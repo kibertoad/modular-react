@@ -1,0 +1,21 @@
+{
+  "name": "modular-react",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared primitives for building modular React applications with pluggable routing and state management.",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "typecheck": "tsc --build",
+    "lint": "tsc && oxfmt --check . && oxlint .",
+    "lint:fix": "oxfmt --write . && oxlint --fix ."
+  },
+  "devDependencies": {
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0",
+    "turbo": "^2.5.0",
+    "typescript": "^6.0.2"
+  },
+  "packageManager": "pnpm@10.28.2"
+}
