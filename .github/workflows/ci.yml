@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  changed-files-job:
+    name: Get changed packages
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.detect.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@7dee1b0c1557f278e5c7dc244927139d78c0e22a # v47.0.4
+        with:
+          files: packages/**
+
+      - name: Detect changed packages
+        id: detect
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          declare -A PATH_TO_NAME=(
+            ["packages/core"]="@modular-react/core"
+            ["packages/react"]="@modular-react/react"
+            ["packages/testing"]="@modular-react/testing"
+          )
+
+          PACKAGES=()
+          for path in "${!PATH_TO_NAME[@]}"; do
+            if echo "$ALL_CHANGED_FILES" | grep -q "$path/"; then
+              PACKAGES+=("\"${PATH_TO_NAME[$path]}\"")
+            fi
+          done
+
+          if [ ${#PACKAGES[@]} -eq 0 ]; then
+            echo 'packages=[]' >> $GITHUB_OUTPUT
+            echo "No packages changed"
+          else
+            JSON="[$(IFS=,; echo "${PACKAGES[*]}")]"
+            echo "packages=$JSON" >> $GITHUB_OUTPUT
+            echo "Changed packages: $JSON"
+          fi
+
+  build:
+    needs: [changed-files-job]
+    if: needs.changed-files-job.outputs.packages != '[]'
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+        package-name: ${{ fromJson(needs.changed-files-job.outputs.packages) }}
+    uses: ./.github/workflows/ci.common.yml
+    with:
+      node_version: ${{ matrix.node-version }}
+      package_name: ${{ matrix.package-name }}
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+  automerge:
+    needs: [build, lint]
+    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.lint.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - uses: fastify/github-action-merge-dependabot@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}

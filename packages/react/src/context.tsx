@@ -169,11 +169,7 @@ export function createSharedHooks<TSharedDependencies extends Record<string, any
     // between renders (deps are set at resolve() time), so the branch
     // is stable, but we avoid calling hooks conditionally.
     const subscribe = store?.subscribe ?? rs?.subscribe ?? noopSubscribe;
-    const getSnapshot = store
-      ? () => store.getState()
-      : rs
-        ? rs.getSnapshot
-        : noopSnapshot;
+    const getSnapshot = store ? () => store.getState() : rs ? rs.getSnapshot : noopSnapshot;
 
     const reactiveValue = useSyncExternalStore(subscribe, getSnapshot);
 

@@ -1,0 +1,267 @@
+name: Publish to npm
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+# Prevent overlapping releases if multiple PRs merge close together
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  detect-changes:
+    if: github.event.pull_request.merged == true && (contains(github.event.pull_request.labels.*.name, 'patch') || contains(github.event.pull_request.labels.*.name, 'minor') || contains(github.event.pull_request.labels.*.name, 'major'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+      has_changes: ${{ steps.build-matrix.outputs.has_changes }}
+      bump: ${{ steps.version.outputs.bump }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Determine version bump
+        id: version
+        run: |
+          if ${{ contains(github.event.pull_request.labels.*.name, 'major') }}; then
+            echo "bump=major" >> $GITHUB_OUTPUT
+          elif ${{ contains(github.event.pull_request.labels.*.name, 'minor') }}; then
+            echo "bump=minor" >> $GITHUB_OUTPUT
+          else
+            echo "bump=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            pkg_core:
+              - 'packages/core/lib/**'
+              - 'packages/core/src/**'
+              - 'packages/core/package.json'
+              - 'packages/core/README.md'
+            pkg_react:
+              - 'packages/react/lib/**'
+              - 'packages/react/src/**'
+              - 'packages/react/package.json'
+              - 'packages/react/README.md'
+            pkg_testing:
+              - 'packages/testing/lib/**'
+              - 'packages/testing/src/**'
+              - 'packages/testing/package.json'
+              - 'packages/testing/README.md'
+
+      - name: Build dynamic matrix
+        id: build-matrix
+        run: |
+          declare -A PKG_NAMES=(
+            ["pkg_core"]="core"
+            ["pkg_react"]="react"
+            ["pkg_testing"]="testing"
+          )
+
+          CHANGED='${{ steps.filter.outputs.changes }}'
+          echo "Changed filters: $CHANGED"
+
+          MATRIX="["
+          FIRST=true
+
+          for key in "${!PKG_NAMES[@]}"; do
+            if echo "$CHANGED" | grep -q "\"$key\""; then
+              NAME="${PKG_NAMES[$key]}"
+              NPM_NAME="@modular-react/${NAME}"
+
+              if [ "$FIRST" = true ]; then
+                FIRST=false
+              else
+                MATRIX+=","
+              fi
+
+              MATRIX+="{\"name\":\"${NAME}\",\"npmName\":\"${NPM_NAME}\"}"
+            fi
+          done
+
+          MATRIX+="]"
+
+          echo "Generated matrix: $MATRIX"
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+          if [ "$MATRIX" = "[]" ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+  release:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+          persist-credentials: true
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Pull latest changes
+        run: git pull --ff-only origin main
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bump versions for changed packages
+        id: bump
+        env:
+          MATRIX: ${{ needs.detect-changes.outputs.matrix }}
+          BUMP: ${{ needs.detect-changes.outputs.bump }}
+        run: |
+          echo "Packages to bump: $MATRIX"
+          echo "Version bump type: $BUMP"
+
+          VERSIONS_JSON="{"
+          FIRST=true
+
+          for PKG_NAME in $(echo "$MATRIX" | jq -r '.[] | .name'); do
+            echo "Bumping version for $PKG_NAME..."
+            cd "packages/$PKG_NAME"
+            OLD_VERSION=$(node -p "require('./package.json').version")
+            npm version "$BUMP" --no-git-tag-version
+            NEW_VERSION=$(node -p "require('./package.json').version")
+            echo "  $OLD_VERSION -> $NEW_VERSION"
+
+            if [ "$FIRST" = true ]; then
+              FIRST=false
+            else
+              VERSIONS_JSON+=","
+            fi
+            VERSIONS_JSON+="\"$PKG_NAME\":\"$NEW_VERSION\""
+
+            cd ../..
+          done
+
+          VERSIONS_JSON+="}"
+          echo "versions=$VERSIONS_JSON" >> $GITHUB_OUTPUT
+
+      - name: Build all packages
+        env:
+          MATRIX: ${{ needs.detect-changes.outputs.matrix }}
+        run: |
+          for NPM_NAME in $(echo "$MATRIX" | jq -r '.[] | .npmName'); do
+            echo "Building $NPM_NAME..."
+            pnpm --filter="$NPM_NAME" run build
+          done
+
+      - name: Publish packages to npm
+        id: publish
+        env:
+          MATRIX: ${{ needs.detect-changes.outputs.matrix }}
+        run: |
+          PUBLISHED=""
+          SKIPPED=""
+
+          for PKG_NAME in $(echo "$MATRIX" | jq -r '.[] | .name'); do
+            cd "packages/$PKG_NAME"
+
+            NPM_NAME=$(node -p "require('./package.json').name")
+            VERSION=$(node -p "require('./package.json').version")
+
+            if npm view "$NPM_NAME@$VERSION" version >/dev/null 2>&1; then
+              echo "Skipping $NPM_NAME@$VERSION - already published"
+              SKIPPED+="$NPM_NAME@$VERSION "
+            else
+              echo "Publishing $NPM_NAME@$VERSION..."
+              npm publish --access public
+              PUBLISHED+="$NPM_NAME@$VERSION "
+            fi
+
+            cd ../..
+          done
+
+          echo "published=$PUBLISHED" >> $GITHUB_OUTPUT
+          echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
+
+      - name: Commit version bumps
+        run: |
+          git add packages/*/package.json
+          if git diff --staged --quiet; then
+            echo "No version changes to commit"
+          else
+            git commit -m "chore: bump versions [skip ci]"
+          fi
+
+      - name: Create tags for published packages
+        env:
+          MATRIX: ${{ needs.detect-changes.outputs.matrix }}
+        run: |
+          for PKG_NAME in $(echo "$MATRIX" | jq -r '.[] | .name'); do
+            NPM_NAME=$(node -p "require('./packages/$PKG_NAME/package.json').name")
+            VERSION=$(node -p "require('./packages/$PKG_NAME/package.json').version")
+            TAG="${NPM_NAME}@${VERSION}"
+
+            if git rev-parse "$TAG" >/dev/null 2>&1; then
+              echo "Warning: Tag already exists: $TAG (skipping)"
+            else
+              echo "Creating tag: $TAG"
+              git tag "$TAG"
+            fi
+          done
+
+      - name: Push commits and tags
+        run: |
+          git push
+          git push --tags
+
+      - name: Summary
+        env:
+          PUBLISHED: ${{ steps.publish.outputs.published }}
+          SKIPPED: ${{ steps.publish.outputs.skipped }}
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -n "$PUBLISHED" ]; then
+            echo "### Published packages" >> $GITHUB_STEP_SUMMARY
+            for PKG in $PUBLISHED; do
+              echo "- $PKG" >> $GITHUB_STEP_SUMMARY
+            done
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -n "$SKIPPED" ]; then
+            echo "### Skipped (already published)" >> $GITHUB_STEP_SUMMARY
+            for PKG in $SKIPPED; do
+              echo "- $PKG" >> $GITHUB_STEP_SUMMARY
+            done
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -z "$PUBLISHED" ] && [ -z "$SKIPPED" ]; then
+            echo "No packages were published or skipped." >> $GITHUB_STEP_SUMMARY
+          fi

@@ -34,8 +34,12 @@ describe("runLifecycleHooks", () => {
     const m2 = { id: "b", version: "1", lifecycle: hook2 };
 
     let called: string[] = [];
-    hook1.onRegister = () => { called.push("a"); };
-    hook2.onRegister = () => { called.push("b"); };
+    hook1.onRegister = () => {
+      called.push("a");
+    };
+    hook2.onRegister = () => {
+      called.push("b");
+    };
 
     runLifecycleHooks([m1, m2] as any, {});
     expect(called).toEqual(["a", "b"]);

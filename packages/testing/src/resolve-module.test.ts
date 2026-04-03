@@ -7,7 +7,9 @@ interface TestSlots {
   systems: { name: string }[];
 }
 
-function mod(overrides: Partial<ModuleDescriptor<any, TestSlots>>): ModuleDescriptor<any, TestSlots> {
+function mod(
+  overrides: Partial<ModuleDescriptor<any, TestSlots>>,
+): ModuleDescriptor<any, TestSlots> {
   return { id: "test-mod", version: "1.0.0", ...overrides } as ModuleDescriptor<any, TestSlots>;
 }
 
@@ -24,8 +26,7 @@ describe("resolveModule", () => {
   it("evaluates dynamic slots when present", () => {
     const m = mod({
       slots: { commands: [{ id: "static" }] },
-      dynamicSlots: (deps: any) =>
-        deps.isAdmin ? { commands: [{ id: "admin-cmd" }] } : {},
+      dynamicSlots: (deps: any) => (deps.isAdmin ? { commands: [{ id: "admin-cmd" }] } : {}),
     });
 
     const { slots } = resolveModule(m, {

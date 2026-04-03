@@ -16,7 +16,9 @@ describe("validateNoDuplicateIds", () => {
   });
 
   it("throws for duplicate eager module IDs", () => {
-    expect(() => validateNoDuplicateIds([mod("a"), mod("a")], [])).toThrow(/Duplicate module ID "a"/);
+    expect(() => validateNoDuplicateIds([mod("a"), mod("a")], [])).toThrow(
+      /Duplicate module ID "a"/,
+    );
   });
 
   it("throws for duplicate across eager and lazy modules", () => {

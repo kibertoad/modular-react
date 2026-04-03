@@ -1,5 +1,11 @@
 import type { Store } from "./store.js";
-import type { ModuleDescriptor, NavigationItem, ReactiveService, SlotMap, SlotMapOf } from "./types.js";
+import type {
+  ModuleDescriptor,
+  NavigationItem,
+  ReactiveService,
+  SlotMap,
+  SlotMapOf,
+} from "./types.js";
 
 /**
  * Configuration for creating a registry.

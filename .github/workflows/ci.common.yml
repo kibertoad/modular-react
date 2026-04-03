@@ -1,0 +1,34 @@
+name: Common CI
+on:
+  workflow_call:
+    inputs:
+      package_name:
+        required: true
+        type: string
+      node_version:
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node ${{ inputs.node_version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node_version }}
+          package-manager-cache: false
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build TS
+        run: pnpm --filter=${{ inputs.package_name }} run build
+
+      - name: Run Tests
+        run: pnpm --filter=${{ inputs.package_name }} run test

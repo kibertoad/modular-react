@@ -12,8 +12,8 @@
     "lint:fix": "oxfmt --write . && oxlint --fix ."
   },
   "devDependencies": {
-    "oxfmt": "^0.42.0",
-    "oxlint": "^1.57.0",
+    "oxfmt": "^0.43.0",
+    "oxlint": "^1.58.0",
     "turbo": "^2.5.0",
     "typescript": "^6.0.2"
   },

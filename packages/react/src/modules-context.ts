@@ -21,9 +21,7 @@ export const ModulesContext = createContext<readonly ModuleEntry[] | null>(null)
 export function useModules(): readonly ModuleEntry[] {
   const modules = useContext(ModulesContext);
   if (!modules) {
-    throw new Error(
-      "[@modular-react/react] useModules must be used within a <ReactiveApp />.",
-    );
+    throw new Error("[@modular-react/react] useModules must be used within a <ReactiveApp />.");
   }
   return modules;
 }

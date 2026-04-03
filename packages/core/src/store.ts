@@ -38,10 +38,7 @@ export interface Store<T> {
    * - **Updater function** — receives current state, return value is merged
    * - **`replace: true`** — replaces the entire state instead of merging
    */
-  setState(
-    partial: T | Partial<T> | ((state: T) => T | Partial<T>),
-    replace?: boolean,
-  ): void;
+  setState(partial: T | Partial<T> | ((state: T) => T | Partial<T>), replace?: boolean): void;
 
   /**
    * Subscribe to state changes. The listener receives the new state
@@ -107,7 +104,7 @@ export function createStore<T>(initialState: T | (() => T)): Store<T> {
 
       const previousState = state;
       state =
-        replace ?? (typeof nextState !== "object" || nextState === null)
+        (replace ?? (typeof nextState !== "object" || nextState === null))
           ? (nextState as T)
           : (Object.assign({}, state, nextState) as T);
 

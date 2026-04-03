@@ -96,9 +96,7 @@ export function createScopedStore<TState>(initializer: () => TState): ScopedStor
   function useScoped<U>(scopeId: string, selector: (state: TState) => U): U;
   function useScoped(scopeId: string, selector?: (state: any) => any): any {
     const store = getOrCreate(scopeId);
-    const getSnapshot = selector
-      ? () => selector(store.getState())
-      : () => store.getState();
+    const getSnapshot = selector ? () => selector(store.getState()) : () => store.getState();
     return useSyncExternalStore(store.subscribe, getSnapshot);
   }
 
