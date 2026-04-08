@@ -31,4 +31,4 @@ jobs:
         run: pnpm --filter=${{ inputs.package_name }} run build
 
       - name: Run Tests
-        run: pnpm --filter=${{ inputs.package_name }} run test
+        run: pnpm --filter=${{ inputs.package_name }} run --if-present test

@@ -30,6 +30,10 @@ jobs:
             ["packages/core"]="@modular-react/core"
             ["packages/react"]="@modular-react/react"
             ["packages/testing"]="@modular-react/testing"
+            ["packages/react-router-cli"]="@react-router-modules/cli"
+            ["packages/react-router-core"]="@react-router-modules/core"
+            ["packages/react-router-runtime"]="@react-router-modules/runtime"
+            ["packages/react-router-testing"]="@react-router-modules/testing"
           )
 
           PACKAGES=()

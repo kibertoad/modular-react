@@ -57,14 +57,35 @@ jobs:
               - 'packages/testing/src/**'
               - 'packages/testing/package.json'
               - 'packages/testing/README.md'
+            pkg_rr_cli:
+              - 'packages/react-router-cli/src/**'
+              - 'packages/react-router-cli/package.json'
+              - 'packages/react-router-cli/README.md'
+            pkg_rr_core:
+              - 'packages/react-router-core/src/**'
+              - 'packages/react-router-core/package.json'
+              - 'packages/react-router-core/README.md'
+            pkg_rr_runtime:
+              - 'packages/react-router-runtime/src/**'
+              - 'packages/react-router-runtime/package.json'
+              - 'packages/react-router-runtime/README.md'
+            pkg_rr_testing:
+              - 'packages/react-router-testing/src/**'
+              - 'packages/react-router-testing/package.json'
+              - 'packages/react-router-testing/README.md'
 
       - name: Build dynamic matrix
         id: build-matrix
         run: |
-          declare -A PKG_NAMES=(
-            ["pkg_core"]="core"
-            ["pkg_react"]="react"
-            ["pkg_testing"]="testing"
+          # Each entry: filter_key -> dir:npmName
+          declare -A PKG_MAP=(
+            ["pkg_core"]="core:@modular-react/core"
+            ["pkg_react"]="react:@modular-react/react"
+            ["pkg_testing"]="testing:@modular-react/testing"
+            ["pkg_rr_cli"]="react-router-cli:@react-router-modules/cli"
+            ["pkg_rr_core"]="react-router-core:@react-router-modules/core"
+            ["pkg_rr_runtime"]="react-router-runtime:@react-router-modules/runtime"
+            ["pkg_rr_testing"]="react-router-testing:@react-router-modules/testing"
           )
 
           CHANGED='${{ steps.filter.outputs.changes }}'
@@ -73,10 +94,9 @@ jobs:
           MATRIX="["
           FIRST=true
 
-          for key in "${!PKG_NAMES[@]}"; do
+          for key in "${!PKG_MAP[@]}"; do
             if echo "$CHANGED" | grep -q "\"$key\""; then
-              NAME="${PKG_NAMES[$key]}"
-              NPM_NAME="@modular-react/${NAME}"
+              IFS=':' read -r DIR NPM_NAME <<< "${PKG_MAP[$key]}"
 
               if [ "$FIRST" = true ]; then
                 FIRST=false
@@ -84,7 +104,7 @@ jobs:
                 MATRIX+=","
               fi
 
-              MATRIX+="{\"name\":\"${NAME}\",\"npmName\":\"${NPM_NAME}\"}"
+              MATRIX+="{\"dir\":\"${DIR}\",\"npmName\":\"${NPM_NAME}\"}"
             fi
           done
 
@@ -148,9 +168,9 @@ jobs:
           VERSIONS_JSON="{"
           FIRST=true
 
-          for PKG_NAME in $(echo "$MATRIX" | jq -r '.[] | .name'); do
-            echo "Bumping version for $PKG_NAME..."
-            cd "packages/$PKG_NAME"
+          for PKG_DIR in $(echo "$MATRIX" | jq -r '.[] | .dir'); do
+            echo "Bumping version for $PKG_DIR..."
+            cd "packages/$PKG_DIR"
             OLD_VERSION=$(node -p "require('./package.json').version")
             npm version "$BUMP" --no-git-tag-version
             NEW_VERSION=$(node -p "require('./package.json').version")
@@ -161,7 +181,7 @@ jobs:
             else
               VERSIONS_JSON+=","
             fi
-            VERSIONS_JSON+="\"$PKG_NAME\":\"$NEW_VERSION\""
+            VERSIONS_JSON+="\"$PKG_DIR\":\"$NEW_VERSION\""
 
             cd ../..
           done
@@ -186,8 +206,8 @@ jobs:
           PUBLISHED=""
           SKIPPED=""
 
-          for PKG_NAME in $(echo "$MATRIX" | jq -r '.[] | .name'); do
-            cd "packages/$PKG_NAME"
+          for PKG_DIR in $(echo "$MATRIX" | jq -r '.[] | .dir'); do
+            cd "packages/$PKG_DIR"
 
             NPM_NAME=$(node -p "require('./package.json').name")
             VERSION=$(node -p "require('./package.json').version")
@@ -220,9 +240,9 @@ jobs:
         env:
           MATRIX: ${{ needs.detect-changes.outputs.matrix }}
         run: |
-          for PKG_NAME in $(echo "$MATRIX" | jq -r '.[] | .name'); do
-            NPM_NAME=$(node -p "require('./packages/$PKG_NAME/package.json').name")
-            VERSION=$(node -p "require('./packages/$PKG_NAME/package.json').version")
+          for PKG_DIR in $(echo "$MATRIX" | jq -r '.[] | .dir'); do
+            NPM_NAME=$(node -p "require('./packages/$PKG_DIR/package.json').name")
+            VERSION=$(node -p "require('./packages/$PKG_DIR/package.json').version")
             TAG="${NPM_NAME}@${VERSION}"
 
             if git rev-parse "$TAG" >/dev/null 2>&1; then
