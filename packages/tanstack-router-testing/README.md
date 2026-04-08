@@ -8,6 +8,13 @@ Testing utilities for modules. Render modules in isolation with mocked dependenc
 npm install -D @tanstack-react-modules/testing
 ```
 
+## What's included
+
+- **`renderModule`** — renders a module with TanStack Router in a test environment
+- **`resolveModule`** — resolves module contributions (slots, lifecycle) without rendering
+- **`createMockStore`** — creates a zustand store pre-populated with test state
+- **Types**: `RenderModuleOptions`, `ResolveModuleOptions`, `ResolveModuleResult`
+
 ## Usage
 
 ```typescript

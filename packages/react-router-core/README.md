@@ -1,12 +1,20 @@
 # @react-router-modules/core
 
-Core types and utilities for defining modules with React Router. Provides `defineModule`, typed hooks (`useStore`, `useService`), scoped stores, and all shared type definitions.
+Core types and utilities for defining modules with React Router. Provides `defineModule`, `createSharedHooks`, scoped stores, and all shared type definitions.
 
 ## Installation
 
 ```bash
 npm install @react-router-modules/core
 ```
+
+## What's included
+
+- **Module definition**: `defineModule`, `defineSlots`
+- **Types**: `ModuleDescriptor` (with React Router `RouteObject` support), `LazyModuleDescriptor`, `NavigationItem`, `ModuleLifecycle`, `ReactiveService`, `SlotMap`, `SlotMapOf`, `ZoneMap`, `ZoneMapOf`
+- **Shared dependencies**: `SharedDependenciesContext`, `createSharedHooks` (returns `useStore`, `useService`, `useReactiveService`, `useOptional`)
+- **Scoped stores**: `createScopedStore` with `useScoped` hook
+- **Detection**: `isStoreApi`, `isReactiveService`, `separateDeps`
 
 ## Usage
 
