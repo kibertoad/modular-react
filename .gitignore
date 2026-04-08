@@ -3,3 +3,4 @@ dist/
 .turbo/
 *.tsbuildinfo
 .idea
+.test-output

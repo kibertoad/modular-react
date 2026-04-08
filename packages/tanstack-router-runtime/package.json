@@ -1,0 +1,50 @@
+{
+  "name": "@tanstack-react-modules/runtime",
+  "version": "1.2.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/modular-react.git",
+    "directory": "packages/tanstack-router-runtime"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "prepublishOnly": "pnpm build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack-react-modules/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@tanstack/react-router": "^1.168.8",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.3",
+    "vite-plugin-dts": "^4.5.0",
+    "zustand": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@tanstack/react-router": "^1.168.8",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.0"
+  }
+}
