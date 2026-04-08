@@ -1,10 +1,6 @@
 import type { StoreApi } from "zustand";
 import type { Router } from "@tanstack/react-router";
-import type {
-  ReactiveService,
-  SlotMap,
-  SlotMapOf,
-} from "@modular-react/core";
+import type { ReactiveService, SlotMap, SlotMapOf } from "@modular-react/core";
 
 // Re-export shared runtime types from @modular-react/core
 export type { NavigationGroup, NavigationManifest, ModuleEntry } from "@modular-react/core";

@@ -4,7 +4,12 @@ import type { Router } from "@tanstack/react-router";
 import type { StoreApi } from "zustand";
 import type { ReactiveService } from "@tanstack-react-modules/core";
 import { SharedDependenciesContext } from "@tanstack-react-modules/core";
-import type { DynamicSlotFactory, SlotFilter, NavigationManifest, ModuleEntry } from "@modular-react/core";
+import type {
+  DynamicSlotFactory,
+  SlotFilter,
+  NavigationManifest,
+  ModuleEntry,
+} from "@modular-react/core";
 import {
   NavigationContext,
   SlotsContext,

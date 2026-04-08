@@ -15,13 +15,10 @@ import {
   validateNoDuplicateIds,
   validateDependencies,
 } from "@modular-react/core";
-import type { DynamicSlotFactory, SlotFilter, NavigationManifest, ModuleEntry } from "@modular-react/core";
+import type { SlotFilter, NavigationManifest, ModuleEntry } from "@modular-react/core";
 import { createSlotsSignal } from "@modular-react/react";
 
-import type {
-  RegistryConfig,
-  ApplicationManifest,
-} from "./types.js";
+import type { RegistryConfig, ApplicationManifest } from "./types.js";
 import { buildRouteTree, type RouteBuilderOptions } from "./route-builder.js";
 import { createAppComponent } from "./app.js";
 

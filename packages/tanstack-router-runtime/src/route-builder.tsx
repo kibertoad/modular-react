@@ -94,7 +94,13 @@ export function buildRouteTree(
   // Eager modules: call createRoutes with protectedParent as parent
   for (const mod of modules) {
     if (!mod.createRoutes) continue;
-    protectedChildren.push(mod.createRoutes(protectedParent));
+    const route = mod.createRoutes(protectedParent);
+    if (!route) {
+      throw new Error(
+        `[@tanstack-react-modules/runtime] Module "${mod.id}" createRoutes() returned a falsy value.`,
+      );
+    }
+    protectedChildren.push(route);
   }
 
   // Lazy modules
@@ -125,12 +131,27 @@ function createAuthenticatedLayoutRoute(
   });
 }
 
-function createLazyModuleRoute(parentRoute: AnyRoute, _lazyMod: LazyModuleDescriptor): AnyRoute {
-  // TODO: Implement lazy module loading properly
-  // For now, create a placeholder route
-  return createRoute({
+/**
+ * Creates a catch-all route for a lazily-loaded module.
+ * On first navigation, the module descriptor is loaded and its routes
+ * are resolved and cached.
+ */
+function createLazyModuleRoute(parentRoute: AnyRoute, lazyMod: LazyModuleDescriptor): AnyRoute {
+  let cachedRoute: AnyRoute | null = null;
+
+  const lazyRoute = createRoute({
     getParentRoute: () => parentRoute,
-    path: _lazyMod.basePath.replace(/^\//, ""),
+    path: lazyMod.basePath.replace(/^\//, "") + "/$",
+    beforeLoad: async () => {
+      if (!cachedRoute) {
+        const { default: descriptor } = await lazyMod.load();
+        if (descriptor.createRoutes) {
+          cachedRoute = descriptor.createRoutes(parentRoute);
+        }
+      }
+    },
     component: () => null,
   });
+
+  return lazyRoute;
 }

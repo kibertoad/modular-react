@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildSlotsManifest, collectDynamicSlotFactories, evaluateDynamicSlots } from "@modular-react/core";
+import {
+  buildSlotsManifest,
+  collectDynamicSlotFactories,
+  evaluateDynamicSlots,
+} from "@modular-react/core";
 import type { DynamicSlotFactory, SlotFilter } from "@modular-react/core";
 import { createSlotsSignal } from "@modular-react/react";
 import type { ModuleDescriptor } from "@react-router-modules/core";

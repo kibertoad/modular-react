@@ -1,5 +1,9 @@
 import type { AnyRoute } from "@tanstack/react-router";
-import type { ModuleDescriptor as BaseModuleDescriptor, SlotMap, SlotMapOf } from "@modular-react/core";
+import type {
+  ModuleDescriptor as BaseModuleDescriptor,
+  SlotMap,
+  SlotMapOf,
+} from "@modular-react/core";
 
 // Re-export shared types from @modular-react/core
 export type {

@@ -3,7 +3,7 @@ import type { RenderResult } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import type { RouteObject } from "react-router";
 import { SharedDependenciesContext, separateDeps } from "@react-router-modules/core";
-import type { ModuleDescriptor, SlotMap } from "@react-router-modules/core";
+import type { ModuleDescriptor, SlotMap, ReactiveService } from "@react-router-modules/core";
 import type { ModuleEntry } from "@modular-react/core";
 import { evaluateDynamicSlots } from "@modular-react/core";
 import { SlotsContext, ModulesContext } from "@modular-react/react";
@@ -70,7 +70,7 @@ export async function renderModule<TSharedDependencies extends Record<string, an
       flatDeps[key] = service;
     }
     for (const [key, rs] of Object.entries(reactiveServices)) {
-      flatDeps[key] = (rs as { getSnapshot: () => unknown }).getSnapshot();
+      flatDeps[key] = (rs as ReactiveService<unknown>).getSnapshot();
     }
 
     slots = evaluateDynamicSlots(

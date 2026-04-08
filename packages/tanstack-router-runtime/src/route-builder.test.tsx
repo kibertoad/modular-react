@@ -184,4 +184,15 @@ describe("buildRouteTree", () => {
       expect(authLayout.options.beforeLoad).toBe(authBeforeLoad);
     });
   });
+
+  it("throws when createRoutes returns a falsy value", () => {
+    const badModule = fakeModule({
+      id: "broken",
+      createRoutes: (() => null) as any,
+    });
+
+    expect(() => buildRouteTree([badModule], [], {})).toThrow(
+      /Module "broken" createRoutes\(\) returned a falsy value/,
+    );
+  });
 });

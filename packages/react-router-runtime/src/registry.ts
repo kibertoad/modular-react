@@ -15,13 +15,10 @@ import {
   validateNoDuplicateIds,
   validateDependencies,
 } from "@modular-react/core";
-import type { DynamicSlotFactory, SlotFilter, NavigationManifest, ModuleEntry } from "@modular-react/core";
+import type { SlotFilter, NavigationManifest, ModuleEntry } from "@modular-react/core";
 import { createSlotsSignal } from "@modular-react/react";
 
-import type {
-  RegistryConfig,
-  ApplicationManifest,
-} from "./types.js";
+import type { RegistryConfig, ApplicationManifest } from "./types.js";
 import { buildRouteTree, type RouteBuilderOptions } from "./route-builder.js";
 import { createAppComponent } from "./app.js";
 
@@ -138,10 +135,7 @@ export function createRegistry<
       resolved = true;
 
       // Validate — cast is safe since validation only reads structural properties (id, requires)
-      validateNoDuplicateIds(
-        modules as ModuleDescriptor[],
-        lazyModules as LazyModuleDescriptor[],
-      );
+      validateNoDuplicateIds(modules as ModuleDescriptor[], lazyModules as LazyModuleDescriptor[]);
       validateDependencies(modules as ModuleDescriptor[], availableKeys);
 
       // Run onRegister lifecycle hooks
@@ -178,13 +172,9 @@ export function createRegistry<
         typeof document !== "undefined" ? createBrowserRouter(routes) : createMemoryRouter(routes);
 
       // Build navigation, slots, and module entries
-      const navigation: NavigationManifest = buildNavigationManifest(
-        modules as ModuleDescriptor[],
-      );
+      const navigation: NavigationManifest = buildNavigationManifest(modules as ModuleDescriptor[]);
       const slots = buildSlotsManifest<TSlots>(modules, config.slots);
-      const dynamicSlotFactories = collectDynamicSlotFactories(
-        modules as ModuleDescriptor[],
-      );
+      const dynamicSlotFactories = collectDynamicSlotFactories(modules as ModuleDescriptor[]);
       const slotFilter = options?.slotFilter as SlotFilter | undefined;
       const moduleEntries: ModuleEntry[] = modules.map((mod) => ({
         id: mod.id,

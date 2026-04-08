@@ -6,29 +6,29 @@ A framework for building modular React applications with pluggable routing. Defi
 
 ### Shared foundation (router-agnostic)
 
-| Package | Description |
-|---------|-------------|
-| [`@modular-react/core`](packages/core) | Types, slots, navigation, validation, and a lightweight store. No React runtime dependency. |
-| [`@modular-react/react`](packages/react) | React bindings: context providers, hooks (`useStore`, `useSlots`, `useNavigation`, etc.), error boundary. |
-| [`@modular-react/testing`](packages/testing) | Test utilities for resolving modules without rendering. |
+| Package                                      | Description                                                                                               |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| [`@modular-react/core`](packages/core)       | Types, slots, navigation, validation, and a lightweight store. No React runtime dependency.               |
+| [`@modular-react/react`](packages/react)     | React bindings: context providers, hooks (`useStore`, `useSlots`, `useNavigation`, etc.), error boundary. |
+| [`@modular-react/testing`](packages/testing) | Test utilities for resolving modules without rendering.                                                   |
 
 ### React Router integration
 
-| Package | Description |
-|---------|-------------|
-| [`@react-router-modules/core`](packages/react-router-core) | Module definition with React Router `RouteObject` support, typed hooks, scoped stores. |
-| [`@react-router-modules/runtime`](packages/react-router-runtime) | Registry, route tree builder, app assembly with all providers wired. |
-| [`@react-router-modules/testing`](packages/react-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation. |
-| [`@react-router-modules/cli`](packages/react-router-cli) | Scaffolding CLI: `reactive init`, `reactive create module`, `reactive create store`. |
+| Package                                                          | Description                                                                            |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| [`@react-router-modules/core`](packages/react-router-core)       | Module definition with React Router `RouteObject` support, typed hooks, scoped stores. |
+| [`@react-router-modules/runtime`](packages/react-router-runtime) | Registry, route tree builder, app assembly with all providers wired.                   |
+| [`@react-router-modules/testing`](packages/react-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation.                   |
+| [`@react-router-modules/cli`](packages/react-router-cli)         | Scaffolding CLI: `reactive init`, `reactive create module`, `reactive create store`.   |
 
 ### TanStack Router integration
 
-| Package | Description |
-|---------|-------------|
-| [`@tanstack-react-modules/core`](packages/tanstack-router-core) | Module definition with TanStack Router `createRoute` support, typed hooks, scoped stores. |
-| [`@tanstack-react-modules/runtime`](packages/tanstack-router-runtime) | Registry, route tree builder, app assembly with all providers wired. |
-| [`@tanstack-react-modules/testing`](packages/tanstack-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation. |
-| [`@tanstack-react-modules/cli`](packages/tanstack-router-cli) | Scaffolding CLI: `reactive init`, `reactive create module`, `reactive create store`. |
+| Package                                                               | Description                                                                               |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [`@tanstack-react-modules/core`](packages/tanstack-router-core)       | Module definition with TanStack Router `createRoute` support, typed hooks, scoped stores. |
+| [`@tanstack-react-modules/runtime`](packages/tanstack-router-runtime) | Registry, route tree builder, app assembly with all providers wired.                      |
+| [`@tanstack-react-modules/testing`](packages/tanstack-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation.                      |
+| [`@tanstack-react-modules/cli`](packages/tanstack-router-cli)         | Scaffolding CLI: `reactive init`, `reactive create module`, `reactive create store`.      |
 
 ## Architecture
 
@@ -62,9 +62,7 @@ export default defineModule<AppDependencies, AppSlots>({
   navigation: [{ label: "Billing", to: "/billing", group: "finance" }],
   slots: { commands: [{ id: "export", label: "Export Invoices" }] },
   dynamicSlots: (deps) => ({
-    commands: deps.auth.user?.isAdmin
-      ? [{ id: "void", label: "Void Invoice" }]
-      : [],
+    commands: deps.auth.user?.isAdmin ? [{ id: "void", label: "Void Invoice" }] : [],
   }),
 });
 ```

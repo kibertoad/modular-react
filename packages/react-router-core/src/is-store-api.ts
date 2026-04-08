@@ -9,6 +9,7 @@ export function isStoreApi(value: unknown): value is StoreApi<unknown> {
     value !== null &&
     typeof value === "object" &&
     "getState" in value &&
+    "getInitialState" in value &&
     "setState" in value &&
     "subscribe" in value
   );

@@ -4,7 +4,12 @@ import type { DataRouter } from "react-router";
 import type { StoreApi } from "zustand";
 import type { ReactiveService } from "@react-router-modules/core";
 import { SharedDependenciesContext } from "@react-router-modules/core";
-import type { DynamicSlotFactory, SlotFilter, NavigationManifest, ModuleEntry } from "@modular-react/core";
+import type {
+  DynamicSlotFactory,
+  SlotFilter,
+  NavigationManifest,
+  ModuleEntry,
+} from "@modular-react/core";
 import {
   NavigationContext,
   SlotsContext,

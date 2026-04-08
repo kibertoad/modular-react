@@ -4,7 +4,6 @@ import { createStore } from "@modular-react/core";
 import {
   SlotsContext,
   useSlots,
-  RecalculateSlotsContext,
   useRecalculateSlots,
   DynamicSlotsProvider,
   createSlotsSignal,
