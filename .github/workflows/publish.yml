@@ -210,13 +210,7 @@ jobs:
           echo "versions=$VERSIONS_JSON" >> $GITHUB_OUTPUT
 
       - name: Build all packages
-        env:
-          MATRIX: ${{ needs.detect-changes.outputs.matrix }}
-        run: |
-          for NPM_NAME in $(echo "$MATRIX" | jq -r '.[] | .npmName'); do
-            echo "Building $NPM_NAME..."
-            pnpm --filter="$NPM_NAME" run build
-          done
+        run: pnpm turbo run build
 
       - name: Publish packages to npm
         id: publish

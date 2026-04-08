@@ -8,6 +8,14 @@ Application assembly layer for the modular-react framework (React Router integra
 npm install @react-router-modules/runtime
 ```
 
+## What's included
+
+- **Registry**: `createRegistry` — assembles modules into a running app
+- **Zones**: `useZones` (reads zone components from matched route `handle`), `useActiveZones` (merges route zones with active module zones)
+- **Types**: `ModuleRegistry`, `ResolveOptions`, `RegistryConfig`, `ApplicationManifest`
+- **Re-exported from `@modular-react/core`**: `buildSlotsManifest`, `collectDynamicSlotFactories`, `evaluateDynamicSlots`, `buildNavigationManifest`, `validateNoDuplicateIds`, `validateDependencies`, `NavigationGroup`, `NavigationManifest`, `ModuleEntry`, `DynamicSlotFactory`, `SlotFilter`
+- **Re-exported from `@modular-react/react`**: `useNavigation`, `useSlots`, `useRecalculateSlots`, `useModules`, `getModuleMeta`, `ModuleErrorBoundary`, `NavigationContext`, `SlotsContext`, `RecalculateSlotsContext`, `ModulesContext`, `DynamicSlotsProvider`, `createSlotsSignal`
+
 ## Usage
 
 ```typescript

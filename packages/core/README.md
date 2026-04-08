@@ -12,12 +12,12 @@ npm install @modular-react/core
 
 ## What's included
 
-- **Types**: `ModuleDescriptor`, `LazyModuleDescriptor`, `NavigationItem`, `ModuleLifecycle`, `ReactiveService`, `SlotMap`, `ZoneMap`, `Store`
+- **Types**: `ModuleDescriptor`, `LazyModuleDescriptor`, `NavigationItem`, `ModuleLifecycle`, `ReactiveService`, `SlotMap`, `SlotMapOf`, `ZoneMap`, `ZoneMapOf`, `Store`, `RegistryConfig`, `NavigationGroup`, `NavigationManifest`, `ModuleEntry`, `DynamicSlotFactory`, `SlotFilter`
 - **Slots**: `buildSlotsManifest`, `collectDynamicSlotFactories`, `evaluateDynamicSlots`
 - **Navigation**: `buildNavigationManifest`
 - **Validation**: `validateNoDuplicateIds`, `validateDependencies`
 - **Store**: `createStore` — a lightweight zustand-compatible store (no middleware)
-- **Detection**: `isStore`, `isReactiveService`, `separateDeps`
+- **Detection**: `isStore`, `isStoreApi` (alias), `isReactiveService`, `separateDeps`
 - **Helpers**: `defineModule`, `defineSlots`, `buildDepsSnapshot`, `runLifecycleHooks`
 
 ## Usage

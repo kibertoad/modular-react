@@ -10,12 +10,13 @@ npm install @modular-react/react
 
 ## What's included
 
-- **Shared dependencies**: `SharedDependenciesContext`, `createSharedHooks` (`useStore`, `useService`, `useReactiveService`, `useOptional`)
+- **Shared dependencies**: `SharedDependenciesContext`, `createSharedHooks` (factory that returns `useStore`, `useService`, `useReactiveService`, `useOptional`)
 - **Scoped stores**: `createScopedStore` with `useScoped` hook
 - **Slots**: `SlotsContext`, `useSlots`, `RecalculateSlotsContext`, `useRecalculateSlots`, `DynamicSlotsProvider`, `createSlotsSignal`
 - **Navigation**: `NavigationContext`, `useNavigation`
 - **Modules**: `ModulesContext`, `useModules`, `getModuleMeta`
 - **Error boundary**: `ModuleErrorBoundary`
+- **Re-exported from `@modular-react/core`**: all types, `createStore`, `isStore`, `isStoreApi`, `isReactiveService`, `separateDeps`, `defineModule`, `defineSlots`, slot/navigation/validation functions, and runtime helpers
 
 ## Usage
 
