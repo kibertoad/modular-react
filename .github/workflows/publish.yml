@@ -73,6 +73,22 @@ jobs:
               - 'packages/react-router-testing/src/**'
               - 'packages/react-router-testing/package.json'
               - 'packages/react-router-testing/README.md'
+            pkg_tr_cli:
+              - 'packages/tanstack-router-cli/src/**'
+              - 'packages/tanstack-router-cli/package.json'
+              - 'packages/tanstack-router-cli/README.md'
+            pkg_tr_core:
+              - 'packages/tanstack-router-core/src/**'
+              - 'packages/tanstack-router-core/package.json'
+              - 'packages/tanstack-router-core/README.md'
+            pkg_tr_runtime:
+              - 'packages/tanstack-router-runtime/src/**'
+              - 'packages/tanstack-router-runtime/package.json'
+              - 'packages/tanstack-router-runtime/README.md'
+            pkg_tr_testing:
+              - 'packages/tanstack-router-testing/src/**'
+              - 'packages/tanstack-router-testing/package.json'
+              - 'packages/tanstack-router-testing/README.md'
 
       - name: Build dynamic matrix
         id: build-matrix
@@ -86,6 +102,10 @@ jobs:
             ["pkg_rr_core"]="react-router-core:@react-router-modules/core"
             ["pkg_rr_runtime"]="react-router-runtime:@react-router-modules/runtime"
             ["pkg_rr_testing"]="react-router-testing:@react-router-modules/testing"
+            ["pkg_tr_cli"]="tanstack-router-cli:@tanstack-react-modules/cli"
+            ["pkg_tr_core"]="tanstack-router-core:@tanstack-react-modules/core"
+            ["pkg_tr_runtime"]="tanstack-router-runtime:@tanstack-react-modules/runtime"
+            ["pkg_tr_testing"]="tanstack-router-testing:@tanstack-react-modules/testing"
           )
 
           CHANGED='${{ steps.filter.outputs.changes }}'

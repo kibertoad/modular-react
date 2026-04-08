@@ -34,6 +34,10 @@ jobs:
             ["packages/react-router-core"]="@react-router-modules/core"
             ["packages/react-router-runtime"]="@react-router-modules/runtime"
             ["packages/react-router-testing"]="@react-router-modules/testing"
+            ["packages/tanstack-router-cli"]="@tanstack-react-modules/cli"
+            ["packages/tanstack-router-core"]="@tanstack-react-modules/core"
+            ["packages/tanstack-router-runtime"]="@tanstack-react-modules/runtime"
+            ["packages/tanstack-router-testing"]="@tanstack-react-modules/testing"
           )
 
           PACKAGES=()
