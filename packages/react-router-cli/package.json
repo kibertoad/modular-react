@@ -24,7 +24,8 @@
     "test:e2e:server": "cd .e2e-output/smoke-app/shell && node node_modules/vite/bin/vite.js --port 5188",
     "test:e2e": "playwright test smoke.e2e.ts",
     "clean": "rimraf dist .test-output .e2e-output",
-    "prepublishOnly": "pnpm build"
+    "prepublishOnly": "pnpm build",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@clack/prompts": "^1.1.0",
