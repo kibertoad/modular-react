@@ -1,6 +1,6 @@
 import { createRootRoute, createRoute, Outlet } from "@tanstack/react-router";
 import type { AnyRoute } from "@tanstack/react-router";
-import type { ReactiveModuleDescriptor, LazyModuleDescriptor } from "@tanstack-react-modules/core";
+import type { ModuleDescriptor, LazyModuleDescriptor } from "@tanstack-react-modules/core";
 
 export interface RouteBuilderOptions {
   /**
@@ -53,7 +53,7 @@ export interface RouteBuilderOptions {
  * Modules without createRoutes are skipped (headless modules).
  */
 export function buildRouteTree(
-  modules: ReactiveModuleDescriptor[],
+  modules: ModuleDescriptor[],
   lazyModules: LazyModuleDescriptor[],
   options?: RouteBuilderOptions,
 ): AnyRoute {

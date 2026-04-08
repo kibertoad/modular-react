@@ -20,6 +20,8 @@ export default defineConfig({
         "zustand",
         "@react-router-modules/core",
         "@react-router-modules/runtime",
+        "@modular-react/core",
+        "@modular-react/react",
       ],
     },
     sourcemap: true,

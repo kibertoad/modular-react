@@ -10,7 +10,7 @@ export default defineConfig({
       fileName: "index",
     },
     rollupOptions: {
-      external: ["react", "zustand", "react-router"],
+      external: ["react", "zustand", "react-router", "@modular-react/core"],
     },
     sourcemap: true,
   },

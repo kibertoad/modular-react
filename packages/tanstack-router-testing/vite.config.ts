@@ -20,6 +20,8 @@ export default defineConfig({
         "zustand",
         "@tanstack-react-modules/core",
         "@tanstack-react-modules/runtime",
+        "@modular-react/core",
+        "@modular-react/react",
       ],
     },
     sourcemap: true,

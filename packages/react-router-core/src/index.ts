@@ -1,6 +1,6 @@
-// Types
+// Types (shared types re-exported via types.ts, plus router-specific)
 export type {
-  ReactiveModuleDescriptor,
+  ModuleDescriptor,
   LazyModuleDescriptor,
   NavigationItem,
   ModuleLifecycle,

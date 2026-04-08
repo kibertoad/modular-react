@@ -2,31 +2,35 @@ import { createRouter } from "@tanstack/react-router";
 import type { AnyRoute } from "@tanstack/react-router";
 import type { StoreApi } from "zustand";
 import type {
-  ReactiveModuleDescriptor,
+  ModuleDescriptor,
   LazyModuleDescriptor,
   ReactiveService,
   SlotMap,
   SlotMapOf,
 } from "@tanstack-react-modules/core";
+import {
+  buildNavigationManifest,
+  buildSlotsManifest,
+  collectDynamicSlotFactories,
+  validateNoDuplicateIds,
+  validateDependencies,
+} from "@modular-react/core";
+import type { DynamicSlotFactory, SlotFilter, NavigationManifest, ModuleEntry } from "@modular-react/core";
+import { createSlotsSignal } from "@modular-react/react";
 
 import type {
   RegistryConfig,
   ApplicationManifest,
-  NavigationManifest,
-  ModuleEntry,
 } from "./types.js";
-import { validateNoDuplicateIds, validateDependencies } from "./validation.js";
-import { buildNavigationManifest } from "./navigation.js";
-import { buildSlotsManifest } from "./slots.js";
 import { buildRouteTree, type RouteBuilderOptions } from "./route-builder.js";
 import { createAppComponent } from "./app.js";
 
-export interface ReactiveRegistry<
+export interface ModuleRegistry<
   TSharedDependencies extends Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
 > {
   /** Register an eager module */
-  register(module: ReactiveModuleDescriptor<TSharedDependencies, TSlots>): void;
+  register(module: ModuleDescriptor<TSharedDependencies, TSlots>): void;
 
   /** Register a lazily-loaded module */
   registerLazy(descriptor: LazyModuleDescriptor<TSharedDependencies, TSlots>): void;
@@ -35,17 +39,18 @@ export interface ReactiveRegistry<
    * Resolve all modules and produce the application manifest.
    * Validates dependencies and builds the route tree.
    */
-  resolve(options?: ResolveOptions): ApplicationManifest<TSlots>;
+  resolve(options?: ResolveOptions<TSharedDependencies, TSlots>): ApplicationManifest<TSlots>;
 }
 
-export interface ResolveOptions {
+export interface ResolveOptions<
+  TSharedDependencies extends Record<string, any> = Record<string, any>,
+  TSlots extends SlotMapOf<TSlots> = SlotMap,
+> {
   /** Root layout component (renders <Outlet /> for child routes) */
   rootComponent?: () => React.JSX.Element;
 
   /**
    * Pre-built root route — if provided, used instead of auto-creating one.
-   * Use this when you need full control over the root route config
-   * (beforeLoad, loader, errorComponent, pendingComponent, etc.).
    * Mutually exclusive with rootComponent/notFoundComponent/beforeLoad.
    */
   rootRoute?: AnyRoute;
@@ -59,43 +64,13 @@ export interface ResolveOptions {
   /**
    * Called before every route loads — for observability, analytics, feature flags.
    * Runs for ALL routes including public ones like /login.
-   * Throw a `redirect()` from @tanstack/react-router to redirect.
-   * Ignored if rootRoute is provided (configure beforeLoad on your root route instead).
-   *
-   * For auth guards, use `authenticatedRoute` instead — it creates a layout route
-   * boundary that only wraps protected routes.
+   * Ignored if rootRoute is provided.
    */
   beforeLoad?: (ctx: { location: { pathname: string } }) => void | Promise<void>;
 
   /**
    * Auth boundary — a pathless layout route that guards module routes and
-   * the index route. Shell routes (login, error pages) sit outside this
-   * boundary and are NOT guarded.
-   *
-   * Follows TanStack Router's recommended `_authenticated` layout pattern:
-   * ```
-   * Root (beforeLoad runs for ALL routes — observability, etc.)
-   * ├── shellRoutes (public — /login, /signup)
-   * └── _authenticated (layout — auth guard)
-   *     ├── / (indexComponent)
-   *     └── module routes
-   * ```
-   *
-   * @example
-   * ```ts
-   * registry.resolve({
-   *   authenticatedRoute: {
-   *     beforeLoad: async () => {
-   *       const res = await fetch('/api/auth/session')
-   *       if (!res.ok) throw redirect({ to: '/login' })
-   *     },
-   *     component: ShellLayout,
-   *   },
-   *   shellRoutes: (root) => [
-   *     createRoute({ getParentRoute: () => root, path: '/login', component: LoginPage }),
-   *   ],
-   * })
-   * ```
+   * the index route. Shell routes sit outside this boundary.
    */
   authenticatedRoute?: {
     /** Auth guard — throw redirect() to deny access */
@@ -104,41 +79,20 @@ export interface ResolveOptions {
     component?: () => React.JSX.Element;
   };
 
-  /**
-   * Additional routes owned by the shell (login, error pages, onboarding, etc.)
-   * that sit alongside module routes at the root level.
-   *
-   * When `authenticatedRoute` is used, shell routes are NOT guarded — they
-   * are siblings of the auth layout, not children. This is the natural place
-   * for public pages like /login.
-   */
+  /** Additional routes owned by the shell (login, error pages, etc.) */
   shellRoutes?: (parentRoute: AnyRoute) => AnyRoute[];
 
   /**
    * Additional React providers to wrap around the app tree.
-   *
-   * **Nesting order:** First element is outermost. `[A, B, C]` produces:
-   * ```tsx
-   * <A>
-   *   <B>
-   *     <C>
-   *       ...app...
-   *     </C>
-   *   </B>
-   * </A>
-   * ```
-   *
-   * Place providers that other providers depend on **first** in the array.
-   * For example, if your data-fetching provider reads from a theme context,
-   * list the theme provider before the data-fetching provider.
-   *
-   * @example
-   * ```ts
-   * providers: [SWRConfigProvider, ThemeProvider, TooltipProvider]
-   * // Produces: <SWRConfigProvider><ThemeProvider><TooltipProvider>...app...</TooltipProvider></ThemeProvider></SWRConfigProvider>
-   * ```
+   * First element is outermost.
    */
   providers?: React.ComponentType<{ children: React.ReactNode }>[];
+
+  /**
+   * Global filter applied to the fully resolved slot manifest (static + dynamic)
+   * on every `recalculateSlots()` call.
+   */
+  slotFilter?: (slots: TSlots, deps: TSharedDependencies) => TSlots;
 }
 
 export function createRegistry<
@@ -146,8 +100,8 @@ export function createRegistry<
   TSlots extends SlotMapOf<TSlots> = SlotMap,
 >(
   config: RegistryConfig<TSharedDependencies, TSlots>,
-): ReactiveRegistry<TSharedDependencies, TSlots> {
-  const modules: ReactiveModuleDescriptor<TSharedDependencies, TSlots>[] = [];
+): ModuleRegistry<TSharedDependencies, TSlots> {
+  const modules: ModuleDescriptor<TSharedDependencies, TSlots>[] = [];
   const lazyModules: LazyModuleDescriptor<TSharedDependencies, TSlots>[] = [];
   let resolved = false;
 
@@ -177,14 +131,14 @@ export function createRegistry<
       lazyModules.push(descriptor);
     },
 
-    resolve(options?: ResolveOptions) {
+    resolve(options?: ResolveOptions<TSharedDependencies, TSlots>) {
       if (resolved) {
         throw new Error("[@tanstack-react-modules/runtime] resolve() can only be called once.");
       }
       resolved = true;
 
       // Validate (cast is safe — these functions only read structural properties)
-      const mods = modules as ReactiveModuleDescriptor[];
+      const mods = modules as ModuleDescriptor[];
       const lazyMods = lazyModules as LazyModuleDescriptor[];
       validateNoDuplicateIds(mods, lazyMods);
       validateDependencies(mods, availableKeys);
@@ -192,7 +146,14 @@ export function createRegistry<
       // Run onRegister lifecycle hooks
       const deps = buildDepsObject<TSharedDependencies>(config);
       for (const mod of modules) {
-        mod.lifecycle?.onRegister?.(deps);
+        try {
+          mod.lifecycle?.onRegister?.(deps);
+        } catch (err) {
+          throw new Error(
+            `[@tanstack-react-modules/runtime] Module "${mod.id}" lifecycle.onRegister() failed: ${err instanceof Error ? err.message : String(err)}`,
+            { cause: err },
+          );
+        }
       }
 
       // Build route tree
@@ -216,6 +177,8 @@ export function createRegistry<
       // Build navigation, slots, and module entries
       const navigation: NavigationManifest = buildNavigationManifest(mods);
       const slots = buildSlotsManifest<TSlots>(modules, config.slots);
+      const dynamicSlotFactories = collectDynamicSlotFactories(mods);
+      const slotFilter = options?.slotFilter as SlotFilter | undefined;
       const moduleEntries: ModuleEntry[] = modules.map((mod) => ({
         id: mod.id,
         version: mod.version,
@@ -245,6 +208,11 @@ export function createRegistry<
         }
       }
 
+      // Create signal for imperative recalculation of dynamic slots
+      const slotsSignal = createSlotsSignal();
+      const hasDynamicSlots = dynamicSlotFactories.length > 0 || slotFilter != null;
+      const recalculateSlots = hasDynamicSlots ? () => slotsSignal.notify() : () => {};
+
       // Create App component
       const App = createAppComponent({
         router,
@@ -255,9 +223,13 @@ export function createRegistry<
         slots,
         modules: moduleEntries,
         providers: options?.providers,
+        dynamicSlotFactories,
+        slotFilter,
+        slotsSignal,
+        recalculateSlots,
       });
 
-      return { App, router, navigation, slots, modules: moduleEntries };
+      return { App, router, navigation, slots, modules: moduleEntries, recalculateSlots };
     },
   };
 }
@@ -267,8 +239,6 @@ function buildDepsObject<TSharedDependencies extends Record<string, any>>(
 ): TSharedDependencies {
   const deps: Record<string, unknown> = {};
 
-  // For stores, get current state as the deps value
-  // (lifecycle hooks get a snapshot, components use useStore for reactivity)
   if (config.stores) {
     for (const [key, store] of Object.entries(config.stores)) {
       if (store) {
@@ -281,7 +251,6 @@ function buildDepsObject<TSharedDependencies extends Record<string, any>>(
       if (service !== undefined) deps[key] = service;
     }
   }
-  // For reactive services, get current snapshot
   if (config.reactiveServices) {
     for (const [key, rs] of Object.entries(config.reactiveServices)) {
       if (rs) {

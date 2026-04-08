@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { buildRouteTree } from "./route-builder.js";
 import { createRootRoute, createRoute } from "@tanstack/react-router";
-import type { ReactiveModuleDescriptor } from "@tanstack-react-modules/core";
+import type { ModuleDescriptor } from "@tanstack-react-modules/core";
 import type { AnyRoute } from "@tanstack/react-router";
 
-function fakeModule(overrides: Partial<ReactiveModuleDescriptor> = {}): ReactiveModuleDescriptor {
+function fakeModule(overrides: Partial<ModuleDescriptor> = {}): ModuleDescriptor {
   return {
     id: overrides.id ?? "test",
     version: "0.1.0",
@@ -12,7 +12,7 @@ function fakeModule(overrides: Partial<ReactiveModuleDescriptor> = {}): Reactive
   };
 }
 
-function moduleWithRoutes(id: string, path: string): ReactiveModuleDescriptor {
+function moduleWithRoutes(id: string, path: string): ModuleDescriptor {
   return fakeModule({
     id,
     createRoutes: (parent: AnyRoute) => {

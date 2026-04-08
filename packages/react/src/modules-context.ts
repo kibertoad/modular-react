@@ -5,7 +5,7 @@ export const ModulesContext = createContext<readonly ModuleEntry[] | null>(null)
 
 /**
  * Access the list of registered modules with their metadata and components.
- * Must be used within a <ReactiveApp /> provider tree.
+ * Must be used within a <ModularApp /> provider tree.
  *
  * Use this to build discovery UIs (directory pages, search, catalogs)
  * and to render module components in workspace tabs or panels.
@@ -21,7 +21,7 @@ export const ModulesContext = createContext<readonly ModuleEntry[] | null>(null)
 export function useModules(): readonly ModuleEntry[] {
   const modules = useContext(ModulesContext);
   if (!modules) {
-    throw new Error("[@modular-react/react] useModules must be used within a <ReactiveApp />.");
+    throw new Error("[@modular-react/react] useModules must be used within a <ModularApp />.");
   }
   return modules;
 }

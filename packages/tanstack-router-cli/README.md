@@ -1,6 +1,6 @@
 # @tanstack-react-modules/cli
 
-Scaffolding CLI for the Reactive modular framework. Creates projects, modules, and stores with full wiring.
+Scaffolding CLI for the modular-react framework (TanStack Router integration). Creates projects, modules, and stores with full wiring.
 
 ## Commands
 
@@ -10,7 +10,7 @@ reactive create module <name> --route billing             # New module
 reactive create store <name>                              # New Zustand store
 ```
 
-All commands support interactive (prompts) and non-interactive (flags) modes. See the [main README](../../README.md#cli-reference) for full documentation.
+All commands support interactive (prompts) and non-interactive (flags) modes. See the [main README](https://github.com/kibertoad/modular-react#cli-reference) for full documentation.
 
 ## Development
 

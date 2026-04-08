@@ -20,7 +20,7 @@ function useSharedDependencies(): SharedDependenciesContextValue {
   const ctx = useContext(SharedDependenciesContext);
   if (!ctx) {
     throw new Error(
-      "[@tanstack-react-modules/core] useStore/useService/useReactiveService must be used within a <ReactiveApp />. " +
+      "[@tanstack-react-modules/core] useStore/useService/useReactiveService must be used within a <ModularApp />. " +
         "Make sure your component is rendered inside the App returned by registry.resolve().",
     );
   }

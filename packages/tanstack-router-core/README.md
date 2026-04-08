@@ -1,6 +1,6 @@
 # @tanstack-react-modules/core
 
-Core types and utilities for defining reactive modules. This is the package modules import - it provides `defineModule`, typed hooks (`useStore`, `useService`), scoped stores, and all shared type definitions.
+Core types and utilities for defining modules with TanStack Router. Provides `defineModule`, typed hooks (`useStore`, `useService`), scoped stores, and all shared type definitions.
 
 ## Installation
 
@@ -12,16 +12,30 @@ npm install @tanstack-react-modules/core
 
 ```typescript
 import { defineModule } from "@tanstack-react-modules/core";
+import { createRoute } from "@tanstack/react-router";
 
 export default defineModule<AppDependencies, AppSlots>({
   id: "billing",
   version: "0.1.0",
-  createRoutes: (parentRoute) => {
-    /* ... */
-  },
+  createRoutes: (parentRoute) =>
+    createRoute({
+      getParentRoute: () => parentRoute,
+      path: "/billing",
+      component: BillingDashboard,
+    }),
   navigation: [{ label: "Billing", to: "/billing", group: "finance" }],
+
+  // Static slots — always present
   slots: { commands: [{ id: "billing:export", label: "Export", onSelect: () => {} }] },
+
+  // Dynamic slots — re-evaluated on recalculateSlots()
+  dynamicSlots: (deps) => ({
+    commands:
+      deps.auth.user?.role === "admin"
+        ? [{ id: "billing:void", label: "Void Invoice", onSelect: () => {} }]
+        : [],
+  }),
 });
 ```
 
-See the [main documentation](https://github.com/kibertoad/reactive#readme) for the full guide.
+See the [main documentation](https://github.com/kibertoad/modular-react#readme) for the full guide.
