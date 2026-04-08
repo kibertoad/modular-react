@@ -26,6 +26,10 @@ export {
 
 // Re-export shared React hooks/contexts from @modular-react/react
 export {
+  NavigationContext,
+  RecalculateSlotsContext,
+  DynamicSlotsProvider,
+  createSlotsSignal,
   useNavigation,
   useSlots,
   useRecalculateSlots,
@@ -35,6 +39,7 @@ export {
   ModulesContext,
   ModuleErrorBoundary,
 } from "@modular-react/react";
+export type { SlotsSignal } from "@modular-react/react";
 
 // Zones (router-specific)
 export { useZones } from "./zones.js";
