@@ -61,7 +61,7 @@ jobs:
     if: needs.changed-files-job.outputs.packages != '[]'
     strategy:
       matrix:
-        node-version: [20.x, 22.x]
+        node-version: [22.x, 24.x]
         package-name: ${{ fromJson(needs.changed-files-job.outputs.packages) }}
     uses: ./.github/workflows/ci.common.yml
     with:
