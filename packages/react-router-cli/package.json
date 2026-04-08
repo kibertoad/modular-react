@@ -1,0 +1,46 @@
+{
+  "name": "@react-router-modules/cli",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/modular-react.git",
+    "directory": "packages/react-router-cli"
+  },
+  "bin": {
+    "reactive": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:e2e:setup": "node scripts/e2e-setup.ts",
+    "test:e2e:server": "cd .e2e-output/smoke-app/shell && node node_modules/vite/bin/vite.js --port 5188",
+    "test:e2e": "playwright test smoke.e2e.ts",
+    "clean": "rimraf dist .test-output .e2e-output",
+    "prepublishOnly": "pnpm build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.1.0",
+    "citty": "^0.2.1",
+    "magicast": "^0.5.2",
+    "pathe": "^2.0.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^25.5.0",
+    "cli-testlab": "^6.0.1",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}
