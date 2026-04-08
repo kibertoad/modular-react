@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildSlotsManifest } from "./slots.js";
-import type { ReactiveModuleDescriptor } from "@tanstack-react-modules/core";
+import { buildSlotsManifest } from "@modular-react/core";
+import type { ModuleDescriptor } from "@tanstack-react-modules/core";
 import type { AnyRoute } from "@tanstack/react-router";
 
 // Plain interface — no index signature or SlotMap extends needed
@@ -10,8 +10,8 @@ interface TestSlots {
 }
 
 function fakeModule(
-  overrides: Partial<ReactiveModuleDescriptor<any, TestSlots>> = {},
-): ReactiveModuleDescriptor<any, TestSlots> {
+  overrides: Partial<ModuleDescriptor<any, TestSlots>> = {},
+): ModuleDescriptor<any, TestSlots> {
   return {
     id: overrides.id ?? "test",
     version: "0.1.0",

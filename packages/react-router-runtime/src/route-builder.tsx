@@ -1,6 +1,6 @@
 import { Outlet, useRoutes } from "react-router";
 import type { RouteObject } from "react-router";
-import type { ReactiveModuleDescriptor, LazyModuleDescriptor } from "@react-router-modules/core";
+import type { ModuleDescriptor, LazyModuleDescriptor } from "@react-router-modules/core";
 
 export interface RouteBuilderOptions {
   /**
@@ -53,7 +53,7 @@ export interface RouteBuilderOptions {
  * Modules without createRoutes are skipped (headless modules).
  */
 export function buildRouteTree(
-  modules: ReactiveModuleDescriptor[],
+  modules: ModuleDescriptor[],
   lazyModules: LazyModuleDescriptor[],
   options?: RouteBuilderOptions,
 ): RouteObject[] {

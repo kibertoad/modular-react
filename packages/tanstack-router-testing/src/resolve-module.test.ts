@@ -67,4 +67,79 @@ describe("resolveModule", () => {
 
     expect(onRegisterCalled).toBe(false);
   });
+
+  it("evaluates dynamicSlots and merges with static slots", () => {
+    const mod = defineModule<{ auth: { role: string } }, TestSlots>({
+      id: "users",
+      version: "0.1.0",
+      slots: {
+        commands: [{ id: "users:list", label: "View Users" }],
+      },
+      dynamicSlots: (deps) => ({
+        commands: deps.auth.role === "admin" ? [{ id: "users:admin", label: "Admin Panel" }] : [],
+      }),
+    });
+
+    const { slots } = resolveModule(mod, {
+      deps: { auth: { role: "admin" } },
+      defaults: { commands: [], systems: [] },
+    });
+
+    expect(slots.commands).toEqual([
+      { id: "users:list", label: "View Users" },
+      { id: "users:admin", label: "Admin Panel" },
+    ]);
+  });
+
+  it("dynamicSlots returns empty array when condition is not met", () => {
+    const mod = defineModule<{ auth: { role: string } }, TestSlots>({
+      id: "users",
+      version: "0.1.0",
+      slots: {
+        commands: [{ id: "users:list", label: "View Users" }],
+      },
+      dynamicSlots: (deps) => ({
+        commands: deps.auth.role === "admin" ? [{ id: "users:admin", label: "Admin Panel" }] : [],
+      }),
+    });
+
+    const { slots } = resolveModule(mod, {
+      deps: { auth: { role: "viewer" } },
+      defaults: { commands: [], systems: [] },
+    });
+
+    expect(slots.commands).toEqual([{ id: "users:list", label: "View Users" }]);
+  });
+
+  it("evaluates dynamicSlots with empty deps when none provided", () => {
+    const mod = defineModule<Record<string, any>, TestSlots>({
+      id: "test",
+      version: "0.1.0",
+      dynamicSlots: () => ({
+        commands: [{ id: "always", label: "Always Present" }],
+      }),
+    });
+
+    const { slots } = resolveModule(mod, {
+      defaults: { commands: [], systems: [] },
+    });
+
+    expect(slots.commands).toEqual([{ id: "always", label: "Always Present" }]);
+  });
+
+  it("skips dynamicSlots evaluation when module has none", () => {
+    const mod = defineModule<Record<string, any>, TestSlots>({
+      id: "static-only",
+      version: "0.1.0",
+      slots: {
+        commands: [{ id: "cmd-1", label: "Static" }],
+      },
+    });
+
+    const { slots } = resolveModule(mod, {
+      defaults: { commands: [], systems: [] },
+    });
+
+    expect(slots.commands).toEqual([{ id: "cmd-1", label: "Static" }]);
+  });
 });

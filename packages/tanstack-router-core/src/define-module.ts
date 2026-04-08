@@ -1,4 +1,4 @@
-import type { ReactiveModuleDescriptor, SlotMap, SlotMapOf } from "./types.js";
+import type { ModuleDescriptor, SlotMap, SlotMapOf } from "./types.js";
 
 /**
  * Identity function that provides type inference for module descriptors.
@@ -15,7 +15,7 @@ export function defineModule<
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
 >(
-  descriptor: ReactiveModuleDescriptor<TSharedDependencies, TSlots, TMeta>,
-): ReactiveModuleDescriptor<TSharedDependencies, TSlots, TMeta> {
+  descriptor: ModuleDescriptor<TSharedDependencies, TSlots, TMeta>,
+): ModuleDescriptor<TSharedDependencies, TSlots, TMeta> {
   return descriptor;
 }

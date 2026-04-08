@@ -1,8 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildSlotsManifest, collectDynamicSlotFactories, evaluateDynamicSlots } from "./slots.js";
-import type { DynamicSlotFactory, SlotFilter } from "./slots.js";
-import { createSlotsSignal } from "./app.js";
-import type { ReactiveModuleDescriptor } from "@react-router-modules/core";
+import {
+  buildSlotsManifest,
+  collectDynamicSlotFactories,
+  evaluateDynamicSlots,
+} from "@modular-react/core";
+import type { DynamicSlotFactory, SlotFilter } from "@modular-react/core";
+import { createSlotsSignal } from "@modular-react/react";
+import type { ModuleDescriptor } from "@react-router-modules/core";
 
 // Plain interface — no index signature or SlotMap extends needed
 interface TestSlots {
@@ -15,8 +19,8 @@ interface TestDeps {
 }
 
 function fakeModule(
-  overrides: Partial<ReactiveModuleDescriptor<TestDeps, TestSlots>> = {},
-): ReactiveModuleDescriptor<TestDeps, TestSlots> {
+  overrides: Partial<ModuleDescriptor<TestDeps, TestSlots>> = {},
+): ModuleDescriptor<TestDeps, TestSlots> {
   return {
     id: overrides.id ?? "test",
     version: "0.1.0",

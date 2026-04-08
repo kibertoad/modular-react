@@ -18,6 +18,8 @@ export default defineConfig({
         "@tanstack/react-query",
         "zustand",
         "@react-router-modules/core",
+        "@modular-react/core",
+        "@modular-react/react",
       ],
     },
     sourcemap: true,

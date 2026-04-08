@@ -1,30 +1,41 @@
 // Registry
 export { createRegistry } from "./registry.js";
-export type { ReactiveRegistry, ResolveOptions } from "./registry.js";
+export type { ModuleRegistry, ResolveOptions } from "./registry.js";
 
 // Types
+export type { RegistryConfig, ApplicationManifest } from "./types.js";
+
+// Re-export shared runtime types from @modular-react/core
 export type {
-  RegistryConfig,
   NavigationGroup,
   NavigationManifest,
-  ApplicationManifest,
   ModuleEntry,
-} from "./types.js";
+  DynamicSlotFactory,
+  SlotFilter,
+} from "@modular-react/core";
 
-// Navigation
-export { useNavigation } from "./navigation-context.js";
+// Re-export shared pure functions from @modular-react/core
+export {
+  buildSlotsManifest,
+  collectDynamicSlotFactories,
+  evaluateDynamicSlots,
+  buildNavigationManifest,
+  validateNoDuplicateIds,
+  validateDependencies,
+} from "@modular-react/core";
 
-// Slots
-export { useSlots, useRecalculateSlots, SlotsContext } from "./slots-context.js";
-export { buildSlotsManifest, collectDynamicSlotFactories, evaluateDynamicSlots } from "./slots.js";
-export type { DynamicSlotFactory, SlotFilter } from "./slots.js";
+// Re-export shared React hooks/contexts from @modular-react/react
+export {
+  useNavigation,
+  useSlots,
+  useRecalculateSlots,
+  SlotsContext,
+  useModules,
+  getModuleMeta,
+  ModulesContext,
+  ModuleErrorBoundary,
+} from "@modular-react/react";
 
-// Zones
+// Zones (router-specific)
 export { useZones } from "./zones.js";
 export { useActiveZones } from "./active-zones.js";
-
-// Modules
-export { useModules, getModuleMeta, ModulesContext } from "./modules-context.js";
-
-// Error boundary (for custom usage)
-export { ModuleErrorBoundary } from "./error-boundary.js";

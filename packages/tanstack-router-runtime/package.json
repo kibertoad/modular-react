@@ -28,6 +28,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@modular-react/core": "workspace:*",
+    "@modular-react/react": "workspace:*",
     "@tanstack-react-modules/core": "workspace:*"
   },
   "devDependencies": {

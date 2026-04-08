@@ -9,7 +9,7 @@ export const RecalculateSlotsContext = createContext<() => void>(noop);
 
 /**
  * Access the collected slot contributions from all registered modules.
- * Must be used within a <ReactiveApp /> provider tree.
+ * Must be used within a <ModularApp /> provider tree.
  *
  * @example
  * const slots = useSlots<AppSlots>()
@@ -18,7 +18,7 @@ export const RecalculateSlotsContext = createContext<() => void>(noop);
 export function useSlots<TSlots extends { [K in keyof TSlots]: readonly unknown[] }>(): TSlots {
   const slots = useContext(SlotsContext);
   if (!slots) {
-    throw new Error("[@modular-react/react] useSlots must be used within a <ReactiveApp />.");
+    throw new Error("[@modular-react/react] useSlots must be used within a <ModularApp />.");
   }
   return slots as TSlots;
 }

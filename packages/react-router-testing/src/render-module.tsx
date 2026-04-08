@@ -3,10 +3,10 @@ import type { RenderResult } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import type { RouteObject } from "react-router";
 import { SharedDependenciesContext, separateDeps } from "@react-router-modules/core";
-import type { ReactiveModuleDescriptor, SlotMap } from "@react-router-modules/core";
-import { SlotsContext, evaluateDynamicSlots } from "@react-router-modules/runtime";
-import { ModulesContext } from "@react-router-modules/runtime";
-import type { ModuleEntry } from "@react-router-modules/runtime";
+import type { ModuleDescriptor, SlotMap, ReactiveService } from "@react-router-modules/core";
+import type { ModuleEntry } from "@modular-react/core";
+import { evaluateDynamicSlots } from "@modular-react/core";
+import { SlotsContext, ModulesContext } from "@modular-react/react";
 import type { StoreApi } from "zustand";
 
 export interface RenderModuleOptions<TSharedDependencies extends Record<string, any>> {
@@ -32,7 +32,7 @@ export interface RenderModuleOptions<TSharedDependencies extends Record<string, 
   props?: Record<string, unknown>;
 }
 
-function buildModuleEntry(module: ReactiveModuleDescriptor<any>): ModuleEntry {
+function buildModuleEntry(module: ModuleDescriptor<any>): ModuleEntry {
   return {
     id: module.id,
     version: module.version,
@@ -47,27 +47,9 @@ function buildModuleEntry(module: ReactiveModuleDescriptor<any>): ModuleEntry {
  *
  * Supports both route-based modules (with createRoutes) and
  * component-only modules (with component, no routes).
- *
- * @example Route-based module
- * const result = await renderModule(billingModule, {
- *   route: '/billing',
- *   deps: {
- *     auth: createMockStore<AuthStore>({ user: testUser, isAuthenticated: true }),
- *     api: { get: vi.fn(), post: vi.fn() },
- *   },
- * })
- *
- * @example Component-only module
- * const result = await renderModule(ddSetupModule, {
- *   deps: {
- *     auth: createMockStore<AuthStore>({ ... }),
- *     httpClient: { get: vi.fn() },
- *   },
- *   props: { customerId: '123', accountNumber: 'A001' },
- * })
  */
 export async function renderModule<TSharedDependencies extends Record<string, any>>(
-  module: ReactiveModuleDescriptor<TSharedDependencies>,
+  module: ModuleDescriptor<TSharedDependencies>,
   options: RenderModuleOptions<TSharedDependencies>,
 ): Promise<RenderResult> {
   const { stores, services, reactiveServices } = separateDeps(
@@ -78,7 +60,6 @@ export async function renderModule<TSharedDependencies extends Record<string, an
 
   // Evaluate dynamic slots if the module has them
   if (module.dynamicSlots) {
-    // Build a flat deps snapshot for the dynamicSlots function
     const flatDeps: Record<string, unknown> = {};
     if (stores) {
       for (const [key, store] of Object.entries(stores)) {
@@ -89,7 +70,7 @@ export async function renderModule<TSharedDependencies extends Record<string, an
       flatDeps[key] = service;
     }
     for (const [key, rs] of Object.entries(reactiveServices)) {
-      flatDeps[key] = (rs as { getSnapshot: () => unknown }).getSnapshot();
+      flatDeps[key] = (rs as ReactiveService<unknown>).getSnapshot();
     }
 
     slots = evaluateDynamicSlots(
@@ -104,7 +85,6 @@ export async function renderModule<TSharedDependencies extends Record<string, an
   }
 
   if (module.createRoutes) {
-    // Route-based module — build routes and render via RouterProvider
     const moduleRoutes = module.createRoutes();
     const routes: RouteObject[] = Array.isArray(moduleRoutes) ? moduleRoutes : [moduleRoutes];
 
@@ -124,7 +104,6 @@ export async function renderModule<TSharedDependencies extends Record<string, an
   }
 
   if (module.component) {
-    // Component-only module — render directly inside providers
     const Component = module.component;
 
     return render(

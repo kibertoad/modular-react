@@ -1,6 +1,6 @@
 # @react-router-modules/core
 
-Core types and utilities for defining reactive modules. This is the package modules import - it provides `defineModule`, typed hooks (`useStore`, `useService`), scoped stores, and all shared type definitions.
+Core types and utilities for defining modules with React Router. Provides `defineModule`, typed hooks (`useStore`, `useService`), scoped stores, and all shared type definitions.
 
 ## Installation
 
@@ -42,4 +42,4 @@ export default defineModule<AppDependencies, AppSlots>({
 });
 ```
 
-See the [main documentation](https://github.com/kibertoad/reactive#readme) for the full guide.
+See the [main documentation](https://github.com/kibertoad/modular-react#readme) for the full guide.

@@ -1,6 +1,6 @@
-import type { ReactiveModuleDescriptor, SlotMap, SlotMapOf } from "@react-router-modules/core";
-import type { ModuleEntry } from "@react-router-modules/runtime";
-import { buildSlotsManifest, evaluateDynamicSlots } from "@react-router-modules/runtime";
+import type { ModuleDescriptor, SlotMap, SlotMapOf } from "@react-router-modules/core";
+import type { ModuleEntry } from "@modular-react/core";
+import { buildSlotsManifest, evaluateDynamicSlots } from "@modular-react/core";
 
 export interface ResolveModuleOptions<
   TSharedDependencies extends Record<string, any>,
@@ -27,23 +27,12 @@ export interface ResolveModuleResult<TSlots> {
  *
  * Use this for headless modules (no component, no routes) that can't
  * be tested with renderModule().
- *
- * When the module has `dynamicSlots`, they are evaluated with the
- * provided `deps` snapshot and merged with static slot contributions.
- *
- * @example
- * const { slots, entry } = resolveModule(externalSystemsModule, {
- *   defaults: { systems: [], commands: [] },
- *   deps: { auth: { user: { isAdmin: true } } },
- * })
- * expect(slots.systems).toHaveLength(1)
- * expect(entry.id).toBe('external-systems')
  */
 export function resolveModule<
   TSharedDependencies extends Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
 >(
-  module: ReactiveModuleDescriptor<TSharedDependencies, TSlots>,
+  module: ModuleDescriptor<TSharedDependencies, TSlots>,
   options?: ResolveModuleOptions<TSharedDependencies, TSlots>,
 ): ResolveModuleResult<TSlots> {
   let slots = buildSlotsManifest<TSlots>([module], options?.defaults);

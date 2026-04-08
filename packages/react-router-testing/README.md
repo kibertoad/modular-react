@@ -1,6 +1,6 @@
 # @react-router-modules/testing
 
-Testing utilities for reactive modules. Render modules in isolation with mocked dependencies.
+Testing utilities for modules. Render modules in isolation with mocked dependencies.
 
 ## Installation
 
@@ -26,4 +26,4 @@ expect(result.getByText("Billing Dashboard")).toBeTruthy();
 
 Both `renderModule` and `resolveModule` automatically evaluate `dynamicSlots` when present on a module, using the provided `deps` to build the dependencies snapshot.
 
-See the [main documentation](https://github.com/kibertoad/reactive#readme) for the full guide.
+See the [main documentation](https://github.com/kibertoad/modular-react#readme) for the full guide.

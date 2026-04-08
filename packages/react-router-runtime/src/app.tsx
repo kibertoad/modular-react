@@ -1,40 +1,23 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo } from "react";
 import { RouterProvider } from "react-router";
 import type { DataRouter } from "react-router";
 import type { StoreApi } from "zustand";
 import type { ReactiveService } from "@react-router-modules/core";
 import { SharedDependenciesContext } from "@react-router-modules/core";
-import { NavigationContext } from "./navigation-context.js";
-import { SlotsContext, RecalculateSlotsContext } from "./slots-context.js";
-import { ModulesContext } from "./modules-context.js";
-import { evaluateDynamicSlots } from "./slots.js";
-import type { DynamicSlotFactory, SlotFilter } from "./slots.js";
-import type { NavigationManifest, ModuleEntry } from "./types.js";
-
-/**
- * Minimal pub/sub signal — one producer (`notify`) triggers
- * all subscribers. Used to connect the imperative `recalculateSlots()`
- * function to the React-side `DynamicSlotsProvider`.
- */
-export interface SlotsSignal {
-  subscribe: (fn: () => void) => () => void;
-  notify: () => void;
-}
-
-export function createSlotsSignal(): SlotsSignal {
-  const listeners = new Set<() => void>();
-  return {
-    subscribe(fn) {
-      listeners.add(fn);
-      return () => {
-        listeners.delete(fn);
-      };
-    },
-    notify() {
-      for (const fn of listeners) fn();
-    },
-  };
-}
+import type {
+  DynamicSlotFactory,
+  SlotFilter,
+  NavigationManifest,
+  ModuleEntry,
+} from "@modular-react/core";
+import {
+  NavigationContext,
+  SlotsContext,
+  RecalculateSlotsContext,
+  ModulesContext,
+  DynamicSlotsProvider,
+} from "@modular-react/react";
+import type { SlotsSignal } from "@modular-react/react";
 
 interface AppProps {
   router: DataRouter;
@@ -49,59 +32,6 @@ interface AppProps {
   slotFilter?: SlotFilter;
   slotsSignal: SlotsSignal;
   recalculateSlots: () => void;
-}
-
-/**
- * Provider that re-evaluates dynamic slot factories when
- * `recalculateSlots()` is called (via the signal).
- *
- * Only mounted when at least one dynamic slot factory or slotFilter exists.
- */
-function DynamicSlotsProvider({
-  baseSlots,
-  factories,
-  filter,
-  stores,
-  services,
-  reactiveServices,
-  signal,
-  children,
-}: {
-  baseSlots: object;
-  factories: readonly DynamicSlotFactory[];
-  filter: SlotFilter | undefined;
-  stores: Record<string, StoreApi<unknown>>;
-  services: Record<string, unknown>;
-  reactiveServices: Record<string, ReactiveService<unknown>>;
-  signal: SlotsSignal;
-  children: React.ReactNode;
-}) {
-  // All props are stable references created once at resolve() time,
-  // so useCallback with empty deps is correct.
-  const computeSlots = useCallback(() => {
-    const deps: Record<string, unknown> = {};
-    for (const [key, store] of Object.entries(stores)) {
-      deps[key] = store.getState();
-    }
-    for (const [key, service] of Object.entries(services)) {
-      deps[key] = service;
-    }
-    for (const [key, rs] of Object.entries(reactiveServices)) {
-      deps[key] = rs.getSnapshot();
-    }
-    return evaluateDynamicSlots(baseSlots as any, factories, deps, filter);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- all closure values are stable from resolve()
-
-  const [resolvedSlots, setResolvedSlots] = useState(computeSlots);
-
-  useEffect(() => {
-    const unsubscribe = signal.subscribe(() => setResolvedSlots(computeSlots()));
-    // Catch any recalculateSlots() calls that fired between initial render and this effect
-    setResolvedSlots(computeSlots());
-    return unsubscribe;
-  }, [computeSlots, signal]);
-
-  return <SlotsContext value={resolvedSlots}>{children}</SlotsContext>;
 }
 
 export function createAppComponent({
@@ -172,6 +102,6 @@ export function createAppComponent({
     return tree;
   }
 
-  App.displayName = "ReactiveApp";
+  App.displayName = "ModularApp";
   return App;
 }

@@ -1,6 +1,6 @@
 # @tanstack-react-modules/runtime
 
-Application assembly layer for the reactive framework. Takes modules and configuration, produces a running app with routing, slots, zones, navigation, and provider wiring.
+Application assembly layer for the modular-react framework (TanStack Router integration). Takes modules and configuration, produces a running app with routing, slots, zones, navigation, and provider wiring.
 
 ## Installation
 
@@ -22,10 +22,19 @@ const registry = createRegistry<AppDependencies, AppSlots>({
 
 registry.register(billingModule);
 
-const { App } = registry.resolve({
+const { App, recalculateSlots } = registry.resolve({
   rootComponent: Layout,
   indexComponent: HomePage,
 });
+
+// Re-evaluate dynamic slots after auth state changes
+authStore.subscribe((state, prev) => {
+  if (state.isAuthenticated !== prev.isAuthenticated) {
+    recalculateSlots();
+  }
+});
 ```
 
-See the [main documentation](https://github.com/kibertoad/reactive#readme) for the full guide.
+Modules can contribute conditional slot entries via `dynamicSlots` and trigger re-evaluation from components via `useRecalculateSlots()`. The shell can apply cross-cutting filters via `slotFilter` on `resolve()`.
+
+See the [main documentation](https://github.com/kibertoad/modular-react#readme) for the full guide.

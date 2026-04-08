@@ -10,7 +10,7 @@ export default defineConfig({
       fileName: "index",
     },
     rollupOptions: {
-      external: ["react", "zustand", "@tanstack/react-router"],
+      external: ["react", "zustand", "@tanstack/react-router", "@modular-react/core"],
     },
     sourcemap: true,
   },

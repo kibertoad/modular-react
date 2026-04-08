@@ -1,8 +1,8 @@
-import type { ReactiveModuleDescriptor, SlotMap, SlotMapOf } from "./types.js";
+import type { ModuleDescriptor, SlotMap, SlotMapOf } from "./types.js";
 
 /**
  * Shorthand for defining headless modules that only contribute slots.
- * Returns a ReactiveModuleDescriptor with no component, routes, or lifecycle.
+ * Returns a ModuleDescriptor with no component, routes, or lifecycle.
  *
  * @example
  * ```ts
@@ -17,6 +17,6 @@ export function defineSlots<
 >(
   id: string,
   slots: { readonly [K in keyof TSlots]?: TSlots[K] },
-): ReactiveModuleDescriptor<TSharedDependencies, TSlots> {
+): ModuleDescriptor<TSharedDependencies, TSlots> {
   return { id, version: "0.0.0", slots };
 }

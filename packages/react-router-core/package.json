@@ -27,6 +27,9 @@
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@modular-react/core": "workspace:*"
+  },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "react": "^19.0.0",

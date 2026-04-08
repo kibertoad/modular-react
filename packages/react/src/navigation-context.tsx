@@ -10,7 +10,7 @@ export const NavigationContext = createContext<NavigationManifest | null>(null);
 export function useNavigation(): NavigationManifest {
   const nav = useContext(NavigationContext);
   if (!nav) {
-    throw new Error("[@modular-react/react] useNavigation must be used within a <ReactiveApp />.");
+    throw new Error("[@modular-react/react] useNavigation must be used within a <ModularApp />.");
   }
   return nav;
 }

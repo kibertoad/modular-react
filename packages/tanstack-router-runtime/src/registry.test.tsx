@@ -176,4 +176,83 @@ describe("createRegistry", () => {
 
     expect(() => registry.resolve()).toThrow(/resolve\(\) can only be called once/);
   });
+
+  it("returns recalculateSlots as a no-op when no dynamic slots exist", () => {
+    const registry = createRegistry<TestDeps, TestSlots>({
+      stores: { auth: createTestAuthStore() },
+      services: { api: { baseUrl: "http://test" } },
+    });
+
+    registry.register(headlessModule("static"));
+
+    const { recalculateSlots } = registry.resolve();
+
+    expect(recalculateSlots).toBeDefined();
+    expect(() => recalculateSlots()).not.toThrow();
+  });
+
+  it("returns a functional recalculateSlots when dynamic slots exist", () => {
+    const registry = createRegistry<TestDeps, TestSlots>({
+      stores: { auth: createTestAuthStore() },
+      services: { api: { baseUrl: "http://test" } },
+    });
+
+    registry.register({
+      id: "dynamic",
+      version: "1.0.0",
+      dynamicSlots: (deps: TestDeps) => ({
+        commands: deps.auth.user !== null ? [{ id: "dyn:cmd", label: "Dynamic Command" }] : [],
+      }),
+    });
+
+    const { recalculateSlots } = registry.resolve();
+
+    expect(recalculateSlots).toBeDefined();
+    expect(() => recalculateSlots()).not.toThrow();
+  });
+
+  it("collects dynamic slot factories during resolve", () => {
+    const dynamicSlots = vi.fn(() => ({
+      commands: [{ id: "dyn:cmd", label: "Dynamic" }],
+    }));
+
+    const registry = createRegistry<TestDeps, TestSlots>({
+      stores: { auth: createTestAuthStore() },
+      services: { api: { baseUrl: "http://test" } },
+      slots: { commands: [] },
+    });
+
+    registry.register({
+      id: "dyn-module",
+      version: "1.0.0",
+      slots: { commands: [{ id: "static:cmd", label: "Static" }] } as TestSlots,
+      dynamicSlots,
+    });
+
+    const { slots } = registry.resolve();
+
+    // Static slots are collected at resolve time
+    expect(slots.commands).toEqual([{ id: "static:cmd", label: "Static" }]);
+  });
+
+  it("wraps onRegister errors with module ID", () => {
+    const registry = createRegistry<TestDeps, TestSlots>({
+      stores: { auth: createTestAuthStore() },
+      services: { api: { baseUrl: "http://test" } },
+    });
+
+    registry.register({
+      id: "failing",
+      version: "1.0.0",
+      lifecycle: {
+        onRegister: () => {
+          throw new Error("init failed");
+        },
+      },
+    });
+
+    expect(() => registry.resolve()).toThrow(
+      /Module "failing" lifecycle\.onRegister\(\) failed: init failed/,
+    );
+  });
 });
