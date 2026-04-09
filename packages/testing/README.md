@@ -10,8 +10,8 @@ npm install -D @modular-react/testing
 
 ## What's included
 
-- **`resolveModule`** — resolves module contributions (slots, lifecycle) without rendering
-- **`createMockStore`** — creates a store pre-populated with test state (uses `@modular-react/core`'s built-in store)
+- **`resolveModule`**: resolves module contributions (slots, lifecycle) without rendering
+- **`createMockStore`**: creates a store pre-populated with test state (uses `@modular-react/core`'s built-in store)
 - **Types**: `ResolveModuleOptions`, `ResolveModuleResult`
 
 ## Usage

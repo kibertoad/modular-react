@@ -10,9 +10,9 @@ npm install -D @react-router-modules/testing
 
 ## What's included
 
-- **`renderModule`** — renders a module with React Router in a test environment
-- **`resolveModule`** — resolves module contributions (slots, lifecycle) without rendering
-- **`createMockStore`** — creates a zustand store pre-populated with test state
+- **`renderModule`**: renders a module with React Router in a test environment
+- **`resolveModule`**: resolves module contributions (slots, lifecycle) without rendering
+- **`createMockStore`**: creates a zustand store pre-populated with test state
 - **Types**: `RenderModuleOptions`, `ResolveModuleOptions`, `ResolveModuleResult`
 
 ## Usage

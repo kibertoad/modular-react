@@ -1,14 +1,14 @@
 # modular-react
 
-You already use React Router or TanStack Router. **modular-react** lets you split your app into self-contained modules that each declare their own routes, navigation items, slot contributions, and dependencies — then composes them at startup through a typed registry.
+modular-react sits on top of React Router or TanStack Router and lets you split your app into self-contained modules. Each module declares its own routes, navigation items, slot contributions, and dependencies, and a typed registry composes them at startup.
 
-The two router integrations are peers — pick the one that matches the router you already ship.
+The two router integrations are peers. Pick the one that matches the router you already ship.
 
 ## The problem this solves
 
 In a router-only setup, every new feature adds entries in `App.tsx`, the sidebar config, the command palette registry, the auth guard list, and wherever else cross-cutting state lives. Four teams editing those same files means constant merge conflicts and no clear ownership. Deleting a feature means hunting its fragments across a dozen places.
 
-modular-react lets each feature own a single `modules/<name>/` directory that fully declares its routes, nav items, commands, zone contributions, and dependencies. The shell never has to know about any specific module — it just registers them and the runtime wires everything together. Adding a feature is `create module`; deleting one is removing a directory and one `registry.register(...)` call.
+modular-react lets each feature own a single `modules/<name>/` directory that fully declares its routes, nav items, commands, zone contributions, and dependencies. The shell never has to know about any specific module; it just registers them and the runtime wires everything together. Adding a feature is `create module`; deleting one is removing a directory and one `registry.register(...)` call.
 
 Good for: plugin-style apps, apps where many teams contribute features, and apps that have grown past the point where one `App.tsx` is still comfortable to edit.
 
@@ -35,15 +35,15 @@ Good for: plugin-style apps, apps where many teams contribute features, and apps
 
 - The **sidebar** is built from every module's `navigation` array.
 - The **header commands** are collected from every module's `slots.commands`.
-- The **detail panel** (and any other zones you define) is filled by whichever module owns the active route. Navigate away, and a different module's contribution takes over — or the panel hides entirely.
+- The **detail panel** (and any other zones you define) is filled by whichever module owns the active route. Navigate away, and a different module's contribution takes over, or the panel hides entirely.
 
 ## Project status
 
-- `@react-router-modules/*` — **v2.x**, considered stable for the APIs documented in the guides below.
-- `@tanstack-react-modules/*` — **v1.x**, considered stable for the APIs documented in the guides below.
-- `@modular-react/{core,react,testing}` — the shared foundation, versioned independently at `0.x`. Breaking changes, when they happen, flow through the router-integration majors.
+- `@react-router-modules/*`: **v2.x**, considered stable for the APIs documented in the guides below.
+- `@tanstack-react-modules/*`: **v1.x**, considered stable for the APIs documented in the guides below.
+- `@modular-react/{core,react,testing}`: the shared foundation, versioned independently at `0.x`. Breaking changes, when they happen, flow through the router-integration majors.
 
-All packages target **React 19**, **Node 22+**, and **pnpm** workspaces. See each getting-started guide for the full pinned version set.
+All packages target **React 19** and **Node 22+**. The docs and CLI scaffolder assume **pnpm workspaces**, but nothing in the runtime or CLI is pnpm-specific; any local package resolution that understands the `workspace:*` protocol (Yarn Berry, Bun) will work after scaffolding with a few script edits. See each getting-started guide for the full pinned version set.
 
 ## Quickstart
 
@@ -59,23 +59,23 @@ cd my-app && pnpm install && pnpm dev
 
 For the walkthrough of what the scaffold produces and how to extend it, see the getting-started guide for your router:
 
-- [Getting started — React Router](docs/getting-started-react-router.md)
-- [Getting started — TanStack Router](docs/getting-started-tanstack-router.md)
+- [Getting started with React Router](docs/getting-started-react-router.md)
+- [Getting started with TanStack Router](docs/getting-started-tanstack-router.md)
 
-> **Package manager:** the scaffold produces a **pnpm workspace**. Yarn Berry and Bun will work after scaffolding with minor script edits; **npm is not supported** because it doesn't implement the `workspace:*` protocol. Turborepo is orthogonal — run it on top of pnpm. See the getting-started guides for details.
+> **Package manager:** the scaffold produces a **pnpm workspace**. Yarn Berry and Bun will work after scaffolding with minor script edits; **npm is not supported** because it doesn't implement the `workspace:*` protocol. Turborepo is orthogonal; run it on top of pnpm. See the getting-started guides for details.
 
 ## Guides
 
 Conceptual documentation for building apps with the framework. Start with a getting-started guide, then dig into the shell patterns once you want to go beyond the defaults.
 
-| Guide                                                                        | What it covers                                                                                                                 |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| [Getting started — React Router](docs/getting-started-react-router.md)       | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                        |
-| [Getting started — TanStack Router](docs/getting-started-tanstack-router.md) | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.            |
-| [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                      | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination. |
-| [Shell Patterns — React Router](docs/shell-patterns-react-router.md)         | Module route shape, route zones via `handle`, `authenticatedRoute` with `loader`, public `shellRoutes`.                        |
-| [Shell Patterns — TanStack Router](docs/shell-patterns-tanstack-router.md)   | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `authenticatedRoute` with `beforeLoad`.  |
-| [Workspace Patterns](docs/workspace-patterns.md)                             | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                        |
+| Guide                                                                           | What it covers                                                                                                                 |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [Getting started with React Router](docs/getting-started-react-router.md)       | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                        |
+| [Getting started with TanStack Router](docs/getting-started-tanstack-router.md) | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.            |
+| [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                         | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination. |
+| [Shell Patterns for React Router](docs/shell-patterns-react-router.md)          | Module route shape, route zones via `handle`, `authenticatedRoute` with `loader`, public `shellRoutes`.                        |
+| [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)    | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `authenticatedRoute` with `beforeLoad`.  |
+| [Workspace Patterns](docs/workspace-patterns.md)                                | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                        |
 
 ## What the code looks like
 
@@ -198,4 +198,4 @@ pnpm test           # Run all tests
 ## Help & contributing
 
 - **Questions or bugs:** open an issue at [kibertoad/modular-react](https://github.com/kibertoad/modular-react/issues).
-- **Pull requests** are welcome — start with an issue for anything beyond a typo fix so we can agree on the direction.
+- **Pull requests** are welcome. Start with an issue for anything beyond a typo fix so we can agree on the direction.

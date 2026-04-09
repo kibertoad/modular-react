@@ -1,19 +1,19 @@
 # Workspace Patterns
 
-This guide covers patterns for building **workspace-style applications** with the modular-react framework — apps where the shell renders modules in tabs, panels, and drawers rather than via URL routes. Contact center agent desktops, trading platforms, and admin consoles are typical examples.
+This guide covers patterns for building **workspace-style applications** with the modular-react framework: apps where the shell renders modules in tabs, panels, and drawers rather than via URL routes. Contact center agent desktops, trading platforms, and admin consoles are typical examples.
 
 > **Prerequisite:** This guide builds on [Shell Patterns (Fundamentals)](shell-patterns.md), which covers the shared foundation: layout grids, slots, command palettes, cross-store coordination, and module-to-shell communication. Read that first.
 >
-> Workspace patterns are router-agnostic. Every hook and descriptor field shown here works identically with `@react-router-modules/*` and `@tanstack-react-modules/*` — only the imports differ. Use whichever runtime your shell already uses. Where route fallback behavior matters, the [React Router](shell-patterns-react-router.md) and [TanStack Router](shell-patterns-tanstack-router.md) companion docs show the route-declaration syntax.
+> Workspace patterns are router-agnostic. Every hook and descriptor field shown here works identically with `@react-router-modules/*` and `@tanstack-react-modules/*`; only the imports differ. Use whichever runtime your shell already uses. Where route fallback behavior matters, the [React Router](shell-patterns-react-router.md) and [TanStack Router](shell-patterns-tanstack-router.md) companion docs show the route-declaration syntax.
 
 ## When to use workspace patterns
 
 Use these patterns when your app has:
 
-- **Tabbed workspaces** — users open and close content tabs within a persistent shell
-- **Component-only modules** — modules render via the shell (not via URL routes)
-- **Per-session state** — each customer/ticket/case has its own tab state, notes, etc.
-- **Contextual panels that change per tab** — the active tab determines what shows in a sidebar
+- **Tabbed workspaces**: users open and close content tabs within a persistent shell
+- **Component-only modules**: modules render via the shell (not via URL routes)
+- **Per-session state**: each customer/ticket/case has its own tab state, notes, etc.
+- **Contextual panels that change per tab**: the active tab determines what shows in a sidebar
 
 If your app is a traditional page-navigated SPA where modules own routes, the core framework + [Shell Patterns](shell-patterns.md) are sufficient.
 
@@ -40,7 +40,7 @@ If your app is a traditional page-navigated SPA where modules own routes, the co
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The shell owns the layout. In workspace apps, the **shell controls which module is currently rendered** — not the URL. The most common pattern is a tab strip where each tab renders one module's content, but the same architecture works for any shell-managed content switching: a single content area that swaps between modules, a drawer, a modal, or a split view. Modules don't know how the shell presents them; the shell decides when and where to render each module's `component`.
+The shell owns the layout. In workspace apps, the **shell controls which module is currently rendered**, not the URL. The most common pattern is a tab strip where each tab renders one module's content, but the same architecture works for any shell-managed content switching: a single content area that swaps between modules, a drawer, a modal, or a split view. Modules don't know how the shell presents them; the shell decides when and where to render each module's `component`.
 
 Modules contribute content through five channels:
 
@@ -52,14 +52,14 @@ Modules contribute content through five channels:
 | Tab-active panels     | `zones` on module descriptor      | Contextual panel when a module tab is active    |
 | Runtime state         | Shared Zustand stores             | Active tab, session state, panel visibility     |
 
-> The fourth row — descriptor-level `zones` — is a shared `ModuleDescriptor` field and works identically across both routers. Row three (route-specific panels) is the one that varies: [React Router uses `handle`](shell-patterns-react-router.md#route-zones), [TanStack Router uses `staticData`](shell-patterns-tanstack-router.md#route-zones).
+> The fourth row (descriptor-level `zones`) is a shared `ModuleDescriptor` field and works identically across both routers. Row three (route-specific panels) is the one that varies: [React Router uses `handle`](shell-patterns-react-router.md#route-zones), [TanStack Router uses `staticData`](shell-patterns-tanstack-router.md#route-zones).
 
 ## Step 1: Define the contracts in app-shared
 
 ```typescript
 // app-shared/src/index.ts
 import { createSharedHooks } from "@react-router-modules/core";
-// ^ or "@tanstack-react-modules/core" — createSharedHooks is identical in both
+// ^ or "@tanstack-react-modules/core" (createSharedHooks is identical in both)
 import type { ComponentType } from "react";
 
 // ---- Zones (layout regions that change per active content) ----
@@ -69,7 +69,7 @@ export interface AppZones {
   headerActions?: ComponentType;
 }
 
-// For TanStack Router only — augment staticData so it type-checks at createRoute.
+// For TanStack Router only: augment staticData so it type-checks at createRoute.
 // React Router does not need augmentation; handle is unknown and narrowed by useZones<AppZones>().
 declare module "@tanstack/router-core" {
   interface StaticDataRouteOption extends AppZones {}
@@ -108,7 +108,7 @@ export interface AppDependencies {
 }
 
 // ---- Module metadata for catalog discovery ----
-// Define your own metadata shape - the framework passes it through via TMeta generic.
+// Define your own metadata shape. The framework passes it through via TMeta generic.
 
 export interface WorkflowMeta {
   readonly name: string;
@@ -213,7 +213,7 @@ export default defineModule<AppDependencies, AppSlots, WorkflowMeta>({
   // The shell renders this in a workspace tab
   component: lazy(() => import("./OnboardingFlow.js")),
 
-  // Catalog metadata - shell reads via useModules() + getModuleMeta()
+  // Catalog metadata: shell reads via useModules() + getModuleMeta()
   meta: {
     name: "Customer Onboarding",
     description: "Walk through the new customer setup process",
@@ -222,7 +222,7 @@ export default defineModule<AppDependencies, AppSlots, WorkflowMeta>({
     estimatedTime: "5-10 mins",
   },
 
-  // Zones - shell reads via useActiveZones() when this module's tab is active
+  // Zones: shell reads via useActiveZones() when this module's tab is active
   zones: {
     contextualPanel: OnboardingPanel,
   },
@@ -262,7 +262,7 @@ The shell reads zones from both routes and the active module using `useActiveZon
 
 ```typescript
 import { useActiveZones } from '@react-router-modules/runtime'
-// ^ or '@tanstack-react-modules/runtime' — identical API
+// ^ or '@tanstack-react-modules/runtime' (identical API)
 import type { AppZones } from '@myorg/app-shared'
 
 function ShellLayout() {
@@ -289,14 +289,14 @@ function ShellLayout() {
 
 1. Collects route zones via `useZones()` (from `handle` on React Router matched routes, or `staticData` on TanStack matched routes).
 2. If `activeModuleId` is provided, looks up the module's `zones` field from `useModules()`.
-3. Merges both — **module wins** for the same key.
+3. Merges both: **module wins** for the same key.
 4. When `activeModuleId` is `null`, returns route zones only.
 
 This gives the shell one code path regardless of whether the active content is route-based or tab-based.
 
 ### How tab switches update zones
 
-When the user clicks a different tab, the zone layout updates through a reactive chain — no imperative wiring needed:
+When the user clicks a different tab, the zone layout updates through a reactive chain, no imperative wiring needed:
 
 ```
 User clicks tab "Billing"
@@ -356,7 +356,7 @@ function DirectoryPage() {
 }
 ```
 
-Category labels fall back to `capitalize(category)` — no hardcoded label map needed.
+Category labels fall back to `capitalize(category)`; no hardcoded label map needed.
 
 ## Step 6: Tab rendering from module catalog
 
@@ -374,7 +374,7 @@ function WorkspaceContent({ activeTab, customerId, accountNumber, sessionId }) {
     return <IframeContainer url={activeTab.iframeUrl} title={activeTab.title} />
   }
 
-  // native-workflow - look up the module
+  // native-workflow: look up the module
   const mod = modules.find((m) => m.id === activeTab.workflowId)
   if (!mod?.component) return <p>Module "{activeTab.workflowId}" not found</p>
 
@@ -431,8 +431,8 @@ function WorkflowWrapper({ workflowId, customerId, accountNumber, sessionId, tab
 
 Modules control their own completion behavior via `WorkflowMeta`:
 
-- `keepOpenOnComplete: true` — tab stays open, module shows its own post-completion UI
-- `addNoteOnComplete: false` — no automatic note on completion
+- `keepOpenOnComplete: true`: tab stays open; module shows its own post-completion UI
+- `addNoteOnComplete: false`: no automatic note on completion
 
 ## Step 7: Per-session state with scoped stores
 
@@ -440,14 +440,14 @@ For apps where each session has independent state, use `createScopedStore`:
 
 ```typescript
 import { createScopedStore } from "@react-router-modules/core";
-// ^ or "@tanstack-react-modules/core" — identical API
+// ^ or "@tanstack-react-modules/core" (identical API)
 
 const sessionTabs = createScopedStore<TabState>(() => ({
   tabs: [{ id: "directory", type: "directory", title: "Directory", closeable: false }],
   activeTabId: "directory",
 }));
 
-// In a component - subscribe to this session's tab state
+// In a component: subscribe to this session's tab state
 function Workspace({ sessionId }: { sessionId: string }) {
   const { tabs, activeTabId } = sessionTabs.useScoped(sessionId);
   // ...
@@ -487,7 +487,7 @@ function InvoiceActions({ invoiceId }: { invoiceId: string }) {
 
 ## Zone initial state and tab navigation
 
-Zones are reactive — they re-derive on every route change and tab switch. There is no implicit default and no "sticky" carry-over from a previous page or tab.
+Zones are reactive; they re-derive on every route change and tab switch. There is no implicit default and no "sticky" carry-over from a previous page or tab.
 
 **Initial render:** When no route or module contributes a zone, every key is `undefined`. The shell layout should render fallback content:
 
@@ -495,7 +495,7 @@ Zones are reactive — they re-derive on every route change and tab switch. Ther
 {zones.contextualPanel ? <zones.contextualPanel /> : <DefaultPanel />}
 ```
 
-**Tab switch:** When the user switches from a tab whose module declares `zones: { contextualPanel: BillingPanel }` to a tab whose module declares no zones, `contextualPanel` reverts to whatever the route hierarchy provides — or `undefined` if no route sets it either. This is intentional: the shell always reflects the currently active content, not the previously active content.
+**Tab switch:** When the user switches from a tab whose module declares `zones: { contextualPanel: BillingPanel }` to a tab whose module declares no zones, `contextualPanel` reverts to whatever the route hierarchy provides, or `undefined` if no route sets it either. This is intentional: the shell always reflects the currently active content, not the previously active content.
 
 **Persistent zones across tabs:** If a zone should always be present regardless of the active tab, set it on a parent layout route (via `handle` on React Router, `staticData` on TanStack Router). Module descriptor zones override route zones for the same key, so the route value acts as a fallback when the active module doesn't contribute that zone.
 
@@ -515,4 +515,4 @@ Zones are reactive — they re-derive on every route change and tab switch. Ther
 | Per-session state                    | Shell    | `createScopedStore`                                           |
 | Tab rendering                        | Shell    | Looks up module by id via `useModules()`, renders `component` |
 
-The framework provides the composition primitives. The shell owns the workspace architecture. Modules stay standalone and testable — they declare what they contribute, the shell decides where it goes.
+The framework provides the composition primitives. The shell owns the workspace architecture. Modules stay standalone and testable: they declare what they contribute, the shell decides where it goes.

@@ -1,6 +1,6 @@
-# Shell Patterns — TanStack Router
+# Shell Patterns for TanStack Router
 
-Router-specific additions to [Shell Patterns (Fundamentals)](shell-patterns.md) for apps built with `@tanstack-react-modules/*`. Read the fundamentals guide first — this document only covers the parts that depend on TanStack Router.
+Router-specific additions to [Shell Patterns (Fundamentals)](shell-patterns.md) for apps built with `@tanstack-react-modules/*`. Read the fundamentals guide first; this document only covers the parts that depend on TanStack Router.
 
 ## Module routes
 
@@ -43,7 +43,7 @@ export default defineModule<AppDependencies, AppSlots>({
 
 ## Route Zones
 
-TanStack Router exposes per-route metadata through `staticData`. The modular-react runtime reads zones from there — any component placed on a matched route's `staticData` is surfaced by `useZones()`.
+TanStack Router exposes per-route metadata through `staticData`. The modular-react runtime reads zones from there: any component placed on a matched route's `staticData` is surfaced by `useZones()`.
 
 ### Declaring zones on a route
 
@@ -126,21 +126,21 @@ const { App } = registry.resolve({
   rootComponent: RootLayout,
   indexComponent: DashboardPage,
 
-  // Runs for ALL routes (including /login) — observability, not auth
+  // Runs for ALL routes (including /login): observability, not auth
   beforeLoad: ({ location }) => {
     analytics.trackPageView(location.pathname);
   },
 
-  // Auth boundary — guards module routes and the index
+  // Auth boundary: guards module routes and the index
   authenticatedRoute: {
     beforeLoad: async () => {
       const res = await fetch("/api/auth/session");
       if (!res.ok) throw redirect({ to: "/login" });
     },
-    component: ShellLayout, // optional — defaults to <Outlet />
+    component: ShellLayout, // optional; defaults to <Outlet />
   },
 
-  // Public routes — outside the auth boundary
+  // Public routes: outside the auth boundary
   shellRoutes: (root) => [
     createRoute({ getParentRoute: () => root, path: "/login", component: LoginPage }),
     createRoute({ getParentRoute: () => root, path: "/signup", component: SignupPage }),
@@ -151,10 +151,10 @@ const { App } = registry.resolve({
 This produces the route tree:
 
 ```
-Root (beforeLoad: observability - runs for all routes)
-├── /login (public - no auth guard)
-├── /signup (public - no auth guard)
-└── _authenticated (layout - auth guard protects children)
+Root (beforeLoad: observability, runs for all routes)
+├── /login (public, no auth guard)
+├── /signup (public, no auth guard)
+└── _authenticated (layout; auth guard protects children)
     ├── / (DashboardPage)
     └── /billing, /users, …  (module routes)
 ```
@@ -178,7 +178,7 @@ export default defineModule<AppDependencies, AppSlots>({
       getParentRoute: () => parentRoute,
       path: "admin",
       beforeLoad: () => {
-        // Access auth store directly — beforeLoad runs outside React
+        // Access auth store directly; beforeLoad runs outside React
         const { role } = authStore.getState();
         if (role !== "admin") throw redirect({ to: "/" });
       },
@@ -195,17 +195,17 @@ export default defineModule<AppDependencies, AppSlots>({
 
 ## createRoutes signature summary
 
-| Aspect                 | TanStack Router                                                   |
-| ---------------------- | ----------------------------------------------------------------- |
-| Return type            | `AnyRoute` (built via `createRoute` + `addChildren`)              |
-| Parent argument        | `parentRoute: AnyRoute` — use `getParentRoute: () => parentRoute` |
-| Code splitting         | `component: lazyRouteComponent(() => import('./Page.js'))`        |
-| Zone declaration       | `staticData: { ... }` on `createRoute` options                    |
-| Route-level auth guard | `beforeLoad: () => { throw redirect({ to: '/' }) }`               |
+| Aspect                 | TanStack Router                                                  |
+| ---------------------- | ---------------------------------------------------------------- |
+| Return type            | `AnyRoute` (built via `createRoute` + `addChildren`)             |
+| Parent argument        | `parentRoute: AnyRoute`: use `getParentRoute: () => parentRoute` |
+| Code splitting         | `component: lazyRouteComponent(() => import('./Page.js'))`       |
+| Zone declaration       | `staticData: { ... }` on `createRoute` options                   |
+| Route-level auth guard | `beforeLoad: () => { throw redirect({ to: '/' }) }`              |
 
 ## See also
 
-- [Shell Patterns (Fundamentals)](shell-patterns.md) — the router-agnostic foundation.
-- [Shell Patterns — React Router](shell-patterns-react-router.md) — the same patterns, expressed against React Router's API.
-- [Workspace Patterns](workspace-patterns.md) — tabbed workspaces and descriptor-level zones.
-- `@tanstack-react-modules/runtime` package README — `dynamicSlots`, `recalculateSlots`, `slotFilter`.
+- [Shell Patterns (Fundamentals)](shell-patterns.md): the router-agnostic foundation.
+- [Shell Patterns for React Router](shell-patterns-react-router.md): the same patterns, expressed against React Router's API.
+- [Workspace Patterns](workspace-patterns.md): tabbed workspaces and descriptor-level zones.
+- `@tanstack-react-modules/runtime` package README: `dynamicSlots`, `recalculateSlots`, `slotFilter`.

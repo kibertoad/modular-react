@@ -1,10 +1,10 @@
-# Shell Patterns — React Router
+# Shell Patterns for React Router
 
-Router-specific additions to [Shell Patterns (Fundamentals)](shell-patterns.md) for apps built with `@react-router-modules/*`. Read the fundamentals guide first — this document only covers the parts that depend on React Router.
+Router-specific additions to [Shell Patterns (Fundamentals)](shell-patterns.md) for apps built with `@react-router-modules/*`. Read the fundamentals guide first; this document only covers the parts that depend on React Router.
 
 ## Module routes
 
-A module's `createRoutes` returns `RouteObject[]` (or a single `RouteObject`). There is no parent argument — React Router route objects are plain data, and the runtime nests them under the root automatically.
+A module's `createRoutes` returns `RouteObject[]` (or a single `RouteObject`). There is no parent argument: React Router route objects are plain data, and the runtime nests them under the root automatically.
 
 ```typescript
 // modules/billing/src/index.ts
@@ -36,11 +36,11 @@ export default defineModule<AppDependencies, AppSlots>({
 });
 ```
 
-Use `lazy: () => import(...)` for per-route code splitting — React Router handles the promise and resolves `Component`, `loader`, `action`, and `handle` from the imported module.
+Use `lazy: () => import(...)` for per-route code splitting. React Router handles the promise and resolves `Component`, `loader`, `action`, and `handle` from the imported module.
 
 ## Route Zones
 
-React Router exposes arbitrary per-route metadata via the `handle` field on `RouteObject`. The modular-react runtime reads zones from there — any component placed on a matched route's `handle` is surfaced by `useZones()`.
+React Router exposes arbitrary per-route metadata via the `handle` field on `RouteObject`. The modular-react runtime reads zones from there: any component placed on a matched route's `handle` is surfaced by `useZones()`.
 
 ### Declaring zones on a route
 
@@ -118,23 +118,23 @@ const { App } = registry.resolve({
   rootComponent: RootLayout,
   indexComponent: DashboardPage,
 
-  // Runs for ALL routes (including /login) — observability, not auth
+  // Runs for ALL routes (including /login): observability, not auth
   loader: async ({ request }) => {
     analytics.trackPageView(new URL(request.url).pathname);
     return null;
   },
 
-  // Auth boundary — guards module routes and the index
+  // Auth boundary: guards module routes and the index
   authenticatedRoute: {
     loader: async () => {
       const res = await fetch("/api/auth/session");
       if (!res.ok) throw redirect("/login");
       return null;
     },
-    Component: ShellLayout, // optional — defaults to <Outlet />
+    Component: ShellLayout, // optional; defaults to <Outlet />
   },
 
-  // Public routes — outside the auth boundary
+  // Public routes: outside the auth boundary
   shellRoutes: () => [
     { path: "/login", Component: LoginPage },
     { path: "/signup", Component: SignupPage },
@@ -145,10 +145,10 @@ const { App } = registry.resolve({
 This produces the route tree:
 
 ```
-Root (loader: observability - runs for all routes)
-├── /login (public - no auth guard)
-├── /signup (public - no auth guard)
-└── _authenticated (layout - auth guard protects children)
+Root (loader: observability, runs for all routes)
+├── /login (public, no auth guard)
+├── /signup (public, no auth guard)
+└── _authenticated (layout; auth guard protects children)
     ├── / (DashboardPage)
     └── /billing, /users, …  (module routes)
 ```
@@ -171,7 +171,7 @@ export default defineModule<AppDependencies, AppSlots>({
     {
       path: "admin",
       loader: () => {
-        // Access auth store directly — loaders run outside React
+        // Access auth store directly; loaders run outside React
         const { role } = authStore.getState();
         if (role !== "admin") throw redirect("/");
         return null;
@@ -191,14 +191,14 @@ export default defineModule<AppDependencies, AppSlots>({
 | Aspect                 | React Router                                                              |
 | ---------------------- | ------------------------------------------------------------------------- |
 | Return type            | `RouteObject \| RouteObject[]`                                            |
-| Parent argument        | None — the runtime grafts your routes onto the auth boundary              |
+| Parent argument        | None; the runtime grafts your routes onto the auth boundary               |
 | Code splitting         | `lazy: () => import('./Page.js').then((m) => ({ Component: m.default }))` |
 | Zone declaration       | `handle: { ... }` on the route object                                     |
 | Route-level auth guard | `loader: () => { throw redirect('/') }`                                   |
 
 ## See also
 
-- [Shell Patterns (Fundamentals)](shell-patterns.md) — the router-agnostic foundation.
-- [Shell Patterns — TanStack Router](shell-patterns-tanstack-router.md) — the same patterns, expressed against TanStack Router's API.
-- [Workspace Patterns](workspace-patterns.md) — tabbed workspaces and descriptor-level zones.
-- `@react-router-modules/runtime` package README — `dynamicSlots`, `recalculateSlots`, `slotFilter`.
+- [Shell Patterns (Fundamentals)](shell-patterns.md): the router-agnostic foundation.
+- [Shell Patterns for TanStack Router](shell-patterns-tanstack-router.md): the same patterns, expressed against TanStack Router's API.
+- [Workspace Patterns](workspace-patterns.md): tabbed workspaces and descriptor-level zones.
+- `@react-router-modules/runtime` package README: `dynamicSlots`, `recalculateSlots`, `slotFilter`.

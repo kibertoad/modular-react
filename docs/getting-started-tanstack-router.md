@@ -1,37 +1,37 @@
-# Getting started — TanStack Router
+# Getting started with TanStack Router
 
 This guide walks you from zero to a running modular TanStack Router app. It assumes you already use (or are comfortable with) TanStack Router v1 and want to split your app into self-contained feature modules.
 
-For router-agnostic fundamentals, see [Shell Patterns](./shell-patterns.md). For the TanStack Router–specific mechanics (zones via `staticData`, `authenticatedRoute` with `beforeLoad`, public `shellRoutes`), see [Shell Patterns — TanStack Router](./shell-patterns-tanstack-router.md).
+For router-agnostic fundamentals, see [Shell Patterns](./shell-patterns.md). For TanStack Router specific mechanics (zones via `staticData`, `authenticatedRoute` with `beforeLoad`, public `shellRoutes`), see [Shell Patterns for TanStack Router](./shell-patterns-tanstack-router.md).
 
 ## Prerequisites
 
 - **Node 22+** and **pnpm**
-- **React 19**, **TanStack Router v1**, **zustand 5** — the versions the scaffold pins
+- **React 19**, **TanStack Router v1**, **zustand 5** (the versions the scaffold pins)
 - Familiarity with TanStack Router's code-based route tree (`createRoute`, `getParentRoute`, `addChildren`)
 
-You don't need an existing project — the CLI scaffolds one for you. Already have a TanStack Router app? Scaffold a throwaway first to see the structure, then follow the [migration sketch](#migrating-an-existing-app) at the bottom of this guide.
+You don't need an existing project; the CLI scaffolds one for you. Already have a TanStack Router app? Scaffold a throwaway first to see the structure, then follow the [migration sketch](#migrating-an-existing-app) at the bottom of this guide.
 
 ### About the package manager
 
-The scaffold produces a **pnpm workspace** — `pnpm-workspace.yaml`, `workspace:*` dependencies, and scripts that use `pnpm --filter` / `pnpm -r`. This is the supported setup.
+The scaffold produces a **pnpm workspace**: `pnpm-workspace.yaml`, `workspace:*` dependencies, and scripts that use `pnpm --filter` / `pnpm -r`. This is the supported setup.
 
 - **Yarn Berry (v2+)** and **Bun** both understand the `workspace:*` protocol and can be used after scaffolding if you rename `pnpm-workspace.yaml` to a `workspaces` field in the root `package.json` and rewrite the scripts. Nothing in the runtime or CLI is pnpm-specific beyond the scaffold output.
 - **npm is not supported.** npm doesn't implement the `workspace:*` protocol, so `npm install` in a scaffolded project will fail to resolve the workspace packages.
-- **Turborepo** is orthogonal — it runs on top of any package manager. If you use Turborepo, keep pnpm underneath and add `turbo.json` afterwards.
+- **Turborepo** is orthogonal; it runs on top of any package manager. If you use Turborepo, keep pnpm underneath and add `turbo.json` afterwards.
 
 ## Mental model
 
 Three roles, one contract:
 
-- **Shell** (`shell/`) — the host app. Owns stores, services, layouts, the registry, and `main.tsx`. The shell is where you run the app from.
-- **Modules** (`modules/<name>/`) — self-contained feature packages. Each module describes everything it contributes: routes, navigation items, commands, zone fills, and the dependencies it needs from the shell. A module never imports from the shell.
-- **app-shared** (`app-shared/`) — the typed contract between the two. It declares three interfaces every module is generic over:
-  - **`AppDependencies`** — the stores and services the shell provides (auth store, config store, http client, …). Modules read from these via typed hooks.
-  - **`AppSlots`** — the static contributions the shell collects across all modules (e.g. a `commands` bar).
-  - **`AppZones`** — per-route layout regions a module can fill (e.g. a detail panel on the right). The active route's contributions are what the shell renders. On TanStack Router, zones ride on the route's `staticData` field, which `app-shared` tightens via a `declare module` augmentation so the types line up.
+- **Shell** (`shell/`): the host app. Owns stores, services, layouts, the registry, and `main.tsx`. The shell is where you run the app from.
+- **Modules** (`modules/<name>/`): self-contained feature packages. Each module describes everything it contributes: routes, navigation items, commands, zone fills, and the dependencies it needs from the shell. A module never imports from the shell.
+- **app-shared** (`app-shared/`): the typed contract between the two. It declares three interfaces every module is generic over:
+  - **`AppDependencies`**: the stores and services the shell provides (auth store, config store, http client, …). Modules read from these via typed hooks.
+  - **`AppSlots`**: the static contributions the shell collects across all modules (e.g. a `commands` bar).
+  - **`AppZones`**: per-route layout regions a module can fill (e.g. a detail panel on the right). The active route's contributions are what the shell renders. On TanStack Router, zones ride on the route's `staticData` field, which `app-shared` tightens via a `declare module` augmentation so the types line up.
 
-Every module signature looks like `defineModule<AppDependencies, AppSlots>({ … })`. That's how TypeScript catches a module asking for a store the shell doesn't provide — at compile time.
+Every module signature looks like `defineModule<AppDependencies, AppSlots>({ … })`. That's how TypeScript catches, at compile time, a module asking for a store the shell doesn't provide.
 
 ## 1. Scaffold a project
 
@@ -50,9 +50,9 @@ The CLI creates a pnpm workspace with three sub-packages and wires them together
 
 ### What you see on first run
 
-Open [`http://localhost:5173`](http://localhost:5173). You'll land on the **Home** page with a "Login as Demo User" button in the header. The sidebar already shows the dashboard module's navigation entries — the scaffold ships with a no-op auth guard, so module routes are reachable even before you log in, but pages that read the auth store will show "Please log in …" until you click the login button.
+Open [`http://localhost:5173`](http://localhost:5173). You'll land on the **Home** page with a "Login as Demo User" button in the header. The sidebar already shows the dashboard module's navigation entries. The scaffold ships with a no-op auth guard, so module routes are reachable even before you log in, but pages that read the auth store will show "Please log in …" until you click the login button.
 
-Click **Login as Demo User**, then navigate to **Dashboard List** in the sidebar. You'll see the list page in the main area and a detail panel on the right. Navigate back to **Dashboard** and the detail panel disappears — it's contributed by the list route, not the module.
+Click **Login as Demo User**, then navigate to **Dashboard List** in the sidebar. You'll see the list page in the main area and a detail panel on the right. Navigate back to **Dashboard** and the detail panel disappears; it's contributed by the list route, not the module.
 
 ## 2. What you got
 
@@ -60,9 +60,9 @@ Click **Login as Demo User**, then navigate to **Dashboard List** in the sidebar
 my-app/
 ├── app-shared/                    # Shared contract: AppDependencies, AppSlots, AppZones, typed hooks
 │   └── src/
-│       ├── index.ts               # The contract — the single place all modules depend on
+│       ├── index.ts               # The contract: the single place all modules depend on
 │       └── types.ts               # Domain types (User, LoginCredentials, …)
-├── shell/                         # The host app — owns stores, services, layouts, main.tsx
+├── shell/                         # The host app: owns stores, services, layouts, main.tsx
 │   └── src/
 │       ├── main.tsx               # Registry wiring + app bootstrap
 │       ├── components/
@@ -71,16 +71,16 @@ my-app/
 │       │   ├── Sidebar.tsx        # Navigation built from module contributions
 │       │   └── Home.tsx           # Index route
 │       ├── stores/
-│       │   ├── auth.ts            # Zustand store — login / logout / user
-│       │   └── config.ts          # Zustand store — apiBaseUrl, env, appName
+│       │   ├── auth.ts            # Zustand store: login / logout / user
+│       │   └── config.ts          # Zustand store: apiBaseUrl, env, appName
 │       └── services/
 │           └── http-client.ts     # Wretch instance, auth-aware via defer()
 └── modules/
     └── dashboard/                 # The first feature module
         └── src/
-            ├── index.ts           # defineModule(...) — the module descriptor
+            ├── index.ts           # defineModule(...): the module descriptor
             ├── pages/
-            │   ├── DashboardDashboard.tsx   # "<ModuleName>Dashboard" — the index page convention
+            │   ├── DashboardDashboard.tsx   # "<ModuleName>Dashboard": the index page convention
             │   └── DashboardList.tsx
             └── panels/
                 └── DetailPanel.tsx          # Contributed into the shell's detail panel zone
@@ -88,7 +88,7 @@ my-app/
 
 ### The `<ModuleName>Dashboard.tsx` convention
 
-The scaffold names every module's index page `<PascalName>Dashboard.tsx`. A module called `dashboard` yields `DashboardDashboard.tsx`; a module called `billing` would yield `BillingDashboard.tsx`. It's just a naming convention — rename the file and update the `lazyRouteComponent()` import in the descriptor if you'd rather have something else.
+The scaffold names every module's index page `<PascalName>Dashboard.tsx`. A module called `dashboard` yields `DashboardDashboard.tsx`; a module called `billing` would yield `BillingDashboard.tsx`. It's just a naming convention; rename the file and update the `lazyRouteComponent()` import in the descriptor if you'd rather have something else.
 
 ### The `-module` suffix
 
@@ -96,7 +96,7 @@ Packages under `modules/` are published as `@myorg/<name>-module`. The suffix is
 
 ### Choice of HTTP client
 
-The scaffold bakes in [`wretch`](https://github.com/elbywan/wretch) + [`@lokalise/frontend-http-client`](https://github.com/lokalise/frontend-http-client) as the `httpClient` type in `AppDependencies`. Swap it for `fetch`, `axios`, `ky`, or anything else — just change the type in `app-shared/src/index.ts` and the implementation in `shell/src/services/http-client.ts`. The framework doesn't care.
+The scaffold bakes in [`wretch`](https://github.com/elbywan/wretch) + [`@lokalise/frontend-http-client`](https://github.com/lokalise/frontend-http-client) as the `httpClient` type in `AppDependencies`. Swap it for `fetch`, `axios`, `ky`, or anything else. Just change the type in `app-shared/src/index.ts` and the implementation in `shell/src/services/http-client.ts`. The framework doesn't care.
 
 ### The `staticData` type augmentation
 
@@ -183,12 +183,12 @@ export default defineModule<AppDependencies, AppSlots>({
 
 A single object describes everything the module contributes:
 
-- **`meta`** — catalog info the shell can read via `useModules()` and `getModuleMeta()`.
-- **`createRoutes(parentRoute)`** — receives the authenticated parent route from the runtime and returns a route subtree built with `createRoute({ getParentRoute: () => ... })` plus `root.addChildren([...])`. The runtime splices that subtree under `authenticatedRoute`, so the whole module sits behind whatever auth guard the shell decides. `createRoutes` is **optional** — headless modules (stores, commands, zones only, no routes) simply omit it.
-- **`navigation`** — items the `<Sidebar>` in the shell picks up via `useNavigation()`. No manual registration.
-- **`slots.commands`** — commands the `<ShellLayout>` header renders as buttons. The demo command reloads the page; replace it with anything callable.
-- **`staticData: { detailPanel: ... }`** — a **route zone**. When `/dashboard/list` is active, the shell reads `useZones<AppZones>().detailPanel` and renders `DashboardDetailPanel` in its right-hand panel. Navigate away and the panel disappears. Typing comes from the `StaticDataRouteOption` augmentation in `app-shared`. See [Shell Patterns — TanStack Router § Route Zones](./shell-patterns-tanstack-router.md#route-zones).
-- **`requires: ['auth']`** — the registry fails fast at resolve time if the `auth` store isn't provided to it. This is how modules declare their dependencies on shell-provided state.
+- **`meta`**: catalog info the shell can read via `useModules()` and `getModuleMeta()`.
+- **`createRoutes(parentRoute)`**: receives the authenticated parent route from the runtime and returns a route subtree built with `createRoute({ getParentRoute: () => ... })` plus `root.addChildren([...])`. The runtime splices that subtree under `authenticatedRoute`, so the whole module sits behind whatever auth guard the shell decides. `createRoutes` is **optional**; headless modules (stores, commands, zones only, no routes) simply omit it.
+- **`navigation`**: items the `<Sidebar>` in the shell picks up via `useNavigation()`. No manual registration.
+- **`slots.commands`**: commands the `<ShellLayout>` header renders as buttons. The demo command reloads the page; replace it with anything callable.
+- **`staticData: { detailPanel: ... }`**: a **route zone**. When `/dashboard/list` is active, the shell reads `useZones<AppZones>().detailPanel` and renders `DashboardDetailPanel` in its right-hand panel. Navigate away and the panel disappears. Typing comes from the `StaticDataRouteOption` augmentation in `app-shared`. See [Shell Patterns for TanStack Router § Route Zones](./shell-patterns-tanstack-router.md#route-zones).
+- **`requires: ['auth']`**: the registry fails fast at resolve time if the `auth` store isn't provided to it. This is how modules declare their dependencies on shell-provided state.
 
 Visit `/dashboard/list` in the running app. You'll see the list page in the main area and the detail panel on the right. Navigate back to `/dashboard` and the panel goes away.
 
@@ -203,7 +203,7 @@ pnpm install
 
 (If you prefer not to retype the package name, add `@tanstack-react-modules/cli` to the root `devDependencies` and use `pnpm exec reactive create module billing --route billing`.)
 
-The `create module` command generates `modules/billing/` with the same structure as `dashboard` (plus a starter vitest test under `src/__tests__/`), adds `@myorg/billing-module` to `shell/package.json`, and wires `registry.register(billing)` into `shell/src/main.tsx`. **The `pnpm install` is not optional** — without it, the new workspace package isn't linked and `pnpm dev` will fail to resolve `@myorg/billing-module`.
+The `create module` command generates `modules/billing/` with the same structure as `dashboard` (plus a starter vitest test under `src/__tests__/`), adds `@myorg/billing-module` to `shell/package.json`, and wires `registry.register(billing)` into `shell/src/main.tsx`. **The `pnpm install` is not optional.** Without it, the new workspace package isn't linked and `pnpm dev` will fail to resolve `@myorg/billing-module`.
 
 Restart `pnpm dev`. You'll see:
 
@@ -211,7 +211,7 @@ Restart `pnpm dev`. You'll see:
 - A **Refresh Billing** button in the header's command bar
 - A detail panel on `/billing/list`
 
-No edits to the shell required — the registry discovers everything from the module descriptor.
+No edits to the shell required; the registry discovers everything from the module descriptor.
 
 ## 5. Add a store
 
@@ -227,13 +227,13 @@ This:
 2. Adds a `NotificationsStore` interface and `notifications: NotificationsStore` field to `AppDependencies` in `app-shared/src/index.ts`.
 3. Registers the store with the registry in `shell/src/main.tsx`.
 
-After the CLI finishes, open the generated store file and fill in the state shape and actions. Any module can consume it with `useStore('notifications', (s) => s.unreadCount)` — the `useStore` hook is the typed one exported from `@myorg/app-shared`, so it knows the store exists and what shape it has.
+After the CLI finishes, open the generated store file and fill in the state shape and actions. Any module can consume it with `useStore('notifications', (s) => s.unreadCount)`. The `useStore` hook is the typed one exported from `@myorg/app-shared`, so it knows the store exists and what shape it has.
 
 If a module `requires: ['notifications']` and you remove the store, the registry will throw at resolve time, before the app ever boots.
 
 ## 6. Turn on the auth guard
 
-The scaffold ships with a no-op auth guard so the app runs immediately. Open `shell/src/main.tsx` — you'll find:
+The scaffold ships with a no-op auth guard so the app runs immediately. Open `shell/src/main.tsx`. You'll find:
 
 ```typescript
 authenticatedRoute: {
@@ -252,21 +252,21 @@ authenticatedRoute: {
 
 To make the guard real:
 
-1. Replace the `beforeLoad` body with an actual check that throws `redirect({ to: '/login' })` (or whichever unauthenticated destination you want) when the user isn't signed in. Use `throw redirect({ to: '/login' })` — **not** `throw redirect('/login')`. TanStack Router's `redirect` takes an options object.
+1. Replace the `beforeLoad` body with an actual check that throws `redirect({ to: '/login' })` (or whichever unauthenticated destination you want) when the user isn't signed in. Use `throw redirect({ to: '/login' })`, **not** `throw redirect('/login')`. TanStack Router's `redirect` takes an options object.
 2. Uncomment `shellRoutes` and return one or more public routes built with `createRoute({ getParentRoute: () => root, ... })`. `shellRoutes` sits **outside** `authenticatedRoute`, so routes returned from it never hit `beforeLoad`.
 3. Build a real login page that calls `authStore.getState().login(...)` and navigates back to `/`.
 
 Note the casing: `component` (lowercase) in `authenticatedRoute`, not `Component`. TanStack Router uses lowercase `component` on `createRoute({ ... })` options, and the runtime's `authenticatedRoute` follows that convention.
 
-For the full pattern — layout route as auth boundary, `beforeLoad` vs. loaders, per-module role guards — see [Shell Patterns — TanStack Router § Auth Guard Pattern](./shell-patterns-tanstack-router.md#auth-guard-pattern).
+For the full pattern (layout route as auth boundary, `beforeLoad` vs. loaders, per-module role guards), see [Shell Patterns for TanStack Router § Auth Guard Pattern](./shell-patterns-tanstack-router.md#auth-guard-pattern).
 
 ## Migrating an existing app
 
-If you already have a TanStack Router v1 app, you don't throw it away — you refactor it in place. There's no automated migration command; the work is mechanical but has to be done module-by-module. Here's the sketch:
+If you already have a TanStack Router v1 app, you don't throw it away. You refactor it in place. There's no automated migration command; the work is mechanical but has to be done module-by-module. Here's the sketch:
 
 1. **Scaffold a throwaway project first.** Run the `init` command in a sibling directory so you have a working reference for the three-package layout, the `main.tsx` wiring, and the scaffolded `app-shared` contract (including the `StaticDataRouteOption` augmentation). Keep it open while you migrate.
-2. **Carve out `app-shared` in your repo.** Create a new workspace package (`app-shared/` or `@yourorg/app-shared`) and copy the scaffolded `index.ts` + `types.ts` as a starting point. Replace the sample store interfaces (`AuthStore`, `ConfigStore`) with the actual shapes of the stores you already have. Keep the `declare module '@tanstack/router-core'` block — that's what makes `staticData` type-check for every module you extract. The goal: `app-shared` becomes the single place your existing code and future modules both import types from.
-3. **Move your existing stores and services under `shell/`.** They probably live in `src/stores/` and `src/services/` today — move them into `shell/src/stores/` and `shell/src/services/` with minimal changes. Wire them into `createRegistry({ stores, services })`.
+2. **Carve out `app-shared` in your repo.** Create a new workspace package (`app-shared/` or `@yourorg/app-shared`) and copy the scaffolded `index.ts` + `types.ts` as a starting point. Replace the sample store interfaces (`AuthStore`, `ConfigStore`) with the actual shapes of the stores you already have. Keep the `declare module '@tanstack/router-core'` block; that's what makes `staticData` type-check for every module you extract. The goal: `app-shared` becomes the single place your existing code and future modules both import types from.
+3. **Move your existing stores and services under `shell/`.** They probably live in `src/stores/` and `src/services/` today. Move them into `shell/src/stores/` and `shell/src/services/` with minimal changes. Wire them into `createRegistry({ stores, services })`.
 4. **Pick the smallest feature and extract it as the first module.** A single feature folder with two or three routes is ideal. Create `modules/<feature>/`, convert the routes out of your current route tree into `createRoutes(parentRoute)` using `createRoute({ getParentRoute: () => … })` + `root.addChildren([…])`, move any nav entries into `navigation: [...]`, and register the module with `registry.register(feature)`. Delete the old code paths.
 5. **Repeat.** Each subsequent feature extraction is smaller than the last because the shell and `app-shared` stop growing.
 6. **Flip the auth guard.** Once two or three modules are extracted and you trust the layout, replace the no-op `beforeLoad` in `authenticatedRoute` with whatever guard your old root route ran.
@@ -281,17 +281,17 @@ The goal isn't "all features are modules on day one." It's "every new feature go
 
 **TypeScript says `TS2664: Invalid module name in augmentation` in `app-shared/src/index.ts`.** The `import type {} from '@tanstack/router-core'` line at the top of the file is missing or got deleted. That import is what makes the `declare module '@tanstack/router-core'` block type-check. Restore it and confirm `@tanstack/router-core` is in `app-shared`'s `peerDependencies` **and** `devDependencies`.
 
-**`pnpm typecheck` at the project root fails with `TS18002: The 'files' list in config file 'tsconfig.json' is empty`.** Known scaffold bug — the root `tsconfig.json` ships with empty `files` and `references` arrays. Workaround: typecheck each sub-package individually (`cd shell && npx tsc --noEmit`, etc.) or let Vite's dev server handle it. `pnpm dev` and `pnpm build` are unaffected.
+**`pnpm typecheck` at the project root fails with `TS18002: The 'files' list in config file 'tsconfig.json' is empty`.** Known scaffold bug: the root `tsconfig.json` ships with empty `files` and `references` arrays. Workaround: typecheck each sub-package individually (`cd shell && npx tsc --noEmit`, etc.) or let Vite's dev server handle it. `pnpm dev` and `pnpm build` are unaffected.
 
 **`staticData: { detailPanel: … }` type-checks in one module but not another.** The zone type augmentation lives in `app-shared/src/index.ts`. If a module imports types from `@myorg/app-shared` but TypeScript can't see the augmentation, make sure the module's `package.json` depends on `@myorg/app-shared` and that `pnpm install` has been run.
 
 **Two modules with the same `id` in their descriptors.** The registry throws `Duplicate module ID "<id>"` at resolve time. Rename one.
 
-**A module declares `requires: ['notifications']` but the store isn't registered.** The registry throws `Module "<id>" requires dependencies not provided by the registry: notifications` at resolve time — before the app ever renders. Either add the store or remove the `requires` entry.
+**A module declares `requires: ['notifications']` but the store isn't registered.** The registry throws `Module "<id>" requires dependencies not provided by the registry: notifications` at resolve time, before the app ever renders. Either add the store or remove the `requires` entry.
 
 ## Where to go next
 
-- **[Shell Patterns](./shell-patterns.md)** — router-agnostic fundamentals: slots, zones, commands, stores, cross-store coordination. Read this first if you haven't.
-- **[Shell Patterns — TanStack Router](./shell-patterns-tanstack-router.md)** — everything specific to the TSR integration: `staticData`-based zones, `authenticatedRoute` with `beforeLoad`, public `shellRoutes`.
-- **[Workspace Patterns](./workspace-patterns.md)** — tab-based workspace apps where modules are opened as dynamic tabs rather than mounted at fixed routes.
-- **[`@tanstack-react-modules/runtime` README](../packages/tanstack-router-runtime/README.md)** — the runtime API surface: `createRegistry`, `resolve`, hooks.
+- **[Shell Patterns](./shell-patterns.md)**: router-agnostic fundamentals (slots, zones, commands, stores, cross-store coordination). Read this first if you haven't.
+- **[Shell Patterns for TanStack Router](./shell-patterns-tanstack-router.md)**: everything specific to the TSR integration (`staticData`-based zones, `authenticatedRoute` with `beforeLoad`, public `shellRoutes`).
+- **[Workspace Patterns](./workspace-patterns.md)**: tab-based workspace apps where modules are opened as dynamic tabs rather than mounted at fixed routes.
+- **[`@tanstack-react-modules/runtime` README](../packages/tanstack-router-runtime/README.md)**: the runtime API surface (`createRegistry`, `resolve`, hooks).

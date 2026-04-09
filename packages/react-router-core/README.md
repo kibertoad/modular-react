@@ -37,10 +37,10 @@ export default defineModule<AppDependencies, AppSlots>({
   ],
   navigation: [{ label: "Billing", to: "/billing", group: "finance" }],
 
-  // Static slots — always present
+  // Static slots (always present)
   slots: { commands: [{ id: "billing:export", label: "Export", onSelect: () => {} }] },
 
-  // Dynamic slots — re-evaluated on recalculateSlots()
+  // Dynamic slots (re-evaluated on recalculateSlots())
   dynamicSlots: (deps) => ({
     commands:
       deps.auth.user?.role === "admin"

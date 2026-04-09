@@ -1,6 +1,6 @@
 # @modular-react/core
 
-Core primitives for modular React applications. Provides types, slot/navigation builders, validation, and a lightweight store — all with zero React runtime dependency.
+Core primitives for modular React applications. Provides types, slot/navigation builders, validation, and a lightweight store, all with zero React runtime dependency.
 
 This is the shared foundation that both `@react-router-modules/*` and `@tanstack-react-modules/*` build on.
 
@@ -16,7 +16,7 @@ npm install @modular-react/core
 - **Slots**: `buildSlotsManifest`, `collectDynamicSlotFactories`, `evaluateDynamicSlots`
 - **Navigation**: `buildNavigationManifest`
 - **Validation**: `validateNoDuplicateIds`, `validateDependencies`
-- **Store**: `createStore` — a lightweight zustand-compatible store (no middleware)
+- **Store**: `createStore` (a lightweight zustand-compatible store, no middleware)
 - **Detection**: `isStore`, `isStoreApi` (alias), `isReactiveService`, `separateDeps`
 - **Helpers**: `defineModule`, `defineSlots`, `buildDepsSnapshot`, `runLifecycleHooks`
 
