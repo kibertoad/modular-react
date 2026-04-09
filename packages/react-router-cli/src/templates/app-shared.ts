@@ -48,6 +48,7 @@ export function appSharedTsconfig(): string {
 
 export function appSharedIndex(_params: { scope: string }): string {
   return `import { createSharedHooks } from '@react-router-modules/core'
+import type { ComponentType } from 'react'
 import type { LoginCredentials, User } from './types.js'
 import type { Wretch } from 'wretch'
 
@@ -79,7 +80,7 @@ export interface AppDependencies {
   httpClient: Wretch
 }
 
-// ---- Slots ----
+// ---- Slots (static contributions from every module) ----
 
 export interface CommandDefinition {
   readonly id: string
@@ -91,6 +92,14 @@ export interface CommandDefinition {
 
 export interface AppSlots {
   commands: CommandDefinition[]
+}
+
+// ---- Zones (per-route layout regions a module can fill) ----
+// Declared on a route's \`handle\` and read by the shell via \`useZones<AppZones>()\`.
+
+export interface AppZones {
+  detailPanel?: ComponentType
+  headerActions?: ComponentType
 }
 
 // ---- Typed hooks (use these in all modules) ----

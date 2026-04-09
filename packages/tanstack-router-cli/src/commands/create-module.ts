@@ -11,6 +11,7 @@ import {
   moduleDescriptor,
   modulePage,
   moduleListPage,
+  moduleDetailPanel,
   moduleTest,
 } from "../templates/module.js";
 
@@ -103,7 +104,9 @@ export default defineCommand({
     const importName = toCamelCase(name);
 
     // Scaffold module directory
+    const moduleLabel = toPascalCase(name);
     mkdirSync(resolve(moduleDir, "src", "pages"), { recursive: true });
+    mkdirSync(resolve(moduleDir, "src", "panels"), { recursive: true });
     mkdirSync(resolve(moduleDir, "src", "__tests__"), { recursive: true });
     writeFileSync(resolve(moduleDir, "package.json"), modulePackageJson({ scope, name }));
     writeFileSync(resolve(moduleDir, "tsconfig.json"), moduleTsconfig());
@@ -113,11 +116,15 @@ export default defineCommand({
     );
     writeFileSync(
       resolve(moduleDir, "src", "pages", `${pageName}.tsx`),
-      modulePage({ scope, pageName, moduleLabel: toPascalCase(name), moduleName: name }),
+      modulePage({ scope, pageName, moduleLabel, moduleName: name }),
     );
     writeFileSync(
       resolve(moduleDir, "src", "pages", `${listPageName}.tsx`),
-      moduleListPage({ scope, pageName: listPageName, moduleLabel: toPascalCase(name) }),
+      moduleListPage({ scope, pageName: listPageName, moduleLabel }),
+    );
+    writeFileSync(
+      resolve(moduleDir, "src", "panels", "DetailPanel.tsx"),
+      moduleDetailPanel({ moduleLabel }),
     );
     writeFileSync(
       resolve(moduleDir, "src", "__tests__", `${name}.test.ts`),

@@ -20,10 +20,14 @@ export function appSharedPackageJson(params: { scope: string }): string {
         zod: "^3.25.0",
       },
       peerDependencies: {
+        // Required so app-shared can augment `@tanstack/router-core`'s
+        // `StaticDataRouteOption` interface with AppZones.
+        "@tanstack/router-core": "^1.120.0",
         react: "^19.0.0",
         zustand: "^5.0.0",
       },
       devDependencies: {
+        "@tanstack/router-core": "^1.120.0",
         react: "^19.0.0",
         zustand: "^5.0.0",
         "@types/react": "^19.0.0",
@@ -48,6 +52,7 @@ export function appSharedTsconfig(): string {
 
 export function appSharedIndex(_params: { scope: string }): string {
   return `import { createSharedHooks } from '@tanstack-react-modules/core'
+import type { ComponentType } from 'react'
 import type { LoginCredentials, User } from './types.js'
 import type { Wretch } from 'wretch'
 
@@ -79,7 +84,7 @@ export interface AppDependencies {
   httpClient: Wretch
 }
 
-// ---- Slots ----
+// ---- Slots (static contributions from every module) ----
 
 export interface CommandDefinition {
   readonly id: string
@@ -91,6 +96,22 @@ export interface CommandDefinition {
 
 export interface AppSlots {
   commands: CommandDefinition[]
+}
+
+// ---- Zones (per-route layout regions a module can fill) ----
+// Declared on a route's \`staticData\` and read by the shell via \`useZones<AppZones>()\`.
+
+export interface AppZones {
+  detailPanel?: ComponentType
+  headerActions?: ComponentType
+}
+
+// Type-safe staticData: tells TanStack Router that createRoute({ staticData: { ... } })
+// should accept \`AppZones\` keys with compile-time checking.
+// The empty import ensures TypeScript loads the target module before we augment it.
+import type {} from '@tanstack/router-core'
+declare module '@tanstack/router-core' {
+  interface StaticDataRouteOption extends AppZones {}
 }
 
 // ---- Typed hooks (use these in all modules) ----

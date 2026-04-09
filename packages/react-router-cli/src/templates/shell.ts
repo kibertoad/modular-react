@@ -101,7 +101,8 @@ import ${params.importName} from '${params.scope}/${params.moduleName}-module'
 import { authStore } from './stores/auth.js'
 import { configStore } from './stores/config.js'
 import { httpClient } from './services/http-client.js'
-import { Layout } from './components/Layout.js'
+import { RootLayout } from './components/RootLayout.js'
+import { ShellLayout } from './components/ShellLayout.js'
 import { Home } from './components/Home.js'
 
 // Create the registry with shared dependencies
@@ -115,10 +116,32 @@ const registry = createRegistry<AppDependencies, AppSlots>({
 // Register modules
 registry.register(${params.importName})
 
-// Resolve — validates everything and produces the app
+// Resolve — validates everything and produces the app.
+//
+// Layout split:
+//   RootLayout  — runs for every route (public + protected). Use for observability.
+//   ShellLayout — renders the authenticated chrome (sidebar, header, detail panel).
+//
+// Auth guard is a no-op TODO. Replace \`loader\` with a real check and uncomment
+// \`shellRoutes\` to expose public pages like /login. See:
+//   https://github.com/kibertoad/modular-react/blob/main/docs/shell-patterns-react-router.md
 const { App } = registry.resolve({
-  rootComponent: Layout,
+  rootComponent: RootLayout,
   indexComponent: Home,
+
+  authenticatedRoute: {
+    loader: () => {
+      // TODO: replace with real auth check. Example:
+      //   const { isAuthenticated } = authStore.getState()
+      //   if (!isAuthenticated) throw redirect('/login')
+      return null
+    },
+    Component: ShellLayout,
+  },
+
+  // shellRoutes: () => [
+  //   { path: '/login', Component: LoginPage },
+  // ],
 })
 
 createRoot(document.getElementById('root')!).render(<App />)
@@ -186,16 +209,46 @@ export const httpClient = wretch()
 `;
 }
 
-export function shellLayout(params: { scope: string }): string {
+export function shellRootLayout(): string {
   return `import { Outlet } from 'react-router'
+
+// The root layout renders for every route — public or protected.
+// It's the place for app-wide concerns that must run even on public pages:
+// analytics, feature flags, error reporting, global providers that don't
+// depend on authentication.
+//
+// The authenticated chrome (sidebar, header, detail panel) lives in
+// ShellLayout, which is mounted via \`authenticatedRoute.Component\`.
+export function RootLayout() {
+  // TODO: Add observability / analytics here. For example:
+  //   useLocation() + track page view
+  return <Outlet />
+}
+`;
+}
+
+export function shellShellLayout(params: { scope: string }): string {
+  return `import { Outlet } from 'react-router'
+import { useSlots, useZones } from '@react-router-modules/runtime'
 import { useStore } from '${params.scope}/app-shared'
+import type { AppSlots, AppZones } from '${params.scope}/app-shared'
 import { Sidebar } from './Sidebar.js'
 
-export function Layout() {
+// The authenticated shell chrome. Rendered under the \`authenticatedRoute\`
+// layout in main.tsx — everything below this layout has (conceptually)
+// cleared the auth guard.
+//
+// This is also where cross-cutting module contributions get rendered:
+//   - \`useSlots().commands\` — the action bar in the header
+//   - \`useZones<AppZones>().detailPanel\` — the right-hand detail panel
+export function ShellLayout() {
   const user = useStore('auth', (s) => s.user)
   const isAuthenticated = useStore('auth', (s) => s.isAuthenticated)
   const login = useStore('auth', (s) => s.login)
   const logout = useStore('auth', (s) => s.logout)
+  const { commands } = useSlots<AppSlots>()
+  const zones = useZones<AppZones>()
+  const DetailPanel = zones.detailPanel
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -205,45 +258,76 @@ export function Layout() {
           padding: '0.75rem 1.5rem',
           borderBottom: '1px solid #e2e8f0',
           display: 'flex',
-          justifyContent: 'flex-end',
           alignItems: 'center',
-          gap: '1rem',
+          gap: '0.5rem',
         }}>
-          {isAuthenticated ? (
-            <>
-              <span style={{ color: '#4a5568' }}>{user?.name}</span>
-              <button
-                onClick={logout}
-                style={{
-                  padding: '0.375rem 0.75rem',
-                  borderRadius: '0.375rem',
-                  border: '1px solid #e2e8f0',
-                  backgroundColor: 'white',
-                  cursor: 'pointer',
-                }}
-              >
-                Logout
-              </button>
-            </>
-          ) : (
+          {/* Commands contributed by modules via slots.commands */}
+          {commands.map((cmd) => (
             <button
-              onClick={() => login({ email: 'demo@example.com', password: 'demo' })}
+              key={cmd.id}
+              onClick={cmd.onSelect}
               style={{
                 padding: '0.375rem 0.75rem',
                 borderRadius: '0.375rem',
-                border: 'none',
-                backgroundColor: '#3182ce',
-                color: 'white',
+                border: '1px solid #e2e8f0',
+                backgroundColor: 'white',
                 cursor: 'pointer',
+                fontSize: '0.875rem',
               }}
             >
-              Login as Demo User
+              {cmd.label}
             </button>
-          )}
+          ))}
+
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            {isAuthenticated ? (
+              <>
+                <span style={{ color: '#4a5568' }}>{user?.name}</span>
+                <button
+                  onClick={logout}
+                  style={{
+                    padding: '0.375rem 0.75rem',
+                    borderRadius: '0.375rem',
+                    border: '1px solid #e2e8f0',
+                    backgroundColor: 'white',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => login({ email: 'demo@example.com', password: 'demo' })}
+                style={{
+                  padding: '0.375rem 0.75rem',
+                  borderRadius: '0.375rem',
+                  border: 'none',
+                  backgroundColor: '#3182ce',
+                  color: 'white',
+                  cursor: 'pointer',
+                }}
+              >
+                Login as Demo User
+              </button>
+            )}
+          </div>
         </header>
-        <main style={{ flex: 1, padding: '1.5rem' }}>
-          <Outlet />
-        </main>
+        <div style={{ flex: 1, display: 'flex' }}>
+          <main style={{ flex: 1, padding: '1.5rem' }}>
+            <Outlet />
+          </main>
+          {DetailPanel && (
+            <aside style={{
+              width: '320px',
+              borderLeft: '1px solid #e2e8f0',
+              padding: '1.5rem',
+              backgroundColor: '#f7fafc',
+            }}>
+              <DetailPanel />
+            </aside>
+          )}
+        </div>
       </div>
     </div>
   )

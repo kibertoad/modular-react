@@ -45,15 +45,17 @@ describe("reactive init", { sequential: true }, () => {
     files.fileExists("my-app/shell/src/stores/auth.ts");
     files.fileExists("my-app/shell/src/stores/config.ts");
     files.fileExists("my-app/shell/src/services/http-client.ts");
-    files.fileExists("my-app/shell/src/components/Layout.tsx");
+    files.fileExists("my-app/shell/src/components/RootLayout.tsx");
+    files.fileExists("my-app/shell/src/components/ShellLayout.tsx");
     files.fileExists("my-app/shell/src/components/Sidebar.tsx");
     files.fileExists("my-app/shell/src/components/Home.tsx");
 
-    // Verify module with two pages
+    // Verify module with two pages and a route-zone detail panel
     files.fileExists("my-app/modules/dashboard/package.json");
     files.fileExists("my-app/modules/dashboard/src/index.ts");
     files.fileExists("my-app/modules/dashboard/src/pages/DashboardDashboard.tsx");
     files.fileExists("my-app/modules/dashboard/src/pages/DashboardList.tsx");
+    files.fileExists("my-app/modules/dashboard/src/panels/DetailPanel.tsx");
   });
 
   it("uses scope in generated package names", async () => {
