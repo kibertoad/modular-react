@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const TMP = resolve(import.meta.dirname, "..", ".test-output");
 
-describe("reactive init", { sequential: true }, () => {
+describe("react-router-modules init", { sequential: true }, () => {
   const files = new FileTestHelper({ basePath: TMP, maxRetries: 5, retryDelay: 200 });
 
   beforeEach(() => {
@@ -101,7 +101,7 @@ describe("reactive init", { sequential: true }, () => {
   });
 });
 
-describe("reactive create module", { sequential: true }, () => {
+describe("react-router-modules create module", { sequential: true }, () => {
   const files = new FileTestHelper({ basePath: TMP, maxRetries: 5, retryDelay: 200 });
 
   beforeEach(() => {
@@ -157,7 +157,7 @@ describe("reactive create module", { sequential: true }, () => {
   });
 });
 
-describe("reactive create store", { sequential: true }, () => {
+describe("react-router-modules create store", { sequential: true }, () => {
   const files = new FileTestHelper({ basePath: TMP, maxRetries: 5, retryDelay: 200 });
 
   beforeEach(() => {

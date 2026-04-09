@@ -18,9 +18,9 @@ const create = defineCommand({
 
 const main = defineCommand({
   meta: {
-    name: "reactive",
+    name: "react-router-modules",
     version: "0.1.0",
-    description: "Reactive framework CLI",
+    description: "modular-react CLI (React Router integration)",
   },
   subCommands: {
     init,

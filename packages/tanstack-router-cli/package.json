@@ -7,7 +7,7 @@
     "directory": "packages/tanstack-router-cli"
   },
   "bin": {
-    "reactive": "./dist/cli.js"
+    "tanstack-react-modules": "./dist/cli.js"
   },
   "files": [
     "dist"

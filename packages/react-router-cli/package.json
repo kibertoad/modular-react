@@ -7,7 +7,7 @@
     "directory": "packages/react-router-cli"
   },
   "bin": {
-    "reactive": "./dist/cli.js"
+    "react-router-modules": "./dist/cli.js"
   },
   "files": [
     "dist"

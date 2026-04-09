@@ -173,7 +173,7 @@ npx @react-router-modules/cli create module billing --route billing
 pnpm install
 ```
 
-(If you prefer not to retype the package name, add `@react-router-modules/cli` to the root `devDependencies` and use `pnpm exec reactive create module billing --route billing`.)
+(If you prefer not to retype the package name, add `@react-router-modules/cli` to the root `devDependencies` and use `pnpm exec react-router-modules create module billing --route billing`.)
 
 The `create module` command generates `modules/billing/` with the same structure as `dashboard` (plus a starter vitest test under `src/__tests__/`), adds `@myorg/billing-module` to `shell/package.json`, and wires `registry.register(billing)` into `shell/src/main.tsx`. **The `pnpm install` is not optional.** Without it, the new workspace package isn't linked and `pnpm dev` will fail to resolve `@myorg/billing-module`.
 

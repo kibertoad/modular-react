@@ -18,9 +18,9 @@ const create = defineCommand({
 
 const main = defineCommand({
   meta: {
-    name: "reactive",
+    name: "tanstack-react-modules",
     version: "0.1.0",
-    description: "Reactive framework CLI",
+    description: "modular-react CLI (TanStack Router integration)",
   },
   subCommands: {
     init,
