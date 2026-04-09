@@ -28,13 +28,11 @@
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@modular-react/core": "workspace:*",
-    "@modular-react/react": "workspace:*",
-    "@tanstack-react-modules/core": "workspace:*",
-    "@tanstack-react-modules/runtime": "workspace:*"
-  },
   "devDependencies": {
+    "@modular-react/core": "*",
+    "@modular-react/react": "*",
+    "@tanstack-react-modules/core": "*",
+    "@tanstack-react-modules/runtime": "*",
     "@tanstack/react-router": "^1.168.8",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
@@ -48,6 +46,10 @@
     "zustand": "^5.0.0"
   },
   "peerDependencies": {
+    "@modular-react/core": "^1.0.0",
+    "@modular-react/react": "^1.0.0",
+    "@tanstack-react-modules/core": "^2.0.0",
+    "@tanstack-react-modules/runtime": "^2.0.0",
     "@tanstack/react-router": "^1.168.8",
     "@testing-library/react": "^16.0.0",
     "react": "^19.0.0",

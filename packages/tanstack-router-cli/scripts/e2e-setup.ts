@@ -26,12 +26,14 @@ exec(`node ${CLI} init smoke-app --scope @smoke --module dashboard`, TMP);
 // Build framework packages
 exec("pnpm -r run build", REPO_ROOT);
 
-// Override @tanstack-react-modules/* to local (not yet on npm)
+// Override @modular-react/* and @tanstack-react-modules/* to local workspace builds
 const rootPkg = JSON.parse(readFileSync(resolve(PROJECT_DIR, "package.json"), "utf-8"));
 rootPkg.pnpm = {
   overrides: {
-    "@tanstack-react-modules/core": `link:${resolve(REPO_ROOT, "packages", "core")}`,
-    "@tanstack-react-modules/runtime": `link:${resolve(REPO_ROOT, "packages", "registry")}`,
+    "@modular-react/core": `link:${resolve(REPO_ROOT, "packages", "core")}`,
+    "@modular-react/react": `link:${resolve(REPO_ROOT, "packages", "react")}`,
+    "@tanstack-react-modules/core": `link:${resolve(REPO_ROOT, "packages", "tanstack-router-core")}`,
+    "@tanstack-react-modules/runtime": `link:${resolve(REPO_ROOT, "packages", "tanstack-router-runtime")}`,
   },
 };
 writeFileSync(resolve(PROJECT_DIR, "package.json"), JSON.stringify(rootPkg, null, 2));

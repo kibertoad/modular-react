@@ -11,8 +11,10 @@ export function shellPackageJson(params: { scope: string; moduleName: string }):
         preview: "vite preview",
       },
       dependencies: {
-        "@tanstack-react-modules/core": "^0.1.0",
-        "@tanstack-react-modules/runtime": "^0.1.0",
+        "@modular-react/core": "^1.0.0",
+        "@modular-react/react": "^1.0.0",
+        "@tanstack-react-modules/core": "^2.0.0",
+        "@tanstack-react-modules/runtime": "^2.0.0",
         [`${params.scope}/app-shared`]: "workspace:*",
         [`${params.scope}/${params.moduleName}-module`]: "workspace:*",
         "@lokalise/frontend-http-client": "^7.0.0",

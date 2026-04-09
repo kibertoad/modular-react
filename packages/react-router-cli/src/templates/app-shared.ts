@@ -13,7 +13,8 @@ export function appSharedPackageJson(params: { scope: string }): string {
         },
       },
       dependencies: {
-        "@react-router-modules/core": "^0.1.0",
+        "@modular-react/core": "^1.0.0",
+        "@react-router-modules/core": "^2.0.0",
         "@lokalise/api-contracts": "^6.0.0",
         "@lokalise/frontend-http-client": "^7.0.0",
         wretch: "^2.11.0",

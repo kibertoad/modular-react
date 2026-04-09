@@ -13,7 +13,8 @@ export function modulePackageJson(params: { scope: string; name: string }): stri
         },
       },
       dependencies: {
-        "@react-router-modules/core": "^0.1.0",
+        "@modular-react/core": "^1.0.0",
+        "@react-router-modules/core": "^2.0.0",
         [`${params.scope}/app-shared`]: "workspace:*",
         "@lokalise/frontend-http-client": "^7.0.0",
       },
