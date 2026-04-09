@@ -14,7 +14,7 @@ All commands support interactive (prompts) and non-interactive (flags) modes. Se
 
 ## Development
 
-Requires Node.js 24+.
+Requires Node.js 22+.
 
 ```bash
 pnpm build          # Compile TypeScript
