@@ -139,7 +139,7 @@ authStore.subscribe(recalculateSlots);
 | [`@react-router-modules/core`](packages/react-router-core)       | Module definition with React Router `RouteObject` support, typed hooks, scoped stores. |
 | [`@react-router-modules/runtime`](packages/react-router-runtime) | Registry, route tree builder, app assembly with all providers wired.                   |
 | [`@react-router-modules/testing`](packages/react-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation.                   |
-| [`@react-router-modules/cli`](packages/react-router-cli)         | Scaffolding CLI: `reactive init`, `reactive create module`, `reactive create store`.   |
+| [`@react-router-modules/cli`](packages/react-router-cli)         | Scaffolding CLI: `react-router-modules init`, `react-router-modules create module`, `react-router-modules create store`. |
 
 ### TanStack Router integration
 
@@ -148,7 +148,7 @@ authStore.subscribe(recalculateSlots);
 | [`@tanstack-react-modules/core`](packages/tanstack-router-core)       | Module definition with TanStack Router `createRoute` support, typed hooks, scoped stores. |
 | [`@tanstack-react-modules/runtime`](packages/tanstack-router-runtime) | Registry, route tree builder, app assembly with all providers wired.                      |
 | [`@tanstack-react-modules/testing`](packages/tanstack-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation.                      |
-| [`@tanstack-react-modules/cli`](packages/tanstack-router-cli)         | Scaffolding CLI: `reactive init`, `reactive create module`, `reactive create store`.      |
+| [`@tanstack-react-modules/cli`](packages/tanstack-router-cli)         | Scaffolding CLI: `tanstack-react-modules init`, `tanstack-react-modules create module`, `tanstack-react-modules create store`. |
 
 ## Architecture
 
@@ -172,17 +172,22 @@ Router-specific layers:
 
 ## CLI command reference
 
-Both router integrations ship a `reactive` CLI binary with the same command surface. The getting-started guides cover the common case; this section lists every command.
+Each router integration ships its own CLI binary with the same command surface:
+
+- `@react-router-modules/cli` → `react-router-modules`
+- `@tanstack-react-modules/cli` → `tanstack-react-modules`
+
+The getting-started guides cover the common case; this section lists every command. Examples below use the React Router binary; substitute `tanstack-react-modules` for the TanStack Router integration.
 
 ```bash
 # Initialize a new project (see getting-started guides for the full walkthrough)
-reactive init my-app --scope @myorg --module dashboard
+react-router-modules init my-app --scope @myorg --module dashboard
 
 # Add a module with routes
-reactive create module billing --route billing [--nav-group finance]
+react-router-modules create module billing --route billing [--nav-group finance]
 
 # Add a headless store wired into AppDependencies
-reactive create store notifications
+react-router-modules create store notifications
 ```
 
 Run any command with `--help` for its full flag set. To invoke without installing the CLI, use `npx @react-router-modules/cli <command>` or `npx @tanstack-react-modules/cli <command>`.

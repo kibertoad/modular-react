@@ -5,9 +5,9 @@ Scaffolding CLI for the modular-react framework (React Router integration). Crea
 ## Commands
 
 ```bash
-reactive init <name> --scope @myorg --module dashboard   # New project
-reactive create module <name> --route billing             # New module
-reactive create store <name>                              # New Zustand store
+react-router-modules init <name> --scope @myorg --module dashboard   # New project
+react-router-modules create module <name> --route billing             # New module
+react-router-modules create store <name>                              # New Zustand store
 ```
 
 All commands support interactive (prompts) and non-interactive (flags) modes. See the [main README](https://github.com/kibertoad/modular-react#cli-reference) for full documentation.
