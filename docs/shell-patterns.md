@@ -15,11 +15,11 @@ This guide covers patterns for building shell applications with the modular-reac
 
 The framework is organized as three layers:
 
-| Layer                    | Packages                                                                   | Purpose                                                                                         |
-| ------------------------ | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Shared foundation        | `@modular-react/core`, `@modular-react/react`, `@modular-react/testing`    | Router-agnostic: types, slot/navigation builders, React contexts and hooks, validation, stores. |
-| React Router integration | `@react-router-modules/core`, `@react-router-modules/runtime`, …           | `defineModule` returning `RouteObject[]`, registry that builds a React Router instance.        |
-| TanStack Router          | `@tanstack-react-modules/core`, `@tanstack-react-modules/runtime`, …       | `defineModule` using `createRoute` / `getParentRoute`, registry that builds a TanStack Router. |
+| Layer                    | Packages                                                                | Purpose                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Shared foundation        | `@modular-react/core`, `@modular-react/react`, `@modular-react/testing` | Router-agnostic: types, slot/navigation builders, React contexts and hooks, validation, stores. |
+| React Router integration | `@react-router-modules/core`, `@react-router-modules/runtime`, …        | `defineModule` returning `RouteObject[]`, registry that builds a React Router instance.         |
+| TanStack Router          | `@tanstack-react-modules/core`, `@tanstack-react-modules/runtime`, …    | `defineModule` using `createRoute` / `getParentRoute`, registry that builds a TanStack Router.  |
 
 A shell app imports from exactly one of the two router integrations. The pattern code throughout this guide is identical across both — only the route construction and the auth guard wiring differ (see the companion docs). You can also write router-neutral code (shared stores, cross-module contracts, typed hooks) once and reuse it.
 
@@ -72,13 +72,13 @@ export function Layout() {
 
 ### Which mechanism for which zone
 
-| Zone content                                                        | Source                                                        |
-| ------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Navigation links and mode switches                                  | `useNavigation()` — modules declare `navigation` items        |
-| Commands, badges, aggregated contributions                          | `useSlots()` — modules declare `slots` contributions          |
-| Route-specific UI for layout regions (detail panel, header actions) | `useZones()` — the active route declares route-level zones    |
-| Active selection, panel visibility                                  | Shared Zustand store — runtime state                          |
-| Route-based page content                                            | `<Outlet />` — the router renders the active module's routes  |
+| Zone content                                                        | Source                                                       |
+| ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Navigation links and mode switches                                  | `useNavigation()` — modules declare `navigation` items       |
+| Commands, badges, aggregated contributions                          | `useSlots()` — modules declare `slots` contributions         |
+| Route-specific UI for layout regions (detail panel, header actions) | `useZones()` — the active route declares route-level zones   |
+| Active selection, panel visibility                                  | Shared Zustand store — runtime state                         |
+| Route-based page content                                            | `<Outlet />` — the router renders the active module's routes |
 
 > **How a route declares zones differs by router.** React Router reads them from the route's `handle` field; TanStack Router reads them from `staticData`. See the companion docs.
 
@@ -122,7 +122,7 @@ export interface AppSlots {
 - **System launching** — use a domain-specific slot (e.g. `slots.systems`)
 
 ```typescript
-import { defineModule } from '@react-router-modules/core' // or '@tanstack-react-modules/core'
+import { defineModule } from "@react-router-modules/core"; // or '@tanstack-react-modules/core'
 
 export default defineModule<AppDependencies, AppSlots>({
   id: "billing",

@@ -188,13 +188,13 @@ export default defineModule<AppDependencies, AppSlots>({
 
 ## createRoutes signature summary
 
-| Aspect                 | React Router                                                     |
-| ---------------------- | ---------------------------------------------------------------- |
-| Return type            | `RouteObject \| RouteObject[]`                                   |
-| Parent argument        | None — the runtime grafts your routes onto the auth boundary      |
+| Aspect                 | React Router                                                              |
+| ---------------------- | ------------------------------------------------------------------------- |
+| Return type            | `RouteObject \| RouteObject[]`                                            |
+| Parent argument        | None — the runtime grafts your routes onto the auth boundary              |
 | Code splitting         | `lazy: () => import('./Page.js').then((m) => ({ Component: m.default }))` |
-| Zone declaration       | `handle: { ... }` on the route object                            |
-| Route-level auth guard | `loader: () => { throw redirect('/') }`                          |
+| Zone declaration       | `handle: { ... }` on the route object                                     |
+| Route-level auth guard | `loader: () => { throw redirect('/') }`                                   |
 
 ## See also
 

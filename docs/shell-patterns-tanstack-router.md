@@ -184,7 +184,9 @@ export default defineModule<AppDependencies, AppSlots>({
       },
     });
     // ... child routes
-    return root.addChildren([/* ... */]);
+    return root.addChildren([
+      /* ... */
+    ]);
   },
 });
 ```
@@ -193,13 +195,13 @@ export default defineModule<AppDependencies, AppSlots>({
 
 ## createRoutes signature summary
 
-| Aspect                 | TanStack Router                                                  |
-| ---------------------- | ---------------------------------------------------------------- |
-| Return type            | `AnyRoute` (built via `createRoute` + `addChildren`)             |
+| Aspect                 | TanStack Router                                                   |
+| ---------------------- | ----------------------------------------------------------------- |
+| Return type            | `AnyRoute` (built via `createRoute` + `addChildren`)              |
 | Parent argument        | `parentRoute: AnyRoute` — use `getParentRoute: () => parentRoute` |
-| Code splitting         | `component: lazyRouteComponent(() => import('./Page.js'))`       |
-| Zone declaration       | `staticData: { ... }` on `createRoute` options                   |
-| Route-level auth guard | `beforeLoad: () => { throw redirect({ to: '/' }) }`              |
+| Code splitting         | `component: lazyRouteComponent(() => import('./Page.js'))`        |
+| Zone declaration       | `staticData: { ... }` on `createRoute` options                    |
+| Route-level auth guard | `beforeLoad: () => { throw redirect({ to: '/' }) }`               |
 
 ## See also
 

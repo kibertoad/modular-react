@@ -103,51 +103,54 @@ The scaffold bakes in [`wretch`](https://github.com/elbywan/wretch) + [`@lokalis
 Open `modules/dashboard/src/index.ts`. This is the entire module definition:
 
 ```typescript
-import { defineModule } from '@react-router-modules/core'
-import type { RouteObject } from 'react-router'
-import type { AppDependencies, AppSlots, AppZones } from '@myorg/app-shared'
-import { DashboardDetailPanel } from './panels/DetailPanel.js'
+import { defineModule } from "@react-router-modules/core";
+import type { RouteObject } from "react-router";
+import type { AppDependencies, AppSlots, AppZones } from "@myorg/app-shared";
+import { DashboardDetailPanel } from "./panels/DetailPanel.js";
 
 export default defineModule<AppDependencies, AppSlots>({
-  id: 'dashboard',
-  version: '0.1.0',
+  id: "dashboard",
+  version: "0.1.0",
 
   meta: {
-    name: 'Dashboard',
-    description: 'Dashboard module',
-    category: 'general',
+    name: "Dashboard",
+    description: "Dashboard module",
+    category: "general",
   },
 
   createRoutes: (): RouteObject => ({
-    path: 'dashboard',
+    path: "dashboard",
     children: [
-      { index: true, lazy: () => import('./pages/DashboardDashboard.js').then((m) => ({ Component: m.default })) },
       {
-        path: 'list',
-        lazy: () => import('./pages/DashboardList.js').then((m) => ({ Component: m.default })),
+        index: true,
+        lazy: () => import("./pages/DashboardDashboard.js").then((m) => ({ Component: m.default })),
+      },
+      {
+        path: "list",
+        lazy: () => import("./pages/DashboardList.js").then((m) => ({ Component: m.default })),
         handle: { detailPanel: DashboardDetailPanel } satisfies AppZones,
       },
     ],
   }),
 
   navigation: [
-    { label: 'Dashboard', to: '/dashboard', order: 10 },
-    { label: 'Dashboard List', to: '/dashboard/list', order: 11 },
+    { label: "Dashboard", to: "/dashboard", order: 10 },
+    { label: "Dashboard List", to: "/dashboard/list", order: 11 },
   ],
 
   slots: {
     commands: [
       {
-        id: 'dashboard:refresh',
-        label: 'Refresh Dashboard',
-        group: 'actions',
+        id: "dashboard:refresh",
+        label: "Refresh Dashboard",
+        group: "actions",
         onSelect: () => window.location.reload(),
       },
     ],
   },
 
-  requires: ['auth'],
-})
+  requires: ["auth"],
+});
 ```
 
 A single object describes everything the module contributes:

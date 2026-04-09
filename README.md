@@ -68,14 +68,14 @@ For the walkthrough of what the scaffold produces and how to extend it, see the 
 
 Conceptual documentation for building apps with the framework. Start with a getting-started guide, then dig into the shell patterns once you want to go beyond the defaults.
 
-| Guide                                                                             | What it covers                                                                                                               |
-| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| [Getting started — React Router](docs/getting-started-react-router.md)            | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                      |
-| [Getting started — TanStack Router](docs/getting-started-tanstack-router.md)      | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.          |
-| [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                           | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination. |
-| [Shell Patterns — React Router](docs/shell-patterns-react-router.md)              | Module route shape, route zones via `handle`, `authenticatedRoute` with `loader`, public `shellRoutes`.                      |
-| [Shell Patterns — TanStack Router](docs/shell-patterns-tanstack-router.md)        | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `authenticatedRoute` with `beforeLoad`. |
-| [Workspace Patterns](docs/workspace-patterns.md)                                  | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                      |
+| Guide                                                                        | What it covers                                                                                                                 |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [Getting started — React Router](docs/getting-started-react-router.md)       | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                        |
+| [Getting started — TanStack Router](docs/getting-started-tanstack-router.md) | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.            |
+| [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                      | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination. |
+| [Shell Patterns — React Router](docs/shell-patterns-react-router.md)         | Module route shape, route zones via `handle`, `authenticatedRoute` with `loader`, public `shellRoutes`.                        |
+| [Shell Patterns — TanStack Router](docs/shell-patterns-tanstack-router.md)   | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `authenticatedRoute` with `beforeLoad`.  |
+| [Workspace Patterns](docs/workspace-patterns.md)                             | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                        |
 
 ## What the code looks like
 
@@ -91,7 +91,9 @@ export default defineModule<AppDependencies, AppSlots>({
   navigation: [{ label: "Billing", to: "/billing", group: "finance" }],
   slots: { commands: [{ id: "export", label: "Export Invoices", onSelect: exportInvoices }] },
   dynamicSlots: (deps) => ({
-    commands: deps.auth.user?.isAdmin ? [{ id: "void", label: "Void Invoice", onSelect: voidInvoice }] : [],
+    commands: deps.auth.user?.isAdmin
+      ? [{ id: "void", label: "Void Invoice", onSelect: voidInvoice }]
+      : [],
   }),
 });
 ```

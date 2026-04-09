@@ -169,10 +169,7 @@ function scaffold(
     shellConfigStore({ scope, appName: projectName }),
   );
   writeFileSync(resolve(root, "shell", "src", "services", "http-client.ts"), shellHttpClient());
-  writeFileSync(
-    resolve(root, "shell", "src", "components", "RootLayout.tsx"),
-    shellRootLayout(),
-  );
+  writeFileSync(resolve(root, "shell", "src", "components", "RootLayout.tsx"), shellRootLayout());
   writeFileSync(
     resolve(root, "shell", "src", "components", "ShellLayout.tsx"),
     shellShellLayout({ scope }),

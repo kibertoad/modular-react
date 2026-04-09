@@ -106,8 +106,8 @@ TanStack Router's `staticData` field is intentionally loosely typed so apps can 
 // Type-safe staticData: tells TanStack Router that createRoute({ staticData: { ... } })
 // should accept `AppZones` keys with compile-time checking.
 // The empty import ensures TypeScript loads the target module before we augment it.
-import type {} from '@tanstack/router-core'
-declare module '@tanstack/router-core' {
+import type {} from "@tanstack/router-core";
+declare module "@tanstack/router-core" {
   interface StaticDataRouteOption extends AppZones {}
 }
 ```
@@ -122,63 +122,63 @@ Two things to know:
 Open `modules/dashboard/src/index.ts`. This is the entire module definition:
 
 ```typescript
-import { defineModule } from '@tanstack-react-modules/core'
-import { createRoute, lazyRouteComponent } from '@tanstack/react-router'
-import type { AppDependencies, AppSlots } from '@myorg/app-shared'
-import { DashboardDetailPanel } from './panels/DetailPanel.js'
+import { defineModule } from "@tanstack-react-modules/core";
+import { createRoute, lazyRouteComponent } from "@tanstack/react-router";
+import type { AppDependencies, AppSlots } from "@myorg/app-shared";
+import { DashboardDetailPanel } from "./panels/DetailPanel.js";
 
 export default defineModule<AppDependencies, AppSlots>({
-  id: 'dashboard',
-  version: '0.1.0',
+  id: "dashboard",
+  version: "0.1.0",
 
   meta: {
-    name: 'Dashboard',
-    description: 'Dashboard module',
-    category: 'general',
+    name: "Dashboard",
+    description: "Dashboard module",
+    category: "general",
   },
 
   createRoutes: (parentRoute) => {
     const root = createRoute({
       getParentRoute: () => parentRoute,
-      path: 'dashboard',
-    })
+      path: "dashboard",
+    });
 
     const index = createRoute({
       getParentRoute: () => root,
-      path: '/',
-      component: lazyRouteComponent(() => import('./pages/DashboardDashboard.js')),
-    })
+      path: "/",
+      component: lazyRouteComponent(() => import("./pages/DashboardDashboard.js")),
+    });
 
     const list = createRoute({
       getParentRoute: () => root,
-      path: 'list',
-      component: lazyRouteComponent(() => import('./pages/DashboardList.js')),
+      path: "list",
+      component: lazyRouteComponent(() => import("./pages/DashboardList.js")),
       staticData: {
         detailPanel: DashboardDetailPanel,
       },
-    })
+    });
 
-    return root.addChildren([index, list])
+    return root.addChildren([index, list]);
   },
 
   navigation: [
-    { label: 'Dashboard', to: '/dashboard', order: 10 },
-    { label: 'Dashboard List', to: '/dashboard/list', order: 11 },
+    { label: "Dashboard", to: "/dashboard", order: 10 },
+    { label: "Dashboard List", to: "/dashboard/list", order: 11 },
   ],
 
   slots: {
     commands: [
       {
-        id: 'dashboard:refresh',
-        label: 'Refresh Dashboard',
-        group: 'actions',
+        id: "dashboard:refresh",
+        label: "Refresh Dashboard",
+        group: "actions",
         onSelect: () => window.location.reload(),
       },
     ],
   },
 
-  requires: ['auth'],
-})
+  requires: ["auth"],
+});
 ```
 
 A single object describes everything the module contributes:
