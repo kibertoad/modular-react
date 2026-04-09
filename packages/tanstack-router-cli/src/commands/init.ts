@@ -24,7 +24,8 @@ import {
   shellAuthStore,
   shellConfigStore,
   shellHttpClient,
-  shellLayout,
+  shellRootLayout,
+  shellShellLayout,
   shellSidebar,
   shellHome,
 } from "../templates/shell.js";
@@ -34,6 +35,7 @@ import {
   moduleDescriptor,
   modulePage,
   moduleListPage,
+  moduleDetailPanel,
 } from "../templates/module.js";
 
 export default defineCommand({
@@ -167,7 +169,14 @@ function scaffold(
     shellConfigStore({ scope, appName: projectName }),
   );
   writeFileSync(resolve(root, "shell", "src", "services", "http-client.ts"), shellHttpClient());
-  writeFileSync(resolve(root, "shell", "src", "components", "Layout.tsx"), shellLayout({ scope }));
+  writeFileSync(
+    resolve(root, "shell", "src", "components", "RootLayout.tsx"),
+    shellRootLayout(),
+  );
+  writeFileSync(
+    resolve(root, "shell", "src", "components", "ShellLayout.tsx"),
+    shellShellLayout({ scope }),
+  );
   writeFileSync(
     resolve(root, "shell", "src", "components", "Sidebar.tsx"),
     shellSidebar({ projectName }),
@@ -176,7 +185,9 @@ function scaffold(
 
   // First module (with two routes for testable routing)
   const moduleDir = resolve(root, "modules", moduleName);
+  const moduleLabel = toPascalCase(moduleName);
   mkdirSync(resolve(moduleDir, "src", "pages"), { recursive: true });
+  mkdirSync(resolve(moduleDir, "src", "panels"), { recursive: true });
   writeFileSync(resolve(moduleDir, "package.json"), modulePackageJson({ scope, name: moduleName }));
   writeFileSync(resolve(moduleDir, "tsconfig.json"), moduleTsconfig());
   writeFileSync(
@@ -185,11 +196,15 @@ function scaffold(
   );
   writeFileSync(
     resolve(moduleDir, "src", "pages", `${pageName}.tsx`),
-    modulePage({ scope, pageName, moduleLabel: toPascalCase(moduleName), moduleName }),
+    modulePage({ scope, pageName, moduleLabel, moduleName }),
   );
   writeFileSync(
     resolve(moduleDir, "src", "pages", `${listPageName}.tsx`),
-    moduleListPage({ scope, pageName: listPageName, moduleLabel: toPascalCase(moduleName) }),
+    moduleListPage({ scope, pageName: listPageName, moduleLabel }),
+  );
+  writeFileSync(
+    resolve(moduleDir, "src", "panels", "DetailPanel.tsx"),
+    moduleDetailPanel({ moduleLabel }),
   );
 }
 
