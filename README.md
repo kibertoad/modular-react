@@ -41,7 +41,7 @@ Good for: plugin-style apps, apps where many teams contribute features, and apps
 
 - `@react-router-modules/*`: **v2.x**, considered stable for the APIs documented in the guides below.
 - `@tanstack-react-modules/*`: **v1.x**, considered stable for the APIs documented in the guides below.
-- `@modular-react/{core,react,testing}`: the shared foundation, versioned independently at `0.x`. Breaking changes, when they happen, flow through the router-integration majors.
+- `@modular-react/{core,react,testing}`: the shared foundation, stable at `1.x`. The router-integration packages depend on these and version independently.
 
 All packages target **React 19** and **Node 22+**. The docs and CLI scaffolder assume **pnpm workspaces**, but nothing in the runtime or CLI is pnpm-specific; any local package resolution that understands the `workspace:*` protocol (Yarn Berry, Bun) will work after scaffolding with a few script edits. See each getting-started guide for the full pinned version set.
 
