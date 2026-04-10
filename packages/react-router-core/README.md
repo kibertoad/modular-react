@@ -51,3 +51,4 @@ export default defineModule<AppDependencies, AppSlots>({
 ```
 
 See the [main documentation](https://github.com/kibertoad/modular-react#readme) for the full guide.
+
