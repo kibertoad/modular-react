@@ -1,6 +1,6 @@
 # @react-router-modules/cli
 
-Scaffolding CLI for the modular-react framework (React Router integration). Creates projects, modules, and stores with full wiring.
+Scaffolding CLI for modular-react (React Router integration). Creates projects, modules, and stores with full wiring.
 
 ## Commands
 

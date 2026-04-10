@@ -29,9 +29,9 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@modular-react/core": "*",
-    "@modular-react/react": "*",
-    "@react-router-modules/core": "*",
+    "@modular-react/core": "^1.0.0",
+    "@modular-react/react": "^1.0.0",
+    "@react-router-modules/core": "^2.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "react": "^19.0.0",
@@ -44,7 +44,7 @@
     "zustand": "^5.0.0"
   },
   "peerDependencies": {
-    "@modular-react/core": "^1.0.0",
+    "@modular-react/core": "^1.0.1",
     "@modular-react/react": "^1.0.0",
     "@react-router-modules/core": "^2.0.0",
     "react": "^19.0.0",

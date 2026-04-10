@@ -1,6 +1,6 @@
 # @react-router-modules/core
 
-Core types and utilities for defining modules with React Router. Provides `defineModule`, `createSharedHooks`, scoped stores, and all shared type definitions.
+Core types and utilities for defining modules using React Router. Provides `defineModule`, `createSharedHooks`, scoped stores, and all shared type definitions.
 
 ## Installation
 
