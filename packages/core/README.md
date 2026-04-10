@@ -30,3 +30,4 @@ import type { ModuleDescriptor, Store } from "@modular-react/core";
 ```
 
 See the [main documentation](https://github.com/kibertoad/modular-react#readme) for the full guide.
+

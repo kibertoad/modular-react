@@ -215,6 +215,11 @@ jobs:
       - name: Publish packages to npm
         id: publish
         env:
+          # setup-node sets NODE_AUTH_TOKEN to a placeholder ('XXXXX-XXXXX-XXXXX-XXXXX')
+          # when no token exists, which prevents npm from falling back to OIDC authentication.
+          # Setting it to an empty/undefined secret clears the placeholder so that
+          # npm publish --provenance can authenticate via the GitHub Actions OIDC token.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           MATRIX: ${{ needs.detect-changes.outputs.matrix }}
         run: |
           PUBLISHED=""

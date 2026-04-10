@@ -27,3 +27,4 @@ import { useSlots, useNavigation, useModules } from "@modular-react/react";
 ```
 
 See the [main documentation](https://github.com/kibertoad/modular-react#readme) for the full guide.
+
