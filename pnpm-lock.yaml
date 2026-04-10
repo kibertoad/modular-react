@@ -48,8 +48,8 @@ importers:
   packages/react:
     devDependencies:
       '@modular-react/core':
-        specifier: '*'
-        version: link:../core
+        specifier: ^1.0.1
+        version: 1.0.2(@types/react@19.2.14)
       '@testing-library/react':
         specifier: ^16.0.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -121,8 +121,8 @@ importers:
   packages/react-router-core:
     devDependencies:
       '@modular-react/core':
-        specifier: '*'
-        version: link:../core
+        specifier: ^1.0.0
+        version: 1.0.2(@types/react@19.2.14)
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.14
@@ -151,14 +151,14 @@ importers:
   packages/react-router-runtime:
     devDependencies:
       '@modular-react/core':
-        specifier: '*'
-        version: link:../core
+        specifier: ^1.0.0
+        version: 1.0.2(@types/react@19.2.14)
       '@modular-react/react':
-        specifier: '*'
+        specifier: ^1.0.0
         version: link:../react
       '@react-router-modules/core':
-        specifier: '*'
-        version: link:../react-router-core
+        specifier: ^2.0.0
+        version: 2.0.1(@modular-react/core@1.0.2(@types/react@19.2.14))(react-router@7.14.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)(zustand@5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4)))
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.14
@@ -193,17 +193,17 @@ importers:
   packages/react-router-testing:
     devDependencies:
       '@modular-react/core':
-        specifier: '*'
-        version: link:../core
+        specifier: ^1.0.0
+        version: 1.0.2(@types/react@19.2.14)
       '@modular-react/react':
-        specifier: '*'
+        specifier: ^1.0.0
         version: link:../react
       '@react-router-modules/core':
-        specifier: '*'
-        version: link:../react-router-core
+        specifier: ^2.0.0
+        version: 2.0.1(@modular-react/core@1.0.2(@types/react@19.2.14))(react-router@7.14.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)(zustand@5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4)))
       '@react-router-modules/runtime':
-        specifier: '*'
-        version: link:../react-router-runtime
+        specifier: ^2.0.0
+        version: 2.0.1(@modular-react/core@1.0.2(@types/react@19.2.14))(@modular-react/react@packages+react)(@react-router-modules/core@2.0.1(@modular-react/core@1.0.2(@types/react@19.2.14))(react-router@7.14.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)(zustand@5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))))(react-dom@19.2.4(react@19.2.4))(react-router@7.14.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)(zustand@5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4)))
       '@testing-library/react':
         specifier: ^16.0.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -272,8 +272,8 @@ importers:
   packages/tanstack-router-core:
     devDependencies:
       '@modular-react/core':
-        specifier: '*'
-        version: link:../core
+        specifier: ^1.0.0
+        version: 1.0.2(@types/react@19.2.14)
       '@tanstack/react-router':
         specifier: ^1.168.8
         version: 1.168.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -302,13 +302,13 @@ importers:
   packages/tanstack-router-runtime:
     devDependencies:
       '@modular-react/core':
-        specifier: '*'
-        version: link:../core
+        specifier: ^1.0.0
+        version: 1.0.2(@types/react@19.2.14)
       '@modular-react/react':
-        specifier: '*'
+        specifier: ^1.0.0
         version: link:../react
       '@tanstack-react-modules/core':
-        specifier: '*'
+        specifier: ^2.0.0
         version: link:../tanstack-router-core
       '@tanstack/react-router':
         specifier: ^1.168.8
@@ -344,16 +344,16 @@ importers:
   packages/tanstack-router-testing:
     devDependencies:
       '@modular-react/core':
-        specifier: '*'
-        version: link:../core
+        specifier: ^1.0.0
+        version: 1.0.2(@types/react@19.2.14)
       '@modular-react/react':
-        specifier: '*'
+        specifier: ^1.0.0
         version: link:../react
       '@tanstack-react-modules/core':
-        specifier: '*'
+        specifier: ^2.0.0
         version: link:../tanstack-router-core
       '@tanstack-react-modules/runtime':
-        specifier: '*'
+        specifier: ^2.0.0
         version: link:../tanstack-router-runtime
       '@tanstack/react-router':
         specifier: ^1.168.8
@@ -392,8 +392,8 @@ importers:
   packages/testing:
     devDependencies:
       '@modular-react/core':
-        specifier: '*'
-        version: link:../core
+        specifier: ^1.0.0
+        version: 1.0.2(@types/react@19.2.14)
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.14
@@ -513,6 +513,14 @@ packages:
 
   '@microsoft/tsdoc@0.16.0':
     resolution: {integrity: sha512-xgAyonlVVS+q7Vc7qLW0UrJU7rSFcETRWsqdXZtjzRU8dF+6CkozTK4V4y1LwOX7j8r/vHphjDeMeGI4tNGeGA==}
+
+  '@modular-react/core@1.0.2':
+    resolution: {integrity: sha512-nrNmJjXKylsWxwKvrfbU9XdBIX2livRzLbCrTnVIhZmYgz+/eVSprBIFrBVAeYZH2DqsI75D+EUnLmNfTRzAwA==}
+    peerDependencies:
+      '@types/react': ^19.0.0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
 
   '@napi-rs/wasm-runtime@1.1.2':
     resolution: {integrity: sha512-sNXv5oLJ7ob93xkZ1XnxisYhGYXfaG9f65/ZgYuAu3qt7b3NadcOEhLvx28hv31PgX8SZJRYrAIPQilQmFpLVw==}
@@ -771,6 +779,25 @@ packages:
     resolution: {integrity: sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg==}
     engines: {node: '>=18'}
     hasBin: true
+
+  '@react-router-modules/core@2.0.1':
+    resolution: {integrity: sha512-LZRzWINYKIASnyWrFxc69PFP9wju/tDUePXbKLQ/318YYLjI2nt3qJ2i+v7PKT+nfUwZiaRPs5rtNcHGKMVlmA==}
+    peerDependencies:
+      '@modular-react/core': ^1.0.0
+      react: ^19.0.0
+      react-router: ^7.6.0
+      zustand: ^5.0.0
+
+  '@react-router-modules/runtime@2.0.1':
+    resolution: {integrity: sha512-CCvfI2gJ+enq6G4YztJjHT0RiTdP7w9w5wpV69BPc4Hrkd4F9wXrAs3tKK4TUqR94jfvGewASYT4vj4cOYoJBA==}
+    peerDependencies:
+      '@modular-react/core': ^1.0.0
+      '@modular-react/react': ^1.0.0
+      '@react-router-modules/core': ^2.0.0
+      react: ^19.0.0
+      react-dom: ^19.0.0
+      react-router: ^7.6.0
+      zustand: ^5.0.0
 
   '@rolldown/binding-android-arm64@1.0.0-rc.12':
     resolution: {integrity: sha512-pv1y2Fv0JybcykuiiD3qBOBdz6RteYojRFY1d+b95WVuzx211CRh+ytI/+9iVyWQ6koTh5dawe4S/yRfOFjgaA==}
@@ -2020,6 +2047,10 @@ snapshots:
 
   '@microsoft/tsdoc@0.16.0': {}
 
+  '@modular-react/core@1.0.2(@types/react@19.2.14)':
+    optionalDependencies:
+      '@types/react': 19.2.14
+
   '@napi-rs/wasm-runtime@1.1.2(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)':
     dependencies:
       '@emnapi/core': 1.9.2
@@ -2146,6 +2177,23 @@ snapshots:
   '@playwright/test@1.59.1':
     dependencies:
       playwright: 1.59.1
+
+  '@react-router-modules/core@2.0.1(@modular-react/core@1.0.2(@types/react@19.2.14))(react-router@7.14.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)(zustand@5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4)))':
+    dependencies:
+      '@modular-react/core': 1.0.2(@types/react@19.2.14)
+      react: 19.2.4
+      react-router: 7.14.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      zustand: 5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
+
+  '@react-router-modules/runtime@2.0.1(@modular-react/core@1.0.2(@types/react@19.2.14))(@modular-react/react@packages+react)(@react-router-modules/core@2.0.1(@modular-react/core@1.0.2(@types/react@19.2.14))(react-router@7.14.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)(zustand@5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))))(react-dom@19.2.4(react@19.2.4))(react-router@7.14.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)(zustand@5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4)))':
+    dependencies:
+      '@modular-react/core': 1.0.2(@types/react@19.2.14)
+      '@modular-react/react': link:packages/react
+      '@react-router-modules/core': 2.0.1(@modular-react/core@1.0.2(@types/react@19.2.14))(react-router@7.14.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)(zustand@5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4)))
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
+      react-router: 7.14.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      zustand: 5.0.12(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
 
   '@rolldown/binding-android-arm64@1.0.0-rc.12':
     optional: true

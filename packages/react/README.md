@@ -1,4 +1,4 @@
-# @modular-react/react
+# @modular-react/react 
 
 React bindings for the `@modular-react/core` package. Provides context providers, hooks, and components that the router-specific runtime packages use internally.
 

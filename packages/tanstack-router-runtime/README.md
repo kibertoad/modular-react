@@ -1,4 +1,4 @@
-# @tanstack-react-modules/runtime
+# @tanstack-react-modules/runtime 
  
 Application assembly layer for modular-react (TanStack Router integration). Takes modules and configuration, produces a running app with routing, slots, zones, navigation, and provider wiring.
 
