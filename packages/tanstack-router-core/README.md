@@ -1,5 +1,5 @@
 # @tanstack-react-modules/core
-
+ 
 Core types and utilities for defining modules with TanStack Router. Provides `defineModule`, `createSharedHooks`, scoped stores, and all shared type definitions.
 
 ## Installation
