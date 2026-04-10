@@ -46,4 +46,3 @@ authStore.subscribe((state, prev) => {
 Modules can contribute conditional slot entries via `dynamicSlots` and trigger re-evaluation from components via `useRecalculateSlots()`. The shell can apply cross-cutting filters via `slotFilter` on `resolve()`.
 
 See the [main documentation](https://github.com/kibertoad/modular-react#readme) for the full guide.
-

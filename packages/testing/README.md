@@ -31,4 +31,3 @@ expect(entry.id).toBe("my-module");
 For rendering modules with a router, use the router-specific testing packages (`@react-router-modules/testing` or `@tanstack-react-modules/testing`).
 
 See the [main documentation](https://github.com/kibertoad/modular-react#readme) for the full guide.
-
