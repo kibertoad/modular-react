@@ -1,4 +1,4 @@
-# @react-router-modules/runtime
+# @react-router-modules/runtime 
 
 Application assembly layer for modular-react (React Router integration). Takes modules and configuration, produces a running app with routing, slots, zones, navigation, and provider wiring.
 
