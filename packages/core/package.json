@@ -2,6 +2,11 @@
   "name": "@modular-react/core",
   "version": "1.0.0",
   "description": "Core primitives for modular React applications: types, slots, navigation, validation, and a lightweight store. No runtime React dependency — pure logic with React type declarations.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/modular-react.git",
+    "directory": "packages/core"
+  },
   "files": [
     "dist"
   ],

@@ -2,6 +2,11 @@
   "name": "@modular-react/testing",
   "version": "1.0.0",
   "description": "Testing utilities for @modular-react modules: mock stores, module resolution, and slot evaluation.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/modular-react.git",
+    "directory": "packages/testing"
+  },
   "files": [
     "dist"
   ],
@@ -24,10 +29,8 @@
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@modular-react/core": "workspace:*"
-  },
   "devDependencies": {
+    "@modular-react/core": "*",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "oxfmt": "^0.43.0",
@@ -40,6 +43,7 @@
     "vitest": "^4.1.0"
   },
   "peerDependencies": {
+    "@modular-react/core": "^1.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   }

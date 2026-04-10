@@ -231,7 +231,7 @@ jobs:
               SKIPPED+="$NPM_NAME@$VERSION "
             else
               echo "Publishing $NPM_NAME@$VERSION..."
-              npm publish --access public
+              npm publish --provenance --access public
               PUBLISHED+="$NPM_NAME@$VERSION "
             fi
 

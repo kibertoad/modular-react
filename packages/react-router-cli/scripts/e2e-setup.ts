@@ -26,12 +26,14 @@ exec(`node ${CLI} init smoke-app --scope @smoke --module dashboard`, TMP);
 // Build framework packages
 exec("pnpm -r run build", REPO_ROOT);
 
-// Override @react-router-modules/* to local (not yet on npm)
+// Override @modular-react/* and @react-router-modules/* to local workspace builds
 const rootPkg = JSON.parse(readFileSync(resolve(PROJECT_DIR, "package.json"), "utf-8"));
 rootPkg.pnpm = {
   overrides: {
-    "@react-router-modules/core": `link:${resolve(REPO_ROOT, "packages", "core")}`,
-    "@react-router-modules/runtime": `link:${resolve(REPO_ROOT, "packages", "runtime")}`,
+    "@modular-react/core": `link:${resolve(REPO_ROOT, "packages", "core")}`,
+    "@modular-react/react": `link:${resolve(REPO_ROOT, "packages", "react")}`,
+    "@react-router-modules/core": `link:${resolve(REPO_ROOT, "packages", "react-router-core")}`,
+    "@react-router-modules/runtime": `link:${resolve(REPO_ROOT, "packages", "react-router-runtime")}`,
   },
 };
 writeFileSync(resolve(PROJECT_DIR, "package.json"), JSON.stringify(rootPkg, null, 2));

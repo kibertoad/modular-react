@@ -28,13 +28,11 @@
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@modular-react/core": "workspace:*",
-    "@modular-react/react": "workspace:*",
-    "@react-router-modules/core": "workspace:*",
-    "@react-router-modules/runtime": "workspace:*"
-  },
   "devDependencies": {
+    "@modular-react/core": "*",
+    "@modular-react/react": "*",
+    "@react-router-modules/core": "*",
+    "@react-router-modules/runtime": "*",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -48,6 +46,10 @@
     "zustand": "^5.0.0"
   },
   "peerDependencies": {
+    "@modular-react/core": "^1.0.0",
+    "@modular-react/react": "^1.0.0",
+    "@react-router-modules/core": "^2.0.0",
+    "@react-router-modules/runtime": "^2.0.0",
     "@testing-library/react": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
