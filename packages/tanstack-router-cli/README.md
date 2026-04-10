@@ -1,6 +1,6 @@
 # @tanstack-react-modules/cli
 
-Scaffolding CLI for the modular-react framework (TanStack Router integration). Creates projects, modules, and stores with full wiring.
+Scaffolding CLI for the modular-react framework (TanStack Router integration). Quickly creates projects, modules, and stores with full wiring.
 
 ## Commands
 
