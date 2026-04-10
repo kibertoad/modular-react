@@ -1,6 +1,6 @@
 # @react-router-modules/testing
 
-Testing utilities for modules. Render modules in isolation with mocked dependencies.
+Testing utilities for React Router modules. Render modules in isolation with mocked dependencies.
 
 ## Installation
 

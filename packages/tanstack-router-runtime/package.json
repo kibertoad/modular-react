@@ -29,9 +29,9 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@modular-react/core": "*",
-    "@modular-react/react": "*",
-    "@tanstack-react-modules/core": "*",
+    "@modular-react/core": "^1.0.0",
+    "@modular-react/react": "^1.0.0",
+    "@tanstack-react-modules/core": "^2.0.0",
     "@tanstack/react-router": "^1.168.8",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
