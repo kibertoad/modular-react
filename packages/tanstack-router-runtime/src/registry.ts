@@ -15,7 +15,12 @@ import {
   validateNoDuplicateIds,
   validateDependencies,
 } from "@modular-react/core";
-import type { SlotFilter, NavigationManifest, ModuleEntry } from "@modular-react/core";
+import type {
+  NavigationItem,
+  SlotFilter,
+  NavigationManifest,
+  ModuleEntry,
+} from "@modular-react/core";
 import { createSlotsSignal } from "@modular-react/react";
 
 import type { RegistryConfig, ApplicationManifest } from "./types.js";
@@ -25,18 +30,30 @@ import { createAppComponent } from "./app.js";
 export interface ModuleRegistry<
   TSharedDependencies extends Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
+  TNavItem extends NavigationItem = NavigationItem,
 > {
-  /** Register an eager module */
-  register(module: ModuleDescriptor<TSharedDependencies, TSlots>): void;
+  /**
+   * Register an eager module. The module's `TNavItem` must match the
+   * registry's — pass the same alias (e.g. `AppNavItem`) on both sides so
+   * typed i18n labels, typed dynamic-href context, and typed `meta` are
+   * enforced end-to-end.
+   */
+  register(module: ModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>): void;
 
-  /** Register a lazily-loaded module */
-  registerLazy(descriptor: LazyModuleDescriptor<TSharedDependencies, TSlots>): void;
+  /**
+   * Register a lazily-loaded module. Only `createRoutes()` on the loaded
+   * descriptor is honored — see {@link LazyModuleDescriptor} for the
+   * complete list of fields ignored at lazy-load time.
+   */
+  registerLazy(descriptor: LazyModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>): void;
 
   /**
    * Resolve all modules and produce the application manifest.
    * Validates dependencies and builds the route tree.
    */
-  resolve(options?: ResolveOptions<TSharedDependencies, TSlots>): ApplicationManifest<TSlots>;
+  resolve(
+    options?: ResolveOptions<TSharedDependencies, TSlots>,
+  ): ApplicationManifest<TSlots, TNavItem>;
 }
 
 export interface ResolveOptions<
@@ -95,11 +112,12 @@ export interface ResolveOptions<
 export function createRegistry<
   TSharedDependencies extends Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
+  TNavItem extends NavigationItem = NavigationItem,
 >(
   config: RegistryConfig<TSharedDependencies, TSlots>,
-): ModuleRegistry<TSharedDependencies, TSlots> {
-  const modules: ModuleDescriptor<TSharedDependencies, TSlots>[] = [];
-  const lazyModules: LazyModuleDescriptor<TSharedDependencies, TSlots>[] = [];
+): ModuleRegistry<TSharedDependencies, TSlots, TNavItem> {
+  const modules: ModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>[] = [];
+  const lazyModules: LazyModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>[] = [];
   let resolved = false;
 
   // Collect all available dependency keys from all three buckets
@@ -128,7 +146,9 @@ export function createRegistry<
       lazyModules.push(descriptor);
     },
 
-    resolve(options?: ResolveOptions<TSharedDependencies, TSlots>) {
+    resolve(
+      options?: ResolveOptions<TSharedDependencies, TSlots>,
+    ): ApplicationManifest<TSlots, TNavItem> {
       if (resolved) {
         throw new Error("[@tanstack-react-modules/runtime] resolve() can only be called once.");
       }
@@ -172,7 +192,7 @@ export function createRegistry<
       });
 
       // Build navigation, slots, and module entries
-      const navigation: NavigationManifest = buildNavigationManifest(mods);
+      const navigation: NavigationManifest<TNavItem> = buildNavigationManifest<TNavItem>(modules);
       const slots = buildSlotsManifest<TSlots>(modules, config.slots);
       const dynamicSlotFactories = collectDynamicSlotFactories(mods);
       const slotFilter = options?.slotFilter as SlotFilter | undefined;

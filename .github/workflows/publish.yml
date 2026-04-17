@@ -14,7 +14,15 @@ concurrency:
 
 jobs:
   detect-changes:
-    if: github.event.pull_request.merged == true && (contains(github.event.pull_request.labels.*.name, 'patch') || contains(github.event.pull_request.labels.*.name, 'minor') || contains(github.event.pull_request.labels.*.name, 'major'))
+    # Publish runs when the PR carries any of: major / minor / patch (auto-bump
+    # paths) OR release-same-version (publish the versions already committed).
+    if: >-
+      github.event.pull_request.merged == true && (
+        contains(github.event.pull_request.labels.*.name, 'patch') ||
+        contains(github.event.pull_request.labels.*.name, 'minor') ||
+        contains(github.event.pull_request.labels.*.name, 'major') ||
+        contains(github.event.pull_request.labels.*.name, 'release-same-version')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,20 +30,42 @@ jobs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
       has_changes: ${{ steps.build-matrix.outputs.has_changes }}
       bump: ${{ steps.version.outputs.bump }}
+      same_version: ${{ steps.version.outputs.same_version }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Determine version bump
+      - name: Determine version strategy
         id: version
+        # Resolve GitHub expressions into env vars and branch on those in
+        # shell. Inline `${{ contains(...) }}` expansion works (it renders
+        # as the literal word `true` / `false` into the command) but it's
+        # easy to get wrong — one typo and the shell silently executes a
+        # command called `false`, which happens to succeed in some shells.
+        # Env-var + bash string compare is the durable pattern.
+        env:
+          IS_SAME_VERSION: ${{ contains(github.event.pull_request.labels.*.name, 'release-same-version') }}
+          IS_MAJOR: ${{ contains(github.event.pull_request.labels.*.name, 'major') }}
+          IS_MINOR: ${{ contains(github.event.pull_request.labels.*.name, 'minor') }}
         run: |
-          if ${{ contains(github.event.pull_request.labels.*.name, 'major') }}; then
-            echo "bump=major" >> $GITHUB_OUTPUT
-          elif ${{ contains(github.event.pull_request.labels.*.name, 'minor') }}; then
-            echo "bump=minor" >> $GITHUB_OUTPUT
+          # release-same-version wins over major/minor/patch — the author
+          # already committed the versions they want, so the workflow must
+          # not re-bump them. Emit same_version=true; bump is unused in that
+          # branch but still set to 'none' so downstream conditionals never
+          # evaluate against an empty string.
+          if [ "$IS_SAME_VERSION" = "true" ]; then
+            echo "same_version=true" >> $GITHUB_OUTPUT
+            echo "bump=none" >> $GITHUB_OUTPUT
           else
-            echo "bump=patch" >> $GITHUB_OUTPUT
+            echo "same_version=false" >> $GITHUB_OUTPUT
+            if [ "$IS_MAJOR" = "true" ]; then
+              echo "bump=major" >> $GITHUB_OUTPUT
+            elif [ "$IS_MINOR" = "true" ]; then
+              echo "bump=minor" >> $GITHUB_OUTPUT
+            else
+              echo "bump=patch" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - id: filter
@@ -177,6 +207,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Bump versions for changed packages
+        # Skip bumping entirely when the PR used release-same-version — the
+        # versions in package.json are already the intended publish targets.
+        if: needs.detect-changes.outputs.same_version != 'true'
         id: bump
         env:
           MATRIX: ${{ needs.detect-changes.outputs.matrix }}
@@ -185,29 +218,31 @@ jobs:
           echo "Packages to bump: $MATRIX"
           echo "Version bump type: $BUMP"
 
-          VERSIONS_JSON="{"
-          FIRST=true
-
           for PKG_DIR in $(echo "$MATRIX" | jq -r '.[] | .dir'); do
             echo "Bumping version for $PKG_DIR..."
             cd "packages/$PKG_DIR"
             OLD_VERSION=$(node -p "require('./package.json').version")
-            npm version "$BUMP" --no-git-tag-version
+            # pnpm version delegates to npm version but respects the workspace
+            # layout; --no-git-tag-version matches the prior npm-based flow.
+            pnpm version "$BUMP" --no-git-tag-version
             NEW_VERSION=$(node -p "require('./package.json').version")
             echo "  $OLD_VERSION -> $NEW_VERSION"
-
-            if [ "$FIRST" = true ]; then
-              FIRST=false
-            else
-              VERSIONS_JSON+=","
-            fi
-            VERSIONS_JSON+="\"$PKG_DIR\":\"$NEW_VERSION\""
-
             cd ../..
           done
 
-          VERSIONS_JSON+="}"
-          echo "versions=$VERSIONS_JSON" >> $GITHUB_OUTPUT
+      - name: Log publish versions
+        env:
+          MATRIX: ${{ needs.detect-changes.outputs.matrix }}
+          SAME_VERSION: ${{ needs.detect-changes.outputs.same_version }}
+        run: |
+          if [ "$SAME_VERSION" = "true" ]; then
+            echo "release-same-version: using versions as committed in package.json"
+          fi
+          for PKG_DIR in $(echo "$MATRIX" | jq -r '.[] | .dir'); do
+            NPM_NAME=$(node -p "require('./packages/$PKG_DIR/package.json').name")
+            VERSION=$(node -p "require('./packages/$PKG_DIR/package.json').version")
+            echo "  $NPM_NAME@$VERSION"
+          done
 
       - name: Build all packages
         run: pnpm turbo run build
@@ -218,7 +253,7 @@ jobs:
           # setup-node sets NODE_AUTH_TOKEN to a placeholder ('XXXXX-XXXXX-XXXXX-XXXXX')
           # when no token exists, which prevents npm from falling back to OIDC authentication.
           # Setting it to an empty/undefined secret clears the placeholder so that
-          # npm publish --provenance can authenticate via the GitHub Actions OIDC token.
+          # pnpm/npm publish --provenance can authenticate via the GitHub Actions OIDC token.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           MATRIX: ${{ needs.detect-changes.outputs.matrix }}
         run: |
@@ -236,7 +271,14 @@ jobs:
               SKIPPED+="$NPM_NAME@$VERSION "
             else
               echo "Publishing $NPM_NAME@$VERSION..."
-              npm publish --provenance --access public
+              # pnpm publish (vs. npm publish) is intentional:
+              # - it rewrites any workspace:* / workspace:^ dep specs to real
+              #   versions in the published tarball
+              # - it respects the workspace's package manager (consistent with
+              #   local dev and the `pnpm turbo run build` step above)
+              # - --no-git-checks skips pnpm's dirty-working-tree guard, which
+              #   would fire because the bump step just modified package.json
+              pnpm publish --provenance --access public --no-git-checks
               PUBLISHED+="$NPM_NAME@$VERSION "
             fi
 
@@ -247,6 +289,9 @@ jobs:
           echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
 
       - name: Commit version bumps
+        # Only meaningful when the workflow actually bumped versions. With
+        # release-same-version the versions were already committed in the PR.
+        if: needs.detect-changes.outputs.same_version != 'true'
         run: |
           git add packages/*/package.json
           if git diff --staged --quiet; then
@@ -281,8 +326,17 @@ jobs:
         env:
           PUBLISHED: ${{ steps.publish.outputs.published }}
           SKIPPED: ${{ steps.publish.outputs.skipped }}
+          SAME_VERSION: ${{ needs.detect-changes.outputs.same_version }}
+          BUMP: ${{ needs.detect-changes.outputs.bump }}
         run: |
           echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$SAME_VERSION" = "true" ]; then
+            echo "**Strategy:** release-same-version (used versions committed in PR)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Strategy:** auto-bump ($BUMP)" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ -n "$PUBLISHED" ]; then

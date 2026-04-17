@@ -94,6 +94,7 @@ export interface ModuleDescriptor<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
+  TNavItem extends NavigationItem = NavigationItem,
 > {
   /** Unique module identifier, e.g. "billing", "user-profile" */
   readonly id: string;
@@ -110,8 +111,15 @@ export interface ModuleDescriptor<
    */
   readonly createRoutes?: (...args: any[]) => any;
 
-  /** Navigation items this module contributes to the app shell */
-  readonly navigation?: readonly NavigationItem[];
+  /**
+   * Navigation items this module contributes to the app shell.
+   *
+   * Type the `TNavItem` generic on `defineModule` (or use a local alias of
+   * `NavigationItem<TLabel, TContext, TMeta>`) to enforce app-specific
+   * constraints — typed i18n keys, typed dynamic-href context, or a typed
+   * `meta` bag for permissions/badges/analytics.
+   */
+  readonly navigation?: readonly TNavItem[];
 
   /**
    * Typed slot contributions this module provides to the shell.
@@ -194,12 +202,54 @@ export interface ModuleDescriptor<
   readonly lifecycle?: ModuleLifecycle<TSharedDependencies>;
 }
 
-export interface NavigationItem {
-  /** Display label */
-  readonly label: string;
+/**
+ * A single navigation item contributed by a module.
+ *
+ * Three generics let the host opt into stricter typing:
+ *
+ * - `TLabel extends string = string` — tighten `label` to an i18n key union
+ *   so typos fail at compile time. Widens to `string` by default for
+ *   apps that don't use typed translation keys.
+ *
+ * - `TContext = void` — type of the context object passed to dynamic `to`
+ *   resolvers. Defaults to `void`, meaning `to` must be a plain string;
+ *   set `TContext` to an object (e.g. `{ workspaceId: string }`) to enable
+ *   `to: (ctx) => string` and resolve hrefs at render time via
+ *   {@link resolveNavHref}.
+ *
+ * - `TMeta = unknown` — bag of app-owned metadata. Use this for
+ *   framework-neutral fields the library shouldn't opinionate on
+ *   (permission actions, badges, analytics ids, feature flags). Cast through
+ *   `unknown` / intersect with your own shape, or alias
+ *   `NavigationItem<…, …, MyMeta>` once and use that throughout.
+ *
+ * Typical local alias in a host app:
+ *
+ * ```ts
+ * import type { NavigationItem } from "@modular-react/core"
+ * import type { ParseKeys } from "i18next"
+ *
+ * interface NavCtx { workspaceId: string }
+ * interface NavMeta { action?: Action; badge?: "beta" | "new" }
+ *
+ * export type AppNavItem = NavigationItem<ParseKeys, NavCtx, NavMeta>
+ * ```
+ */
+export interface NavigationItem<TLabel extends string = string, TContext = void, TMeta = unknown> {
+  /** Display label — narrow `TLabel` to an i18n key union for compile-time validation. */
+  readonly label: TLabel;
 
-  /** Route path to navigate to */
-  readonly to: string;
+  /**
+   * Route path to navigate to.
+   *
+   * - A plain string is used as-is (e.g. `"/settings"`).
+   * - A function receives the render-time context (`TContext`) and returns
+   *   the final href — use this for workspace-scoped paths, feature-flagged
+   *   URLs, or anything the module can't know statically. Call
+   *   {@link resolveNavHref} from the shell (or do it inline) to compute
+   *   the string.
+   */
+  readonly to: TContext extends void ? string : string | ((ctx: TContext) => string);
 
   /** Icon — either a string identifier or a React component */
   readonly icon?: string | React.ComponentType<{ className?: string }>;
@@ -212,6 +262,15 @@ export interface NavigationItem {
 
   /** If true, item is registered but hidden from default nav rendering */
   readonly hidden?: boolean;
+
+  /**
+   * App-owned metadata. The library treats this as opaque — use it for
+   * permission actions, feature flags, badges, analytics ids, or anything
+   * else that's app- rather than library-shaped. Type via the `TMeta`
+   * generic (aliasing `NavigationItem<…, …, MyMeta>` once is the typical
+   * pattern).
+   */
+  readonly meta?: TMeta;
 }
 
 export interface ModuleLifecycle<
@@ -230,11 +289,35 @@ export interface ModuleLifecycle<
 /**
  * Descriptor for a lazily-loaded module.
  * The full module descriptor is loaded on demand when the route is first visited.
+ *
+ * ## What a lazy module can and cannot contribute
+ *
+ * Lazy modules are loaded by the router on first navigation to their
+ * `basePath`. By the time they load, the registry has already produced the
+ * navigation manifest, the resolved slots, and the module entries — so only
+ * the loaded descriptor's `createRoutes()` is honored.
+ *
+ * Anything else you put on the loaded descriptor is silently ignored. The
+ * runtime logs a warning at load time if it detects one of these fields:
+ *
+ * - `navigation` — not collected; would never appear in `useNavigation()`.
+ * - `slots` / `dynamicSlots` — not merged into the resolved slots.
+ * - `lifecycle.onRegister` — not run; registration already happened.
+ * - `zones` / `component` — only meaningful for workspace-style
+ *   (non-routed) modules, which must be registered eagerly.
+ * - `requires` / `optionalRequires` — not validated post-hoc against shared
+ *   deps.
+ *
+ * For anything that needs to land in the manifest, register the module
+ * eagerly (`registry.register(module)`). Use `registerLazy` only for the
+ * pure route-code-splitting case where the module contributes **routes
+ * only** and everything else lives in an eagerly-registered shell.
  */
 export interface LazyModuleDescriptor<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
+  TNavItem extends NavigationItem = NavigationItem,
 > {
   /** Unique module identifier */
   readonly id: string;
@@ -244,6 +327,6 @@ export interface LazyModuleDescriptor<
 
   /** Dynamic import that returns the full module descriptor */
   readonly load: () => Promise<{
-    default: ModuleDescriptor<TSharedDependencies, TSlots, TMeta>;
+    default: ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>;
   }>;
 }

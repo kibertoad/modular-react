@@ -42,18 +42,18 @@ export interface RegistryConfig<
   slots?: { [K in keyof TSlots]?: TSlots[K] };
 }
 
-export interface NavigationGroup {
+export interface NavigationGroup<TNavItem extends NavigationItem = NavigationItem> {
   readonly group: string;
-  readonly items: readonly NavigationItem[];
+  readonly items: readonly TNavItem[];
 }
 
-export interface NavigationManifest {
+export interface NavigationManifest<TNavItem extends NavigationItem = NavigationItem> {
   /** All navigation items flat */
-  readonly items: readonly NavigationItem[];
+  readonly items: readonly TNavItem[];
   /** Items grouped by their group key, sorted by order within each group */
-  readonly groups: readonly NavigationGroup[];
+  readonly groups: readonly NavigationGroup<TNavItem>[];
   /** Ungrouped items (no group key) */
-  readonly ungrouped: readonly NavigationItem[];
+  readonly ungrouped: readonly TNavItem[];
 }
 
 /**

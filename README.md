@@ -72,9 +72,11 @@ Conceptual documentation for building apps with the framework. Start with a gett
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | [Getting started with React Router](docs/getting-started-react-router.md)       | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                        |
 | [Getting started with TanStack Router](docs/getting-started-tanstack-router.md) | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.            |
+| [Framework-mode (React Router v7)](docs/framework-mode-react-router.md)         | `resolveManifest()` integration with `@react-router/dev/vite` — keep file-based `routes.ts`, `+types/route.ts`, HMR, and SSR.  |
+| [Navigation: typed labels, dynamic hrefs, meta](docs/navigation.md)             | `NavigationItem<TLabel, TContext, TMeta>` — typed i18n keys, context-aware `to`, app-owned `meta` for permissions/badges.      |
 | [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                         | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination. |
-| [Shell Patterns for React Router](docs/shell-patterns-react-router.md)          | Module route shape, route zones via `handle`, `authenticatedRoute` with `loader`, public `shellRoutes`.                        |
-| [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)    | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `authenticatedRoute` with `beforeLoad`.  |
+| [Shell Patterns for React Router](docs/shell-patterns-react-router.md)          | Module route shape, route zones via `handle`, `useRouteData` for non-component metadata, auth guards, public shell routes.     |
+| [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)    | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `useRouteData`, `beforeLoad` auth.       |
 | [Workspace Patterns](docs/workspace-patterns.md)                                | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                        |
 
 ## What the code looks like
@@ -98,29 +100,36 @@ export default defineModule<AppDependencies, AppSlots>({
 });
 ```
 
-The shell assembles modules into a running app via a registry:
+The shell assembles modules into a running app via a registry. For React Router v7 with `@react-router/dev/vite` (the recommended path — keeps HMR, generated `+types/route.ts`, SSR, and file-based routing):
 
 ```typescript
+// app/registry.ts
 import { createRegistry } from "@react-router-modules/runtime";
+import billingModule from "./modules/billing";
 
 const registry = createRegistry<AppDependencies, AppSlots>({
   stores: { auth: authStore },
   services: { httpClient },
 });
-
 registry.register(billingModule);
-registry.register(usersModule);
 
-const { App, recalculateSlots } = registry.resolve({
-  rootComponent: RootLayout,
-  indexComponent: HomePage,
-  authenticatedRoute: { loader: requireAuth, Component: ShellLayout },
-});
+export const manifest = registry.resolveManifest();
 
-// When a store that `dynamicSlots` depends on changes, call recalculateSlots()
-// to re-run the factories and update the visible slot contributions.
-authStore.subscribe(recalculateSlots);
+// app/root.tsx
+import { Outlet } from "react-router";
+import { manifest } from "./registry";
+export default () => <manifest.Providers><Outlet /></manifest.Providers>;
+
+// app/routes.ts continues to use flatRoutes() / route() / prefix() as normal.
+
+// Re-evaluate dynamic slots when state changes. `recalculateSlots` is a
+// no-op unless at least one module declared `dynamicSlots` or you passed a
+// `slotFilter` to `resolveManifest()` — wire the subscription only when
+// there is actually something dynamic to recompute.
+authStore.subscribe(manifest.recalculateSlots);
 ```
+
+For legacy React Router setups or plugin-host apps (library owns router creation, no framework-mode integration), use `registry.resolve({ rootComponent, indexComponent, authenticatedRoute })` instead — see [Framework-mode guide](docs/framework-mode-react-router.md) for the tradeoffs.
 
 ## Packages
 
@@ -199,6 +208,20 @@ pnpm install
 pnpm build          # Build all packages
 pnpm test           # Run all tests
 ```
+
+## Release labels
+
+Every merged PR to `main` must carry exactly one of these labels. The publish workflow reads the label to decide whether to release and how:
+
+| Label                  | What it does                                                                                                                                                                                                                                                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `patch`                | Run the release. Bump each changed package's patch version.                                                                                                                                                                                                                                                                               |
+| `minor`                | Run the release. Bump each changed package's minor version.                                                                                                                                                                                                                                                                               |
+| `major`                | Run the release. Bump each changed package's major version.                                                                                                                                                                                                                                                                               |
+| `release-same-version` | Run the release, but **do not bump versions** — publish the versions already committed in each `package.json`. Use this when the PR pre-set the versions by hand (e.g. coordinated multi-package release where the docs or example apps reference specific numbers). The workflow still skips any `<name>@<version>` already live on npm. |
+| `skip-release`         | Merge without releasing. Use for docs, workflow edits, tests, or anything that doesn't ship library code.                                                                                                                                                                                                                                 |
+
+Attach exactly one label. `release-same-version` wins over `major`/`minor`/`patch` if both are attached. Attaching `skip-release` alongside a release label is ambiguous — the `ensure-labels` check passes but the publish job still fires on the release label, so don't mix them.
 
 ## Help & contributing
 

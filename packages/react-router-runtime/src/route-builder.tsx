@@ -1,6 +1,7 @@
 import { Outlet, useRoutes } from "react-router";
 import type { RouteObject } from "react-router";
 import type { ModuleDescriptor, LazyModuleDescriptor } from "@react-router-modules/core";
+import { warnIgnoredLazyFields } from "@modular-react/core";
 
 export interface RouteBuilderOptions {
   /**
@@ -182,8 +183,11 @@ function createAuthenticatedLayoutRoute(
  * Creates a catch-all route for a lazily-loaded module.
  * On first navigation, the module descriptor is loaded and its routes
  * are rendered as descendant routes via useRoutes().
+ *
+ * Exported so framework-mode callers (`resolveManifest`) can include the
+ * same lazy-catch-all shape in the routes they hand back to the host.
  */
-function createLazyModuleRoute(lazyMod: LazyModuleDescriptor): RouteObject {
+export function createLazyModuleRoute(lazyMod: LazyModuleDescriptor): RouteObject {
   // Capture the loaded routes so they're resolved only once
   let cachedRoutes: RouteObject[] | null = null;
 
@@ -192,6 +196,7 @@ function createLazyModuleRoute(lazyMod: LazyModuleDescriptor): RouteObject {
     lazy: async () => {
       if (!cachedRoutes) {
         const { default: descriptor } = await lazyMod.load();
+        warnIgnoredLazyFields(descriptor, "@react-router-modules/runtime");
         if (descriptor.createRoutes) {
           const routes = descriptor.createRoutes();
           cachedRoutes = Array.isArray(routes) ? routes : [routes];

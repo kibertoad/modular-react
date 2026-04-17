@@ -44,3 +44,4 @@ export type { SlotsSignal } from "@modular-react/react";
 // Zones (router-specific)
 export { useZones } from "./zones.js";
 export { useActiveZones } from "./active-zones.js";
+export { useRouteData } from "./route-data.js";

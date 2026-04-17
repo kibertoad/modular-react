@@ -1,6 +1,7 @@
 import type { AnyRoute } from "@tanstack/react-router";
 import type {
   ModuleDescriptor as BaseModuleDescriptor,
+  NavigationItem,
   SlotMap,
   SlotMapOf,
 } from "@modular-react/core";
@@ -28,7 +29,8 @@ export interface ModuleDescriptor<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
-> extends Omit<BaseModuleDescriptor<TSharedDependencies, TSlots, TMeta>, "createRoutes"> {
+  TNavItem extends NavigationItem = NavigationItem,
+> extends Omit<BaseModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>, "createRoutes"> {
   /**
    * Receives a parent route and returns the module's route subtree.
    * Uses TanStack Router's createRoute directly.
@@ -42,11 +44,16 @@ export interface ModuleDescriptor<
 /**
  * Descriptor for a lazily-loaded module.
  * The full module descriptor is loaded on demand when the route is first visited.
+ *
+ * See the base {@link import("@modular-react/core").LazyModuleDescriptor}
+ * JSDoc for the list of fields that are ignored at lazy-load time — only
+ * `createRoutes()` is honored.
  */
 export interface LazyModuleDescriptor<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
+  TNavItem extends NavigationItem = NavigationItem,
 > {
   /** Unique module identifier */
   readonly id: string;
@@ -56,6 +63,6 @@ export interface LazyModuleDescriptor<
 
   /** Dynamic import that returns the full module descriptor */
   readonly load: () => Promise<{
-    default: ModuleDescriptor<TSharedDependencies, TSlots, TMeta>;
+    default: ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>;
   }>;
 }

@@ -2,6 +2,8 @@
 
 Router-specific additions to [Shell Patterns (Fundamentals)](shell-patterns.md) for apps built with `@react-router-modules/*`. Read the fundamentals guide first; this document only covers the parts that depend on React Router.
 
+> **New React Router v7 apps should prefer framework mode** (`@react-router/dev/vite` + `resolveManifest()`) — you keep HMR, generated `+types/route.ts`, SSR, and file-based routing. This guide uses `resolve()` because it covers router-agnostic patterns (zones, route data, auth boundaries) that apply equally to both modes, but the wiring shown here is for the `resolve()` path. See [Framework-mode integration](framework-mode-react-router.md) for the recommended setup, and use the patterns below adapted to your `routes.ts` when you do.
+
 ## Module routes
 
 A module's `createRoutes` returns `RouteObject[]` (or a single `RouteObject`). There is no parent argument: React Router route objects are plain data, and the runtime nests them under the root automatically.
@@ -88,6 +90,74 @@ function Layout() {
 ```
 
 Deeper routes override shallower ones: if the billing section root sets `handle.detailPanel = BillingSidebar` and the invoice detail page sets `handle.detailPanel = InvoiceSidebar`, the detail page wins while it is active.
+
+## Route data (non-component handles)
+
+`useZones` enforces `ComponentType | undefined` on every zone value — a useful rail 95% of the time, but it gets in the way for non-component route metadata: header variant enums, page titles, analytics event names, per-route feature flags. `useRouteData` is the relaxed-typing counterpart: same deepest-wins merge over `handle`, no constraint on value types.
+
+Two hooks, two channels, same `handle` object:
+
+```typescript
+// app-shared/src/index.ts
+import type { ComponentType } from "react";
+
+export interface AppZones {
+  HeaderActions?: ComponentType;
+  DetailPanel?: ComponentType;
+}
+
+export interface AppRouteData {
+  headerVariant?: "portal" | "project" | "setup";
+  pageTitle?: string;
+}
+```
+
+A route can contribute to both:
+
+```typescript
+import type { RouteObject } from "react-router";
+
+const projectDetail: RouteObject = {
+  path: "projects/:projectId",
+  Component: ProjectDetailPage,
+  handle: {
+    HeaderActions: ProjectActions, // → useZones<AppZones>()
+    headerVariant: "project" as const, // → useRouteData<AppRouteData>()
+    pageTitle: "Project", // → useRouteData<AppRouteData>()
+  },
+};
+```
+
+The shell reads each channel with its own typing:
+
+```typescript
+import { useZones, useRouteData } from "@react-router-modules/runtime"
+import type { AppZones, AppRouteData } from "@myorg/app-shared"
+
+function Shell() {
+  const { HeaderActions, DetailPanel } = useZones<AppZones>()
+  const { headerVariant, pageTitle } = useRouteData<AppRouteData>()
+
+  return (
+    <>
+      <AppShell.Header
+        variant={headerVariant}
+        title={pageTitle}
+        actions={HeaderActions ? <HeaderActions /> : undefined}
+      />
+      <main><Outlet /></main>
+      {DetailPanel && <aside><DetailPanel /></aside>}
+    </>
+  )
+}
+```
+
+Merge semantics match `useZones` exactly: walks matched routes root-to-leaf, deepest match wins per key, `undefined` values at a deeper level don't clobber an ancestor's value. Tolerates routes that don't declare `handle` at all.
+
+When to use which:
+
+- **`useZones`** — values the shell will render as JSX. Strict component typing catches mistakes at compile time.
+- **`useRouteData`** — anything else. Strings, enums, numbers, config objects. No component constraint.
 
 ## Auth Guard Pattern
 

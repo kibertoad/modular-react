@@ -51,6 +51,10 @@ export function createAppComponent({
   // All values captured in closure are stable references created once at resolve() time.
   const depsValue = { stores, services, reactiveServices };
   const hasDynamicSlots = dynamicSlotFactories.length > 0 || slotFilter != null;
+  // Reverse once at factory time — providers is immutable for the lifetime
+  // of the App component and applying them back-to-front wraps so the first
+  // entry ends up outermost.
+  const providersInnerFirst = providers ? [...providers].reverse() : undefined;
 
   function App() {
     const tree = useMemo(() => {
@@ -87,8 +91,8 @@ export function createAppComponent({
       );
 
       // Wrap with user-supplied providers (first element = outermost wrapper)
-      if (providers) {
-        for (const Provider of [...providers].reverse()) {
+      if (providersInnerFirst) {
+        for (const Provider of providersInnerFirst) {
           node = <Provider>{node}</Provider>;
         }
       }

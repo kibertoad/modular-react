@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, Outlet } from "@tanstack/react-router";
 import type { AnyRoute } from "@tanstack/react-router";
 import type { ModuleDescriptor, LazyModuleDescriptor } from "@tanstack-react-modules/core";
+import { warnIgnoredLazyFields } from "@modular-react/core";
 
 export interface RouteBuilderOptions {
   /**
@@ -145,6 +146,7 @@ function createLazyModuleRoute(parentRoute: AnyRoute, lazyMod: LazyModuleDescrip
     beforeLoad: async () => {
       if (!cachedRoute) {
         const { default: descriptor } = await lazyMod.load();
+        warnIgnoredLazyFields(descriptor, "@tanstack-react-modules/runtime");
         if (descriptor.createRoutes) {
           cachedRoute = descriptor.createRoutes(parentRoute);
         }
