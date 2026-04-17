@@ -15,7 +15,12 @@ import {
   validateNoDuplicateIds,
   validateDependencies,
 } from "@modular-react/core";
-import type { SlotFilter, NavigationManifest, ModuleEntry } from "@modular-react/core";
+import type {
+  NavigationItem,
+  SlotFilter,
+  NavigationManifest,
+  ModuleEntry,
+} from "@modular-react/core";
 import { createSlotsSignal } from "@modular-react/react";
 import type { SlotsSignal } from "@modular-react/react";
 
@@ -36,12 +41,22 @@ import { createProvidersComponent } from "./providers.js";
 export interface ModuleRegistry<
   TSharedDependencies extends Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
+  TNavItem extends NavigationItem = NavigationItem,
 > {
-  /** Register an eager module */
-  register(module: ModuleDescriptor<TSharedDependencies, TSlots>): void;
+  /**
+   * Register an eager module. The module's `TNavItem` must match the
+   * registry's — pass the same alias (e.g. `AppNavItem`) on both sides so
+   * typed i18n labels, typed dynamic-href context, and typed `meta` are
+   * enforced end-to-end.
+   */
+  register(module: ModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>): void;
 
-  /** Register a lazily-loaded module */
-  registerLazy(descriptor: LazyModuleDescriptor<TSharedDependencies, TSlots>): void;
+  /**
+   * Register a lazily-loaded module. Only `createRoutes()` on the loaded
+   * descriptor is honored — see {@link LazyModuleDescriptor} for the
+   * complete list of fields ignored at lazy-load time.
+   */
+  registerLazy(descriptor: LazyModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>): void;
 
   /**
    * Resolve all modules and produce the application manifest, including a
@@ -52,7 +67,9 @@ export interface ModuleRegistry<
    * routing (React Router v7 framework mode with `@react-router/dev/vite`,
    * etc.), use {@link ModuleRegistry.resolveManifest} instead.
    */
-  resolve(options?: ResolveOptions<TSharedDependencies, TSlots>): ApplicationManifest<TSlots>;
+  resolve(
+    options?: ResolveOptions<TSharedDependencies, TSlots>,
+  ): ApplicationManifest<TSlots, TNavItem>;
 
   /**
    * Resolve all modules for framework-mode integrations. Returns the
@@ -71,7 +88,7 @@ export interface ModuleRegistry<
    */
   resolveManifest(
     options?: ResolveManifestOptions<TSharedDependencies, TSlots>,
-  ): ResolvedManifest<TSlots>;
+  ): ResolvedManifest<TSlots, TNavItem>;
 }
 
 export interface ResolveOptions<
@@ -133,9 +150,12 @@ export interface ResolveOptions<
  * across both entry points so that calling `resolveManifest()` from
  * `routes.ts` and again from `root.tsx` yields the same provider stack.
  */
-interface CommonAssembly<TSlots extends SlotMapOf<TSlots>> {
+interface CommonAssembly<
+  TSlots extends SlotMapOf<TSlots>,
+  TNavItem extends NavigationItem = NavigationItem,
+> {
   modules: readonly ModuleEntry[];
-  navigation: NavigationManifest;
+  navigation: NavigationManifest<TNavItem>;
   slots: TSlots;
   stores: Record<string, StoreApi<unknown>>;
   services: Record<string, unknown>;
@@ -150,11 +170,12 @@ interface CommonAssembly<TSlots extends SlotMapOf<TSlots>> {
 export function createRegistry<
   TSharedDependencies extends Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
+  TNavItem extends NavigationItem = NavigationItem,
 >(
   config: RegistryConfig<TSharedDependencies, TSlots>,
-): ModuleRegistry<TSharedDependencies, TSlots> {
-  const modules: ModuleDescriptor<TSharedDependencies, TSlots>[] = [];
-  const lazyModules: LazyModuleDescriptor<TSharedDependencies, TSlots>[] = [];
+): ModuleRegistry<TSharedDependencies, TSlots, TNavItem> {
+  const modules: ModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>[] = [];
+  const lazyModules: LazyModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>[] = [];
 
   // A registry commits to one mode on first call:
   //   - "resolve"          → library owns the router; single-use
@@ -167,7 +188,7 @@ export function createRegistry<
   // Cached manifest — populated on the first resolveManifest() call so later
   // calls from a second site (e.g. root.tsx after routes.ts) return the same
   // Providers/routes/etc.
-  let cachedManifest: ResolvedManifest<TSlots> | null = null;
+  let cachedManifest: ResolvedManifest<TSlots, TNavItem> | null = null;
 
   const availableKeys = new Set<string>([
     ...Object.keys(config.stores ?? {}),
@@ -186,7 +207,7 @@ export function createRegistry<
   function buildAssembly(options: {
     providers?: React.ComponentType<{ children: React.ReactNode }>[];
     slotFilter?: (slots: TSlots, deps: TSharedDependencies) => TSlots;
-  }): CommonAssembly<TSlots> {
+  }): CommonAssembly<TSlots, TNavItem> {
     validateNoDuplicateIds(modules as ModuleDescriptor[], lazyModules as LazyModuleDescriptor[]);
     validateDependencies(modules as ModuleDescriptor[], availableKeys);
 
@@ -202,7 +223,7 @@ export function createRegistry<
       }
     }
 
-    const navigation: NavigationManifest = buildNavigationManifest(modules as ModuleDescriptor[]);
+    const navigation = buildNavigationManifest<TNavItem>(modules);
     const slots = buildSlotsManifest<TSlots>(modules, config.slots);
     const dynamicSlotFactories = collectDynamicSlotFactories(modules as ModuleDescriptor[]);
     const slotFilter = options.slotFilter as SlotFilter | undefined;
@@ -281,7 +302,9 @@ export function createRegistry<
       lazyModules.push(descriptor);
     },
 
-    resolve(options?: ResolveOptions<TSharedDependencies, TSlots>): ApplicationManifest<TSlots> {
+    resolve(
+      options?: ResolveOptions<TSharedDependencies, TSlots>,
+    ): ApplicationManifest<TSlots, TNavItem> {
       if (mode === "resolveManifest") {
         throw new Error(
           "[@react-router-modules/runtime] resolve() cannot be called after resolveManifest() — the registry is already in framework-mode.",
@@ -342,7 +365,7 @@ export function createRegistry<
 
     resolveManifest(
       options?: ResolveManifestOptions<TSharedDependencies, TSlots>,
-    ): ResolvedManifest<TSlots> {
+    ): ResolvedManifest<TSlots, TNavItem> {
       if (mode === "resolve") {
         throw new Error(
           "[@react-router-modules/runtime] resolveManifest() cannot be called after resolve() — the registry already owns a router.",
@@ -380,7 +403,14 @@ export function createRegistry<
         recalculateSlots: assembly.recalculateSlots,
       });
 
-      const routes = buildModuleRoutesOnly();
+      // `manifest.routes` is typed `readonly RouteObject[]` — the cached
+      // manifest is shared by reference across resolveManifest() callsites
+      // (routes.ts + root.tsx), so TypeScript is the guard against a
+      // callsite mutating the array out from under the other. We don't
+      // Object.freeze it: shallow freeze wouldn't protect `route.children`
+      // anyway, and the ecosystem convention (React Router itself, Redux
+      // in prod, TanStack Router) is types-only here.
+      const routes: readonly RouteObject[] = buildModuleRoutesOnly();
 
       cachedManifest = {
         Providers,

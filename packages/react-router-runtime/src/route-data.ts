@@ -53,6 +53,20 @@ import { useMatches } from "react-router";
  * Merge semantics match `useZones`: walks matched routes root-to-leaf,
  * deepest match wins per key, `undefined` values at a deeper level don't
  * override an ancestor's value.
+ *
+ * ## Returned object contains all handle keys, not just declared ones
+ *
+ * The returned object is the raw merged `handle` — TypeScript narrows what
+ * you can *access* via `TRouteData`, but every key present across matches
+ * is still there at runtime. If a route declared a component zone (e.g.
+ * `HeaderActions`) on the same `handle` object, it appears here too.
+ *
+ * This is intentional: the two hooks (`useZones` / `useRouteData`) don't
+ * have to coordinate on key sets, so a migration can split handle fields
+ * between them incrementally. The consequence is that code that iterates
+ * the return value (`Object.keys(useRouteData())`, `JSON.stringify`, etc.)
+ * will see component entries mixed with data entries — read by declared
+ * key, not by iteration.
  */
 export function useRouteData<TRouteData extends object>(): Partial<TRouteData> {
   const matches = useMatches();

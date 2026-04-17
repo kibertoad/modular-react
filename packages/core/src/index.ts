@@ -29,6 +29,9 @@ export type { DynamicSlotFactory, SlotFilter } from "./slots.js";
 // Navigation
 export { buildNavigationManifest, resolveNavHref } from "./navigation.js";
 
+// Lazy-module helpers
+export { warnIgnoredLazyFields } from "./lazy-module.js";
+
 // Validation
 export { validateNoDuplicateIds, validateDependencies } from "./validation.js";
 

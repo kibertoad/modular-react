@@ -169,4 +169,33 @@ describe("resolveNavHref", () => {
       expect(() => resolveNavHref(item)).toThrow(/"broken".*invalid `to` field/);
     });
   });
+
+  describe("TContext type behavior", () => {
+    // These tests are compile-only — they catch regressions in the conditional
+    // type on NavigationItem.to (`TContext extends void ? string : string | fn`).
+    // Failing compilation here means the `TContext = void` default silently
+    // stopped restricting `to` to a plain string, letting dynamic-href modules
+    // slip past hosts that never opted into a context shape.
+
+    it("TContext = void keeps `to` as string only (no function allowed)", () => {
+      const item: NavigationItem = { label: "x", to: "/x" };
+      expectTypeOf(item.to).toEqualTypeOf<string>();
+    });
+
+    it("TContext set to an object widens `to` to string | (ctx) => string", () => {
+      type Ctx = { workspaceId: string };
+      const item: NavigationItem<string, Ctx> = { label: "x", to: "/x" };
+      expectTypeOf(item.to).toEqualTypeOf<string | ((ctx: Ctx) => string)>();
+    });
+
+    it("resolveNavHref infers TContext from the passed context", () => {
+      type Ctx = { id: string };
+      const item: Pick<NavigationItem<string, Ctx>, "to" | "label"> = {
+        label: "x",
+        to: (c) => `/x/${c.id}`,
+      };
+      // Call site compiles only if TContext is inferred correctly.
+      expect(resolveNavHref(item, { id: "7" })).toBe("/x/7");
+    });
+  });
 });

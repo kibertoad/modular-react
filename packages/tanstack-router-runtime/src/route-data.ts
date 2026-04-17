@@ -38,6 +38,14 @@ import { useMatches } from "@tanstack/react-router";
  * Merge semantics match `useZones`: walks matched routes root-to-leaf,
  * deepest match wins per key, `undefined` values at a deeper level don't
  * override an ancestor's value.
+ *
+ * ## Returned object contains all staticData keys, not just declared ones
+ *
+ * The returned object is the raw merged `staticData` — TypeScript narrows
+ * what you can *access* via `TRouteData`, but every key present across
+ * matches is still there at runtime. If a route declared a component zone
+ * (e.g. `HeaderActions`) on the same `staticData` object, it appears here
+ * too. Read by declared key, not by `Object.keys()` iteration.
  */
 export function useRouteData<TRouteData extends object>(): Partial<TRouteData> {
   const matches = useMatches();

@@ -8,15 +8,19 @@ This guide shows how to use `@react-router-modules/runtime` alongside React Rout
 
 `resolve()` calls `createBrowserRouter(routes)` directly. It's the shortest path to a working app — one call and you're rendering — but you give up everything `@react-router/dev/vite` provides:
 
-| Feature                                                       | Framework mode (`resolveManifest`) | `resolve()`          |
-| ------------------------------------------------------------- | ---------------------------------- | -------------------- |
-| HMR on route files                                            | ✅                                 | ❌ — full reload     |
-| Generated `+types/route.ts` (typed params/loaders)            | ✅                                 | ❌                   |
-| File-based route discovery (`flatRoutes()`)                   | ✅                                 | ❌ — imperative only |
-| SSR / client-splits                                           | ✅                                 | ❌                   |
-| `route() / index() / prefix()` ergonomics                     | ✅                                 | ❌                   |
-| Library owns router creation                                  | ❌                                 | ✅                   |
-| Single-file wiring (app's full shape in one `resolve()` call) | ❌                                 | ✅                   |
+| Feature                                                                   | Framework mode (`resolveManifest`) | `resolve()`          |
+| ------------------------------------------------------------------------- | ---------------------------------- | -------------------- |
+| HMR on route files                                                        | ✅                                 | ❌ — full reload     |
+| Generated `+types/route.ts` (typed params/loaders)                        | ✅                                 | ❌                   |
+| File-based route discovery (`flatRoutes()`)                               | ✅                                 | ❌ — imperative only |
+| SSR / client-splits                                                       | ✅                                 | ❌                   |
+| `route() / index() / prefix()` ergonomics                                 | ✅                                 | ❌                   |
+| Library owns router creation<sup>1</sup>                                  | ❌                                 | ✅                   |
+| Single-file wiring<sup>2</sup> (app's full shape in one `resolve()` call) | ❌                                 | ✅                   |
+
+<sup>1</sup> In framework mode, the library _intentionally_ defers router creation to `@react-router/dev/vite` so it can keep the framework's route discovery, type generation, and dev-server features. The ❌ here is the tradeoff that unlocks everything above — not a regression.
+
+<sup>2</sup> The ❌ is similarly the inverse of the ✅s above: when file-based discovery and generated types are owned by the framework, route shape lives in `routes.ts` instead of a `resolve()` call. Most apps find this a net win; plugin-host apps that need every module's full shape in one place are the counter-case.
 
 Pick `resolve()` only when the tradeoff genuinely favors it:
 
@@ -150,6 +154,53 @@ All of these move out of `resolveManifest()` options and into `routes.ts` / load
 | `slotFilter`          | Still on `resolveManifest({ slotFilter })` — applied to the dynamic-slots pipeline |
 
 The two options that remain on `resolveManifest()` — `providers` and `slotFilter` — are about the context tree, not about routing. They stay because the `Providers` component owns them.
+
+### `_auth.tsx` — minimal layout-route auth guard
+
+Concrete sketch of the framework-mode equivalent to `authenticatedRoute` on `resolve()`:
+
+```ts
+// app/routes.ts
+import type { RouteConfig } from "@react-router/dev/routes";
+import { layout, route, index } from "@react-router/dev/routes";
+import { flatRoutes } from "@react-router/fs-routes";
+
+export default [
+  route("login", "routes/login.tsx"),
+  route("signup", "routes/signup.tsx"),
+  layout("routes/_auth.tsx", [
+    index("routes/home.tsx"),
+    // Module routes — file-based discovery for everything under the auth
+    // boundary. Module files contribute `handle` / `loader` / components
+    // as normal; the guard in `_auth.tsx` gates them all.
+    ...(await flatRoutes({ rootDirectory: "routes/protected" })),
+  ]),
+] satisfies RouteConfig;
+```
+
+```tsx
+// app/routes/_auth.tsx
+import { Outlet, redirect } from "react-router";
+import type { Route } from "./+types/_auth";
+
+export async function loader({ request }: Route.LoaderArgs) {
+  const res = await fetch(new URL("/api/auth/session", request.url), {
+    headers: { cookie: request.headers.get("cookie") ?? "" },
+  });
+  if (!res.ok) throw redirect("/login");
+  const session = await res.json();
+  return { session };
+}
+
+export default function AuthLayout() {
+  // The loader already gated entry; everything nested under this route is
+  // authenticated. Replace <Outlet /> with your real shell layout if you
+  // had a Component on `authenticatedRoute`.
+  return <Outlet />;
+}
+```
+
+Under `resolve()`, the library built this tree for you. In framework mode, you declare it with `layout()` + a regular `loader` export — fewer library concepts, fully typed by the framework's generated `+types/_auth`.
 
 ## Testing
 

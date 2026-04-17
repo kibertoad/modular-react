@@ -1,6 +1,6 @@
 import type { StoreApi } from "zustand";
 import type { DataRouter, RouteObject } from "react-router";
-import type { ReactiveService, SlotMap, SlotMapOf } from "@modular-react/core";
+import type { NavigationItem, ReactiveService, SlotMap, SlotMapOf } from "@modular-react/core";
 
 // Re-export shared runtime types from @modular-react/core
 export type { NavigationGroup, NavigationManifest, ModuleEntry } from "@modular-react/core";
@@ -40,13 +40,21 @@ export interface RegistryConfig<
   slots?: { [K in keyof TSlots]?: TSlots[K] };
 }
 
-export interface ApplicationManifest<TSlots extends SlotMapOf<TSlots> = SlotMap> {
+export interface ApplicationManifest<
+  TSlots extends SlotMapOf<TSlots> = SlotMap,
+  TNavItem extends NavigationItem = NavigationItem,
+> {
   /** The root React component with all providers wired, including `<RouterProvider />` */
   readonly App: React.ComponentType;
   /** The React Router instance — pass to <RouterProvider /> if needed */
   readonly router: DataRouter;
-  /** Auto-generated navigation manifest from all modules */
-  readonly navigation: import("@modular-react/core").NavigationManifest;
+  /**
+   * Auto-generated navigation manifest from all modules. Typed by the
+   * registry's `TNavItem` generic — if you call
+   * `createRegistry<AppDeps, AppSlots, AppNavItem>()`, every item here
+   * carries the typed labels / dynamic-href context / meta you declared.
+   */
+  readonly navigation: import("@modular-react/core").NavigationManifest<TNavItem>;
   /** Collected slot contributions from all modules (static base — does not include dynamic) */
   readonly slots: TSlots;
   /** Registered module summaries — use useModules() to access in components */
@@ -59,7 +67,10 @@ export interface ApplicationManifest<TSlots extends SlotMapOf<TSlots> = SlotMap>
    * results — for example after login, role change, or feature flag update.
    * Components consuming `useSlots()` will re-render with the new values.
    *
-   * No-op when no module uses `dynamicSlots` and no `slotFilter` is configured.
+   * **No-op when no module uses `dynamicSlots` and no `slotFilter` is
+   * configured.** Subscribing a store to this when nothing in the registry
+   * is dynamic is harmless but pointless — wire the subscription only when
+   * there's actually a dynamic contribution to recompute.
    */
   readonly recalculateSlots: () => void;
 }
@@ -121,7 +132,10 @@ export interface ResolveManifestOptions<
  * export default [...flatRoutes(), ...manifest.routes] satisfies RouteConfig
  * ```
  */
-export interface ResolvedManifest<TSlots extends SlotMapOf<TSlots> = SlotMap> {
+export interface ResolvedManifest<
+  TSlots extends SlotMapOf<TSlots> = SlotMap,
+  TNavItem extends NavigationItem = NavigationItem,
+> {
   /**
    * Context provider component — wraps children with SharedDependencies,
    * Navigation, Slots, Modules, RecalculateSlots, and any user-supplied
@@ -136,11 +150,21 @@ export interface ResolvedManifest<TSlots extends SlotMapOf<TSlots> = SlotMap> {
    * mode, where route shape lives in `routes.ts` and modules only contribute
    * navigation/slots/zones/lifecycle). Host decides how to consume — e.g.
    * spread into `routes.ts` default export, mount under a catch-all, etc.
+   *
+   * Typed `readonly RouteObject[]` because the cached manifest is shared by
+   * reference across callsites (routes.ts + root.tsx). Don't push into the
+   * array or mutate its entries — clone (`[...manifest.routes]`) if you
+   * need a mutable list. The library doesn't `Object.freeze` at runtime;
+   * the `readonly` type is the contract, matching what React Router /
+   * TanStack / Redux-in-prod do for returned-structure protection.
    */
-  readonly routes: RouteObject[];
+  readonly routes: readonly RouteObject[];
 
-  /** Auto-generated navigation manifest from all modules */
-  readonly navigation: import("@modular-react/core").NavigationManifest;
+  /**
+   * Auto-generated navigation manifest from all modules. Typed by the
+   * registry's `TNavItem` generic.
+   */
+  readonly navigation: import("@modular-react/core").NavigationManifest<TNavItem>;
 
   /** Collected slot contributions from all modules (static base — does not include dynamic) */
   readonly slots: TSlots;

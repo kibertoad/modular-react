@@ -166,7 +166,15 @@ When to use which:
 - **`useZones`** — values the shell will render as JSX. Strict component typing catches mistakes at compile time.
 - **`useRouteData`** — anything else. Strings, enums, numbers, config objects. No component constraint.
 
-> TanStack Router's `StaticDataRouteOption` is augmented to the shape you declared for `AppZones`. If you want route-time validation of `useRouteData` keys too, widen the augmentation to include `AppRouteData`'s shape. The runtime hooks don't require the augmentation — they read whatever `staticData` carries.
+> TanStack Router's `StaticDataRouteOption` is augmented to the shape you declared for `AppZones`. If you want route-time validation of `useRouteData` keys too, widen the augmentation to include `AppRouteData`:
+>
+> ```ts
+> declare module "@tanstack/router-core" {
+>   interface StaticDataRouteOption extends AppZones, AppRouteData {}
+> }
+> ```
+>
+> Because TypeScript merges these at declaration time, **`AppZones` and `AppRouteData` must not share any keys** — a collision turns into a merged-interface conflict and `createRoute({ staticData: { ... } })` will stop type-checking at call sites you didn't touch. Keep zone keys distinct from route-data keys (the conventional split is PascalCase for components, camelCase for data) and you're fine. The runtime hooks don't require the augmentation — they read whatever `staticData` carries, so you can skip the augmentation entirely and rely on the generic on `useRouteData<AppRouteData>()` alone.
 
 ## Auth Guard Pattern
 

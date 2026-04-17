@@ -38,20 +38,30 @@ jobs:
 
       - name: Determine version strategy
         id: version
+        # Resolve GitHub expressions into env vars and branch on those in
+        # shell. Inline `${{ contains(...) }}` expansion works (it renders
+        # as the literal word `true` / `false` into the command) but it's
+        # easy to get wrong — one typo and the shell silently executes a
+        # command called `false`, which happens to succeed in some shells.
+        # Env-var + bash string compare is the durable pattern.
+        env:
+          IS_SAME_VERSION: ${{ contains(github.event.pull_request.labels.*.name, 'release-same-version') }}
+          IS_MAJOR: ${{ contains(github.event.pull_request.labels.*.name, 'major') }}
+          IS_MINOR: ${{ contains(github.event.pull_request.labels.*.name, 'minor') }}
         run: |
           # release-same-version wins over major/minor/patch — the author
           # already committed the versions they want, so the workflow must
           # not re-bump them. Emit same_version=true; bump is unused in that
-          # branch but still set to 'patch' as a safe default so other
-          # conditionals don't evaluate against empty strings.
-          if ${{ contains(github.event.pull_request.labels.*.name, 'release-same-version') }}; then
+          # branch but still set to 'none' so downstream conditionals never
+          # evaluate against an empty string.
+          if [ "$IS_SAME_VERSION" = "true" ]; then
             echo "same_version=true" >> $GITHUB_OUTPUT
             echo "bump=none" >> $GITHUB_OUTPUT
           else
             echo "same_version=false" >> $GITHUB_OUTPUT
-            if ${{ contains(github.event.pull_request.labels.*.name, 'major') }}; then
+            if [ "$IS_MAJOR" = "true" ]; then
               echo "bump=major" >> $GITHUB_OUTPUT
-            elif ${{ contains(github.event.pull_request.labels.*.name, 'minor') }}; then
+            elif [ "$IS_MINOR" = "true" ]; then
               echo "bump=minor" >> $GITHUB_OUTPUT
             else
               echo "bump=patch" >> $GITHUB_OUTPUT

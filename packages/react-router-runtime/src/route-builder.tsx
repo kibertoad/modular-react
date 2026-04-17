@@ -1,6 +1,7 @@
 import { Outlet, useRoutes } from "react-router";
 import type { RouteObject } from "react-router";
 import type { ModuleDescriptor, LazyModuleDescriptor } from "@react-router-modules/core";
+import { warnIgnoredLazyFields } from "@modular-react/core";
 
 export interface RouteBuilderOptions {
   /**
@@ -195,6 +196,7 @@ export function createLazyModuleRoute(lazyMod: LazyModuleDescriptor): RouteObjec
     lazy: async () => {
       if (!cachedRoutes) {
         const { default: descriptor } = await lazyMod.load();
+        warnIgnoredLazyFields(descriptor, "@react-router-modules/runtime");
         if (descriptor.createRoutes) {
           const routes = descriptor.createRoutes();
           cachedRoutes = Array.isArray(routes) ? routes : [routes];

@@ -24,11 +24,18 @@ export function buildNavigationManifest<TNavItem extends NavigationItem = Naviga
     }
   }
 
-  // Sort by order (lower first), then by label alphabetically
+  // Sort by order (lower first), then by label lexicographically.
+  // NOTE: deliberately NOT using String.prototype.localeCompare — it reads the
+  // runtime's default locale, so server and client can disagree on collation
+  // for non-ASCII labels and the rendered nav order diverges, producing a
+  // hydration mismatch. A plain `<` / `>` comparison is deterministic and
+  // good enough for nav item ordering (labels are typically i18n keys or
+  // ASCII-dominant anyway).
   const sorted = [...allItems].sort((a, b) => {
     const orderDiff = (a.order ?? 999) - (b.order ?? 999);
     if (orderDiff !== 0) return orderDiff;
-    return a.label.localeCompare(b.label);
+    if (a.label === b.label) return 0;
+    return a.label < b.label ? -1 : 1;
   });
 
   // Group items

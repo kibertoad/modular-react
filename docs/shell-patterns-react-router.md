@@ -2,6 +2,8 @@
 
 Router-specific additions to [Shell Patterns (Fundamentals)](shell-patterns.md) for apps built with `@react-router-modules/*`. Read the fundamentals guide first; this document only covers the parts that depend on React Router.
 
+> **New React Router v7 apps should prefer framework mode** (`@react-router/dev/vite` + `resolveManifest()`) — you keep HMR, generated `+types/route.ts`, SSR, and file-based routing. This guide uses `resolve()` because it covers router-agnostic patterns (zones, route data, auth boundaries) that apply equally to both modes, but the wiring shown here is for the `resolve()` path. See [Framework-mode integration](framework-mode-react-router.md) for the recommended setup, and use the patterns below adapted to your `routes.ts` when you do.
+
 ## Module routes
 
 A module's `createRoutes` returns `RouteObject[]` (or a single `RouteObject`). There is no parent argument: React Router route objects are plain data, and the runtime nests them under the root automatically.

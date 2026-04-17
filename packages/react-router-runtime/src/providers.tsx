@@ -59,6 +59,12 @@ export function createProvidersComponent({
 }: ProvidersProps): React.ComponentType<{ children: React.ReactNode }> {
   const depsValue = { stores, services, reactiveServices };
   const hasDynamicSlots = dynamicSlotFactories.length > 0 || slotFilter != null;
+  // Reverse once at factory time rather than on every render — the list is
+  // captured in closure and never changes for the lifetime of the Providers
+  // component. Applying providers back-to-front wraps them so the first
+  // entry ends up outermost (matching the documented order in
+  // ResolveManifestOptions.providers).
+  const providersInnerFirst = providers ? [...providers].reverse() : undefined;
 
   function Providers({ children }: { children: React.ReactNode }) {
     const slotsProvider = hasDynamicSlots ? (
@@ -89,8 +95,8 @@ export function createProvidersComponent({
       </SharedDependenciesContext>
     );
 
-    if (providers) {
-      for (const Provider of [...providers].reverse()) {
+    if (providersInnerFirst) {
+      for (const Provider of providersInnerFirst) {
         node = <Provider>{node}</Provider>;
       }
     }

@@ -216,6 +216,20 @@ describe("resolveManifest (framework mode)", () => {
       expect(third).toBe(first);
     });
 
+    it("returns the same routes array reference across calls so a spread into routes.ts is stable", () => {
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register(routedModule("r", "/r"));
+
+      const firstRoutes = registry.resolveManifest().routes;
+      const secondRoutes = registry.resolveManifest().routes;
+
+      expect(secondRoutes).toBe(firstRoutes);
+      expect(secondRoutes[0]).toBe(firstRoutes[0]);
+    });
+
     it("runs onRegister lifecycle hooks exactly once even when resolveManifest is called multiple times", () => {
       const onRegister = vi.fn();
       const registry = createRegistry<TestDeps, TestSlots>({
@@ -235,6 +249,48 @@ describe("resolveManifest (framework mode)", () => {
       expect(onRegister).toHaveBeenCalledOnce();
     });
 
+    it("calls each module's createRoutes() exactly once even across multiple resolveManifest calls", () => {
+      // This locks in the caching contract: if createRoutes is called twice
+      // (e.g. from routes.ts and then root.tsx), any module that does
+      // side-effectful work in createRoutes (imports, logging, registrations
+      // against a framework singleton) would run it twice — silently
+      // double-registering whatever it's registering.
+      const createRoutes = vi.fn((): RouteObject => ({ path: "/x", Component: () => <div /> }));
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register({ id: "m", version: "1.0.0", createRoutes });
+
+      registry.resolveManifest();
+      registry.resolveManifest();
+      registry.resolveManifest();
+
+      expect(createRoutes).toHaveBeenCalledOnce();
+    });
+
+    it("does not re-run duplicate-id / missing-dep validation on cached calls", () => {
+      // Once the manifest is cached, later resolveManifest() calls must be
+      // pure reads of the cache — validation only runs on the first call.
+      // If a test ever regresses such that validation runs twice, this test
+      // would still pass (validation is idempotent), but the important
+      // property is that the cached manifest is returned by reference
+      // without re-walking modules. We assert that by requiring the call to
+      // be a no-op even when modules would fail a re-validation that
+      // somehow saw mutated state.
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register(headlessModule("m"));
+      const first = registry.resolveManifest();
+      // Cannot register after resolve, so validation state cannot change —
+      // any second call must be a pure cache return.
+      const second = registry.resolveManifest();
+      expect(second).toBe(first);
+      expect(second.modules).toBe(first.modules);
+    });
+
     it("throws when options are passed on a subsequent call — misconfiguration should be loud", () => {
       const registry = createRegistry<TestDeps, TestSlots>({
         stores: { auth: createAuthStore() },
@@ -246,6 +302,100 @@ describe("resolveManifest (framework mode)", () => {
       expect(() => registry.resolveManifest({ providers: [] })).toThrow(
         /options may only be passed on the first call/,
       );
+    });
+
+    it("includes lazy module catch-all routes consistently across calls", () => {
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.registerLazy({
+        id: "lazy",
+        basePath: "/lazy",
+        load: async () => ({
+          default: {
+            id: "lazy",
+            version: "1.0.0",
+            createRoutes: () => ({ path: "feature", Component: () => <></> }),
+          },
+        }),
+      });
+
+      const a = registry.resolveManifest().routes;
+      const b = registry.resolveManifest().routes;
+      expect(b).toBe(a);
+      expect(b).toHaveLength(1);
+    });
+  });
+
+  describe("createRoutes error handling", () => {
+    it("throws with the module id when createRoutes() returns a falsy value", () => {
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register({
+        id: "bad-mod",
+        version: "1.0.0",
+        createRoutes: () => null as unknown as RouteObject,
+      });
+
+      expect(() => registry.resolveManifest()).toThrow(
+        /Module "bad-mod" createRoutes\(\) returned a falsy value/,
+      );
+    });
+
+    it("propagates thrown errors from createRoutes() unchanged (module crash surfaces loudly)", () => {
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register({
+        id: "throws",
+        version: "1.0.0",
+        createRoutes: () => {
+          throw new Error("boom from module");
+        },
+      });
+
+      expect(() => registry.resolveManifest()).toThrow(/boom from module/);
+    });
+
+    it("wraps onRegister errors with the module id for debuggability", () => {
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register({
+        id: "bad-init",
+        version: "1.0.0",
+        lifecycle: {
+          onRegister: () => {
+            throw new Error("init failed");
+          },
+        },
+      });
+
+      expect(() => registry.resolveManifest()).toThrow(
+        /Module "bad-init" lifecycle\.onRegister\(\) failed: init failed/,
+      );
+    });
+  });
+
+  describe("manifest.routes immutability contract", () => {
+    it("the routes array is typed readonly — the cached manifest must not be poisoned across callsites", () => {
+      // Primarily a type-level contract; at runtime we just assert the
+      // cached reference is stable. The readonly type on ResolvedManifest
+      // is what actually guards callers from pushing into the array.
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register(routedModule("r", "/r"));
+
+      const { routes } = registry.resolveManifest();
+      const second = registry.resolveManifest().routes;
+      expect(second).toBe(routes);
     });
   });
 

@@ -289,11 +289,35 @@ export interface ModuleLifecycle<
 /**
  * Descriptor for a lazily-loaded module.
  * The full module descriptor is loaded on demand when the route is first visited.
+ *
+ * ## What a lazy module can and cannot contribute
+ *
+ * Lazy modules are loaded by the router on first navigation to their
+ * `basePath`. By the time they load, the registry has already produced the
+ * navigation manifest, the resolved slots, and the module entries — so only
+ * the loaded descriptor's `createRoutes()` is honored.
+ *
+ * Anything else you put on the loaded descriptor is silently ignored. The
+ * runtime logs a warning at load time if it detects one of these fields:
+ *
+ * - `navigation` — not collected; would never appear in `useNavigation()`.
+ * - `slots` / `dynamicSlots` — not merged into the resolved slots.
+ * - `lifecycle.onRegister` — not run; registration already happened.
+ * - `zones` / `component` — only meaningful for workspace-style
+ *   (non-routed) modules, which must be registered eagerly.
+ * - `requires` / `optionalRequires` — not validated post-hoc against shared
+ *   deps.
+ *
+ * For anything that needs to land in the manifest, register the module
+ * eagerly (`registry.register(module)`). Use `registerLazy` only for the
+ * pure route-code-splitting case where the module contributes **routes
+ * only** and everything else lives in an eagerly-registered shell.
  */
 export interface LazyModuleDescriptor<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
+  TNavItem extends NavigationItem = NavigationItem,
 > {
   /** Unique module identifier */
   readonly id: string;
@@ -303,6 +327,6 @@ export interface LazyModuleDescriptor<
 
   /** Dynamic import that returns the full module descriptor */
   readonly load: () => Promise<{
-    default: ModuleDescriptor<TSharedDependencies, TSlots, TMeta>;
+    default: ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>;
   }>;
 }

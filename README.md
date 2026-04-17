@@ -121,7 +121,10 @@ export default () => <manifest.Providers><Outlet /></manifest.Providers>;
 
 // app/routes.ts continues to use flatRoutes() / route() / prefix() as normal.
 
-// Re-evaluate dynamic slots when state changes:
+// Re-evaluate dynamic slots when state changes. `recalculateSlots` is a
+// no-op unless at least one module declared `dynamicSlots` or you passed a
+// `slotFilter` to `resolveManifest()` — wire the subscription only when
+// there is actually something dynamic to recompute.
 authStore.subscribe(manifest.recalculateSlots);
 ```
 
@@ -204,6 +207,20 @@ pnpm install
 pnpm build          # Build all packages
 pnpm test           # Run all tests
 ```
+
+## Release labels
+
+Every merged PR to `main` must carry exactly one of these labels. The publish workflow reads the label to decide whether to release and how:
+
+| Label                  | What it does                                                                                                                                                                                                                                                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `patch`                | Run the release. Bump each changed package's patch version.                                                                                                                                                                                                                                                                               |
+| `minor`                | Run the release. Bump each changed package's minor version.                                                                                                                                                                                                                                                                               |
+| `major`                | Run the release. Bump each changed package's major version.                                                                                                                                                                                                                                                                               |
+| `release-same-version` | Run the release, but **do not bump versions** — publish the versions already committed in each `package.json`. Use this when the PR pre-set the versions by hand (e.g. coordinated multi-package release where the docs or example apps reference specific numbers). The workflow still skips any `<name>@<version>` already live on npm. |
+| `skip-release`         | Merge without releasing. Use for docs, workflow edits, tests, or anything that doesn't ship library code.                                                                                                                                                                                                                                 |
+
+Attach exactly one label. `release-same-version` wins over `major`/`minor`/`patch` if both are attached. Attaching `skip-release` alongside a release label is ambiguous — the `ensure-labels` check passes but the publish job still fires on the release label, so don't mix them.
 
 ## Help & contributing
 
