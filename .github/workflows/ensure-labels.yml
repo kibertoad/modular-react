@@ -20,5 +20,11 @@ jobs:
       - name: Check one of required labels are set
         uses: docker://agilepathway/pull-request-label-checker:v1.6.65
         with:
-          one_of: major,minor,patch,skip-release
+          # release-same-version: publish with the versions already committed in
+          # package.json (useful when the PR pre-bumped versions by hand, e.g.
+          # a coordinated multi-package release where the author wanted to pin
+          # exact versions in docs/examples). Mutually sensible with any of
+          # major/minor/patch — if release-same-version is present, the bump
+          # is skipped and those labels are ignored.
+          one_of: major,minor,patch,skip-release,release-same-version
           repo_token: ${{ secrets.GITHUB_TOKEN }}

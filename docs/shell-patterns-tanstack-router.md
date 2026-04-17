@@ -97,6 +97,76 @@ function Layout() {
 
 Deeper routes override shallower ones: if a billing section root sets `staticData.detailPanel = BillingSidebar` and the invoice detail page sets `staticData.detailPanel = InvoiceSidebar`, the detail page wins while it is active.
 
+## Route data (non-component staticData)
+
+`useZones` enforces `ComponentType | undefined` on every zone value — a useful rail 95% of the time, but it gets in the way for non-component route metadata: header variant enums, page titles, analytics event names, per-route feature flags. `useRouteData` is the relaxed-typing counterpart: same deepest-wins merge over `staticData`, no constraint on value types.
+
+Two hooks, two channels, same `staticData` object:
+
+```typescript
+// app-shared/src/index.ts
+import type { ComponentType } from "react"
+
+export interface AppZones {
+  HeaderActions?: ComponentType
+  DetailPanel?: ComponentType
+}
+
+export interface AppRouteData {
+  headerVariant?: "portal" | "project" | "setup"
+  pageTitle?: string
+}
+```
+
+A route can contribute to both:
+
+```typescript
+import { createRoute } from "@tanstack/react-router"
+
+const projectDetail = createRoute({
+  getParentRoute: () => root,
+  path: "project",
+  component: ProjectPage,
+  staticData: {
+    HeaderActions: ProjectActions,       // → useZones<AppZones>()
+    headerVariant: "project" as const,   // → useRouteData<AppRouteData>()
+    pageTitle: "Project",                // → useRouteData<AppRouteData>()
+  },
+})
+```
+
+The shell reads each channel with its own typing:
+
+```typescript
+import { useZones, useRouteData } from "@tanstack-react-modules/runtime"
+import type { AppZones, AppRouteData } from "@myorg/app-shared"
+
+function Shell() {
+  const { HeaderActions, DetailPanel } = useZones<AppZones>()
+  const { headerVariant, pageTitle } = useRouteData<AppRouteData>()
+
+  return (
+    <>
+      <AppShell.Header
+        variant={headerVariant}
+        title={pageTitle}
+        actions={HeaderActions ? <HeaderActions /> : undefined}
+      />
+      <main><Outlet /></main>
+      {DetailPanel && <aside><DetailPanel /></aside>}
+    </>
+  )
+}
+```
+
+Merge semantics match `useZones` exactly: walks matched routes root-to-leaf, deepest match wins per key, `undefined` values at a deeper level don't clobber an ancestor's value.
+
+When to use which:
+- **`useZones`** — values the shell will render as JSX. Strict component typing catches mistakes at compile time.
+- **`useRouteData`** — anything else. Strings, enums, numbers, config objects. No component constraint.
+
+> TanStack Router's `StaticDataRouteOption` is augmented to the shape you declared for `AppZones`. If you want route-time validation of `useRouteData` keys too, widen the augmentation to include `AppRouteData`'s shape. The runtime hooks don't require the augmentation — they read whatever `staticData` carries.
+
 ## Auth Guard Pattern
 
 The runtime follows TanStack Router's recommended `_authenticated` layout route pattern. Use `authenticatedRoute` on `registry.resolve()` to create a pathless layout that guards protected routes, and use `shellRoutes` for anything public that must sit outside that boundary (login, signup, marketing pages).

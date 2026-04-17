@@ -1,6 +1,6 @@
 {
   "name": "@modular-react/react",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "React bindings for @modular-react/core: hooks, contexts, error boundaries, and scoped stores.",
   "repository": {
     "type": "git",

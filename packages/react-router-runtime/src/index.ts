@@ -3,7 +3,12 @@ export { createRegistry } from "./registry.js";
 export type { ModuleRegistry, ResolveOptions } from "./registry.js";
 
 // Types
-export type { RegistryConfig, ApplicationManifest } from "./types.js";
+export type {
+  RegistryConfig,
+  ApplicationManifest,
+  ResolvedManifest,
+  ResolveManifestOptions,
+} from "./types.js";
 
 // Re-export shared runtime types from @modular-react/core
 export type {
@@ -44,3 +49,4 @@ export type { SlotsSignal } from "@modular-react/react";
 // Zones (router-specific)
 export { useZones } from "./zones.js";
 export { useActiveZones } from "./active-zones.js";
+export { useRouteData } from "./route-data.js";

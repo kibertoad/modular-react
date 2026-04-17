@@ -89,6 +89,73 @@ function Layout() {
 
 Deeper routes override shallower ones: if the billing section root sets `handle.detailPanel = BillingSidebar` and the invoice detail page sets `handle.detailPanel = InvoiceSidebar`, the detail page wins while it is active.
 
+## Route data (non-component handles)
+
+`useZones` enforces `ComponentType | undefined` on every zone value — a useful rail 95% of the time, but it gets in the way for non-component route metadata: header variant enums, page titles, analytics event names, per-route feature flags. `useRouteData` is the relaxed-typing counterpart: same deepest-wins merge over `handle`, no constraint on value types.
+
+Two hooks, two channels, same `handle` object:
+
+```typescript
+// app-shared/src/index.ts
+import type { ComponentType } from "react"
+
+export interface AppZones {
+  HeaderActions?: ComponentType
+  DetailPanel?: ComponentType
+}
+
+export interface AppRouteData {
+  headerVariant?: "portal" | "project" | "setup"
+  pageTitle?: string
+}
+```
+
+A route can contribute to both:
+
+```typescript
+import type { RouteObject } from "react-router"
+
+const projectDetail: RouteObject = {
+  path: "projects/:projectId",
+  Component: ProjectDetailPage,
+  handle: {
+    HeaderActions: ProjectActions,       // → useZones<AppZones>()
+    headerVariant: "project" as const,   // → useRouteData<AppRouteData>()
+    pageTitle: "Project",                // → useRouteData<AppRouteData>()
+  },
+}
+```
+
+The shell reads each channel with its own typing:
+
+```typescript
+import { useZones, useRouteData } from "@react-router-modules/runtime"
+import type { AppZones, AppRouteData } from "@myorg/app-shared"
+
+function Shell() {
+  const { HeaderActions, DetailPanel } = useZones<AppZones>()
+  const { headerVariant, pageTitle } = useRouteData<AppRouteData>()
+
+  return (
+    <>
+      <AppShell.Header
+        variant={headerVariant}
+        title={pageTitle}
+        actions={HeaderActions ? <HeaderActions /> : undefined}
+      />
+      <main><Outlet /></main>
+      {DetailPanel && <aside><DetailPanel /></aside>}
+    </>
+  )
+}
+```
+
+Merge semantics match `useZones` exactly: walks matched routes root-to-leaf, deepest match wins per key, `undefined` values at a deeper level don't clobber an ancestor's value. Tolerates routes that don't declare `handle` at all.
+
+When to use which:
+- **`useZones`** — values the shell will render as JSX. Strict component typing catches mistakes at compile time.
+- **`useRouteData`** — anything else. Strings, enums, numbers, config objects. No component constraint.
+
 ## Auth Guard Pattern
 
 The runtime follows React Router's recommended layout-route approach for auth boundaries. Use `authenticatedRoute` on `registry.resolve()` to create a pathless layout that guards protected routes, and use `shellRoutes` for anything public that must sit outside that boundary (login, signup, marketing pages).
