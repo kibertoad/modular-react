@@ -35,11 +35,22 @@ import type { ModuleDescriptor, Store } from "@modular-react/core";
 
 ```typescript
 import type { NavigationItem } from "@modular-react/core";
+// `ParseKeys` from i18next resolves to your app's translation keys once you
+// augment `CustomTypeOptions.resources` (see the i18next TypeScript guide).
+// Used bare it falls back to a loose string union — still fine for the
+// alias below, but you only get full key-level autocomplete after the
+// augmentation.
 import type { ParseKeys } from "i18next";
 
 interface NavContext {
   workspaceId: string;
 }
+
+// Defined by the host app — whatever set of permission actions the shell
+// gates nav items on. The library doesn't care what shape it is; `meta` is
+// opaque.
+type Action = "managePortalRequests" | "viewReports";
+
 interface NavMeta {
   action?: Action;
   badge?: "beta" | "new";

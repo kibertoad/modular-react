@@ -98,7 +98,7 @@ export default function Root() {
 // app/routes.ts
 import type { RouteConfig } from "@react-router/dev/routes";
 import { flatRoutes } from "@react-router/fs-routes";
-import { route, index, prefix } from "@react-router/dev/routes";
+import { route, index } from "@react-router/dev/routes";
 
 // Routes live in framework-mode primitives — the host owns route shape.
 export default [

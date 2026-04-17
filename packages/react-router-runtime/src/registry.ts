@@ -190,6 +190,15 @@ export function createRegistry<
   // Providers/routes/etc.
   let cachedManifest: ResolvedManifest<TSlots, TNavItem> | null = null;
 
+  // onRegister must run at most once per module for the lifetime of the
+  // registry — modules commonly use it to subscribe to stores or register
+  // side-effects against a framework singleton, and double-firing would
+  // double-register those. We track this independently of cachedManifest
+  // because cachedManifest is only populated on *successful* manifest build:
+  // if buildAssembly/buildModuleRoutesOnly throws after onRegister ran, a
+  // retry of resolveManifest() would otherwise walk the hooks a second time.
+  let onRegisterRan = false;
+
   const availableKeys = new Set<string>([
     ...Object.keys(config.stores ?? {}),
     ...Object.keys(config.services ?? {}),
@@ -211,16 +220,24 @@ export function createRegistry<
     validateNoDuplicateIds(modules as ModuleDescriptor[], lazyModules as LazyModuleDescriptor[]);
     validateDependencies(modules as ModuleDescriptor[], availableKeys);
 
-    const deps = buildDepsObject<TSharedDependencies>(config);
-    for (const mod of modules) {
-      try {
-        mod.lifecycle?.onRegister?.(deps);
-      } catch (err) {
-        throw new Error(
-          `[@react-router-modules/runtime] Module "${mod.id}" lifecycle.onRegister() failed: ${err instanceof Error ? err.message : String(err)}`,
-          { cause: err },
-        );
+    if (!onRegisterRan) {
+      const deps = buildDepsObject<TSharedDependencies>(config);
+      for (const mod of modules) {
+        try {
+          mod.lifecycle?.onRegister?.(deps);
+        } catch (err) {
+          // Flip the flag before throwing so a retry doesn't re-walk hooks
+          // that may have already run for earlier modules before this one
+          // threw. A half-registered state is still better than a
+          // double-registered one.
+          onRegisterRan = true;
+          throw new Error(
+            `[@react-router-modules/runtime] Module "${mod.id}" lifecycle.onRegister() failed: ${err instanceof Error ? err.message : String(err)}`,
+            { cause: err },
+          );
+        }
       }
+      onRegisterRan = true;
     }
 
     const navigation = buildNavigationManifest<TNavItem>(modules);

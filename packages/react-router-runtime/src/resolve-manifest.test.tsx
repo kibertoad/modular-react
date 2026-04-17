@@ -249,6 +249,39 @@ describe("resolveManifest (framework mode)", () => {
       expect(onRegister).toHaveBeenCalledOnce();
     });
 
+    it("does not re-run onRegister hooks when resolveManifest retries after a failed first call", () => {
+      // Guards against a subtle bug: if the first resolveManifest() throws
+      // (e.g. a module's createRoutes returns null), onRegister hooks that
+      // already ran must not run a second time when the caller retries.
+      // Modules commonly use onRegister to subscribe to stores or register
+      // side-effects against a framework singleton, and double-firing would
+      // double-register those.
+      const onRegister = vi.fn();
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register({
+        id: "good",
+        version: "1.0.0",
+        lifecycle: { onRegister },
+      });
+      registry.register({
+        id: "bad",
+        version: "1.0.0",
+        createRoutes: () => null as unknown as RouteObject,
+      });
+
+      expect(() => registry.resolveManifest()).toThrow(
+        /Module "bad" createRoutes\(\) returned a falsy value/,
+      );
+      // Retry: throws the same error, but onRegister must NOT fire a second time.
+      expect(() => registry.resolveManifest()).toThrow(
+        /Module "bad" createRoutes\(\) returned a falsy value/,
+      );
+      expect(onRegister).toHaveBeenCalledOnce();
+    });
+
     it("calls each module's createRoutes() exactly once even across multiple resolveManifest calls", () => {
       // This locks in the caching contract: if createRoutes is called twice
       // (e.g. from routes.ts and then root.tsx), any module that does

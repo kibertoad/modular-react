@@ -116,6 +116,7 @@ registry.register(billingModule);
 export const manifest = registry.resolveManifest();
 
 // app/root.tsx
+import { Outlet } from "react-router";
 import { manifest } from "./registry";
 export default () => <manifest.Providers><Outlet /></manifest.Providers>;
 
