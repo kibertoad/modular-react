@@ -30,10 +30,7 @@ export interface ModuleDescriptor<
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
   TNavItem extends NavigationItem = NavigationItem,
-> extends Omit<
-    BaseModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>,
-    "createRoutes"
-  > {
+> extends Omit<BaseModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>, "createRoutes"> {
   /**
    * Receives a parent route and returns the module's route subtree.
    * Uses TanStack Router's createRoute directly.

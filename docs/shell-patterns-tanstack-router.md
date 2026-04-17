@@ -105,34 +105,34 @@ Two hooks, two channels, same `staticData` object:
 
 ```typescript
 // app-shared/src/index.ts
-import type { ComponentType } from "react"
+import type { ComponentType } from "react";
 
 export interface AppZones {
-  HeaderActions?: ComponentType
-  DetailPanel?: ComponentType
+  HeaderActions?: ComponentType;
+  DetailPanel?: ComponentType;
 }
 
 export interface AppRouteData {
-  headerVariant?: "portal" | "project" | "setup"
-  pageTitle?: string
+  headerVariant?: "portal" | "project" | "setup";
+  pageTitle?: string;
 }
 ```
 
 A route can contribute to both:
 
 ```typescript
-import { createRoute } from "@tanstack/react-router"
+import { createRoute } from "@tanstack/react-router";
 
 const projectDetail = createRoute({
   getParentRoute: () => root,
   path: "project",
   component: ProjectPage,
   staticData: {
-    HeaderActions: ProjectActions,       // → useZones<AppZones>()
-    headerVariant: "project" as const,   // → useRouteData<AppRouteData>()
-    pageTitle: "Project",                // → useRouteData<AppRouteData>()
+    HeaderActions: ProjectActions, // → useZones<AppZones>()
+    headerVariant: "project" as const, // → useRouteData<AppRouteData>()
+    pageTitle: "Project", // → useRouteData<AppRouteData>()
   },
-})
+});
 ```
 
 The shell reads each channel with its own typing:
@@ -162,6 +162,7 @@ function Shell() {
 Merge semantics match `useZones` exactly: walks matched routes root-to-leaf, deepest match wins per key, `undefined` values at a deeper level don't clobber an ancestor's value.
 
 When to use which:
+
 - **`useZones`** — values the shell will render as JSX. Strict component typing catches mistakes at compile time.
 - **`useRouteData`** — anything else. Strings, enums, numbers, config objects. No component constraint.
 

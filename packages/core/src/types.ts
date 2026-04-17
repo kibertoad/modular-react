@@ -235,11 +235,7 @@ export interface ModuleDescriptor<
  * export type AppNavItem = NavigationItem<ParseKeys, NavCtx, NavMeta>
  * ```
  */
-export interface NavigationItem<
-  TLabel extends string = string,
-  TContext = void,
-  TMeta = unknown,
-> {
+export interface NavigationItem<TLabel extends string = string, TContext = void, TMeta = unknown> {
   /** Display label — narrow `TLabel` to an i18n key union for compile-time validation. */
   readonly label: TLabel;
 

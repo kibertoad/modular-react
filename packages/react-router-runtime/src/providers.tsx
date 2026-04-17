@@ -82,7 +82,9 @@ export function createProvidersComponent({
     let node: React.ReactNode = (
       <SharedDependenciesContext value={depsValue}>
         <NavigationContext value={navigation}>
-          <RecalculateSlotsContext value={recalculateSlots}>{slotsProvider}</RecalculateSlotsContext>
+          <RecalculateSlotsContext value={recalculateSlots}>
+            {slotsProvider}
+          </RecalculateSlotsContext>
         </NavigationContext>
       </SharedDependenciesContext>
     );

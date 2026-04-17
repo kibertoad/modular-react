@@ -1,4 +1,4 @@
-# @modular-react/testing 
+# @modular-react/testing
 
 Router-agnostic testing utilities for modular-react modules. Resolve module contributions (slots, lifecycle) without rendering.
 

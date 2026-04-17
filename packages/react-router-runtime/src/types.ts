@@ -153,4 +153,3 @@ export interface ResolvedManifest<TSlots extends SlotMapOf<TSlots> = SlotMap> {
    */
   readonly recalculateSlots: () => void;
 }
-

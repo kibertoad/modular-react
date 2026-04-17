@@ -24,37 +24,37 @@ npm install @react-router-modules/runtime
 
 ```typescript
 // app/registry.ts — resolve once, import from both sites
-import { createRegistry } from "@react-router-modules/runtime"
-import portalModule from "./modules/portal"
+import { createRegistry } from "@react-router-modules/runtime";
+import portalModule from "./modules/portal";
 
 const registry = createRegistry<AppDependencies, AppSlots>({
   stores: { auth: authStore },
   services: { httpClient },
-})
+});
 
-registry.register(portalModule)
+registry.register(portalModule);
 
-export const manifest = registry.resolveManifest({ providers: [I18nProvider] })
+export const manifest = registry.resolveManifest({ providers: [I18nProvider] });
 ```
 
 ```tsx
 // app/root.tsx
-import { Outlet } from "react-router"
-import { manifest } from "./registry"
+import { Outlet } from "react-router";
+import { manifest } from "./registry";
 
 export default function Root() {
   return (
     <manifest.Providers>
       <Outlet />
     </manifest.Providers>
-  )
+  );
 }
 ```
 
 ```typescript
 // app/routes.ts — host owns route shape
-import { flatRoutes } from "@react-router/fs-routes"
-export default [...(await flatRoutes())] satisfies RouteConfig
+import { flatRoutes } from "@react-router/fs-routes";
+export default [...(await flatRoutes())] satisfies RouteConfig;
 ```
 
 `resolveManifest()` is idempotent — calling it from `routes.ts` and `root.tsx` both returns the same cached manifest. Module `onRegister` hooks run exactly once. Modules contribute navigation, slots, zones, and shared-deps requirements as usual; route shape lives in `routes.ts` using framework primitives. See [framework-mode-react-router.md](../../docs/framework-mode-react-router.md) for the full guide.
@@ -68,25 +68,25 @@ export default [...(await flatRoutes())] satisfies RouteConfig
 - Legacy React Router setups predating framework mode.
 
 ```typescript
-import { createRegistry } from "@react-router-modules/runtime"
-import billingModule from "./modules/billing"
+import { createRegistry } from "@react-router-modules/runtime";
+import billingModule from "./modules/billing";
 
 const registry = createRegistry<AppDependencies, AppSlots>({
   stores: { auth: authStore },
   services: { httpClient },
   slots: { commands: [] },
-})
+});
 
-registry.register(billingModule)
+registry.register(billingModule);
 
 const { App, recalculateSlots } = registry.resolve({
   rootComponent: Layout,
   indexComponent: HomePage,
-})
+});
 
 authStore.subscribe((state, prev) => {
-  if (state.isAuthenticated !== prev.isAuthenticated) recalculateSlots()
-})
+  if (state.isAuthenticated !== prev.isAuthenticated) recalculateSlots();
+});
 ```
 
 `resolve()` is single-use — call it once; a second call throws. It can't be mixed with `resolveManifest()` (the registry commits on first call).
@@ -96,11 +96,11 @@ authStore.subscribe((state, prev) => {
 `useZones<T>()` enforces `ComponentType | undefined` on every zone value. `useRouteData<T>()` is the relaxed-typing counterpart — same deepest-wins merge over `handle`, no constraint on values:
 
 ```typescript
-import { useZones, useRouteData } from "@react-router-modules/runtime"
+import { useZones, useRouteData } from "@react-router-modules/runtime";
 
 function Shell() {
-  const { HeaderActions } = useZones<AppZones>()
-  const { headerVariant, pageTitle } = useRouteData<AppRouteData>()
+  const { HeaderActions } = useZones<AppZones>();
+  const { headerVariant, pageTitle } = useRouteData<AppRouteData>();
   // headerVariant is "portal" | "project" | undefined; pageTitle is string | undefined.
 }
 ```

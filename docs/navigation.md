@@ -3,18 +3,14 @@
 `NavigationItem` has three optional generics. They all default to permissive shapes, so existing apps keep compiling; opt in one at a time as you want stricter typing.
 
 ```ts
-interface NavigationItem<
-  TLabel extends string = string,
-  TContext = void,
-  TMeta = unknown,
-> {
-  readonly label: TLabel
-  readonly to: TContext extends void ? string : string | ((ctx: TContext) => string)
-  readonly icon?: string | ComponentType<{ className?: string }>
-  readonly group?: string
-  readonly order?: number
-  readonly hidden?: boolean
-  readonly meta?: TMeta
+interface NavigationItem<TLabel extends string = string, TContext = void, TMeta = unknown> {
+  readonly label: TLabel;
+  readonly to: TContext extends void ? string : string | ((ctx: TContext) => string);
+  readonly icon?: string | ComponentType<{ className?: string }>;
+  readonly group?: string;
+  readonly order?: number;
+  readonly hidden?: boolean;
+  readonly meta?: TMeta;
 }
 ```
 
@@ -24,63 +20,61 @@ Declare the alias in your `app-shared` package so every module and the shell agr
 
 ```ts
 // app-shared/src/nav.ts
-import type { NavigationItem } from "@modular-react/core"
-import type { ParseKeys } from "i18next"
-import type { Action } from "./permissions"
+import type { NavigationItem } from "@modular-react/core";
+import type { ParseKeys } from "i18next";
+import type { Action } from "./permissions";
 
 export interface NavContext {
-  workspaceId: string
+  workspaceId: string;
 }
 
 export interface NavMeta {
-  action?: Action
-  badge?: "beta" | "new"
-  analyticsId?: string
+  action?: Action;
+  badge?: "beta" | "new";
+  analyticsId?: string;
 }
 
-export type AppNavItem = NavigationItem<ParseKeys, NavContext, NavMeta>
+export type AppNavItem = NavigationItem<ParseKeys, NavContext, NavMeta>;
 ```
 
 Thread it through `defineModule`:
 
 ```ts
 // modules/portal/src/index.ts
-import { defineModule } from "@react-router-modules/core"
-import type { AppDependencies, AppSlots, AppNavItem } from "@myorg/app-shared"
+import { defineModule } from "@react-router-modules/core";
+import type { AppDependencies, AppSlots, AppNavItem } from "@myorg/app-shared";
 
 export default defineModule<AppDependencies, AppSlots, Record<string, unknown>, AppNavItem>({
   id: "portal",
   version: "1.0.0",
   navigation: [
     {
-      label: "appShell.nav.portalRequests",                         // ParseKeys — typo = compile error
-      to: ({ workspaceId }) => `/portal/${workspaceId}/requests`,   // typed context
-      meta: { action: "managePortalRequests" },                     // typed meta
+      label: "appShell.nav.portalRequests", // ParseKeys — typo = compile error
+      to: ({ workspaceId }) => `/portal/${workspaceId}/requests`, // typed context
+      meta: { action: "managePortalRequests" }, // typed meta
     },
   ],
-})
+});
 ```
 
 And read with the same type on the shell:
 
 ```tsx
 // components/Sidebar.tsx
-import { useNavigation } from "@modular-react/react"
-import { resolveNavHref } from "@modular-react/core"
-import { useTranslation } from "react-i18next"
-import type { AppNavItem } from "@myorg/app-shared"
-import { usePermissions } from "./permissions"
-import { useWorkspaceId } from "./workspace"
+import { useNavigation } from "@modular-react/react";
+import { resolveNavHref } from "@modular-react/core";
+import { useTranslation } from "react-i18next";
+import type { AppNavItem } from "@myorg/app-shared";
+import { usePermissions } from "./permissions";
+import { useWorkspaceId } from "./workspace";
 
 export function Sidebar() {
-  const nav = useNavigation<AppNavItem>()
-  const { t } = useTranslation()
-  const { canPerform } = usePermissions()
-  const workspaceId = useWorkspaceId()
+  const nav = useNavigation<AppNavItem>();
+  const { t } = useTranslation();
+  const { canPerform } = usePermissions();
+  const workspaceId = useWorkspaceId();
 
-  const visible = nav.items.filter(
-    (item) => !item.meta?.action || canPerform(item.meta.action),
-  )
+  const visible = nav.items.filter((item) => !item.meta?.action || canPerform(item.meta.action));
 
   return (
     <ul>
@@ -91,7 +85,7 @@ export function Sidebar() {
         </li>
       ))}
     </ul>
-  )
+  );
 }
 ```
 
@@ -110,15 +104,15 @@ You don't have to adopt all three. Pick the ones that pay for themselves.
 Narrow labels to an i18n key union so typos fail at compile time.
 
 ```ts
-type NavKey = "appShell.nav.home" | "appShell.nav.billing"
-type AppNavItem = NavigationItem<NavKey>
+type NavKey = "appShell.nav.home" | "appShell.nav.billing";
+type AppNavItem = NavigationItem<NavKey>;
 
 defineModule<AppDependencies, AppSlots, Record<string, unknown>, AppNavItem>({
   navigation: [
-    { label: "appShell.nav.home", to: "/" },        // ✅
-    { label: "appShell.nav.typo", to: "/" },        // ❌ Type '"appShell.nav.typo"' is not assignable
+    { label: "appShell.nav.home", to: "/" }, // ✅
+    { label: "appShell.nav.typo", to: "/" }, // ❌ Type '"appShell.nav.typo"' is not assignable
   ],
-})
+});
 ```
 
 `i18next`'s `ParseKeys` union (or the equivalent for your i18n library) plugs in directly.
@@ -128,22 +122,24 @@ defineModule<AppDependencies, AppSlots, Record<string, unknown>, AppNavItem>({
 Some URLs can't be known statically — workspace-scoped paths, feature-flagged routes, active-tab-scoped routes. Declare the context your shell hands over at render time:
 
 ```ts
-interface NavContext { workspaceId: string }
-type AppNavItem = NavigationItem<string, NavContext>
+interface NavContext {
+  workspaceId: string;
+}
+type AppNavItem = NavigationItem<string, NavContext>;
 
 defineModule<AppDependencies, AppSlots, Record<string, unknown>, AppNavItem>({
   navigation: [
     { label: "Requests", to: ({ workspaceId }) => `/portal/${workspaceId}/requests` },
-    { label: "Settings", to: "/settings" },  // still fine — static string
+    { label: "Settings", to: "/settings" }, // still fine — static string
   ],
-})
+});
 ```
 
 Resolve to a concrete href with `resolveNavHref(item, context)`:
 
 ```ts
-import { resolveNavHref } from "@modular-react/core"
-const href = resolveNavHref(item, { workspaceId: "ws-42" })
+import { resolveNavHref } from "@modular-react/core";
+const href = resolveNavHref(item, { workspaceId: "ws-42" });
 // → "/portal/ws-42/requests" or "/settings"
 ```
 
@@ -158,20 +154,18 @@ The library treats `meta` as opaque. Use it for anything the module wants to att
 
 ```ts
 interface NavMeta {
-  action?: Action             // permission filter
-  badge?: "beta" | "new"      // UI badge
-  analyticsId?: string        // event name on click
-  featureFlag?: string        // gate visibility
+  action?: Action; // permission filter
+  badge?: "beta" | "new"; // UI badge
+  analyticsId?: string; // event name on click
+  featureFlag?: string; // gate visibility
 }
-type AppNavItem = NavigationItem<string, void, NavMeta>
+type AppNavItem = NavigationItem<string, void, NavMeta>;
 ```
 
 **Permissions** are the motivating case. Before `meta`, apps ended up with a label→action map in the sidebar — stringly-typed, breaks silently when labels change, and the rule lives outside the owning module. With `meta.action` on each item, the module declares its rules, and the shell filters generically:
 
 ```ts
-const visible = nav.items.filter(
-  (item) => !item.meta?.action || canPerform(item.meta.action),
-)
+const visible = nav.items.filter((item) => !item.meta?.action || canPerform(item.meta.action));
 ```
 
 **Badges, analytics ids, feature flags** follow the same pattern. Anything that's app-shaped rather than library-shaped belongs in `meta`.
@@ -185,13 +179,13 @@ resolveNavHref<TContext>(
 ): string
 ```
 
-| Input                                                        | Behavior                                                              |
-| ------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `to: "/foo"`, no context                                     | Returns `"/foo"`                                                      |
-| `to: "/foo"`, any context                                    | Returns `"/foo"` — context ignored                                    |
-| `to: (ctx) => "/x/" + ctx.id`, context `{ id: "1" }`         | Returns `"/x/1"`                                                      |
-| `to: () => "/x"`, no context                                 | Throws: `"<label>": no context was provided`                          |
-| `to: 42` (invalid shape)                                     | Throws: `"<label>": invalid \`to\` field (expected string or function)` |
+| Input                                                | Behavior                                                                |
+| ---------------------------------------------------- | ----------------------------------------------------------------------- |
+| `to: "/foo"`, no context                             | Returns `"/foo"`                                                        |
+| `to: "/foo"`, any context                            | Returns `"/foo"` — context ignored                                      |
+| `to: (ctx) => "/x/" + ctx.id`, context `{ id: "1" }` | Returns `"/x/1"`                                                        |
+| `to: () => "/x"`, no context                         | Throws: `"<label>": no context was provided`                            |
+| `to: 42` (invalid shape)                             | Throws: `"<label>": invalid \`to\` field (expected string or function)` |
 
 The function takes a `Pick<..., "to" \| "label">` rather than the full item, so you can pass any object with those two fields — useful for tests or intermediate representations.
 

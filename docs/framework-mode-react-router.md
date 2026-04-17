@@ -8,15 +8,15 @@ This guide shows how to use `@react-router-modules/runtime` alongside React Rout
 
 `resolve()` calls `createBrowserRouter(routes)` directly. It's the shortest path to a working app — one call and you're rendering — but you give up everything `@react-router/dev/vite` provides:
 
-| Feature                                              | Framework mode (`resolveManifest`) | `resolve()`          |
-| ---------------------------------------------------- | ---------------------------------- | -------------------- |
-| HMR on route files                                   | ✅                                 | ❌ — full reload     |
-| Generated `+types/route.ts` (typed params/loaders)   | ✅                                 | ❌                   |
-| File-based route discovery (`flatRoutes()`)          | ✅                                 | ❌ — imperative only |
-| SSR / client-splits                                  | ✅                                 | ❌                   |
-| `route() / index() / prefix()` ergonomics            | ✅                                 | ❌                   |
-| Library owns router creation                         | ❌                                 | ✅                   |
-| Single-file wiring (app's full shape in one `resolve()` call) | ❌                         | ✅                   |
+| Feature                                                       | Framework mode (`resolveManifest`) | `resolve()`          |
+| ------------------------------------------------------------- | ---------------------------------- | -------------------- |
+| HMR on route files                                            | ✅                                 | ❌ — full reload     |
+| Generated `+types/route.ts` (typed params/loaders)            | ✅                                 | ❌                   |
+| File-based route discovery (`flatRoutes()`)                   | ✅                                 | ❌ — imperative only |
+| SSR / client-splits                                           | ✅                                 | ❌                   |
+| `route() / index() / prefix()` ergonomics                     | ✅                                 | ❌                   |
+| Library owns router creation                                  | ❌                                 | ✅                   |
+| Single-file wiring (app's full shape in one `resolve()` call) | ❌                                 | ✅                   |
 
 Pick `resolve()` only when the tradeoff genuinely favors it:
 
@@ -34,12 +34,12 @@ Read [Getting started with React Router](getting-started-react-router.md) first 
 
 ```ts
 interface ResolvedManifest<TSlots> {
-  Providers: React.ComponentType<{ children: React.ReactNode }>
-  routes: RouteObject[]
-  navigation: NavigationManifest
-  slots: TSlots
-  modules: readonly ModuleEntry[]
-  recalculateSlots: () => void
+  Providers: React.ComponentType<{ children: React.ReactNode }>;
+  routes: RouteObject[];
+  navigation: NavigationManifest;
+  slots: TSlots;
+  modules: readonly ModuleEntry[];
+  recalculateSlots: () => void;
 }
 ```
 
@@ -57,23 +57,23 @@ No `DataRouter` is created. The framework Vite plugin bootstraps the router as u
 
 ```ts
 // app/registry.ts
-import { createRegistry } from "@react-router-modules/runtime"
-import portalModule from "./modules/portal"
-import type { AppDependencies, AppSlots } from "./types"
-import { I18nProvider } from "./providers/i18n"
-import { authStore, httpClient } from "./services"
+import { createRegistry } from "@react-router-modules/runtime";
+import portalModule from "./modules/portal";
+import type { AppDependencies, AppSlots } from "./types";
+import { I18nProvider } from "./providers/i18n";
+import { authStore, httpClient } from "./services";
 
 const registry = createRegistry<AppDependencies, AppSlots>({
   stores: { auth: authStore },
   services: { httpClient },
   slots: { commands: [] },
-})
+});
 
-registry.register(portalModule)
+registry.register(portalModule);
 
 export const manifest = registry.resolveManifest({
   providers: [I18nProvider],
-})
+});
 ```
 
 ```ts
@@ -92,9 +92,9 @@ export default function Root() {
 
 ```ts
 // app/routes.ts
-import type { RouteConfig } from "@react-router/dev/routes"
-import { flatRoutes } from "@react-router/fs-routes"
-import { route, index, prefix } from "@react-router/dev/routes"
+import type { RouteConfig } from "@react-router/dev/routes";
+import { flatRoutes } from "@react-router/fs-routes";
+import { route, index, prefix } from "@react-router/dev/routes";
 
 // Routes live in framework-mode primitives — the host owns route shape.
 export default [
@@ -103,7 +103,7 @@ export default [
     index("routes/portal/index.tsx"),
     route(":workspaceId/requests", "routes/portal.workspace.requests.tsx"),
   ]),
-] satisfies RouteConfig
+] satisfies RouteConfig;
 ```
 
 Note that nothing in `routes.ts` references the registry. That's intentional — route **shape** is declared by the host using framework primitives; the module contributes navigation, slots, zones, and lifecycle, not route file paths.
@@ -114,21 +114,21 @@ A module can still return `RouteObject[]` from `createRoutes()` if it wants to. 
 
 ```ts
 // app/routes.ts
-import { manifest } from "./registry"
+import { manifest } from "./registry";
 
 export default [
   ...(await flatRoutes()),
   // Mount module-contributed routes under a catch-all the host owns:
   route("plugins/*", "routes/plugins-root.tsx"),
-] satisfies RouteConfig
+] satisfies RouteConfig;
 ```
 
 ```tsx
 // app/routes/plugins-root.tsx
-import { useRoutes } from "react-router"
-import { manifest } from "../registry"
+import { useRoutes } from "react-router";
+import { manifest } from "../registry";
 export default function PluginsRoot() {
-  return useRoutes(manifest.routes)
+  return useRoutes(manifest.routes);
 }
 ```
 
@@ -156,21 +156,31 @@ The two options that remain on `resolveManifest()` — `providers` and `slotFilt
 `resolveManifest()` is fully testable without a router. The `Providers` component mounts the same context stack `resolve()` uses, so hooks like `useNavigation`, `useSlots`, `useModules`, and `useStore` work in tests that only render `<Providers>`:
 
 ```tsx
-import { render } from "@testing-library/react"
-import { createRegistry } from "@react-router-modules/runtime"
-import { useNavigation } from "@modular-react/react"
+import { render } from "@testing-library/react";
+import { createRegistry } from "@react-router-modules/runtime";
+import { useNavigation } from "@modular-react/react";
 
-const registry = createRegistry({ stores: { auth: authStore }, services: { httpClient } })
-registry.register(billingModule)
-const { Providers } = registry.resolveManifest()
+const registry = createRegistry({ stores: { auth: authStore }, services: { httpClient } });
+registry.register(billingModule);
+const { Providers } = registry.resolveManifest();
 
 function Probe() {
-  const nav = useNavigation()
-  return <ul>{nav.items.map((i) => <li key={i.label}>{i.label}</li>)}</ul>
+  const nav = useNavigation();
+  return (
+    <ul>
+      {nav.items.map((i) => (
+        <li key={i.label}>{i.label}</li>
+      ))}
+    </ul>
+  );
 }
 
-const { getByText } = render(<Providers><Probe /></Providers>)
-expect(getByText("Billing")).toBeInTheDocument()
+const { getByText } = render(
+  <Providers>
+    <Probe />
+  </Providers>,
+);
+expect(getByText("Billing")).toBeInTheDocument();
 ```
 
 For tests that exercise real routing, use the existing `@react-router-modules/testing` utilities.

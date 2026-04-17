@@ -37,8 +37,13 @@ import type { ModuleDescriptor, Store } from "@modular-react/core";
 import type { NavigationItem } from "@modular-react/core";
 import type { ParseKeys } from "i18next";
 
-interface NavContext { workspaceId: string }
-interface NavMeta { action?: Action; badge?: "beta" | "new" }
+interface NavContext {
+  workspaceId: string;
+}
+interface NavMeta {
+  action?: Action;
+  badge?: "beta" | "new";
+}
 
 // Alias once in app-shared and use everywhere
 export type AppNavItem = NavigationItem<ParseKeys, NavContext, NavMeta>;
@@ -54,9 +59,9 @@ export default defineModule<AppDeps, AppSlots, Record<string, unknown>, AppNavIt
   version: "1.0.0",
   navigation: [
     {
-      label: "appShell.nav.portalRequests",                      // typed i18n key
+      label: "appShell.nav.portalRequests", // typed i18n key
       to: ({ workspaceId }) => `/portal/${workspaceId}/requests`, // dynamic href
-      meta: { action: "managePortalRequests" },                  // typed meta
+      meta: { action: "managePortalRequests" }, // typed meta
     },
   ],
 });

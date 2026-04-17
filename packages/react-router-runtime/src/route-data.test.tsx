@@ -63,11 +63,7 @@ describe("useRouteData", () => {
     });
 
     it("tolerates matches with no handle field at all", () => {
-      mockUseMatches.mockReturnValue([
-        {},
-        { handle: { headerVariant: "portal" } },
-        {},
-      ] as any);
+      mockUseMatches.mockReturnValue([{}, { handle: { headerVariant: "portal" } }, {}] as any);
       const data = useRouteData<{ headerVariant?: string }>();
       expect(data.headerVariant).toBe("portal");
     });

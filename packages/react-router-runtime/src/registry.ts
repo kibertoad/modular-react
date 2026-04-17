@@ -69,7 +69,9 @@ export interface ModuleRegistry<
    * May not be mixed with `resolve()` — the registry commits to one
    * router-ownership mode on first call.
    */
-  resolveManifest(options?: ResolveManifestOptions<TSharedDependencies, TSlots>): ResolvedManifest<TSlots>;
+  resolveManifest(
+    options?: ResolveManifestOptions<TSharedDependencies, TSlots>,
+  ): ResolvedManifest<TSlots>;
 }
 
 export interface ResolveOptions<
@@ -421,4 +423,3 @@ function buildDepsObject<TSharedDependencies extends Record<string, any>>(
 
   return deps as TSharedDependencies;
 }
-
