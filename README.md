@@ -68,17 +68,17 @@ For the walkthrough of what the scaffold produces and how to extend it, see the 
 
 Conceptual documentation for building apps with the framework. Start with a getting-started guide, then dig into the shell patterns once you want to go beyond the defaults.
 
-| Guide                                                                           | What it covers                                                                                                                 |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| [Getting started with React Router](docs/getting-started-react-router.md)       | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                        |
-| [Getting started with TanStack Router](docs/getting-started-tanstack-router.md) | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.            |
-| [Framework-mode (React Router v7)](docs/framework-mode-react-router.md)         | `resolveManifest()` integration with `@react-router/dev/vite` — keep file-based `routes.ts`, `+types/route.ts`, HMR, and SSR.  |
+| Guide                                                                              | What it covers                                                                                                                             |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| [Getting started with React Router](docs/getting-started-react-router.md)          | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                                    |
+| [Getting started with TanStack Router](docs/getting-started-tanstack-router.md)    | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.                        |
+| [Framework-mode (React Router v7)](docs/framework-mode-react-router.md)            | `resolveManifest()` integration with `@react-router/dev/vite` — keep file-based `routes.ts`, `+types/route.ts`, HMR, and SSR.              |
 | [Framework-mode (TanStack Router & Start)](docs/framework-mode-tanstack-router.md) | `resolveManifest()` integration with `@tanstack/router-plugin` and TanStack Start — keep file-based `routeTree.gen.ts`, typed routes, SSR. |
-| [Navigation: typed labels, dynamic hrefs, meta](docs/navigation.md)             | `NavigationItem<TLabel, TContext, TMeta>` — typed i18n keys, context-aware `to`, app-owned `meta` for permissions/badges.      |
-| [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                         | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination. |
-| [Shell Patterns for React Router](docs/shell-patterns-react-router.md)          | Module route shape, route zones via `handle`, `useRouteData` for non-component metadata, auth guards, public shell routes.     |
-| [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)    | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `useRouteData`, `beforeLoad` auth.       |
-| [Workspace Patterns](docs/workspace-patterns.md)                                | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                        |
+| [Navigation: typed labels, dynamic hrefs, meta](docs/navigation.md)                | `NavigationItem<TLabel, TContext, TMeta>` — typed i18n keys, context-aware `to`, app-owned `meta` for permissions/badges.                  |
+| [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                            | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination.             |
+| [Shell Patterns for React Router](docs/shell-patterns-react-router.md)             | Module route shape, route zones via `handle`, `useRouteData` for non-component metadata, auth guards, public shell routes.                 |
+| [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)       | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `useRouteData`, `beforeLoad` auth.                   |
+| [Workspace Patterns](docs/workspace-patterns.md)                                   | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                                    |
 
 ## What the code looks like
 

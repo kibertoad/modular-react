@@ -52,7 +52,7 @@ export const Route = createRootRoute({
 ```
 
 ```typescript
-// app/router.tsx — host owns createRouter
+// app/router.ts — host owns createRouter
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 

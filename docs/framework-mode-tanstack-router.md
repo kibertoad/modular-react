@@ -110,16 +110,16 @@ Nothing in `router.ts` references the registry. That's intentional — route **s
 
 All of these move out of `resolveManifest()` options and into route files / `beforeLoad` guards:
 
-| `resolve()` option   | Framework-mode equivalent                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `rootComponent`      | `component` on `createRootRoute` in `app/routes/__root.tsx`                                                  |
-| `indexComponent`     | `app/routes/index.tsx` (or whatever file maps to `/`)                                                        |
-| `notFoundComponent`  | `notFoundComponent` option on `createRootRoute`                                                              |
-| `authenticatedRoute` | A pathless layout route (`app/routes/_authenticated.tsx`) with a `beforeLoad` guard                          |
-| `shellRoutes`        | Regular files in `app/routes/` outside the `_authenticated` layout                                           |
-| `beforeLoad` (root)  | `beforeLoad` on `createRootRoute` in `__root.tsx`                                                            |
-| `providers`          | Still on `resolveManifest({ providers })` — applied to the context tree                                      |
-| `slotFilter`         | Still on `resolveManifest({ slotFilter })` — applied to the dynamic-slots pipeline                           |
+| `resolve()` option   | Framework-mode equivalent                                                           |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `rootComponent`      | `component` on `createRootRoute` in `app/routes/__root.tsx`                         |
+| `indexComponent`     | `app/routes/index.tsx` (or whatever file maps to `/`)                               |
+| `notFoundComponent`  | `notFoundComponent` option on `createRootRoute`                                     |
+| `authenticatedRoute` | A pathless layout route (`app/routes/_authenticated.tsx`) with a `beforeLoad` guard |
+| `shellRoutes`        | Regular files in `app/routes/` outside the `_authenticated` layout                  |
+| `beforeLoad` (root)  | `beforeLoad` on `createRootRoute` in `__root.tsx`                                   |
+| `providers`          | Still on `resolveManifest({ providers })` — applied to the context tree             |
+| `slotFilter`         | Still on `resolveManifest({ slotFilter })` — applied to the dynamic-slots pipeline  |
 
 The two options that remain on `resolveManifest()` — `providers` and `slotFilter` — are about the context tree, not about routing. They stay because the `Providers` component owns them.
 
@@ -151,53 +151,40 @@ Under `resolve()`, the library built this tree for you. In framework mode, you d
 
 ## TanStack Start specifics
 
-TanStack Start builds on TanStack Router file-based mode with SSR, server entry files, and server functions. The integration seam the module registry cares about — `__root.tsx` wrapping and the host-owned `createRouter` — is the same; Start's extras (server functions, `createStartHandler`, etc.) are orthogonal.
+TanStack Start builds on TanStack Router file-based mode with SSR, server entry files, and server functions. The integration seam the module registry cares about — `__root.tsx` wrapping and the host-owned `createRouter` factory — is the same shape as the pure file-based case; Start's extras (server functions, server entry handler) are orthogonal.
+
+In a Start app the root layout renders Start's document scaffolding (`<Meta />`, `<Scripts />`, or their current equivalents) alongside `<Outlet />`. Wrap `manifest.Providers` around `<Outlet />` exactly as in the pure file-based case:
 
 ```tsx
-// app/router.tsx — Start convention: export a `createRouter` factory
-import { createRouter as createTanStackRouter } from "@tanstack/react-router";
-import { routeTree } from "./routeTree.gen";
-
-export function createRouter() {
-  return createTanStackRouter({
-    routeTree,
-    defaultPreload: "intent",
-  });
-}
-```
-
-```tsx
-// app/routes/__root.tsx — same wrap as the pure file-based case
+// app/routes/__root.tsx (Start)
 import { createRootRoute, Outlet } from "@tanstack/react-router";
-import { Meta, Scripts } from "@tanstack/start";
 import { manifest } from "../registry";
+// Document scaffolding — import Start's current head/scripts components per
+// the version you're on (e.g. `@tanstack/react-start`):
+// import { Meta, Scripts } from "@tanstack/react-start"
 
 export const Route = createRootRoute({
-  component: RootComponent,
-});
-
-function RootComponent() {
-  return (
+  component: () => (
     <html>
-      <head>
-        <Meta />
-      </head>
+      <head>{/* <Meta /> */}</head>
       <body>
         <manifest.Providers>
           <Outlet />
         </manifest.Providers>
-        <Scripts />
+        {/* <Scripts /> */}
       </body>
     </html>
-  );
-}
+  ),
+});
 ```
 
-The `app/registry.ts` file is identical to the non-Start example. The modular-react packages do not touch `window`, `document`, `localStorage`, or any browser-only global at import or resolve time, so importing `registry.ts` from both the server entry (`app/ssr.tsx`) and the client entry (`app/client.tsx`) is safe. If your own `providers` include browser-only code, guard those with the same SSR pattern you'd use outside of the module system (e.g. `useEffect` for client-only subscriptions).
+> Start's public API (package name and document-scaffolding exports) has moved around the 1.x line — check the Start docs for the version you're on rather than copy-pasting imports. The integration seam for this library is stable: `manifest.Providers` around `<Outlet />` in the root layout, and `manifest` imported from a shared `registry.ts`.
+
+The `app/registry.ts` file is identical to the non-Start example. The modular-react packages do not touch `window`, `document`, `localStorage`, or any browser-only global at import or resolve time, so importing `registry.ts` from both the server entry and the client entry is safe. If your own `providers` include browser-only code, guard those with the same SSR pattern you'd use outside of the module system (e.g. `useEffect` for client-only subscriptions).
 
 ### Server functions are outside the module registry
 
-`createServerFn()` and its caller components live in your route files — the registry doesn't see them. If a module wants to expose a server-side API, export a `createServerFn` from the module package and have route files import it directly. The registry still delivers shared deps and navigation; server boundaries are a layer above it.
+`createServerFn()` (or its current equivalent) and its caller components live in your route files — the registry doesn't see them. If a module wants to expose a server-side API, export a server function from the module package and have route files import it directly. The registry still delivers shared deps and navigation; server boundaries are a layer above it.
 
 ## Testing
 

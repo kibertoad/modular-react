@@ -381,6 +381,19 @@ export function createRegistry<
         return cachedManifest;
       }
 
+      // Lazy modules exist purely to contribute routes via a catch-all
+      // pattern at load time — in framework mode the host owns route
+      // composition (file-based tree, Start entry, etc.) so there's
+      // nowhere for a lazy catch-all to attach. Silently accepting them
+      // would produce a working-looking manifest that's missing every
+      // lazy-module route. Throw instead; the user either wants eager
+      // registration or `resolve()` (library-owned router).
+      if (lazyModules.length > 0) {
+        throw new Error(
+          `[@tanstack-react-modules/runtime] resolveManifest() does not support lazy modules — the host owns route composition in framework mode, so there is no parent route to attach a lazy catch-all to. Register the module(s) eagerly with register(), or use resolve() if you need library-owned routing. Lazy modules registered: ${lazyModules.map((m) => m.id).join(", ")}.`,
+        );
+      }
+
       mode = "resolveManifest";
       registrationLocked = true;
 

@@ -148,6 +148,15 @@ export interface ResolveManifestOptions<
  * the declaration is silently ignored — modules can be written once and
  * work under either `resolve()` (library-owned router) or `resolveManifest()`
  * (host-owned router) depending on how the app consumes them.
+ *
+ * ## Lazy modules are not supported in framework mode
+ *
+ * {@link ModuleRegistry.registerLazy} produces a catch-all route under a
+ * parent — there is no parent in framework mode (the host owns composition),
+ * so a registry that has any lazy modules registered will throw on
+ * `resolveManifest()`. Either register the module eagerly (the load-time
+ * benefit is minimal once Vite code-splitting is in play), or switch to
+ * `resolve()` for the library-owned router path.
  */
 export interface ResolvedManifest<
   TSlots extends SlotMapOf<TSlots> = SlotMap,

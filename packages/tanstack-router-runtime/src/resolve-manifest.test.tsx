@@ -109,6 +109,45 @@ describe("resolveManifest (framework mode)", () => {
 
       expect(createRoutes).not.toHaveBeenCalled();
     });
+
+    it("throws when lazy modules are registered — no parent to attach a catch-all to", () => {
+      // Lazy modules only contribute routes under a parent; in framework
+      // mode the host owns composition, so there's nowhere to graft them.
+      // Silently dropping them would ship a manifest that's missing every
+      // lazy-module route with no feedback — throw loudly instead.
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.registerLazy({
+        id: "billing-lazy",
+        basePath: "/billing",
+        load: async () => ({ default: { id: "billing-lazy", version: "1.0.0" } }),
+      });
+
+      expect(() => registry.resolveManifest()).toThrow(
+        /resolveManifest\(\) does not support lazy modules[\s\S]*billing-lazy/,
+      );
+    });
+
+    it("lists every lazy module id in the error so the user can find them", () => {
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.registerLazy({
+        id: "a",
+        basePath: "/a",
+        load: async () => ({ default: { id: "a", version: "1.0.0" } }),
+      });
+      registry.registerLazy({
+        id: "b",
+        basePath: "/b",
+        load: async () => ({ default: { id: "b", version: "1.0.0" } }),
+      });
+
+      expect(() => registry.resolveManifest()).toThrow(/a, b/);
+    });
   });
 
   describe("Providers component", () => {
@@ -192,6 +231,12 @@ describe("resolveManifest (framework mode)", () => {
 
       expect(second).toBe(first);
       expect(third).toBe(first);
+      // Sub-collections are captured in closure on the Providers component,
+      // so downstream readers depending on reference equality (memoization,
+      // deps arrays) get stable identity.
+      expect(second.modules).toBe(first.modules);
+      expect(second.navigation).toBe(first.navigation);
+      expect(second.slots).toBe(first.slots);
     });
 
     it("runs onRegister lifecycle hooks exactly once even when resolveManifest is called multiple times", () => {
