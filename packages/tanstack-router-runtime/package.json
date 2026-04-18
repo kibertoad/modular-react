@@ -1,6 +1,6 @@
 {
   "name": "@tanstack-react-modules/runtime",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
