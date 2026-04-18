@@ -48,9 +48,16 @@ export interface ModuleRegistry<
   register(module: ModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>): void;
 
   /**
-   * Register a lazily-loaded module. Only `createRoutes()` on the loaded
-   * descriptor is honored — see {@link LazyModuleDescriptor} for the
-   * complete list of fields ignored at lazy-load time.
+   * Register a lazily-loaded module. The loaded descriptor's `component` is
+   * rendered at `basePath/$` via TanStack's `lazyRouteComponent` — every
+   * other field (including `createRoutes`) is ignored because TanStack's
+   * route tree is frozen at `createRouter` time. See
+   * {@link LazyModuleDescriptor} for the full field list and rationale.
+   *
+   * Not supported in framework mode (`resolveManifest()`) — the host owns
+   * route composition, so there's no parent for the catch-all. Register
+   * eagerly instead, with `lazyRouteComponent()` inside the module's own
+   * `createRoutes` for component-level code splitting.
    */
   registerLazy(descriptor: LazyModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>): void;
 

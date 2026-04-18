@@ -63,7 +63,7 @@ export const router = createRouter({ routeTree, defaultPreload: "intent" });
 
 > **No `routes` field on the manifest.** Unlike the React Router counterpart, module `createRoutes(parentRoute)` produces a route whose parent is bound at construction time — it can't be spread into a host's already-composed file-based tree. In framework mode the host owns route composition, module `createRoutes` declarations are silently ignored, and modules contribute only navigation/slots/zones/lifecycle. Modules can be written once and work under either mode.
 
-> **Lazy modules throw in framework mode.** `registerLazy()` exists specifically to produce a catch-all route under a parent at load time — there is no parent in framework mode, so a registry with any lazy modules throws on `resolveManifest()`. Register eagerly, or switch to `resolve()`.
+> **Lazy modules throw in framework mode.** `registerLazy()` produces a catch-all route under a parent at load time — there is no parent in framework mode, so a registry with any lazy modules throws on `resolveManifest()`. Register eagerly with a `lazyRouteComponent()` inside `createRoutes()`, or switch to `resolve()`. In `resolve()` mode a lazy module's loaded `component` is rendered at `basePath/$`; `createRoutes` on a lazily-loaded descriptor is not supported because TanStack's route tree is frozen at `createRouter` time.
 
 ## `resolve()` — library owns the router
 

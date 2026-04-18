@@ -173,11 +173,11 @@ function createAuthenticatedLayoutRoute(
  *
  * **Limitation: no route-structure loading.** TanStack Router's route tree
  * is frozen at `createRouter({ routeTree })` time; you cannot graft new
- * routes in after that. If a loaded descriptor declares `createRoutes`
- * without a `component`, we warn (via `warnIgnoredLazyFields`) — the routes
- * can't mount. Lazy modules that need to contribute multiple routes should
- * register eagerly and use `lazyRouteComponent()` inside their own
- * `createRoutes` to code-split individual components. See
+ * routes in after that. If a loaded descriptor declares `createRoutes` it
+ * is logged via `warnIgnoredTanStackLazyFields` — the routes can't mount.
+ * Lazy modules that need to contribute multiple routes should register
+ * eagerly and use `lazyRouteComponent()` inside their own `createRoutes`
+ * to code-split individual components. See
  * docs/framework-mode-tanstack-router.md for the complete guidance.
  */
 function createLazyModuleRoute(parentRoute: AnyRoute, lazyMod: LazyModuleDescriptor): AnyRoute {

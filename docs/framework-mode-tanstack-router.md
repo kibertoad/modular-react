@@ -197,9 +197,11 @@ This is the idiomatic path for apps that want the framework plugin to do all the
 
 ### Why `registerLazy()` is not the answer
 
-`registerLazy()` is a different mechanism — it defers loading a module's **route structure**, not just its code. It was built for plugin-host apps where the set of module paths isn't known at startup (remote federation, runtime-installed bundles). In framework mode the host composes routes from files on disk or a hand-built tree, so there's no parent route for a runtime-loaded catch-all to attach to. `resolveManifest()` throws if a registry has lazy modules registered, with an error pointing back at the patterns above.
+`registerLazy()` is the library-level mechanism for plugin-host apps: a module descriptor is deferred behind an `import()` and only fetched when a navigation hits its `basePath`. In the TanStack adapter the loaded descriptor contributes a single `component` rendered at a catch-all under `basePath` (via TanStack's own `lazyRouteComponent`) — TanStack Router's route tree is frozen at `createRouter` time, so a lazy descriptor cannot graft new routes in.
 
-If you had an app using `registerLazy()` on `resolve()` purely for code splitting, the migration to framework mode is: register each module eagerly, and put `lazyRouteComponent(() => import(...))` inside its `createRoutes` (or move the route to `.lazy.tsx` in `routes/`). You get the same splitting, without the runtime-loaded-structure machinery.
+In framework mode the host owns route composition (file-based tree, Start entry, etc.) and there is no parent route for the catch-all to attach to. `resolveManifest()` therefore rejects registries that have lazy modules, and the two patterns above cover every code-splitting use case.
+
+If you had an app using `registerLazy()` on `resolve()` for code splitting, the migration to framework mode is straightforward: register each module eagerly and put `lazyRouteComponent(() => import(...))` inside its `createRoutes` (or move the route to `.lazy.tsx` in `routes/`). You get the same splitting, without the runtime-loaded-wrapper machinery.
 
 ## TanStack Start specifics
 
