@@ -1,11 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, waitFor } from "@testing-library/react";
-import {
-  createMemoryHistory,
-  createRouter,
-  Outlet,
-  RouterProvider,
-} from "@tanstack/react-router";
+import { createMemoryHistory, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import type { LazyModuleDescriptor } from "@tanstack-react-modules/core";
 import { buildRouteTree } from "./route-builder.js";
 

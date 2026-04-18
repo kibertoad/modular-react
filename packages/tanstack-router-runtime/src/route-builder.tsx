@@ -1,9 +1,4 @@
-import {
-  createRootRoute,
-  createRoute,
-  lazyRouteComponent,
-  Outlet,
-} from "@tanstack/react-router";
+import { createRootRoute, createRoute, lazyRouteComponent, Outlet } from "@tanstack/react-router";
 import type { AnyRoute } from "@tanstack/react-router";
 import type { ModuleDescriptor, LazyModuleDescriptor } from "@tanstack-react-modules/core";
 
@@ -26,9 +21,7 @@ const IGNORED_TANSTACK_LAZY_FIELDS = [
   "lifecycle",
 ] as const;
 
-function warnIgnoredTanStackLazyFields(
-  descriptor: ModuleDescriptor<any, any, any, any>,
-): void {
+function warnIgnoredTanStackLazyFields(descriptor: ModuleDescriptor<any, any, any, any>): void {
   const ignored = IGNORED_TANSTACK_LAZY_FIELDS.filter(
     (f) => (descriptor as unknown as Record<string, unknown>)[f] !== undefined,
   );
