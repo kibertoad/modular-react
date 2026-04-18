@@ -2,6 +2,8 @@
 
 Router-specific additions to [Shell Patterns (Fundamentals)](shell-patterns.md) for apps built with `@tanstack-react-modules/*`. Read the fundamentals guide first; this document only covers the parts that depend on TanStack Router.
 
+> **New TanStack Router apps and all TanStack Start apps should prefer framework mode** (`@tanstack/router-plugin` + `resolveManifest()`) — you keep file-based `routeTree.gen.ts`, generated route types, and (with Start) SSR and server functions. This guide uses `resolve()` because it covers router-agnostic patterns (zones, route data, auth boundaries) that apply equally to both modes, but the wiring shown here is for the `resolve()` path. In framework mode, module `createRoutes` declarations are ignored — move route shape to route files on disk and keep the patterns below for navigation, zones, and shared deps. See [Framework-mode integration (TanStack Router & Start)](framework-mode-tanstack-router.md) for the recommended setup.
+
 ## Module routes
 
 A module's `createRoutes` receives a `parentRoute` and returns a route built via TanStack Router's `createRoute`. You use `getParentRoute: () => parentRoute` to graft your subtree onto whatever the runtime passes in (the auth boundary for protected modules, or the root for public ones).
@@ -284,6 +286,7 @@ export default defineModule<AppDependencies, AppSlots>({
 
 ## See also
 
+- [Framework-mode integration (TanStack Router & Start)](framework-mode-tanstack-router.md): `resolveManifest()`, file-based routing, SSR considerations.
 - [Shell Patterns (Fundamentals)](shell-patterns.md): the router-agnostic foundation.
 - [Shell Patterns for React Router](shell-patterns-react-router.md): the same patterns, expressed against React Router's API.
 - [Workspace Patterns](workspace-patterns.md): tabbed workspaces and descriptor-level zones.

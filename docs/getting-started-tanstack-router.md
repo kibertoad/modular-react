@@ -4,6 +4,8 @@ This guide walks you from zero to a running modular TanStack Router app. It assu
 
 For router-agnostic fundamentals, see [Shell Patterns](./shell-patterns.md). For TanStack Router specific mechanics (zones via `staticData`, `authenticatedRoute` with `beforeLoad`, public `shellRoutes`), see [Shell Patterns for TanStack Router](./shell-patterns-tanstack-router.md).
 
+> **Using file-based routing (`@tanstack/router-plugin`) or TanStack Start?** Skip ahead to [Framework-mode integration (TanStack Router & Start)](./framework-mode-tanstack-router.md). `resolveManifest()` is the recommended entry point for any app where the host owns `createRouter({ routeTree })`.
+
 ## Prerequisites
 
 - **Node 22+** and **pnpm**
