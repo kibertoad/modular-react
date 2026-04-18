@@ -74,3 +74,115 @@ export interface ApplicationManifest<
    */
   readonly recalculateSlots: () => void;
 }
+
+/**
+ * Options for {@link ModuleRegistry.resolveManifest}.
+ *
+ * Framework-mode integrations (TanStack Router file-based mode with
+ * `@tanstack/router-plugin`, or TanStack Start) consume `resolveManifest()`
+ * — the host owns the router and the route tree, so route-structure options
+ * accepted by `resolve()` (`rootComponent`, `indexComponent`,
+ * `notFoundComponent`, `authenticatedRoute`, `shellRoutes`, `rootRoute`,
+ * `beforeLoad`) are not available here. Declare those shapes in your
+ * `__root.tsx` and route files instead.
+ */
+export interface ResolveManifestOptions<
+  TSharedDependencies extends Record<string, any> = Record<string, any>,
+  TSlots extends SlotMapOf<TSlots> = SlotMap,
+> {
+  /**
+   * Additional React providers to wrap around the app tree.
+   * First element is outermost — e.g. `[I18nProvider, QueryClientProvider]`
+   * wraps as `<I18nProvider><QueryClientProvider>...</QueryClientProvider></I18nProvider>`.
+   */
+  providers?: React.ComponentType<{ children: React.ReactNode }>[];
+
+  /**
+   * Global filter applied to the fully resolved slot manifest (static + dynamic)
+   * on every `recalculateSlots()` call.
+   */
+  slotFilter?: (slots: TSlots, deps: TSharedDependencies) => TSlots;
+}
+
+/**
+ * Result of {@link ModuleRegistry.resolveManifest} — the framework-mode
+ * assembly output. Gives you the context provider stack, the navigation
+ * manifest, resolved slots, module entries, and a recalculate signal. Does
+ * NOT create or own a router.
+ *
+ * Use this when your host owns routing — e.g. TanStack Router file-based
+ * mode with `@tanstack/router-plugin` (generated `routeTree.gen.ts`) or
+ * TanStack Start, where the host calls `createRouter({ routeTree })` and
+ * the framework owns route discovery and type generation.
+ *
+ * Typical usage:
+ *
+ * ```ts
+ * // registry.ts
+ * export const registry = createRegistry({...})
+ * registry.register(portalModule)
+ * export const manifest = registry.resolveManifest({ providers: [I18nProvider] })
+ *
+ * // routes/__root.tsx
+ * import { manifest } from '../registry'
+ * export const Route = createRootRoute({
+ *   component: () => (
+ *     <manifest.Providers>
+ *       <Outlet />
+ *     </manifest.Providers>
+ *   ),
+ * })
+ * ```
+ *
+ * ## No `routes` field
+ *
+ * Unlike the React Router counterpart, the TanStack resolved manifest does
+ * not include a `routes` array. TanStack module `createRoutes(parentRoute)`
+ * produces an `AnyRoute` whose parent is bound at construction time — it
+ * cannot be spread into a host's already-composed file-based tree. In
+ * framework mode, put module route files on disk alongside other routes and
+ * let the plugin compose them. Modules continue to contribute navigation,
+ * slots, zones, and lifecycle hooks as usual.
+ *
+ * If a module declares `createRoutes` and the host calls `resolveManifest()`,
+ * the declaration is silently ignored — modules can be written once and
+ * work under either `resolve()` (library-owned router) or `resolveManifest()`
+ * (host-owned router) depending on how the app consumes them.
+ *
+ * ## Lazy modules are not supported in framework mode
+ *
+ * {@link ModuleRegistry.registerLazy} produces a catch-all route under a
+ * parent — there is no parent in framework mode (the host owns composition),
+ * so a registry that has any lazy modules registered will throw on
+ * `resolveManifest()`. Either register the module eagerly (the load-time
+ * benefit is minimal once Vite code-splitting is in play), or switch to
+ * `resolve()` for the library-owned router path.
+ */
+export interface ResolvedManifest<
+  TSlots extends SlotMapOf<TSlots> = SlotMap,
+  TNavItem extends NavigationItem = NavigationItem,
+> {
+  /**
+   * Context provider component — wraps children with SharedDependencies,
+   * Navigation, Slots, Modules, RecalculateSlots, and any user-supplied
+   * providers. Place around `<Outlet />` in your `__root.tsx` layout.
+   */
+  readonly Providers: React.ComponentType<{ children: React.ReactNode }>;
+
+  /**
+   * Auto-generated navigation manifest from all modules. Typed by the
+   * registry's `TNavItem` generic.
+   */
+  readonly navigation: import("@modular-react/core").NavigationManifest<TNavItem>;
+
+  /** Collected slot contributions from all modules (static base — does not include dynamic) */
+  readonly slots: TSlots;
+
+  /** Registered module summaries — use useModules() to access in components */
+  readonly modules: readonly import("@modular-react/core").ModuleEntry[];
+
+  /**
+   * Trigger re-evaluation of dynamic slots. See {@link ApplicationManifest.recalculateSlots}.
+   */
+  readonly recalculateSlots: () => void;
+}

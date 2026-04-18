@@ -1,20 +1,27 @@
 import { describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { createStore } from "zustand/vanilla";
-import type { RouteObject } from "react-router";
+import { createRoute } from "@tanstack/react-router";
+import type { AnyRoute } from "@tanstack/react-router";
 import { useNavigation, useSlots, useModules } from "@modular-react/react";
 import { createRegistry } from "./registry.js";
 
 /**
  * `resolveManifest()` is the framework-mode entry point — the host (e.g.
- * `@react-router/dev/vite`) owns routing, so the registry produces a
- * `Providers` component and optional `routes` but does NOT create a router.
+ * `@tanstack/router-plugin` file-based mode, or TanStack Start) owns
+ * routing, so the registry produces a `Providers` component but does NOT
+ * create a router.
  *
  * These tests exercise real behavior from a framework-mode consumer's
  * perspective: does `Providers` deliver navigation / slots / modules to the
  * hooks the host's components will call? Does it stay consistent across
- * multiple resolution sites (routes.ts + root.tsx)? Does it refuse to let
- * you mix router-owning and framework modes?
+ * multiple resolution sites? Does it refuse to let you mix router-owning
+ * and framework modes?
+ *
+ * Note: unlike React Router, TanStack module routes are bound to a parent
+ * at `createRoute` time via `getParentRoute`, so there's no `routes` field
+ * on the manifest. `createRoutes` is silently ignored in framework mode —
+ * see `ResolvedManifest` JSDoc for the rationale.
  */
 
 interface TestAuth {
@@ -50,13 +57,14 @@ function routedModule(id: string, path: string) {
   return {
     id,
     version: "1.0.0",
-    createRoutes: (): RouteObject => ({ path, Component: () => <div data-testid={id} /> }),
+    createRoutes: (parent: AnyRoute) =>
+      createRoute({ getParentRoute: () => parent, path, component: () => <></> }),
   };
 }
 
 describe("resolveManifest (framework mode)", () => {
   describe("shape", () => {
-    it("returns Providers, routes, navigation, slots, modules, recalculateSlots", () => {
+    it("returns Providers, navigation, slots, modules, recalculateSlots", () => {
       const registry = createRegistry<TestDeps, TestSlots>({
         stores: { auth: createAuthStore() },
         services: { api: { baseUrl: "http://test" } },
@@ -66,70 +74,96 @@ describe("resolveManifest (framework mode)", () => {
       const manifest = registry.resolveManifest();
 
       expect(manifest.Providers).toBeTypeOf("function");
-      expect(Array.isArray(manifest.routes)).toBe(true);
       expect(manifest.navigation.items).toHaveLength(1);
       expect(manifest.slots.commands).toHaveLength(1);
       expect(manifest.modules).toHaveLength(1);
       expect(manifest.recalculateSlots).toBeTypeOf("function");
     });
 
-    it("returns module routes from createRoutes() and empty array when none declare routes", () => {
-      const r1 = createRegistry<TestDeps, TestSlots>({
-        stores: { auth: createAuthStore() },
-        services: { api: { baseUrl: "http://test" } },
-      });
-      r1.register(routedModule("a", "/a"));
-      r1.register(routedModule("b", "/b"));
-      expect(r1.resolveManifest().routes.map((r) => (r as { path: string }).path)).toEqual([
-        "/a",
-        "/b",
-      ]);
-
-      const r2 = createRegistry<TestDeps, TestSlots>({
-        stores: { auth: createAuthStore() },
-        services: { api: { baseUrl: "http://test" } },
-      });
-      r2.register(headlessModule("headless"));
-      expect(r2.resolveManifest().routes).toEqual([]);
-    });
-
-    it("supports modules returning an array of routes from createRoutes()", () => {
+    it("silently ignores module createRoutes() — route shape lives in the host's file-based tree", () => {
       const registry = createRegistry<TestDeps, TestSlots>({
         stores: { auth: createAuthStore() },
         services: { api: { baseUrl: "http://test" } },
       });
-      registry.register({
-        id: "multi",
-        version: "1.0.0",
-        createRoutes: (): RouteObject[] => [
-          { path: "/one", Component: () => <></> },
-          { path: "/two", Component: () => <></> },
-        ],
-      });
+      registry.register(routedModule("a", "/a"));
+      registry.register(routedModule("b", "/b"));
+      registry.register(headlessModule("c", { navigation: true }));
 
-      expect(registry.resolveManifest().routes).toHaveLength(2);
+      const manifest = registry.resolveManifest();
+
+      // No routes field on the manifest, but the other contributions still flow.
+      expect(manifest).not.toHaveProperty("routes");
+      expect(manifest.modules.map((m) => m.id)).toEqual(["a", "b", "c"]);
+      expect(manifest.navigation.items).toHaveLength(1);
     });
 
-    it("includes lazy module catch-all routes in manifest.routes", () => {
+    it("does not invoke createRoutes() in framework mode — host composes routes", () => {
+      const createRoutes = vi.fn();
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register({ id: "m", version: "1.0.0", createRoutes });
+
+      registry.resolveManifest();
+
+      expect(createRoutes).not.toHaveBeenCalled();
+    });
+
+    it("throws when registerLazy() was used — framework mode has no parent for a runtime-loaded catch-all", () => {
+      // `registerLazy()` is a library-level mechanism for plugin-host apps
+      // where route *structure* is loaded at runtime. In framework mode the
+      // host owns composition, so there's nowhere to graft a catch-all.
+      // Silently dropping them would ship a manifest that's missing every
+      // lazy-module route with no feedback — throw loudly instead. Note:
+      // this is separate from code-splitting; `lazyRouteComponent` and
+      // `.lazy.tsx` still work for splitting inside eager modules.
       const registry = createRegistry<TestDeps, TestSlots>({
         stores: { auth: createAuthStore() },
         services: { api: { baseUrl: "http://test" } },
       });
       registry.registerLazy({
-        id: "lazy",
-        basePath: "/lazy",
-        load: async () => ({
-          default: {
-            id: "lazy",
-            version: "1.0.0",
-            createRoutes: () => ({ path: "feature", Component: () => <></> }),
-          },
-        }),
+        id: "billing-lazy",
+        basePath: "/billing",
+        load: async () => ({ default: { id: "billing-lazy", version: "1.0.0" } }),
       });
 
-      const { routes } = registry.resolveManifest();
-      expect(routes).toHaveLength(1);
-      expect((routes[0] as { path: string }).path).toBe("lazy/*");
+      expect(() => registry.resolveManifest()).toThrow(
+        /resolveManifest\(\) does not support registerLazy\(\)[\s\S]*billing-lazy/,
+      );
+    });
+
+    it("mentions lazyRouteComponent and .lazy.tsx in the error so users can find the right pattern", () => {
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.registerLazy({
+        id: "x",
+        basePath: "/x",
+        load: async () => ({ default: { id: "x", version: "1.0.0" } }),
+      });
+
+      expect(() => registry.resolveManifest()).toThrow(/lazyRouteComponent\(\)|\.lazy\.tsx/);
+    });
+
+    it("lists every lazy module id in the error so the user can find them", () => {
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.registerLazy({
+        id: "a",
+        basePath: "/a",
+        load: async () => ({ default: { id: "a", version: "1.0.0" } }),
+      });
+      registry.registerLazy({
+        id: "b",
+        basePath: "/b",
+        load: async () => ({ default: { id: "b", version: "1.0.0" } }),
+      });
+
+      expect(() => registry.resolveManifest()).toThrow(/a, b/);
     });
   });
 
@@ -201,7 +235,7 @@ describe("resolveManifest (framework mode)", () => {
   });
 
   describe("idempotency", () => {
-    it("returns the same manifest object across calls (shared routes.ts + root.tsx pattern)", () => {
+    it("returns the same manifest object across calls (shared registry module pattern)", () => {
       const registry = createRegistry<TestDeps, TestSlots>({
         stores: { auth: createAuthStore() },
         services: { api: { baseUrl: "http://test" } },
@@ -214,20 +248,12 @@ describe("resolveManifest (framework mode)", () => {
 
       expect(second).toBe(first);
       expect(third).toBe(first);
-    });
-
-    it("returns the same routes array reference across calls so a spread into routes.ts is stable", () => {
-      const registry = createRegistry<TestDeps, TestSlots>({
-        stores: { auth: createAuthStore() },
-        services: { api: { baseUrl: "http://test" } },
-      });
-      registry.register(routedModule("r", "/r"));
-
-      const firstRoutes = registry.resolveManifest().routes;
-      const secondRoutes = registry.resolveManifest().routes;
-
-      expect(secondRoutes).toBe(firstRoutes);
-      expect(secondRoutes[0]).toBe(firstRoutes[0]);
+      // Sub-collections are captured in closure on the Providers component,
+      // so downstream readers depending on reference equality (memoization,
+      // deps arrays) get stable identity.
+      expect(second.modules).toBe(first.modules);
+      expect(second.navigation).toBe(first.navigation);
+      expect(second.slots).toBe(first.slots);
     });
 
     it("runs onRegister lifecycle hooks exactly once even when resolveManifest is called multiple times", () => {
@@ -251,12 +277,20 @@ describe("resolveManifest (framework mode)", () => {
 
     it("does not re-run onRegister hooks when resolveManifest retries after a failed first call", () => {
       // Guards against a subtle bug: if the first resolveManifest() throws
-      // (e.g. a module's createRoutes returns null), onRegister hooks that
-      // already ran must not run a second time when the caller retries.
-      // Modules commonly use onRegister to subscribe to stores or register
-      // side-effects against a framework singleton, and double-firing would
-      // double-register those.
-      const onRegister = vi.fn();
+      // from a module's onRegister (after earlier hooks already ran), a
+      // retry must not re-walk the hooks — modules commonly subscribe to
+      // stores or register side-effects against framework singletons in
+      // onRegister, and double-firing would double-register those.
+      //
+      // After the throw, `onRegisterRan` flips to true, so the retry skips
+      // the loop entirely. The retry then completes successfully with a
+      // manifest reflecting the modules' navigation/slots/etc. — "bad"'s
+      // onRegister never re-fires, and "good"'s onRegister fires exactly
+      // once across both calls.
+      const onRegisterGood = vi.fn();
+      const onRegisterBad = vi.fn(() => {
+        throw new Error("boom");
+      });
       const registry = createRegistry<TestDeps, TestSlots>({
         stores: { auth: createAuthStore() },
         services: { api: { baseUrl: "http://test" } },
@@ -264,64 +298,21 @@ describe("resolveManifest (framework mode)", () => {
       registry.register({
         id: "good",
         version: "1.0.0",
-        lifecycle: { onRegister },
+        lifecycle: { onRegister: onRegisterGood },
       });
       registry.register({
         id: "bad",
         version: "1.0.0",
-        createRoutes: () => null as unknown as RouteObject,
+        lifecycle: { onRegister: onRegisterBad },
       });
 
       expect(() => registry.resolveManifest()).toThrow(
-        /Module "bad" createRoutes\(\) returned a falsy value/,
+        /Module "bad" lifecycle\.onRegister\(\) failed: boom/,
       );
-      // Retry: throws the same error, but onRegister must NOT fire a second time.
-      expect(() => registry.resolveManifest()).toThrow(
-        /Module "bad" createRoutes\(\) returned a falsy value/,
-      );
-      expect(onRegister).toHaveBeenCalledOnce();
-    });
-
-    it("calls each module's createRoutes() exactly once even across multiple resolveManifest calls", () => {
-      // This locks in the caching contract: if createRoutes is called twice
-      // (e.g. from routes.ts and then root.tsx), any module that does
-      // side-effectful work in createRoutes (imports, logging, registrations
-      // against a framework singleton) would run it twice — silently
-      // double-registering whatever it's registering.
-      const createRoutes = vi.fn((): RouteObject => ({ path: "/x", Component: () => <div /> }));
-      const registry = createRegistry<TestDeps, TestSlots>({
-        stores: { auth: createAuthStore() },
-        services: { api: { baseUrl: "http://test" } },
-      });
-      registry.register({ id: "m", version: "1.0.0", createRoutes });
-
-      registry.resolveManifest();
-      registry.resolveManifest();
-      registry.resolveManifest();
-
-      expect(createRoutes).toHaveBeenCalledOnce();
-    });
-
-    it("does not re-run duplicate-id / missing-dep validation on cached calls", () => {
-      // Once the manifest is cached, later resolveManifest() calls must be
-      // pure reads of the cache — validation only runs on the first call.
-      // If a test ever regresses such that validation runs twice, this test
-      // would still pass (validation is idempotent), but the important
-      // property is that the cached manifest is returned by reference
-      // without re-walking modules. We assert that by requiring the call to
-      // be a no-op even when modules would fail a re-validation that
-      // somehow saw mutated state.
-      const registry = createRegistry<TestDeps, TestSlots>({
-        stores: { auth: createAuthStore() },
-        services: { api: { baseUrl: "http://test" } },
-      });
-      registry.register(headlessModule("m"));
-      const first = registry.resolveManifest();
-      // Cannot register after resolve, so validation state cannot change —
-      // any second call must be a pure cache return.
-      const second = registry.resolveManifest();
-      expect(second).toBe(first);
-      expect(second.modules).toBe(first.modules);
+      // Retry: the loop is skipped entirely. Neither hook fires a second time.
+      expect(() => registry.resolveManifest()).not.toThrow();
+      expect(onRegisterGood).toHaveBeenCalledOnce();
+      expect(onRegisterBad).toHaveBeenCalledOnce();
     });
 
     it("throws when options are passed on a subsequent call — misconfiguration should be loud", () => {
@@ -364,10 +355,13 @@ describe("resolveManifest (framework mode)", () => {
         },
       });
 
+      // First call with optionsA throws in buildAssembly.
       expect(() => registry.resolveManifest({ providers: [OriginalProvider] })).toThrow(
         /first-call boom/,
       );
 
+      // Second call with DIFFERENT options must be rejected, not silently
+      // replace optionsA.
       expect(() => registry.resolveManifest({ providers: [DivergentProvider] })).toThrow(
         /options may only be passed on the first call/,
       );
@@ -376,9 +370,11 @@ describe("resolveManifest (framework mode)", () => {
     it("retry without options honors the options captured on the failed first call", () => {
       // Paired with the test above: if the user retries with no options,
       // the captured options from the original call are what the manifest
-      // is built with.
+      // is built with. onRegisterRan flips to true inside the catch, so the
+      // retry skips the loop and buildAssembly succeeds with the captured
+      // providers.
       const CapturedProvider = ({ children }: { children: React.ReactNode }) => (
-        <div data-testid="captured-retry-rr">{children}</div>
+        <div data-testid="captured-retry-tanstack">{children}</div>
       );
 
       const registry = createRegistry<TestDeps, TestSlots>({
@@ -403,105 +399,11 @@ describe("resolveManifest (framework mode)", () => {
 
       const { getByTestId } = render(
         <manifest.Providers>
-          <span data-testid="retry-child-rr" />
+          <span data-testid="retry-child-tanstack" />
         </manifest.Providers>,
       );
-      expect(getByTestId("captured-retry-rr")).toBeTruthy();
-      expect(getByTestId("retry-child-rr")).toBeTruthy();
-    });
-
-    it("includes lazy module catch-all routes consistently across calls", () => {
-      const registry = createRegistry<TestDeps, TestSlots>({
-        stores: { auth: createAuthStore() },
-        services: { api: { baseUrl: "http://test" } },
-      });
-      registry.registerLazy({
-        id: "lazy",
-        basePath: "/lazy",
-        load: async () => ({
-          default: {
-            id: "lazy",
-            version: "1.0.0",
-            createRoutes: () => ({ path: "feature", Component: () => <></> }),
-          },
-        }),
-      });
-
-      const a = registry.resolveManifest().routes;
-      const b = registry.resolveManifest().routes;
-      expect(b).toBe(a);
-      expect(b).toHaveLength(1);
-    });
-  });
-
-  describe("createRoutes error handling", () => {
-    it("throws with the module id when createRoutes() returns a falsy value", () => {
-      const registry = createRegistry<TestDeps, TestSlots>({
-        stores: { auth: createAuthStore() },
-        services: { api: { baseUrl: "http://test" } },
-      });
-      registry.register({
-        id: "bad-mod",
-        version: "1.0.0",
-        createRoutes: () => null as unknown as RouteObject,
-      });
-
-      expect(() => registry.resolveManifest()).toThrow(
-        /Module "bad-mod" createRoutes\(\) returned a falsy value/,
-      );
-    });
-
-    it("propagates thrown errors from createRoutes() unchanged (module crash surfaces loudly)", () => {
-      const registry = createRegistry<TestDeps, TestSlots>({
-        stores: { auth: createAuthStore() },
-        services: { api: { baseUrl: "http://test" } },
-      });
-      registry.register({
-        id: "throws",
-        version: "1.0.0",
-        createRoutes: () => {
-          throw new Error("boom from module");
-        },
-      });
-
-      expect(() => registry.resolveManifest()).toThrow(/boom from module/);
-    });
-
-    it("wraps onRegister errors with the module id for debuggability", () => {
-      const registry = createRegistry<TestDeps, TestSlots>({
-        stores: { auth: createAuthStore() },
-        services: { api: { baseUrl: "http://test" } },
-      });
-      registry.register({
-        id: "bad-init",
-        version: "1.0.0",
-        lifecycle: {
-          onRegister: () => {
-            throw new Error("init failed");
-          },
-        },
-      });
-
-      expect(() => registry.resolveManifest()).toThrow(
-        /Module "bad-init" lifecycle\.onRegister\(\) failed: init failed/,
-      );
-    });
-  });
-
-  describe("manifest.routes immutability contract", () => {
-    it("the routes array is typed readonly — the cached manifest must not be poisoned across callsites", () => {
-      // Primarily a type-level contract; at runtime we just assert the
-      // cached reference is stable. The readonly type on ResolvedManifest
-      // is what actually guards callers from pushing into the array.
-      const registry = createRegistry<TestDeps, TestSlots>({
-        stores: { auth: createAuthStore() },
-        services: { api: { baseUrl: "http://test" } },
-      });
-      registry.register(routedModule("r", "/r"));
-
-      const { routes } = registry.resolveManifest();
-      const second = registry.resolveManifest().routes;
-      expect(second).toBe(routes);
+      expect(getByTestId("captured-retry-tanstack")).toBeTruthy();
+      expect(getByTestId("retry-child-tanstack")).toBeTruthy();
     });
   });
 
@@ -573,6 +475,26 @@ describe("resolveManifest (framework mode)", () => {
 
       expect(() => registry.resolveManifest()).toThrow(
         /Module "needs-api" requires dependencies not provided/,
+      );
+    });
+
+    it("wraps onRegister errors with the module id for debuggability", () => {
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register({
+        id: "bad-init",
+        version: "1.0.0",
+        lifecycle: {
+          onRegister: () => {
+            throw new Error("init failed");
+          },
+        },
+      });
+
+      expect(() => registry.resolveManifest()).toThrow(
+        /Module "bad-init" lifecycle\.onRegister\(\) failed: init failed/,
       );
     });
   });

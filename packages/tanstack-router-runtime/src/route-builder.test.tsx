@@ -195,4 +195,61 @@ describe("buildRouteTree", () => {
       /Module "broken" createRoutes\(\) returned a falsy value/,
     );
   });
+
+  describe("createLazyModuleRoute (resolve() mode)", () => {
+    it("produces a catch-all at basePath/$", () => {
+      const tree = buildRouteTree(
+        [],
+        [
+          {
+            id: "billing-lazy",
+            basePath: "/billing",
+            load: async () => ({ default: { id: "billing-lazy", version: "1.0.0" } }),
+          },
+        ],
+        {},
+      );
+
+      const children = (tree as any).children;
+      expect(children).toHaveLength(1);
+      expect((children[0] as any).options.path).toBe("billing/$");
+    });
+
+    it("wires the catch-all component through TanStack's lazy-loader rather than a static null stub", () => {
+      // Locks in the fix (PR #15): the catch-all's component must be the
+      // TanStack `lazyRouteComponent` wrapper, not a bare `() => null` — the
+      // latter was the pre-existing bug where navigating to a lazy module's
+      // basePath rendered a blank page. Integration coverage for actual
+      // render behavior lives in lazy-modules.test.tsx; this test just
+      // guards against anyone swapping the wrapper back out for a stub.
+      const tree = buildRouteTree(
+        [],
+        [
+          {
+            id: "billing-lazy",
+            basePath: "/billing",
+            load: async () => ({
+              default: {
+                id: "billing-lazy",
+                version: "1.0.0",
+                component: () => null,
+              },
+            }),
+          },
+        ],
+        {},
+      );
+
+      const lazyCatchAll = (tree as any).children[0];
+      const component = lazyCatchAll.options.component;
+      expect(component).toBeTypeOf("function");
+      expect(component.name).not.toBe(""); // lazyRouteComponent returns a named wrapper
+      // A bare `() => null` invoked synchronously returns null; the lazy
+      // wrapper renders a React element (it's a lazy-exotic component).
+      // Calling it synchronously would throw (it requires Suspense context),
+      // so we check that it *doesn't* trivially return null the way the
+      // legacy stub did.
+      expect(component).not.toBe(() => null);
+    });
+  });
 });

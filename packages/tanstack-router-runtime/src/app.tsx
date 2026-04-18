@@ -1,106 +1,30 @@
-import { useMemo } from "react";
 import { RouterProvider } from "@tanstack/react-router";
 import type { Router } from "@tanstack/react-router";
-import type { StoreApi } from "zustand";
-import type { ReactiveService } from "@tanstack-react-modules/core";
-import { SharedDependenciesContext } from "@tanstack-react-modules/core";
-import type {
-  DynamicSlotFactory,
-  SlotFilter,
-  NavigationManifest,
-  ModuleEntry,
-} from "@modular-react/core";
-import {
-  NavigationContext,
-  SlotsContext,
-  RecalculateSlotsContext,
-  ModulesContext,
-  DynamicSlotsProvider,
-} from "@modular-react/react";
-import type { SlotsSignal } from "@modular-react/react";
+import { createProvidersComponent, type ProvidersProps } from "./providers.js";
 
-interface AppProps {
+interface AppProps extends ProvidersProps {
   router: Router<any, any, any>;
-  stores: Record<string, StoreApi<unknown>>;
-  services: Record<string, unknown>;
-  reactiveServices: Record<string, ReactiveService<unknown>>;
-  navigation: NavigationManifest;
-  slots: object;
-  modules: readonly ModuleEntry[];
-  providers?: React.ComponentType<{ children: React.ReactNode }>[];
-  dynamicSlotFactories: DynamicSlotFactory[];
-  slotFilter?: SlotFilter;
-  slotsSignal: SlotsSignal;
-  recalculateSlots: () => void;
 }
 
-export function createAppComponent({
-  router,
-  stores,
-  services,
-  reactiveServices,
-  navigation,
-  slots,
-  modules,
-  providers,
-  dynamicSlotFactories,
-  slotFilter,
-  slotsSignal,
-  recalculateSlots,
-}: AppProps) {
-  // All values captured in closure are stable references created once at resolve() time.
-  const depsValue = { stores, services, reactiveServices };
-  const hasDynamicSlots = dynamicSlotFactories.length > 0 || slotFilter != null;
-  // Reverse once at factory time — providers is immutable for the lifetime
-  // of the App component and applying them back-to-front wraps so the first
-  // entry ends up outermost.
-  const providersInnerFirst = providers ? [...providers].reverse() : undefined;
+/**
+ * Composes the root App component for registries that own the router.
+ * Wraps the shared modular-react provider stack around a `<RouterProvider />`.
+ *
+ * Framework-mode integrations (TanStack Router file-based mode with
+ * `@tanstack/router-plugin`, or TanStack Start) should use
+ * `registry.resolveManifest()` instead — it returns the same provider stack
+ * without owning a router, so the host can call `createRouter({ routeTree })`
+ * against a generated tree.
+ */
+export function createAppComponent({ router, ...providersProps }: AppProps) {
+  const Providers = createProvidersComponent(providersProps);
 
   function App() {
-    const tree = useMemo(() => {
-      const slotsProvider = hasDynamicSlots ? (
-        <DynamicSlotsProvider
-          baseSlots={slots}
-          factories={dynamicSlotFactories}
-          filter={slotFilter}
-          stores={stores}
-          services={services}
-          reactiveServices={reactiveServices}
-          signal={slotsSignal}
-        >
-          <ModulesContext value={modules}>
-            <RouterProvider router={router} />
-          </ModulesContext>
-        </DynamicSlotsProvider>
-      ) : (
-        <SlotsContext value={slots}>
-          <ModulesContext value={modules}>
-            <RouterProvider router={router} />
-          </ModulesContext>
-        </SlotsContext>
-      );
-
-      let node: React.ReactNode = (
-        <SharedDependenciesContext value={depsValue}>
-          <NavigationContext value={navigation}>
-            <RecalculateSlotsContext value={recalculateSlots}>
-              {slotsProvider}
-            </RecalculateSlotsContext>
-          </NavigationContext>
-        </SharedDependenciesContext>
-      );
-
-      // Wrap with user-supplied providers (first element = outermost wrapper)
-      if (providersInnerFirst) {
-        for (const Provider of providersInnerFirst) {
-          node = <Provider>{node}</Provider>;
-        }
-      }
-
-      return node;
-    }, []);
-
-    return tree;
+    return (
+      <Providers>
+        <RouterProvider router={router} />
+      </Providers>
+    );
   }
 
   App.displayName = "ModularApp";

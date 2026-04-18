@@ -68,16 +68,17 @@ For the walkthrough of what the scaffold produces and how to extend it, see the 
 
 Conceptual documentation for building apps with the framework. Start with a getting-started guide, then dig into the shell patterns once you want to go beyond the defaults.
 
-| Guide                                                                           | What it covers                                                                                                                 |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| [Getting started with React Router](docs/getting-started-react-router.md)       | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                        |
-| [Getting started with TanStack Router](docs/getting-started-tanstack-router.md) | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.            |
-| [Framework-mode (React Router v7)](docs/framework-mode-react-router.md)         | `resolveManifest()` integration with `@react-router/dev/vite` — keep file-based `routes.ts`, `+types/route.ts`, HMR, and SSR.  |
-| [Navigation: typed labels, dynamic hrefs, meta](docs/navigation.md)             | `NavigationItem<TLabel, TContext, TMeta>` — typed i18n keys, context-aware `to`, app-owned `meta` for permissions/badges.      |
-| [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                         | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination. |
-| [Shell Patterns for React Router](docs/shell-patterns-react-router.md)          | Module route shape, route zones via `handle`, `useRouteData` for non-component metadata, auth guards, public shell routes.     |
-| [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)    | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `useRouteData`, `beforeLoad` auth.       |
-| [Workspace Patterns](docs/workspace-patterns.md)                                | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                        |
+| Guide                                                                              | What it covers                                                                                                                             |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| [Getting started with React Router](docs/getting-started-react-router.md)          | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                                    |
+| [Getting started with TanStack Router](docs/getting-started-tanstack-router.md)    | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.                        |
+| [Framework-mode (React Router v7)](docs/framework-mode-react-router.md)            | `resolveManifest()` integration with `@react-router/dev/vite` — keep file-based `routes.ts`, `+types/route.ts`, HMR, and SSR.              |
+| [Framework-mode (TanStack Router & Start)](docs/framework-mode-tanstack-router.md) | `resolveManifest()` integration with `@tanstack/router-plugin` and TanStack Start — keep file-based `routeTree.gen.ts`, typed routes, SSR. |
+| [Navigation: typed labels, dynamic hrefs, meta](docs/navigation.md)                | `NavigationItem<TLabel, TContext, TMeta>` — typed i18n keys, context-aware `to`, app-owned `meta` for permissions/badges.                  |
+| [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                            | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination.             |
+| [Shell Patterns for React Router](docs/shell-patterns-react-router.md)             | Module route shape, route zones via `handle`, `useRouteData` for non-component metadata, auth guards, public shell routes.                 |
+| [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)       | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `useRouteData`, `beforeLoad` auth.                   |
+| [Workspace Patterns](docs/workspace-patterns.md)                                   | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                                    |
 
 ## What the code looks like
 
@@ -130,6 +131,34 @@ authStore.subscribe(manifest.recalculateSlots);
 ```
 
 For legacy React Router setups or plugin-host apps (library owns router creation, no framework-mode integration), use `registry.resolve({ rootComponent, indexComponent, authenticatedRoute })` instead — see [Framework-mode guide](docs/framework-mode-react-router.md) for the tradeoffs.
+
+The same `resolveManifest()` pattern is available for **TanStack Router file-based mode and TanStack Start**:
+
+```typescript
+// app/registry.ts
+import { createRegistry } from "@tanstack-react-modules/runtime";
+import billingModule from "./modules/billing";
+
+const registry = createRegistry<AppDependencies, AppSlots>({
+  stores: { auth: authStore },
+  services: { httpClient },
+});
+registry.register(billingModule);
+
+export const manifest = registry.resolveManifest();
+
+// app/routes/__root.tsx
+import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { manifest } from "../registry";
+export const Route = createRootRoute({
+  component: () => <manifest.Providers><Outlet /></manifest.Providers>,
+});
+
+// app/router.ts continues to call createRouter({ routeTree }) as usual.
+authStore.subscribe(manifest.recalculateSlots);
+```
+
+See [Framework-mode (TanStack Router & Start) guide](docs/framework-mode-tanstack-router.md) for the full walkthrough and the SSR considerations.
 
 ## Packages
 

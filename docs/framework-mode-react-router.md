@@ -245,6 +245,7 @@ For tests that exercise real routing, use the existing `@react-router-modules/te
 
 ## See also
 
+- [Framework-mode integration (TanStack Router & Start)](framework-mode-tanstack-router.md) — the TanStack-side equivalent, including SSR considerations.
 - [Getting started with React Router](getting-started-react-router.md) — for the library-owns-router path.
 - [Shell Patterns for React Router](shell-patterns-react-router.md) — module route shape, zones, auth guards.
 - [`useRouteData`](shell-patterns-react-router.md#route-data-non-component-handles) — non-component route metadata (headerVariant, page titles).

@@ -190,6 +190,15 @@ export function createRegistry<
   // Providers/routes/etc.
   let cachedManifest: ResolvedManifest<TSlots, TNavItem> | null = null;
 
+  // Options captured from the first resolveManifest() invocation, honored by
+  // every subsequent call (including retries after a failed buildAssembly).
+  // We commit to "there has been a first call" *before* anything that can
+  // throw — otherwise a first call that throws in buildAssembly would leave
+  // `cachedManifest` null and let a retry slip different options past the
+  // "options may only be passed on the first call" guard.
+  let firstCallCompleted = false;
+  let capturedOptions: ResolveManifestOptions<TSharedDependencies, TSlots> | undefined = undefined;
+
   // onRegister must run at most once per module for the lifetime of the
   // registry — modules commonly use it to subscribe to stores or register
   // side-effects against a framework singleton, and double-firing would
@@ -389,22 +398,30 @@ export function createRegistry<
         );
       }
 
-      if (cachedManifest) {
+      if (firstCallCompleted) {
         // Idempotent: first call captured options; later calls must pass none.
+        // Enforced here (rather than gated on `cachedManifest`) so that a
+        // retry after a failed first call can't slip different options past
+        // the guard — the captured options win either way.
         if (options !== undefined) {
           throw new Error(
             "[@react-router-modules/runtime] resolveManifest() has already been called — options may only be passed on the first call. Extract the manifest into a shared module and import it from both sites.",
           );
         }
-        return cachedManifest;
+        if (cachedManifest) return cachedManifest;
+        // Fall through: first call threw before producing a manifest; retry
+        // using the captured options.
+      } else {
+        capturedOptions = options;
+        firstCallCompleted = true;
       }
 
       mode = "resolveManifest";
       registrationLocked = true;
 
       const assembly = buildAssembly({
-        providers: options?.providers,
-        slotFilter: options?.slotFilter,
+        providers: capturedOptions?.providers,
+        slotFilter: capturedOptions?.slotFilter,
       });
       const Providers = createProvidersComponent({
         stores: assembly.stores,

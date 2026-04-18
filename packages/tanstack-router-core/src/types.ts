@@ -42,12 +42,34 @@ export interface ModuleDescriptor<
 }
 
 /**
- * Descriptor for a lazily-loaded module.
- * The full module descriptor is loaded on demand when the route is first visited.
+ * Descriptor for a lazily-loaded module (TanStack Router adapter).
  *
- * See the base {@link import("@modular-react/core").LazyModuleDescriptor}
- * JSDoc for the list of fields that are ignored at lazy-load time — only
- * `createRoutes()` is honored.
+ * TanStack Router's route tree is frozen at `createRouter({ routeTree })`
+ * time; routes cannot be added post-hoc. That makes the TanStack semantics
+ * **different from the React Router adapter** — here a lazy module
+ * contributes a single `component` rendered at `basePath/$` via TanStack's
+ * `lazyRouteComponent`, rather than a route subtree via `createRoutes`.
+ *
+ * ## What a lazy module can and cannot contribute (TanStack)
+ *
+ * **Honored:** `component` — rendered at the catch-all for any sub-path
+ * under `basePath`. Use this for simple code-splitting of a feature's
+ * entry component.
+ *
+ * **Ignored (the runtime warns at load time):** `createRoutes`, `navigation`,
+ * `slots`, `dynamicSlots`, `zones`, `meta`, `requires`, `optionalRequires`,
+ * `lifecycle`. Navigation / slots / lifecycle happen at registry resolve
+ * time, before the lazy module has loaded; `createRoutes` is ignored
+ * specifically because TanStack's route tree is static.
+ *
+ * For multi-route code splitting, register the module eagerly and use
+ * `lazyRouteComponent()` inside its own `createRoutes`. For runtime-loaded
+ * route *structure* (genuine plugin-host apps), TanStack Router is the
+ * wrong model entirely — those apps want React Router's `useRoutes()`.
+ *
+ * Lazy modules are rejected by `resolveManifest()` (framework mode): in
+ * that mode the host owns route composition, so there is no parent route
+ * for a catch-all to attach to. See docs/framework-mode-tanstack-router.md.
  */
 export interface LazyModuleDescriptor<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
