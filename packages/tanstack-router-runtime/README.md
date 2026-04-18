@@ -63,6 +63,8 @@ export const router = createRouter({ routeTree, defaultPreload: "intent" });
 
 > **No `routes` field on the manifest.** Unlike the React Router counterpart, module `createRoutes(parentRoute)` produces a route whose parent is bound at construction time — it can't be spread into a host's already-composed file-based tree. In framework mode the host owns route composition, module `createRoutes` declarations are silently ignored, and modules contribute only navigation/slots/zones/lifecycle. Modules can be written once and work under either mode.
 
+> **Lazy modules throw in framework mode.** `registerLazy()` exists specifically to produce a catch-all route under a parent at load time — there is no parent in framework mode, so a registry with any lazy modules throws on `resolveManifest()`. Register eagerly, or switch to `resolve()`.
+
 ## `resolve()` — library owns the router
 
 `resolve()` calls `createRouter({ routeTree })` directly on an imperatively-built tree. It gives up file-based route discovery, generated route types, and (with Start) SSR — you register every route imperatively. Useful when any of these are the point:
