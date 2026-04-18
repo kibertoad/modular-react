@@ -337,6 +337,79 @@ describe("resolveManifest (framework mode)", () => {
       );
     });
 
+    it("rejects divergent options on retry after a failed first call — captured options win", () => {
+      // Regression guard (CodeRabbit PR #15): if the first call's options
+      // threw in buildAssembly (e.g. onRegister hook crashed), a second
+      // call's options would have slipped past the "options may only be
+      // passed on the first call" guard because `cachedManifest` was still
+      // null. Now the first invocation commits before anything can throw,
+      // and every subsequent call honors the captured options.
+      const OriginalProvider = ({ children }: { children: React.ReactNode }) => (
+        <div data-testid="first-opts">{children}</div>
+      );
+      const DivergentProvider = ({ children }: { children: React.ReactNode }) => (
+        <div data-testid="second-opts">{children}</div>
+      );
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register({
+        id: "bad",
+        version: "1.0.0",
+        lifecycle: {
+          onRegister: () => {
+            throw new Error("first-call boom");
+          },
+        },
+      });
+
+      expect(() => registry.resolveManifest({ providers: [OriginalProvider] })).toThrow(
+        /first-call boom/,
+      );
+
+      expect(() => registry.resolveManifest({ providers: [DivergentProvider] })).toThrow(
+        /options may only be passed on the first call/,
+      );
+    });
+
+    it("retry without options honors the options captured on the failed first call", () => {
+      // Paired with the test above: if the user retries with no options,
+      // the captured options from the original call are what the manifest
+      // is built with.
+      const CapturedProvider = ({ children }: { children: React.ReactNode }) => (
+        <div data-testid="captured-retry-rr">{children}</div>
+      );
+
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register({
+        id: "flaky",
+        version: "1.0.0",
+        lifecycle: {
+          onRegister: () => {
+            throw new Error("first-call boom");
+          },
+        },
+      });
+
+      expect(() => registry.resolveManifest({ providers: [CapturedProvider] })).toThrow(
+        /first-call boom/,
+      );
+
+      const manifest = registry.resolveManifest();
+
+      const { getByTestId } = render(
+        <manifest.Providers>
+          <span data-testid="retry-child-rr" />
+        </manifest.Providers>,
+      );
+      expect(getByTestId("captured-retry-rr")).toBeTruthy();
+      expect(getByTestId("retry-child-rr")).toBeTruthy();
+    });
+
     it("includes lazy module catch-all routes consistently across calls", () => {
       const registry = createRegistry<TestDeps, TestSlots>({
         stores: { auth: createAuthStore() },

@@ -110,11 +110,14 @@ describe("resolveManifest (framework mode)", () => {
       expect(createRoutes).not.toHaveBeenCalled();
     });
 
-    it("throws when lazy modules are registered — no parent to attach a catch-all to", () => {
-      // Lazy modules only contribute routes under a parent; in framework
-      // mode the host owns composition, so there's nowhere to graft them.
+    it("throws when registerLazy() was used — framework mode has no parent for a runtime-loaded catch-all", () => {
+      // `registerLazy()` is a library-level mechanism for plugin-host apps
+      // where route *structure* is loaded at runtime. In framework mode the
+      // host owns composition, so there's nowhere to graft a catch-all.
       // Silently dropping them would ship a manifest that's missing every
-      // lazy-module route with no feedback — throw loudly instead.
+      // lazy-module route with no feedback — throw loudly instead. Note:
+      // this is separate from code-splitting; `lazyRouteComponent` and
+      // `.lazy.tsx` still work for splitting inside eager modules.
       const registry = createRegistry<TestDeps, TestSlots>({
         stores: { auth: createAuthStore() },
         services: { api: { baseUrl: "http://test" } },
@@ -126,8 +129,22 @@ describe("resolveManifest (framework mode)", () => {
       });
 
       expect(() => registry.resolveManifest()).toThrow(
-        /resolveManifest\(\) does not support lazy modules[\s\S]*billing-lazy/,
+        /resolveManifest\(\) does not support registerLazy\(\)[\s\S]*billing-lazy/,
       );
+    });
+
+    it("mentions lazyRouteComponent and .lazy.tsx in the error so users can find the right pattern", () => {
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.registerLazy({
+        id: "x",
+        basePath: "/x",
+        load: async () => ({ default: { id: "x", version: "1.0.0" } }),
+      });
+
+      expect(() => registry.resolveManifest()).toThrow(/lazyRouteComponent\(\)|\.lazy\.tsx/);
     });
 
     it("lists every lazy module id in the error so the user can find them", () => {
@@ -309,6 +326,84 @@ describe("resolveManifest (framework mode)", () => {
       expect(() => registry.resolveManifest({ providers: [] })).toThrow(
         /options may only be passed on the first call/,
       );
+    });
+
+    it("rejects divergent options on retry after a failed first call — captured options win", () => {
+      // Regression guard (CodeRabbit PR #15): if the first call's options
+      // threw in buildAssembly (e.g. onRegister hook crashed), a second
+      // call's options would have slipped past the "options may only be
+      // passed on the first call" guard because `cachedManifest` was still
+      // null. Now the first invocation commits before anything can throw,
+      // and every subsequent call honors the captured options.
+      const OriginalProvider = ({ children }: { children: React.ReactNode }) => (
+        <div data-testid="first-opts">{children}</div>
+      );
+      const DivergentProvider = ({ children }: { children: React.ReactNode }) => (
+        <div data-testid="second-opts">{children}</div>
+      );
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register({
+        id: "bad",
+        version: "1.0.0",
+        lifecycle: {
+          onRegister: () => {
+            throw new Error("first-call boom");
+          },
+        },
+      });
+
+      // First call with optionsA throws in buildAssembly.
+      expect(() => registry.resolveManifest({ providers: [OriginalProvider] })).toThrow(
+        /first-call boom/,
+      );
+
+      // Second call with DIFFERENT options must be rejected, not silently
+      // replace optionsA.
+      expect(() => registry.resolveManifest({ providers: [DivergentProvider] })).toThrow(
+        /options may only be passed on the first call/,
+      );
+    });
+
+    it("retry without options honors the options captured on the failed first call", () => {
+      // Paired with the test above: if the user retries with no options,
+      // the captured options from the original call are what the manifest
+      // is built with. onRegisterRan flips to true inside the catch, so the
+      // retry skips the loop and buildAssembly succeeds with the captured
+      // providers.
+      const CapturedProvider = ({ children }: { children: React.ReactNode }) => (
+        <div data-testid="captured-retry-tanstack">{children}</div>
+      );
+
+      const registry = createRegistry<TestDeps, TestSlots>({
+        stores: { auth: createAuthStore() },
+        services: { api: { baseUrl: "http://test" } },
+      });
+      registry.register({
+        id: "flaky",
+        version: "1.0.0",
+        lifecycle: {
+          onRegister: () => {
+            throw new Error("first-call boom");
+          },
+        },
+      });
+
+      expect(() => registry.resolveManifest({ providers: [CapturedProvider] })).toThrow(
+        /first-call boom/,
+      );
+
+      const manifest = registry.resolveManifest();
+
+      const { getByTestId } = render(
+        <manifest.Providers>
+          <span data-testid="retry-child-tanstack" />
+        </manifest.Providers>,
+      );
+      expect(getByTestId("captured-retry-tanstack")).toBeTruthy();
+      expect(getByTestId("retry-child-tanstack")).toBeTruthy();
     });
   });
 

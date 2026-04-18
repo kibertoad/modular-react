@@ -149,6 +149,58 @@ Any route file placed under `app/routes/_authenticated/` is guarded by this `bef
 
 Under `resolve()`, the library built this tree for you. In framework mode, you declare it with a `_authenticated` layout file + a regular `beforeLoad` — fewer library concepts, full type safety from the TanStack plugin's generated route types.
 
+## Lazy loading in framework mode
+
+Framework mode fully supports lazy loading of route code — it just uses TanStack Router's native primitives instead of a library-specific mechanism. There are two patterns you'll use:
+
+### Component-level code splitting (eager route, lazy component)
+
+For a module whose route structure is known at build time, wrap its component with `lazyRouteComponent` so the component bundle is fetched on first navigation:
+
+```tsx
+// modules/billing/src/index.ts
+import { defineModule } from "@tanstack-react-modules/core";
+import { createRoute, lazyRouteComponent } from "@tanstack/react-router";
+
+export default defineModule<AppDependencies, AppSlots>({
+  id: "billing",
+  version: "1.0.0",
+  createRoutes: (parent) =>
+    createRoute({
+      getParentRoute: () => parent,
+      path: "billing",
+      component: lazyRouteComponent(() => import("./pages/BillingPage.js")),
+    }),
+});
+```
+
+> In framework mode `createRoutes` is ignored — move this structure into a route file (`app/routes/billing.tsx`) and keep `lazyRouteComponent` exactly the same. The module continues to contribute navigation/slots/zones.
+
+### File-based lazy routes (whole route file is lazy)
+
+TanStack Router's file-based convention ships two forms of route files: eager (`billing.tsx`) and lazy (`billing.lazy.tsx` via `createLazyFileRoute`). The plugin code-splits the lazy form automatically:
+
+```tsx
+// app/routes/billing.lazy.tsx
+import { createLazyFileRoute } from "@tanstack/react-router";
+
+export const Route = createLazyFileRoute("/billing")({
+  component: BillingPage,
+});
+
+function BillingPage() {
+  /* ... */
+}
+```
+
+This is the idiomatic path for apps that want the framework plugin to do all the splitting work without per-route `lazyRouteComponent` wrapping.
+
+### Why `registerLazy()` is not the answer
+
+`registerLazy()` is a different mechanism — it defers loading a module's **route structure**, not just its code. It was built for plugin-host apps where the set of module paths isn't known at startup (remote federation, runtime-installed bundles). In framework mode the host composes routes from files on disk or a hand-built tree, so there's no parent route for a runtime-loaded catch-all to attach to. `resolveManifest()` throws if a registry has lazy modules registered, with an error pointing back at the patterns above.
+
+If you had an app using `registerLazy()` on `resolve()` purely for code splitting, the migration to framework mode is: register each module eagerly, and put `lazyRouteComponent(() => import(...))` inside its `createRoutes` (or move the route to `.lazy.tsx` in `routes/`). You get the same splitting, without the runtime-loaded-structure machinery.
+
 ## TanStack Start specifics
 
 TanStack Start builds on TanStack Router file-based mode with SSR, server entry files, and server functions. The integration seam the module registry cares about — `__root.tsx` wrapping and the host-owned `createRouter` factory — is the same shape as the pure file-based case; Start's extras (server functions, server entry handler) are orthogonal.
@@ -180,7 +232,7 @@ export const Route = createRootRoute({
 
 > Start's public API (package name and document-scaffolding exports) has moved around the 1.x line — check the Start docs for the version you're on rather than copy-pasting imports. The integration seam for this library is stable: `manifest.Providers` around `<Outlet />` in the root layout, and `manifest` imported from a shared `registry.ts`.
 
-The `app/registry.ts` file is identical to the non-Start example. The modular-react packages do not touch `window`, `document`, `localStorage`, or any browser-only global at import or resolve time, so importing `registry.ts` from both the server entry and the client entry is safe. If your own `providers` include browser-only code, guard those with the same SSR pattern you'd use outside of the module system (e.g. `useEffect` for client-only subscriptions).
+The `app/registry.ts` file is identical to the non-Start example. The modular-react packages do not touch `window`, `document`, `localStorage`, or any browser-only global at import or resolve time, so importing `registry.ts` from both the server entry and the client entry is safe. If your own `providers` include browser-only code, guard those with the same SSR pattern you'd use outside the module system (e.g. `useEffect` for client-only subscriptions).
 
 ### Server functions are outside the module registry
 
