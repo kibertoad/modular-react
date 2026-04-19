@@ -13,7 +13,7 @@ Released alongside PR adjustments to PR #14 (Lokalise PoC gaps follow-up).
 - **`@modular-react/core`** — new exports: `mergeRouteStaticData` (router-agnostic merge helper used by `useZones` / `useRouteData`) and `AnyModuleDescriptor<TNavItem>` (alias for `ModuleDescriptor<any, any, any, TNavItem>` — internal-plumbing shorthand). Internal: `buildNavigationManifest`, `collectDynamicSlotFactories`, and `warnIgnoredLazyFields` now accept the alias rather than positional `any` filler.
 - **`@react-router-modules/core`** — re-exports its own router-narrowed `AnyModuleDescriptor` (preserves the React Router `createRoutes` signature).
 - **`@tanstack-react-modules/core`** — same as above for TanStack Router.
-- **`@react-router-modules/runtime`** — `useZones` and `useRouteData` now delegate merge logic to `mergeRouteStaticData` in core. No behavior change; dedup across the two runtimes.
+- **`@react-router-modules/runtime`** — `useZones` and `useRouteData` now delegate merge logic to `mergeRouteStaticData` in core. No behavior change; deduplicates merge logic across the two runtimes.
 - **`@tanstack-react-modules/runtime`** — same as above.
 
 ### Peer-dep ranges

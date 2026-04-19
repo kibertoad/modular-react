@@ -77,5 +77,11 @@ export interface LazyModuleDescriptor<
  * unlike {@link import("@modular-react/core").AnyModuleDescriptor}, which
  * targets the router-agnostic base descriptor.
  */
+// Uses `any` (not `Record<string, any>` / `SlotMap` / `Record<string, unknown>`)
+// for the filled-in generics on purpose: `any` is bivariant, so
+// `AnyModuleDescriptor<TNavItem>` accepts `ModuleDescriptor<TDeps, TSlots, …,
+// TNavItem>` for arbitrary concrete `TDeps` / `TSlots`. With the stricter
+// constraint defaults, TS refuses the assignment at generic boundaries —
+// which defeats the whole point of the alias.
 export type AnyModuleDescriptor<TNavItem extends NavigationItem = NavigationItem> =
   ModuleDescriptor<any, any, any, TNavItem>;

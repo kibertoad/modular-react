@@ -23,7 +23,7 @@ describe("AnyModuleDescriptor", () => {
       type AppNavItem = NavigationItem<"home" | "settings">;
 
       type Concrete = ModuleDescriptor<AppDeps, AppSlots, AppMeta, AppNavItem>;
-      expectTypeOf<Concrete>().toMatchTypeOf<AnyModuleDescriptor<AppNavItem>>();
+      expectTypeOf<Concrete>().toExtend<AnyModuleDescriptor<AppNavItem>>();
     });
 
     it("accepts arrays of concrete descriptors wherever AnyModuleDescriptor[] is expected", () => {
