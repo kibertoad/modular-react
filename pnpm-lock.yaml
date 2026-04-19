@@ -48,7 +48,7 @@ importers:
   packages/react:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.0.1
+        specifier: ^1.2.0
         version: link:../core
       '@testing-library/react':
         specifier: ^16.0.0
@@ -121,7 +121,7 @@ importers:
   packages/react-router-core:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
+        specifier: ^1.2.0
         version: link:../core
       '@types/react':
         specifier: ^19.0.0
@@ -151,13 +151,13 @@ importers:
   packages/react-router-runtime:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
+        specifier: ^1.2.0
         version: link:../core
       '@modular-react/react':
-        specifier: ^1.0.0
+        specifier: ^1.2.0
         version: link:../react
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: ^2.3.0
         version: link:../react-router-core
       '@testing-library/react':
         specifier: ^16.0.0
@@ -199,16 +199,16 @@ importers:
   packages/react-router-testing:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
+        specifier: ^1.2.0
         version: link:../core
       '@modular-react/react':
-        specifier: ^1.0.0
+        specifier: ^1.2.0
         version: link:../react
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: ^2.3.0
         version: link:../react-router-core
       '@react-router-modules/runtime':
-        specifier: ^2.0.0
+        specifier: ^2.3.0
         version: link:../react-router-runtime
       '@testing-library/react':
         specifier: ^16.0.0
@@ -278,7 +278,7 @@ importers:
   packages/tanstack-router-core:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
+        specifier: ^1.2.0
         version: link:../core
       '@tanstack/react-router':
         specifier: ^1.168.8
@@ -308,13 +308,13 @@ importers:
   packages/tanstack-router-runtime:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
+        specifier: ^1.2.0
         version: link:../core
       '@modular-react/react':
-        specifier: ^1.0.0
+        specifier: ^1.2.0
         version: link:../react
       '@tanstack-react-modules/core':
-        specifier: ^2.0.0
+        specifier: ^2.3.0
         version: link:../tanstack-router-core
       '@tanstack/react-router':
         specifier: ^1.168.8
@@ -356,16 +356,16 @@ importers:
   packages/tanstack-router-testing:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
+        specifier: ^1.2.0
         version: link:../core
       '@modular-react/react':
-        specifier: ^1.0.0
+        specifier: ^1.2.0
         version: link:../react
       '@tanstack-react-modules/core':
-        specifier: ^2.0.0
+        specifier: ^2.3.0
         version: link:../tanstack-router-core
       '@tanstack-react-modules/runtime':
-        specifier: ^2.0.0
+        specifier: ^2.3.0
         version: link:../tanstack-router-runtime
       '@tanstack/react-router':
         specifier: ^1.168.8
@@ -404,7 +404,7 @@ importers:
   packages/testing:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
+        specifier: ^1.2.0
         version: link:../core
       '@types/react':
         specifier: ^19.0.0

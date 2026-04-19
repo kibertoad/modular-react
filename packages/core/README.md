@@ -12,9 +12,10 @@ npm install @modular-react/core
 
 ## What's included
 
-- **Types**: `ModuleDescriptor`, `LazyModuleDescriptor`, `NavigationItem`, `ModuleLifecycle`, `ReactiveService`, `SlotMap`, `SlotMapOf`, `ZoneMap`, `ZoneMapOf`, `Store`, `RegistryConfig`, `NavigationGroup`, `NavigationManifest`, `ModuleEntry`, `DynamicSlotFactory`, `SlotFilter`
+- **Types**: `ModuleDescriptor`, `AnyModuleDescriptor`, `LazyModuleDescriptor`, `NavigationItem`, `ModuleLifecycle`, `ReactiveService`, `SlotMap`, `SlotMapOf`, `ZoneMap`, `ZoneMapOf`, `Store`, `RegistryConfig`, `NavigationGroup`, `NavigationManifest`, `ModuleEntry`, `DynamicSlotFactory`, `SlotFilter`
 - **Slots**: `buildSlotsManifest`, `collectDynamicSlotFactories`, `evaluateDynamicSlots`
 - **Navigation**: `buildNavigationManifest`, `resolveNavHref`
+- **Route data**: `mergeRouteStaticData` (router-agnostic merge helper used by `useZones` / `useRouteData` in the runtime packages)
 - **Validation**: `validateNoDuplicateIds`, `validateDependencies`
 - **Store**: `createStore` (a lightweight zustand-compatible store, no middleware)
 - **Detection**: `isStore`, `isStoreApi` (alias), `isReactiveService`, `separateDeps`
@@ -87,6 +88,48 @@ const href = resolveNavHref(item, { workspaceId });
 ```
 
 See [docs/navigation.md](../../docs/navigation.md) for the full guide.
+
+## AnyModuleDescriptor
+
+`ModuleDescriptor` has four type parameters (`TSharedDependencies`, `TSlots`, `TMeta`, `TNavItem`). Internal helpers — navigation builders, lazy-field warnings, test fixtures — often only care about one of them (usually `TNavItem`), and writing `ModuleDescriptor<any, any, any, AppNavItem>` everywhere is noisy.
+
+`AnyModuleDescriptor<TNavItem>` is the shorthand:
+
+```typescript
+import type { AnyModuleDescriptor, NavigationItem } from "@modular-react/core";
+
+// Accept any module shape, but preserve the nav item narrowing.
+function collectNav<TNavItem extends NavigationItem>(
+  modules: readonly AnyModuleDescriptor<TNavItem>[],
+) {
+  return modules.flatMap((m) => m.navigation ?? []);
+}
+```
+
+Prefer the full `ModuleDescriptor<...>` at user-facing boundaries — the alias is intended for generic plumbing where the extra positional `any`s would be pure filler. `@react-router-modules/core` and `@tanstack-react-modules/core` export their own `AnyModuleDescriptor` that preserve their router-specific `createRoutes` narrowing; import the alias from the router package you already depend on.
+
+## mergeRouteStaticData
+
+Router-agnostic merge helper used internally by the `useZones` and `useRouteData` hooks in the runtime packages. The two routers diverge on where they park per-route static data (`handle` in React Router, `staticData` in TanStack Router) but agree on the merge rules — so the shared helper takes the merge rules and a getter that plucks the data field.
+
+You usually don't call it directly — use the `useZones` / `useRouteData` wrappers. Reach for it if you're building a second hook alongside them that reads a **different** field off the same matches:
+
+```typescript
+import { mergeRouteStaticData } from "@modular-react/core";
+import { useMatches } from "react-router";
+
+// Imagine routes attach a `loaderHints` field alongside `handle` (e.g. via a
+// bespoke meta helper). This hook surfaces it with the same deepest-wins
+// merge semantics the built-in hooks use — without hand-rolling the merge
+// loop a third time.
+type WithLoaderHints = { loaderHints?: Record<string, unknown> };
+
+function useLoaderHints<T extends object>(): Partial<T> {
+  return mergeRouteStaticData<T>(useMatches(), (match) => (match as WithLoaderHints).loaderHints);
+}
+```
+
+Semantics: iterates matches in the order given (root → leaf), deeper matches overwrite shallower ones per key, `undefined` values are skipped (so a leaf can't silently clobber an ancestor by omitting the key or setting it to `undefined`). Arrays at the data position are ignored rather than enumerated as index-keyed objects.
 
 ## Full documentation
 

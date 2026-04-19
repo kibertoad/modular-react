@@ -1,6 +1,6 @@
 {
   "name": "@tanstack-react-modules/runtime",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
@@ -29,9 +29,9 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@modular-react/core": "^1.0.0",
-    "@modular-react/react": "^1.0.0",
-    "@tanstack-react-modules/core": "^2.0.0",
+    "@modular-react/core": "^1.2.0",
+    "@modular-react/react": "^1.2.0",
+    "@tanstack-react-modules/core": "^2.3.0",
     "@tanstack/react-router": "^1.168.8",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
@@ -46,9 +46,9 @@
     "zustand": "^5.0.0"
   },
   "peerDependencies": {
-    "@modular-react/core": "^1.0.0",
-    "@modular-react/react": "^1.0.0",
-    "@tanstack-react-modules/core": "^2.0.0",
+    "@modular-react/core": "^1.2.0",
+    "@modular-react/react": "^1.2.0",
+    "@tanstack-react-modules/core": "^2.3.0",
     "@tanstack/react-router": "^1.168.8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

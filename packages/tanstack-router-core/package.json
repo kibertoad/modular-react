@@ -1,6 +1,6 @@
 {
   "name": "@tanstack-react-modules/core",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
@@ -29,7 +29,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@modular-react/core": "^1.0.0",
+    "@modular-react/core": "^1.2.0",
     "@tanstack/react-router": "^1.168.8",
     "@types/react": "^19.0.0",
     "react": "^19.0.0",
@@ -40,7 +40,7 @@
     "zustand": "^5.0.0"
   },
   "peerDependencies": {
-    "@modular-react/core": "^1.0.1",
+    "@modular-react/core": "^1.2.0",
     "@tanstack/react-router": "^1.168.8",
     "react": "^19.0.0",
     "zustand": "^5.0.0"

@@ -330,3 +330,34 @@ export interface LazyModuleDescriptor<
     default: ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>;
   }>;
 }
+
+/**
+ * {@link ModuleDescriptor} with every generic defaulted except `TNavItem`.
+ *
+ * Shorthand for the `ModuleDescriptor<any, any, any, TNavItem>` pattern
+ * that shows up in generic plumbing (manifest builders, registry
+ * signatures, test helpers) where only the nav item shape matters and
+ * the other parameters would be filler.
+ *
+ * Prefer the fully-typed `ModuleDescriptor<TDeps, TSlots, TMeta, TNavItem>`
+ * at user-facing boundaries — this alias is intended for internal framework
+ * code and type-utility sites.
+ *
+ * @example
+ * ```ts
+ * // Accept modules that share a nav item shape but may differ on deps/slots.
+ * function collectNav<TNavItem extends NavigationItem>(
+ *   modules: readonly AnyModuleDescriptor<TNavItem>[],
+ * ) {
+ *   return modules.flatMap((m) => m.navigation ?? [])
+ * }
+ * ```
+ */
+// Uses `any` (not `Record<string, any>` / `SlotMap` / `Record<string, unknown>`)
+// for the filled-in generics on purpose: `any` is bivariant, so
+// `AnyModuleDescriptor<TNavItem>` accepts `ModuleDescriptor<TDeps, TSlots, …,
+// TNavItem>` for arbitrary concrete `TDeps` / `TSlots`. With the stricter
+// constraint defaults, TS refuses the assignment at generic boundaries —
+// which defeats the whole point of the alias.
+export type AnyModuleDescriptor<TNavItem extends NavigationItem = NavigationItem> =
+  ModuleDescriptor<any, any, any, TNavItem>;

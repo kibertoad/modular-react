@@ -1,16 +1,15 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
 import { buildNavigationManifest, resolveNavHref } from "./navigation.js";
-import type { ModuleDescriptor, NavigationItem } from "./types.js";
+import type { AnyModuleDescriptor, NavigationItem } from "./types.js";
 
 function mod<TNavItem extends NavigationItem>(
   nav: readonly TNavItem[],
-): ModuleDescriptor<any, any, any, TNavItem> {
-  return { id: "test", version: "1.0.0", navigation: nav } as ModuleDescriptor<
-    any,
-    any,
-    any,
-    TNavItem
-  >;
+): AnyModuleDescriptor<TNavItem> {
+  return {
+    id: "test",
+    version: "1.0.0",
+    navigation: nav,
+  } as AnyModuleDescriptor<TNavItem>;
 }
 
 describe("buildNavigationManifest", () => {
