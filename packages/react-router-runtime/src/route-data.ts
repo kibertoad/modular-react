@@ -1,10 +1,11 @@
 import { useMatches } from "react-router";
+import { mergeRouteStaticData } from "@modular-react/core";
 
 /**
  * Read merged `handle` values from the currently matched route hierarchy —
  * the "non-component zone" escape hatch.
  *
- * {@link useZones} is the component-typed channel: each value must be a
+ * `useZones` is the component-typed channel: each value must be a
  * `ComponentType | undefined` so the shell can render it in a layout
  * region. That constraint is a useful rail 95% of the time, but it gets in
  * the way for non-component metadata the module wants to attach to a route —
@@ -67,19 +68,19 @@ import { useMatches } from "react-router";
  * the return value (`Object.keys(useRouteData())`, `JSON.stringify`, etc.)
  * will see component entries mixed with data entries — read by declared
  * key, not by iteration.
+ *
+ * ## Return value identity
+ *
+ * A fresh object is produced on every render — the hook cannot memoize
+ * safely because the `matches` array from React Router is itself freshly
+ * allocated per render. Destructure the fields you need (field values are
+ * stable across renders when the route hierarchy is unchanged); do **not**
+ * pass the whole returned object into a `useEffect` / `useMemo` dependency
+ * array or it will re-fire every render.
  */
 export function useRouteData<TRouteData extends object>(): Partial<TRouteData> {
-  const matches = useMatches();
-  const merged: Record<string, unknown> = {};
-  for (const match of matches) {
-    const data = (match as { handle?: unknown }).handle;
-    if (data && typeof data === "object") {
-      for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-        if (value !== undefined) {
-          merged[key] = value;
-        }
-      }
-    }
-  }
-  return merged as Partial<TRouteData>;
+  return mergeRouteStaticData<TRouteData>(
+    useMatches(),
+    (match) => (match as { handle?: unknown }).handle,
+  );
 }

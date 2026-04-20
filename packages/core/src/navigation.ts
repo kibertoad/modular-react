@@ -1,4 +1,4 @@
-import type { ModuleDescriptor, NavigationItem } from "./types.js";
+import type { AnyModuleDescriptor, NavigationItem } from "./types.js";
 import type { NavigationManifest, NavigationGroup } from "./runtime-types.js";
 
 /**
@@ -14,7 +14,7 @@ import type { NavigationManifest, NavigationGroup } from "./runtime-types.js";
  * up from the module list.
  */
 export function buildNavigationManifest<TNavItem extends NavigationItem = NavigationItem>(
-  modules: readonly ModuleDescriptor<any, any, any, TNavItem>[],
+  modules: readonly AnyModuleDescriptor<TNavItem>[],
 ): NavigationManifest<TNavItem> {
   const allItems: TNavItem[] = [];
 

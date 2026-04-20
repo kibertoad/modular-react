@@ -11,7 +11,7 @@ npm install @tanstack-react-modules/core
 ## What's included
 
 - **Module definition**: `defineModule`, `defineSlots`
-- **Types**: `ModuleDescriptor` (with TanStack Router `createRoute` support), `LazyModuleDescriptor`, `NavigationItem`, `ModuleLifecycle`, `ReactiveService`, `SlotMap`, `SlotMapOf`, `ZoneMap`, `ZoneMapOf`
+- **Types**: `ModuleDescriptor` (with TanStack Router `createRoute` support), `AnyModuleDescriptor` (router-narrowed shorthand for internal plumbing), `LazyModuleDescriptor`, `NavigationItem`, `ModuleLifecycle`, `ReactiveService`, `SlotMap`, `SlotMapOf`, `ZoneMap`, `ZoneMapOf`
 - **Shared dependencies**: `SharedDependenciesContext`, `createSharedHooks` (returns `useStore`, `useService`, `useReactiveService`, `useOptional`)
 - **Scoped stores**: `createScopedStore` with `useScoped` hook
 - **Detection**: `isStoreApi`, `isReactiveService`, `separateDeps`

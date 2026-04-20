@@ -1,4 +1,4 @@
-import type { ModuleDescriptor } from "./types.js";
+import type { AnyModuleDescriptor } from "./types.js";
 
 /**
  * Fields on a {@link ModuleDescriptor} that are only honored when the module
@@ -34,10 +34,7 @@ const IGNORED_LAZY_FIELDS = [
  * Pass `runtimeLabel` (e.g. `"@react-router-modules/runtime"`) so the
  * warning is greppable to the runtime that surfaced it.
  */
-export function warnIgnoredLazyFields(
-  descriptor: ModuleDescriptor<any, any, any, any>,
-  runtimeLabel: string,
-): void {
+export function warnIgnoredLazyFields(descriptor: AnyModuleDescriptor, runtimeLabel: string): void {
   const ignored = IGNORED_LAZY_FIELDS.filter(
     (f) => (descriptor as unknown as Record<string, unknown>)[f] !== undefined,
   );

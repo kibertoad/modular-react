@@ -1,6 +1,6 @@
 {
   "name": "@modular-react/react",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "React bindings for @modular-react/core: hooks, contexts, error boundaries, and scoped stores.",
   "repository": {
     "type": "git",
@@ -30,7 +30,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@modular-react/core": "^1.0.1",
+    "@modular-react/core": "^1.2.0",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -45,7 +45,7 @@
     "vitest": "^4.1.0"
   },
   "peerDependencies": {
-    "@modular-react/core": "^1.0.1",
+    "@modular-react/core": "^1.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   }

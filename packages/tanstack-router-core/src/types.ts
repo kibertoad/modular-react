@@ -88,3 +88,23 @@ export interface LazyModuleDescriptor<
     default: ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>;
   }>;
 }
+
+/**
+ * TanStack Router-narrowed {@link ModuleDescriptor} with every generic
+ * defaulted except `TNavItem`.
+ *
+ * Shorthand for `ModuleDescriptor<any, any, any, TNavItem>` in internal
+ * plumbing (manifest builders, registry signatures, test helpers) where
+ * only the nav item shape matters and the other parameters would be
+ * filler. Preserves the TanStack Router-specific `createRoutes` signature
+ * unlike {@link import("@modular-react/core").AnyModuleDescriptor}, which
+ * targets the router-agnostic base descriptor.
+ */
+// Uses `any` (not `Record<string, any>` / `SlotMap` / `Record<string, unknown>`)
+// for the filled-in generics on purpose: `any` is bivariant, so
+// `AnyModuleDescriptor<TNavItem>` accepts `ModuleDescriptor<TDeps, TSlots, …,
+// TNavItem>` for arbitrary concrete `TDeps` / `TSlots`. With the stricter
+// constraint defaults, TS refuses the assignment at generic boundaries —
+// which defeats the whole point of the alias.
+export type AnyModuleDescriptor<TNavItem extends NavigationItem = NavigationItem> =
+  ModuleDescriptor<any, any, any, TNavItem>;

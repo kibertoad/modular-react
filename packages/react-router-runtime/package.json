@@ -1,6 +1,6 @@
 {
   "name": "@react-router-modules/runtime",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
@@ -29,9 +29,9 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@modular-react/core": "^1.0.0",
-    "@modular-react/react": "^1.0.0",
-    "@react-router-modules/core": "^2.0.0",
+    "@modular-react/core": "^1.2.0",
+    "@modular-react/react": "^1.2.0",
+    "@react-router-modules/core": "^2.3.0",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -46,9 +46,9 @@
     "zustand": "^5.0.0"
   },
   "peerDependencies": {
-    "@modular-react/core": "^1.0.1",
-    "@modular-react/react": "^1.0.0",
-    "@react-router-modules/core": "^2.0.0",
+    "@modular-react/core": "^1.2.0",
+    "@modular-react/react": "^1.2.0",
+    "@react-router-modules/core": "^2.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router": "^7.6.0",

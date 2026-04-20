@@ -1,4 +1,5 @@
 import { useMatches } from "@tanstack/react-router";
+import { mergeRouteStaticData } from "@modular-react/core";
 import type { ZoneMapOf } from "@tanstack-react-modules/core";
 
 /**
@@ -30,19 +31,14 @@ import type { ZoneMapOf } from "@tanstack-react-modules/core";
  *     detailPanel: UserDetailSidebar,
  *   },
  * })
+ *
+ * A fresh object is returned on every render — destructure the zones you
+ * need at the top of your layout rather than passing the whole result into
+ * a `useEffect` / `useMemo` dependency array.
  */
 export function useZones<TZones extends ZoneMapOf<TZones>>(): Partial<TZones> {
-  const matches = useMatches();
-  const merged: Record<string, unknown> = {};
-  for (const match of matches) {
-    const data = (match as any).staticData;
-    if (data && typeof data === "object") {
-      for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-        if (value !== undefined) {
-          merged[key] = value;
-        }
-      }
-    }
-  }
-  return merged as Partial<TZones>;
+  return mergeRouteStaticData<TZones>(
+    useMatches(),
+    (match) => (match as { staticData?: unknown }).staticData,
+  );
 }

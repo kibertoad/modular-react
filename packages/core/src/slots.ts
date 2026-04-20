@@ -1,4 +1,4 @@
-import type { ModuleDescriptor } from "./types.js";
+import type { AnyModuleDescriptor, ModuleDescriptor } from "./types.js";
 
 /**
  * A dynamic slot factory — a function that receives a deps snapshot
@@ -54,7 +54,7 @@ export function buildSlotsManifest<TSlots extends { [K in keyof TSlots]: readonl
  * Returns an empty array when no module contributes dynamic slots.
  */
 export function collectDynamicSlotFactories(
-  modules: readonly ModuleDescriptor<any, any>[],
+  modules: readonly AnyModuleDescriptor[],
 ): DynamicSlotFactory[] {
   const factories: DynamicSlotFactory[] = [];
   for (const mod of modules) {

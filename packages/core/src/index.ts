@@ -1,6 +1,7 @@
 // Types
 export type {
   ModuleDescriptor,
+  AnyModuleDescriptor,
   LazyModuleDescriptor,
   NavigationItem,
   ModuleLifecycle,
@@ -28,6 +29,9 @@ export type { DynamicSlotFactory, SlotFilter } from "./slots.js";
 
 // Navigation
 export { buildNavigationManifest, resolveNavHref } from "./navigation.js";
+
+// Route data
+export { mergeRouteStaticData } from "./route-data.js";
 
 // Lazy-module helpers
 export { warnIgnoredLazyFields } from "./lazy-module.js";
