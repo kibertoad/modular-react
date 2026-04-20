@@ -94,7 +94,7 @@ export interface ModuleDescriptor<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 > {
   /** Unique module identifier, e.g. "billing", "user-profile" */
   readonly id: string;
@@ -273,6 +273,26 @@ export interface NavigationItem<TLabel extends string = string, TContext = void,
   readonly meta?: TMeta;
 }
 
+/**
+ * Structural upper bound used by every `TNavItem extends …` constraint in
+ * this library — NOT `NavigationItem`, which resolves to
+ * `NavigationItem<string, void, unknown>` and narrows `to` to `string`.
+ *
+ * `(ctx: never) => string` accepts any concrete `(ctx: TContext) => string`
+ * via function-parameter contravariance (`never` is a subtype of every type).
+ * That lets consumers pass `NavigationItem<Keys, Ctx, Meta>` as `TNavItem`
+ * without casts, while plain `to: string` still satisfies the bound.
+ */
+export interface NavigationItemBase {
+  readonly label: unknown;
+  readonly to: string | ((ctx: never) => string);
+  readonly icon?: unknown;
+  readonly group?: string;
+  readonly order?: number;
+  readonly hidden?: boolean;
+  readonly meta?: unknown;
+}
+
 export interface ModuleLifecycle<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
 > {
@@ -317,7 +337,7 @@ export interface LazyModuleDescriptor<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 > {
   /** Unique module identifier */
   readonly id: string;
@@ -346,7 +366,7 @@ export interface LazyModuleDescriptor<
  * @example
  * ```ts
  * // Accept modules that share a nav item shape but may differ on deps/slots.
- * function collectNav<TNavItem extends NavigationItem>(
+ * function collectNav<TNavItem extends NavigationItemBase>(
  *   modules: readonly AnyModuleDescriptor<TNavItem>[],
  * ) {
  *   return modules.flatMap((m) => m.navigation ?? [])
@@ -359,5 +379,5 @@ export interface LazyModuleDescriptor<
 // TNavItem>` for arbitrary concrete `TDeps` / `TSlots`. With the stricter
 // constraint defaults, TS refuses the assignment at generic boundaries —
 // which defeats the whole point of the alias.
-export type AnyModuleDescriptor<TNavItem extends NavigationItem = NavigationItem> =
+export type AnyModuleDescriptor<TNavItem extends NavigationItemBase = NavigationItem> =
   ModuleDescriptor<any, any, any, TNavItem>;

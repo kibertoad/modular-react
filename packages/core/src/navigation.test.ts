@@ -1,8 +1,8 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
 import { buildNavigationManifest, resolveNavHref } from "./navigation.js";
-import type { AnyModuleDescriptor, NavigationItem } from "./types.js";
+import type { AnyModuleDescriptor, NavigationItem, NavigationItemBase } from "./types.js";
 
-function mod<TNavItem extends NavigationItem>(
+function mod<TNavItem extends NavigationItemBase>(
   nav: readonly TNavItem[],
 ): AnyModuleDescriptor<TNavItem> {
   return {

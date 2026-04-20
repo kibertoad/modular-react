@@ -1,4 +1,4 @@
-import type { AnyModuleDescriptor, NavigationItem } from "./types.js";
+import type { AnyModuleDescriptor, NavigationItem, NavigationItemBase } from "./types.js";
 import type { NavigationManifest, NavigationGroup } from "./runtime-types.js";
 
 /**
@@ -13,7 +13,7 @@ import type { NavigationManifest, NavigationGroup } from "./runtime-types.js";
  * call `buildNavigationManifest<AppNavItem>([...])` or let inference pick it
  * up from the module list.
  */
-export function buildNavigationManifest<TNavItem extends NavigationItem = NavigationItem>(
+export function buildNavigationManifest<TNavItem extends NavigationItemBase = NavigationItem>(
   modules: readonly AnyModuleDescriptor<TNavItem>[],
 ): NavigationManifest<TNavItem> {
   const allItems: TNavItem[] = [];
@@ -35,7 +35,7 @@ export function buildNavigationManifest<TNavItem extends NavigationItem = Naviga
     const orderDiff = (a.order ?? 999) - (b.order ?? 999);
     if (orderDiff !== 0) return orderDiff;
     if (a.label === b.label) return 0;
-    return a.label < b.label ? -1 : 1;
+    return (a.label as string) < (b.label as string) ? -1 : 1;
   });
 
   // Group items

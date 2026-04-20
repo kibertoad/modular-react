@@ -1,4 +1,4 @@
-import type { AnyModuleDescriptor, ModuleDescriptor } from "./types.js";
+import type { AnyModuleDescriptor, ModuleDescriptor, NavigationItemBase } from "./types.js";
 
 /**
  * A dynamic slot factory — a function that receives a deps snapshot
@@ -24,7 +24,7 @@ export type SlotFilter = (
  * in the result — even if no module contributes to it.
  */
 export function buildSlotsManifest<TSlots extends { [K in keyof TSlots]: readonly unknown[] }>(
-  modules: readonly ModuleDescriptor<any, TSlots>[],
+  modules: readonly ModuleDescriptor<any, TSlots, any, NavigationItemBase>[],
   defaults?: Partial<{ [K in keyof TSlots]: TSlots[K] }>,
 ): TSlots {
   const result: Record<string, unknown[]> = {};

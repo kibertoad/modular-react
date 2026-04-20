@@ -1,4 +1,4 @@
-import type { NavigationItem } from "@modular-react/core";
+import type { NavigationItem, NavigationItemBase } from "@modular-react/core";
 import type { ModuleDescriptor, SlotMap, SlotMapOf } from "./types.js";
 
 /**
@@ -21,7 +21,7 @@ export function defineModule<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 >(
   descriptor: ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>,
 ): ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem> {

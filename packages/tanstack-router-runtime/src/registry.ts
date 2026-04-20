@@ -17,6 +17,7 @@ import {
 } from "@modular-react/core";
 import type {
   NavigationItem,
+  NavigationItemBase,
   SlotFilter,
   NavigationManifest,
   ModuleEntry,
@@ -37,7 +38,7 @@ import { createProvidersComponent } from "./providers.js";
 export interface ModuleRegistry<
   TSharedDependencies extends Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 > {
   /**
    * Register an eager module. The module's `TNavItem` must match the
@@ -157,7 +158,7 @@ export interface ResolveOptions<
  */
 interface CommonAssembly<
   TSlots extends SlotMapOf<TSlots>,
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 > {
   modules: readonly ModuleEntry[];
   navigation: NavigationManifest<TNavItem>;
@@ -175,7 +176,7 @@ interface CommonAssembly<
 export function createRegistry<
   TSharedDependencies extends Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 >(
   config: RegistryConfig<TSharedDependencies, TSlots>,
 ): ModuleRegistry<TSharedDependencies, TSlots, TNavItem> {

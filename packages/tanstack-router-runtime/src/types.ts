@@ -1,6 +1,12 @@
 import type { StoreApi } from "zustand";
 import type { Router } from "@tanstack/react-router";
-import type { NavigationItem, ReactiveService, SlotMap, SlotMapOf } from "@modular-react/core";
+import type {
+  NavigationItem,
+  NavigationItemBase,
+  ReactiveService,
+  SlotMap,
+  SlotMapOf,
+} from "@modular-react/core";
 
 // Re-export shared runtime types from @modular-react/core
 export type { NavigationGroup, NavigationManifest, ModuleEntry } from "@modular-react/core";
@@ -42,7 +48,7 @@ export interface RegistryConfig<
 
 export interface ApplicationManifest<
   TSlots extends SlotMapOf<TSlots> = SlotMap,
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 > {
   /** The root React component with all providers wired */
   readonly App: React.ComponentType;
@@ -160,7 +166,7 @@ export interface ResolveManifestOptions<
  */
 export interface ResolvedManifest<
   TSlots extends SlotMapOf<TSlots> = SlotMap,
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 > {
   /**
    * Context provider component — wraps children with SharedDependencies,
