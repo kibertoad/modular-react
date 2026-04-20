@@ -79,6 +79,7 @@ Conceptual documentation for building apps with the framework. Start with a gett
 | [Shell Patterns for React Router](docs/shell-patterns-react-router.md)             | Module route shape, route zones via `handle`, `useRouteData` for non-component metadata, auth guards, public shell routes.                 |
 | [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)       | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `useRouteData`, `beforeLoad` auth.                   |
 | [Workspace Patterns](docs/workspace-patterns.md)                                   | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                                    |
+| [Sibling modules sharing a screen](docs/sibling-modules-shared-screen.md)          | One generic screen (e.g. an integration manager) rendered by several sibling modules with per-module config flowing through typed handle.  |
 
 ## What the code looks like
 
@@ -159,6 +160,15 @@ authStore.subscribe(manifest.recalculateSlots);
 ```
 
 See [Framework-mode (TanStack Router & Start) guide](docs/framework-mode-tanstack-router.md) for the full walkthrough and the SSR considerations.
+
+## Examples
+
+Runnable examples live under [`examples/`](examples/), split by router integration. Each is a self-contained pnpm workspace that consumes the library via `workspace:*`:
+
+- [`examples/react-router/integration-manager/`](examples/react-router/integration-manager) — sibling modules sharing a screen (React Router)
+- [`examples/tanstack-router/integration-manager/`](examples/tanstack-router/integration-manager) — sibling modules sharing a screen (TanStack Router)
+
+See [`examples/README.md`](examples/README.md) for how to run them and how to add new ones.
 
 ## Packages
 

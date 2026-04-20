@@ -1,2 +1,5 @@
 packages:
   - "packages/*"
+  - "examples/*/*/app-shared"
+  - "examples/*/*/modules/*"
+  - "examples/*/*/shell"

@@ -1,0 +1,31 @@
+{
+  "name": "@example-tsr-integration-manager/shell",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@example-tsr-integration-manager/app-shared": "workspace:*",
+    "@example-tsr-integration-manager/contentful": "workspace:*",
+    "@example-tsr-integration-manager/github": "workspace:*",
+    "@example-tsr-integration-manager/strapi": "workspace:*",
+    "@modular-react/react": "workspace:*",
+    "@tanstack-react-modules/core": "workspace:*",
+    "@tanstack-react-modules/runtime": "workspace:*",
+    "@tanstack/react-router": "^1.168.8",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^6.0.2",
+    "vite": "^6.0.0"
+  }
+}
