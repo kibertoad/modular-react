@@ -1,4 +1,10 @@
-import type { ModuleDescriptor, NavigationItem, SlotMap, SlotMapOf } from "./types.js";
+import type {
+  ModuleDescriptor,
+  NavigationItem,
+  NavigationItemBase,
+  SlotMap,
+  SlotMapOf,
+} from "./types.js";
 
 /**
  * Identity function that provides type inference for module descriptors.
@@ -35,7 +41,7 @@ export function defineModule<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 >(
   descriptor: ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>,
 ): ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem> {

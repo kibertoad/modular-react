@@ -4,6 +4,7 @@ export {
   type ModuleDescriptor,
   type LazyModuleDescriptor,
   type NavigationItem,
+  type NavigationItemBase,
   type ModuleLifecycle,
   type ReactiveService,
   type SlotMap,

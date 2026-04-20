@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
-import type { NavigationItem, NavigationManifest } from "@modular-react/core";
+import type { NavigationItem, NavigationItemBase, NavigationManifest } from "@modular-react/core";
 
-export const NavigationContext = createContext<NavigationManifest | null>(null);
+export const NavigationContext = createContext<NavigationManifest<NavigationItemBase> | null>(null);
 
 /**
  * Access the auto-generated navigation manifest from registered modules.
@@ -21,7 +21,7 @@ export const NavigationContext = createContext<NavigationManifest | null>(null);
  * ```
  */
 export function useNavigation<
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 >(): NavigationManifest<TNavItem> {
   const nav = useContext(NavigationContext);
   if (!nav) {
