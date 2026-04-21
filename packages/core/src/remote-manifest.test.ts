@@ -222,9 +222,9 @@ describe("RemoteModuleManifest (type-level)", () => {
     type AppRemoteNavItem = RemoteNavigationItem<Keys, Meta>;
     type AppRemoteManifest = RemoteModuleManifest<TestSlots, AppRemoteNavItem>;
 
-    expectTypeOf<NonNullable<AppRemoteManifest["navigation"]>[number]>().toEqualTypeOf<
-      AppRemoteNavItem
-    >();
+    expectTypeOf<
+      NonNullable<AppRemoteManifest["navigation"]>[number]
+    >().toEqualTypeOf<AppRemoteNavItem>();
 
     // And the return type of mergeRemoteManifests preserves it too.
     const merged = mergeRemoteManifests<TestSlots, AppRemoteNavItem>([]);

@@ -36,20 +36,20 @@ Remote manifests deliberately do **not** deliver React components, routes, or bu
 
 Remote manifests are a **strict subset** of a [`ModuleDescriptor`](../packages/core/src/types.ts) — only data that survives a round trip through JSON.
 
-| Contribution                              | Remote? | Why                                                                                          |
-| ----------------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
-| `slots`                                   | Yes     | Plain data, concatenated into the app's slot map.                                            |
-| `navigation` (string `to`, string `icon`) | Yes     | Plain data. The shell maps icon identifiers to local components.                             |
-| `meta`                                    | Yes     | Plain data, surfaced for catalog UIs.                                                        |
-| `component`, `zones`                      | No      | React components cannot cross the wire.                                                      |
-| `createRoutes`                            | No      | Route builders are framework-specific functions returning live component references.         |
-| `dynamicSlots`, `lifecycle`               | No      | Functions.                                                                                   |
-| `requires`, `optionalRequires`            | No      | Dependency contracts belong to the consuming code, not the remote payload.                   |
+| Contribution                              | Remote? | Why                                                                                  |
+| ----------------------------------------- | ------- | ------------------------------------------------------------------------------------ |
+| `slots`                                   | Yes     | Plain data, concatenated into the app's slot map.                                    |
+| `navigation` (string `to`, string `icon`) | Yes     | Plain data. The shell maps icon identifiers to local components.                     |
+| `meta`                                    | Yes     | Plain data, surfaced for catalog UIs.                                                |
+| `component`, `zones`                      | No      | React components cannot cross the wire.                                              |
+| `createRoutes`                            | No      | Route builders are framework-specific functions returning live component references. |
+| `dynamicSlots`, `lifecycle`               | No      | Functions.                                                                           |
+| `requires`, `optionalRequires`            | No      | Dependency contracts belong to the consuming code, not the remote payload.           |
 
 The library ships a narrowed type that enforces this subset at compile time:
 
 ```ts
-import type { RemoteModuleManifest, RemoteNavigationItem } from "@modular-react/core"
+import type { RemoteModuleManifest, RemoteNavigationItem } from "@modular-react/core";
 ```
 
 `RemoteNavigationItem` narrows `to` to `string` and `icon` to `string` — the two fields on a regular [`NavigationItem`](../packages/core/src/types.ts) that aren't JSON-safe. `RemoteModuleManifest` refuses the non-serializable `ModuleDescriptor` fields up front, so the type itself documents the wire contract.
@@ -93,13 +93,13 @@ Pick the slot / nav / meta shapes you want backends to target. Alias `RemoteModu
 
 ```ts
 // app-shared/src/remote.ts
-import type { RemoteModuleManifest, RemoteNavigationItem } from "@modular-react/core"
-import type { AppSlots } from "./slots"
-import type { AppNavMeta, AppNavLabel } from "./nav"
+import type { RemoteModuleManifest, RemoteNavigationItem } from "@modular-react/core";
+import type { AppSlots } from "./slots";
+import type { AppNavMeta, AppNavLabel } from "./nav";
 
-type AppRemoteNavItem = RemoteNavigationItem<AppNavLabel, AppNavMeta>
+type AppRemoteNavItem = RemoteNavigationItem<AppNavLabel, AppNavMeta>;
 
-export type AppRemoteManifest = RemoteModuleManifest<AppSlots, AppRemoteNavItem>
+export type AppRemoteManifest = RemoteModuleManifest<AppSlots, AppRemoteNavItem>;
 ```
 
 Document this type for the backend team. If you use an OpenAPI / JSON Schema pipeline, generate the server-side type from it — the payload contract is now just "an `AppRemoteManifest[]`".
@@ -114,8 +114,8 @@ Document this type for the backend team. If you use an OpenAPI / JSON Schema pip
 
 ```ts
 // services/integrations-client.ts
-import { z } from "zod"
-import type { AppRemoteManifest } from "@myorg/app-shared"
+import { z } from "zod";
+import type { AppRemoteManifest } from "@myorg/app-shared";
 
 const RemoteNavItemSchema = z.object({
   label: z.string(),
@@ -125,7 +125,7 @@ const RemoteNavItemSchema = z.object({
   order: z.number().optional(),
   hidden: z.boolean().optional(),
   meta: z.record(z.unknown()).optional(),
-})
+});
 
 const RemoteManifestSchema = z.object({
   id: z.string(),
@@ -133,14 +133,14 @@ const RemoteManifestSchema = z.object({
   slots: z.record(z.array(z.unknown())).optional(),
   navigation: z.array(RemoteNavItemSchema).optional(),
   meta: z.record(z.unknown()).optional(),
-})
+});
 
 export async function fetchIntegrationManifests(
   httpClient: HttpClient,
 ): Promise<AppRemoteManifest[]> {
-  const raw = await httpClient.get("/api/integrations")
-  const parsed = z.array(RemoteManifestSchema).parse(raw)
-  return parsed as AppRemoteManifest[]
+  const raw = await httpClient.get("/api/integrations");
+  const parsed = z.array(RemoteManifestSchema).parse(raw);
+  return parsed as AppRemoteManifest[];
 }
 ```
 
@@ -155,7 +155,7 @@ queryClient.fetchQuery({
   queryKey: ["integrations"],
   queryFn: () => fetchIntegrationManifests(httpClient),
   staleTime: 5 * 60_000,
-})
+});
 ```
 
 Whether you hold the result in React Query's cache or mirror it into a Zustand store is a shell-level choice; `mergeRemoteManifests` doesn't care where the array came from.
@@ -166,14 +166,14 @@ A small Zustand store is the simplest fit — `dynamicSlots` runs outside React 
 
 ```ts
 // stores/integrations-store.ts
-import { createStore } from "zustand/vanilla"
-import type { AppRemoteManifest } from "@myorg/app-shared"
+import { createStore } from "zustand/vanilla";
+import type { AppRemoteManifest } from "@myorg/app-shared";
 
 interface IntegrationsState {
-  status: "idle" | "loading" | "ready" | "error"
-  manifests: readonly AppRemoteManifest[]
-  setManifests(manifests: readonly AppRemoteManifest[]): void
-  setStatus(status: IntegrationsState["status"]): void
+  status: "idle" | "loading" | "ready" | "error";
+  manifests: readonly AppRemoteManifest[];
+  setManifests(manifests: readonly AppRemoteManifest[]): void;
+  setStatus(status: IntegrationsState["status"]): void;
 }
 
 export const integrationsStore = createStore<IntegrationsState>()((set) => ({
@@ -181,7 +181,7 @@ export const integrationsStore = createStore<IntegrationsState>()((set) => ({
   manifests: [],
   setManifests: (manifests) => set({ manifests, status: "ready" }),
   setStatus: (status) => set({ status }),
-}))
+}));
 ```
 
 Register it as a store on the registry (same pattern as any other Zustand store in the app) and add `integrations: IntegrationsState` to your `AppDependencies` so modules can read `deps.integrations` in `dynamicSlots`.
@@ -190,10 +190,10 @@ Register it as a store on the registry (same pattern as any other Zustand store 
 
 ```ts
 // modules/integrations/index.ts
-import { defineModule, mergeRemoteManifests } from "@modular-react/core"
-import type { AppDependencies, AppSlots } from "@myorg/app-shared"
-import { fetchIntegrationManifests } from "../../services/integrations-client"
-import { integrationsStore } from "../../stores/integrations-store"
+import { defineModule, mergeRemoteManifests } from "@modular-react/core";
+import type { AppDependencies, AppSlots } from "@myorg/app-shared";
+import { fetchIntegrationManifests } from "../../services/integrations-client";
+import { integrationsStore } from "../../stores/integrations-store";
 
 export default defineModule<AppDependencies, AppSlots>({
   id: "integrations",
@@ -202,29 +202,29 @@ export default defineModule<AppDependencies, AppSlots>({
 
   lifecycle: {
     async onRegister(deps) {
-      integrationsStore.getState().setStatus("loading")
+      integrationsStore.getState().setStatus("loading");
       try {
-        const manifests = await fetchIntegrationManifests(deps.httpClient)
-        integrationsStore.getState().setManifests(manifests)
+        const manifests = await fetchIntegrationManifests(deps.httpClient);
+        integrationsStore.getState().setManifests(manifests);
       } catch (err) {
-        integrationsStore.getState().setStatus("error")
-        console.error("[integrations] failed to fetch manifests", err)
+        integrationsStore.getState().setStatus("error");
+        console.error("[integrations] failed to fetch manifests", err);
       }
     },
   },
 
   dynamicSlots: (deps) => mergeRemoteManifests(deps.integrations.manifests).slots,
-})
+});
 ```
 
 Then, wherever your shell wires `recalculateSlots()`:
 
 ```ts
 // app/registry.ts
-import { integrationsStore } from "./stores/integrations-store"
+import { integrationsStore } from "./stores/integrations-store";
 
-export const manifest = registry.resolveManifest()
-integrationsStore.subscribe(manifest.recalculateSlots)
+export const manifest = registry.resolveManifest();
+integrationsStore.subscribe(manifest.recalculateSlots);
 ```
 
 Now: when the fetch completes, the store updates, `recalculateSlots()` fires, `dynamicSlots(deps)` re-runs, and the shell re-renders with the integrations merged in. Adding a new integration is a backend change — the FE picks it up on next fetch, without a deploy.
@@ -237,7 +237,7 @@ Two options for remote-driven navigation:
 
 1. **Model navigation as a slot.** Declare a `remoteNavigation: readonly RemoteNavigationItem[]` slot in `AppSlots` and render it in your shell next to the static nav. This is the lower-friction choice and it's what `mergeRemoteManifests(...).navigation` is for — feed it into that slot.
 
-2. **Block boot on the fetch.** Fetch manifests *before* calling `createRegistry` / `resolveManifest`, then pass the remote navigation items as part of the integrations module's static `navigation`. Simpler at read time, but every app boot now waits on the network.
+2. **Block boot on the fetch.** Fetch manifests _before_ calling `createRegistry` / `resolveManifest`, then pass the remote navigation items as part of the integrations module's static `navigation`. Simpler at read time, but every app boot now waits on the network.
 
 Most apps want option 1.
 
@@ -259,42 +259,50 @@ Two layers are worth testing separately:
 **1. The merge logic** — purely a property of `mergeRemoteManifests`. Call it directly; no module / registry needed:
 
 ```ts
-import { mergeRemoteManifests } from "@modular-react/core"
-import type { AppRemoteManifest } from "@myorg/app-shared"
+import { mergeRemoteManifests } from "@modular-react/core";
+import type { AppRemoteManifest } from "@myorg/app-shared";
 
 const remotes: AppRemoteManifest[] = [
-  { id: "integration:sf", version: "1.0.0", slots: { systems: [{ id: "sf", name: "Salesforce" }] } },
+  {
+    id: "integration:sf",
+    version: "1.0.0",
+    slots: { systems: [{ id: "sf", name: "Salesforce" }] },
+  },
   { id: "integration:hs", version: "1.0.0", slots: { systems: [{ id: "hs", name: "HubSpot" }] } },
-]
+];
 
-const merged = mergeRemoteManifests(remotes)
+const merged = mergeRemoteManifests(remotes);
 expect(merged.slots.systems).toEqual([
   { id: "sf", name: "Salesforce" },
   { id: "hs", name: "HubSpot" },
-])
+]);
 ```
 
 **2. The module's dynamic-slot flow** — use `resolveModule` from `@modular-react/testing`, seeding `deps` with a pre-loaded integrations snapshot so `dynamicSlots(deps)` sees known data:
 
 ```ts
-import { resolveModule } from "@modular-react/testing"
-import integrations from "./modules/integrations"
+import { resolveModule } from "@modular-react/testing";
+import integrations from "./modules/integrations";
 
 const result = resolveModule(integrations, {
   deps: {
     integrations: {
       status: "ready",
       manifests: [
-        { id: "integration:sf", version: "1.0.0", slots: { systems: [{ id: "sf", name: "Salesforce" }] } },
+        {
+          id: "integration:sf",
+          version: "1.0.0",
+          slots: { systems: [{ id: "sf", name: "Salesforce" }] },
+        },
       ],
       setManifests: () => {},
       setStatus: () => {},
     },
     httpClient: { get: async () => [] }, // onRegister runs — give it a benign stub
   },
-})
+});
 
-expect(result.slots.systems).toEqual([{ id: "sf", name: "Salesforce" }])
+expect(result.slots.systems).toEqual([{ id: "sf", name: "Salesforce" }]);
 ```
 
 Note that `resolveModule` will invoke `lifecycle.onRegister` — provide a stub `httpClient` that returns an empty array so the fetch path is a no-op, and the `dynamicSlots` result is driven purely by the seeded `deps.integrations.manifests`.

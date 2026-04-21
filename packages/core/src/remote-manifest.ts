@@ -1,9 +1,4 @@
-import type {
-  NavigationItem,
-  NavigationItemBase,
-  SlotMap,
-  SlotMapOf,
-} from "./types.js";
+import type { NavigationItemBase, SlotMap, SlotMapOf } from "./types.js";
 
 /**
  * A navigation item shape that can round-trip through JSON.
