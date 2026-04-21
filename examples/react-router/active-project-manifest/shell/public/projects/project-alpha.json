@@ -1,0 +1,31 @@
+{
+  "id": "integration:salesforce",
+  "version": "1.0.0",
+  "slots": {
+    "integration": [
+      {
+        "id": "salesforce",
+        "name": "Salesforce",
+        "category": "crm",
+        "icon": "crm",
+        "description": "Sync contacts and pipeline between Salesforce and this workspace.",
+        "authentication": { "type": "oauth" },
+        "filters": [
+          { "id": "search", "type": "search", "query": "contains(name, '{value}')" },
+          {
+            "id": "last-modified",
+            "type": "daterange",
+            "query": "lastModifiedAt ge {value.from} and lastModifiedAt le {value.to}"
+          }
+        ],
+        "capabilities": {
+          "importTracking": { "version": 1, "data": { "pollingIntervalMs": 5000 } },
+          "contactSync": { "version": 1, "data": { "direction": "bidirectional" } }
+        }
+      }
+    ]
+  },
+  "meta": {
+    "enabledBy": "license:crm-basic"
+  }
+}

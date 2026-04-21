@@ -1,0 +1,23 @@
+{
+  "id": "integration:zendesk",
+  "version": "1.0.0",
+  "slots": {
+    "integration": [
+      {
+        "id": "zendesk",
+        "name": "Zendesk",
+        "category": "ticketing",
+        "icon": "ticketing",
+        "description": "Customer support ticketing. Links tickets to workspace records.",
+        "authentication": { "type": "apikey" },
+        "filters": [{ "id": "search", "type": "search", "query": "subject:{value}" }],
+        "capabilities": {
+          "importTracking": { "version": 1, "data": { "pollingIntervalMs": 10000 } }
+        }
+      }
+    ]
+  },
+  "meta": {
+    "enabledBy": "license:support"
+  }
+}
