@@ -11,9 +11,14 @@ A runnable example of the [Remote Capability Manifests](../../../docs/remote-cap
 
 ## Run it
 
+The example's packages are nested workspace members of the modular-react monorepo, so inter-package deps (`@modular-react/core`, `@react-router-modules/runtime`, etc.) link to the local `packages/*` sources via `link-workspace-packages=true` — any change you make in `packages/*` is reflected immediately.
+
+From the repository root:
+
 ```bash
-pnpm install
-pnpm dev
+pnpm install                                                   # installs everything
+pnpm turbo run build --filter="./packages/*"                   # build library dist/ so types resolve
+pnpm --filter shell dev                                        # start this example's dev server
 ```
 
 Open the printed URL, navigate to **Integrations** in the sidebar. You should see four tiles (Salesforce, HubSpot, Zendesk, Mixpanel) loaded from the JSON.
@@ -77,6 +82,8 @@ remote-capabilities/
 - `integrationsStore.subscribe(recalculateSlots)` in `main.tsx` is the bridge that makes async-fetched data drive live UI.
 
 ## Tests
+
+From the repository root:
 
 ```bash
 pnpm --filter @example/integrations-module test
