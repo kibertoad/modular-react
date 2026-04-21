@@ -1,6 +1,6 @@
 import { useSlots } from "@react-router-modules/runtime";
-import { useStore } from "@example/app-shared";
-import type { AppSlots, IntegrationDefinition } from "@example/app-shared";
+import { useStore } from "@example-active/app-shared";
+import type { AppSlots, IntegrationDefinition } from "@example-active/app-shared";
 
 const ICON_MAP: Record<string, string> = {
   crm: "🤝",
@@ -25,57 +25,65 @@ const FILTER_LABEL: Record<IntegrationDefinition["filters"][number]["type"], str
   daterange: "Date range",
 };
 
-export default function IntegrationsPage() {
-  const { integrations } = useSlots<AppSlots>();
+export default function IntegrationPage() {
+  const { integration } = useSlots<AppSlots>();
   const status = useStore("integrations", (s) => s.status);
+  const activeProjectId = useStore("integrations", (s) => s.activeProjectId);
   const error = useStore("integrations", (s) => s.error);
+
+  const definition = integration[0];
 
   return (
     <div>
-      <h2 style={{ marginBottom: "0.5rem" }}>Integrations</h2>
+      <h2 style={{ marginBottom: "0.5rem" }}>Active project integration</h2>
       <p style={{ color: "#718096", marginBottom: "1.5rem" }}>
-        Every card below is rendered by the <strong>same shared component</strong>, fed by a
-        backend-delivered manifest. Auth type, supported filters, and capability-gated action
-        buttons all come from the JSON — unsupported controls are simply not rendered. Edit{" "}
-        <code>shell/public/integrations.json</code> and reload to see the UI morph.
+        Pick a project in the sidebar. Its integration manifest is fetched on demand, written to the
+        store, and rendered by <strong>the same shared component</strong> — auth, filters, and
+        capability-gated actions all decided by the manifest. Switching projects discards the old
+        manifest and swaps the whole surface.
       </p>
 
-      <StatusBanner status={status} error={error} count={integrations.length} />
+      <StatusBanner status={status} activeProjectId={activeProjectId} error={error} />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-          gap: "1rem",
-          marginTop: "1.5rem",
-        }}
-      >
-        {integrations.map((integration) => (
-          <IntegrationCard key={integration.id} integration={integration} />
-        ))}
-      </div>
+      {definition ? (
+        <IntegrationCard integration={definition} />
+      ) : (
+        <EmptyState status={status} activeProjectId={activeProjectId} />
+      )}
     </div>
   );
 }
 
 function StatusBanner({
   status,
+  activeProjectId,
   error,
-  count,
 }: {
   status: "idle" | "loading" | "ready" | "error";
+  activeProjectId: string | null;
   error: string | null;
-  count: number;
 }) {
   const palette = {
-    idle: { bg: "#edf2f7", fg: "#4a5568", text: "Waiting to fetch manifests." },
-    loading: { bg: "#ebf8ff", fg: "#2b6cb0", text: "Fetching manifests from the backend…" },
+    idle: {
+      bg: "#edf2f7",
+      fg: "#4a5568",
+      text: "No project selected — pick one in the sidebar to load its integration.",
+    },
+    loading: {
+      bg: "#ebf8ff",
+      fg: "#2b6cb0",
+      text: `Loading integration for ${activeProjectId}…`,
+    },
     ready: {
       bg: "#f0fff4",
       fg: "#276749",
-      text: `Loaded ${count} integration(s) from the backend.`,
+      text: `Integration for ${activeProjectId} loaded.`,
     },
-    error: { bg: "#fff5f5", fg: "#c53030", text: error ?? "Failed to fetch manifests." },
+    error: {
+      bg: "#fff5f5",
+      fg: "#c53030",
+      text: error ?? "Failed to fetch manifest.",
+    },
   }[status];
 
   return (
@@ -86,6 +94,7 @@ function StatusBanner({
         backgroundColor: palette.bg,
         color: palette.fg,
         fontSize: "0.875rem",
+        marginBottom: "1rem",
       }}
     >
       {palette.text}
@@ -93,16 +102,28 @@ function StatusBanner({
   );
 }
 
+function EmptyState({
+  status,
+  activeProjectId,
+}: {
+  status: "idle" | "loading" | "ready" | "error";
+  activeProjectId: string | null;
+}) {
+  if (status === "ready" && activeProjectId != null) {
+    return (
+      <div style={{ color: "#a0aec0", fontStyle: "italic" }}>
+        This project has no integration configured on the backend.
+      </div>
+    );
+  }
+  return null;
+}
+
 /**
- * The capability-gated shared component.
- *
- * This one React component renders every integration in the catalog. It never
- * has hard-coded knowledge of "Salesforce" or "HubSpot" — it only reads the
- * typed `IntegrationDefinition` and decides what UI to show.
- *
- * Adding a new integration on the backend lights up a new card here with the
- * right controls, zero FE changes. Adding a *new capability* (e.g. "webhooks")
- * is a code change: extend `IntegrationCapabilities` + render it below.
+ * The capability-gated shared component. Identical in spirit to the one in
+ * the `remote-capabilities` example — it has no idea whether its input came
+ * from a merged catalog or a per-project swap, because the library's types
+ * don't care and the component doesn't either.
  */
 function IntegrationCard({ integration }: { integration: IntegrationDefinition }) {
   const { authentication, filters, capabilities } = integration;
@@ -117,6 +138,7 @@ function IntegrationCard({ integration }: { integration: IntegrationDefinition }
         display: "flex",
         flexDirection: "column",
         gap: "0.75rem",
+        maxWidth: "480px",
       }}
     >
       <header>
@@ -133,7 +155,6 @@ function IntegrationCard({ integration }: { integration: IntegrationDefinition }
         </p>
       </header>
 
-      {/* Filter chips — only supported filters render. */}
       {filters.length > 0 && (
         <section>
           <Label>Supported filters</Label>
@@ -147,9 +168,6 @@ function IntegrationCard({ integration }: { integration: IntegrationDefinition }
         </section>
       )}
 
-      {/* Action row — each button is gated by a capability. Unsupported buttons
-          are not rendered at all, so an integration without importTracking
-          literally cannot show an "Import" affordance. */}
       <section style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
         {capabilities.importTracking && (
           <ActionButton>

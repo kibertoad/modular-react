@@ -32,6 +32,38 @@ Remote manifests deliberately do **not** deliver React components, routes, or bu
 - You're trying to ship per-capability logic (validators, effects, route loaders) via JSON. Keep that in a local module; let the manifest only carry data.
 - Capabilities are few and stable. One line per capability in a local module array is simpler than a fetch + store + `dynamicSlots` round trip.
 
+## Two shapes this pattern takes
+
+Almost every real use of remote manifests falls into one of two shapes. The library treats them identically — both are just "slot items contributed by a manifest" — but it's worth naming them because the _design pressure_ on the slot item type is different in each case.
+
+1. **Catalog / navigation enumeration.** The manifests tell the shell "here are the things that exist": a tile per tenant-licensed integration, a command-palette entry per installed partner app, a menu entry per reporting pack. The slot item type is usually slim (id / name / icon / link), and the shell renders one card or one nav entry per item. Adding an item = new manifest row. This is the "flat tile grid" mental model.
+
+2. **Capability-gated shared component.** The manifests tell the shell "here is what each thing supports": a single shared component (detail page, editor, dashboard) reads the item's `authentication`, `filters`, `capabilities`, etc. and conditionally renders UI — unsupported buttons are hidden, supported filters show, known capabilities light up their affordance. One React component renders every integration in the catalog without ever naming a specific partner. Adding an integration = new manifest row _and_ the shared component automatically picks up whatever capabilities it declared.
+
+Both shapes coexist in the same app and often in the same slot — the example repo ships both flavours on one page: each card is a catalogue entry (pattern 1), and the auth/filter/capability details inside that card are rendered by a shared component that never hard-codes an integration name (pattern 2).
+
+The critical design decision is always "what lives in the slot item type vs. what's hard-coded in the shell." See [Designing the slot item type](#designing-the-slot-item-type) below.
+
+## Storing: merge-many vs swap-one topology
+
+Orthogonal to _what the manifests drive_ is _how the app holds them_. Two topologies, both first-class — the library is deliberately neutral on which one you pick:
+
+| Topology                      | When it fits                                                                                                            | Store shape           | `dynamicSlots`                                     | Fetch triggered by                     |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------- | -------------------------------------------------- | -------------------------------------- |
+| **Cumulative (merge-many)**   | Catalog of tenant-licensed integrations, partner-app command entries, feature packs — many items visible simultaneously | `readonly Manifest[]` | `mergeRemoteManifests(deps.store.manifests).slots` | Boot (`lifecycle.onRegister`)          |
+| **Active profile (swap-one)** | Per-project active integration, per-tenant override, per-workspace auth flow — one at a time, replaced on switch        | `Manifest \| null`    | `deps.store.activeManifest?.slots ?? {}`           | User action (e.g. `selectProject(id)`) |
+
+`mergeRemoteManifests` exists for the cumulative case because concatenating slot arrays and de-duping ids is boring, error-prone code that every cumulative app would otherwise re-invent. The swap case doesn't need a helper — it's a field read. Don't take that asymmetry as a hint that merging is the "canonical" path.
+
+**Hybrid is also fine.** Real apps often have both: stable tenant-wide integrations fetched once at boot and merged (e.g. into an `integrations` slot), plus a per-project manifest that swaps on context change (e.g. into an `activeIntegration` slot). The two flows write into different slots and don't interact — one store per flow is the cleanest wiring.
+
+Each topology comes with its own gotchas:
+
+- **Cumulative:** fail loudly on duplicate ids across backend-served manifests (that's what `mergeRemoteManifests` does). Remember to prefix remote ids so they can't collide with locally-registered modules.
+- **Swap:** guard against stale fetches when the user rapidly switches contexts — on resolve, re-check the active id matches what was requested, and drop the result if it doesn't. Otherwise a slow earlier fetch will clobber a newer one.
+
+Runnable reference: [`remote-capabilities`](../examples/react-router/remote-capabilities/README.md) for cumulative, [`active-project-manifest`](../examples/react-router/active-project-manifest/README.md) for swap. Same `IntegrationDefinition` slot item in both — only the store shape and one line of `dynamicSlots` differ.
+
 ## What a remote manifest can carry
 
 Remote manifests are a **strict subset** of a [`ModuleDescriptor`](../packages/core/src/types.ts) — only data that survives a round trip through JSON.
@@ -103,6 +135,78 @@ export type AppRemoteManifest = RemoteModuleManifest<AppSlots, AppRemoteNavItem>
 ```
 
 Document this type for the backend team. If you use an OpenAPI / JSON Schema pipeline, generate the server-side type from it — the payload contract is now just "an `AppRemoteManifest[]`".
+
+### Designing the slot item type
+
+`RemoteModuleManifest` itself stays tiny — `id`, `version`, `slots`, `navigation`, `meta`. **Rich per-capability data lives inside your slot item type, not at the manifest root.** This is the single most common source of confusion when first designing a payload. If you find yourself wanting to add fields like `authentication`, `filters`, or `capabilities` to the manifest, that's a signal they belong inside the item that the manifest contributes to a slot.
+
+Concretely, if your backend returns something shaped like:
+
+```json
+{
+  "id": "integration:salesforce",
+  "version": "1.0.0",
+  "authentication": { "type": "oauth" },
+  "filters": [{ "id": "search", "type": "search", "query": "contains(name, '{value}')" }],
+  "capabilities": { "importTracking": { "version": 1, "data": { "pollingIntervalMs": 5000 } } }
+}
+```
+
+…it needs one level of indirection before it becomes a `RemoteModuleManifest`. Put the rich shape in a slot item type (the shell declares it in `AppSlots`), and have the manifest carry exactly one of those items:
+
+```ts
+// The rich shape — owned by the shell, read by a shared component.
+export interface IntegrationDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly authentication: { readonly type: "oauth" | "apikey" | "none" };
+  readonly filters: ReadonlyArray<
+    | { readonly id: string; readonly type: "search"; readonly query: string }
+    | { readonly id: string; readonly type: "daterange"; readonly query: string }
+  >;
+  readonly capabilities: {
+    readonly importTracking?: {
+      readonly version: 1;
+      readonly data: { readonly pollingIntervalMs: number };
+    };
+    // …further capabilities here. Each one must be declared for the shell to
+    // render it — the set of recognised capabilities is a code-level decision.
+  };
+}
+
+export interface AppSlots {
+  integrations: readonly IntegrationDefinition[];
+}
+```
+
+The wire payload then becomes:
+
+```json
+{
+  "id": "integration:salesforce",
+  "version": "1.0.0",
+  "slots": {
+    "integrations": [
+      {
+        "id": "salesforce",
+        "name": "Salesforce",
+        "authentication": { "type": "oauth" },
+        "filters": [
+          /* … */
+        ],
+        "capabilities": {
+          "importTracking": { "version": 1, "data": { "pollingIntervalMs": 5000 } }
+        }
+      }
+    ]
+  }
+}
+```
+
+Two rules of thumb make this easier:
+
+- **Closed unions belong in code, open data belongs in the payload.** `authentication.type` is a closed union (the FE knows how to render each variant); the set of integration ids/names is open (any new partner should work without a code change).
+- **Adding a new _integration_ is a backend change; adding a new _capability_ is a code change.** If a field's set of valid values is known at FE build time, put it in the slot item's type. If it's unbounded, accept it as string data.
 
 ### Namespace remote ids
 
@@ -186,6 +290,8 @@ export const integrationsStore = createStore<IntegrationsState>()((set) => ({
 
 Register it as a store on the registry (same pattern as any other Zustand store in the app) and add `integrations: IntegrationsState` to your `AppDependencies` so modules can read `deps.integrations` in `dynamicSlots`.
 
+> The example above uses the **cumulative topology** — an array of manifests, set once per fetch. For the **swap topology** (one active manifest at a time, replaced on context change), the store shape is `activeManifest: Manifest | null` and the mutator is typically an async `selectProject(id)` action that closes over the fetch client. See [Storing: merge-many vs swap-one topology](#storing-merge-many-vs-swap-one-topology) above and the [`active-project-manifest`](../examples/react-router/active-project-manifest/README.md) example for a complete walk-through.
+
 ## Step 4: One local "integrations" module
 
 ```ts
@@ -228,6 +334,19 @@ integrationsStore.subscribe(manifest.recalculateSlots);
 ```
 
 Now: when the fetch completes, the store updates, `recalculateSlots()` fires, `dynamicSlots(deps)` re-runs, and the shell re-renders with the integrations merged in. Adding a new integration is a backend change — the FE picks it up on next fetch, without a deploy.
+
+For the **swap topology**, the same module is shorter: no `onRegister` (fetching is UI-driven), and `dynamicSlots` reads the active manifest directly without a merge helper:
+
+```ts
+export default defineModule<AppDependencies, AppSlots>({
+  id: "integrations",
+  version: "1.0.0",
+  requires: ["integrations"],
+  dynamicSlots: (deps) => deps.integrations.activeManifest?.slots ?? {},
+});
+```
+
+The shell wires `integrationsStore.subscribe(recalculateSlots)` identically — the only thing that changes is what the store holds.
 
 ## Navigation from remote manifests
 
@@ -315,9 +434,12 @@ Note that `resolveModule` will invoke `lifecycle.onRegister` — provide a stub 
 - **Don't concatenate manifests into a fake single descriptor.** Keep them as an array; `mergeRemoteManifests` is what folds them into the shapes the shell actually consumes.
 - **Don't share ids between remote manifests and local modules.** `mergeRemoteManifests` only dedupes within the remote set. Prefix remote ids (e.g. `integration:`, `partner:`) to rule out collisions by construction.
 
-## Runnable example
+## Runnable examples
 
-A complete runnable walkthrough of this pattern lives at [`examples/react-router/remote-capabilities/`](../examples/react-router/remote-capabilities/README.md). It mirrors Steps 1–4 above with a mock backend (a static JSON served from the shell's `public/` directory), so you can edit the "response" and reload to see a new tile appear without touching any frontend code — the end-user-visible proof of the zero-FE-change promise.
+Two complete walkthroughs live under `examples/react-router/`, one per topology. Both share the same `IntegrationDefinition` slot item and the same capability-gated shared component — only the store shape and one line of `dynamicSlots` differ.
+
+- [**`remote-capabilities/`**](../examples/react-router/remote-capabilities/README.md) — cumulative topology. A catalog of four integrations, all visible simultaneously, merged with `mergeRemoteManifests`. Edit the JSON, reload, and watch a new tile appear with zero FE changes.
+- [**`active-project-manifest/`**](../examples/react-router/active-project-manifest/README.md) — swap topology. The shell picks one active project at a time; each project's manifest is fetched on demand, swapped into the store, and rendered by the same shared component. Switch projects and watch the whole surface morph.
 
 ## Reference
 

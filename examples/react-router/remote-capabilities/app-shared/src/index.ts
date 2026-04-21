@@ -4,23 +4,75 @@ import type { RemoteModuleManifest, RemoteNavigationItem } from "@modular-react/
 // ---- Slot item shapes (what the remote payload actually carries) ----
 
 /**
- * Catalog tile describing one generic integration (Salesforce, HubSpot, …).
- * Backend-owned: adding a new one means adding a row to the API response.
+ * Authentication strategy the backend has configured for this integration.
+ * The shared page renders different auth-status UI per type (e.g. "Connect
+ * OAuth…" vs "Paste API key"), so the set of valid values is a closed union
+ * owned by the FE. Adding a new auth type is a code change.
  */
-export interface IntegrationTile {
+export type IntegrationAuthentication =
+  | { readonly type: "oauth" }
+  | { readonly type: "apikey" }
+  | { readonly type: "none" };
+
+/**
+ * Filter descriptor. Each entry tells the shared page that this integration
+ * supports a given server-side filter and what template query to send.
+ * Filters the backend omits are not rendered — the shared page hides
+ * unsupported inputs rather than showing dead controls.
+ */
+export type IntegrationFilter =
+  | { readonly id: string; readonly type: "search"; readonly query: string }
+  | { readonly id: string; readonly type: "daterange"; readonly query: string };
+
+/**
+ * Capability-map entry. Each capability key the FE knows about has a fixed
+ * payload shape; if the backend sends an unknown key, the shared page simply
+ * has no renderer for it (loud TS error if you try to read it without adding
+ * it to this map).
+ */
+export interface IntegrationCapabilities {
+  readonly importTracking?: {
+    readonly version: 1;
+    readonly data: { readonly pollingIntervalMs: number };
+  };
+  readonly contactSync?: {
+    readonly version: 1;
+    readonly data: { readonly direction: "push" | "pull" | "bidirectional" };
+  };
+}
+
+/**
+ * One generic integration — the full definition the backend returns.
+ *
+ * This is the slot-item type. Every rich per-integration field (auth, filters,
+ * capabilities) lives here, NOT at the `RemoteModuleManifest` root. The
+ * manifest is just an envelope: `{ id, version, slots: { integrations: [...] } }`.
+ *
+ * The same definition drives two things at once:
+ *
+ *  - **Catalog surface** — id/name/category/icon/description render a tile in
+ *    the integrations grid (this example's equivalent of nav-style rendering).
+ *  - **Capability-gated shared component** — the shared detail card reads
+ *    `authentication`, `filters`, `capabilities` and conditionally renders
+ *    UI (e.g. hides the "Start import" button when `importTracking` is absent).
+ */
+export interface IntegrationDefinition {
   readonly id: string;
   readonly name: string;
   readonly category: "crm" | "ticketing" | "analytics" | "marketing";
   /** Icon identifier — the shell maps this to a local renderer / emoji / sprite. */
   readonly icon: string;
   readonly description: string;
+  readonly authentication: IntegrationAuthentication;
+  readonly filters: readonly IntegrationFilter[];
+  readonly capabilities: IntegrationCapabilities;
 }
 
 // ---- AppSlots: every slot must be a readonly array ----
 
 export interface AppSlots {
   /** Generic integrations the current tenant is licensed for. Driven by backend. */
-  integrations: readonly IntegrationTile[];
+  integrations: readonly IntegrationDefinition[];
 }
 
 // ---- Remote manifest alias (the wire contract) ----

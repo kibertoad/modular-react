@@ -35,6 +35,11 @@ describe("integrations module", () => {
               category: "crm",
               icon: "crm",
               description: "CRM",
+              authentication: { type: "oauth" },
+              filters: [{ id: "search", type: "search", query: "name={value}" }],
+              capabilities: {
+                importTracking: { version: 1, data: { pollingIntervalMs: 5000 } },
+              },
             },
           ],
         },
@@ -47,7 +52,18 @@ describe("integrations module", () => {
     });
 
     expect(slots.integrations).toEqual([
-      { id: "sf", name: "Salesforce", category: "crm", icon: "crm", description: "CRM" },
+      {
+        id: "sf",
+        name: "Salesforce",
+        category: "crm",
+        icon: "crm",
+        description: "CRM",
+        authentication: { type: "oauth" },
+        filters: [{ id: "search", type: "search", query: "name={value}" }],
+        capabilities: {
+          importTracking: { version: 1, data: { pollingIntervalMs: 5000 } },
+        },
+      },
     ]);
   });
 
@@ -74,6 +90,9 @@ describe("integrations module", () => {
               category: "crm",
               icon: "crm",
               description: "CRM",
+              authentication: { type: "oauth" },
+              filters: [],
+              capabilities: {},
             },
           ],
         },

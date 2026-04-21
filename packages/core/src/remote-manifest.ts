@@ -92,6 +92,19 @@ export interface MergedRemoteManifests<
  * Merge a list of {@link RemoteModuleManifest}s into a single bundle of
  * slots, navigation, and per-module meta.
  *
+ * Use this helper for the **cumulative topology** — many manifests held
+ * simultaneously (catalogue tiles, partner-app command entries, feature
+ * packs). If your app instead holds a single active manifest at a time and
+ * swaps it on context change (per-project, per-tenant, per-workspace), skip
+ * this helper entirely and read the active manifest's `slots` directly:
+ *
+ * ```ts
+ * dynamicSlots: (deps) => deps.integrations.activeManifest?.slots ?? {}
+ * ```
+ *
+ * See the "Storing: merge-many vs swap-one topology" section of the
+ * Remote Capability Manifests guide for the full tradeoff.
+ *
  * Duplicate ids throw — remote manifests coming from different backend
  * services that accidentally share an id would silently clobber each other
  * in the meta map and double-contribute to slots, so fail loudly instead.
