@@ -23,6 +23,10 @@ export function Sidebar() {
           </h3>
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {group.items.map((item) => (
+              // This example uses the default NavigationItem context (`void`),
+              // so `item.to` is always a string. If you adopt function-form
+              // hrefs (NavigationItem<TLabel, TContext> with TContext !== void),
+              // resolve `item.to(context)` here instead of falling back to "#".
               <li key={`${group.group}:${item.label}:${String(item.to)}`}>
                 <NavLink to={typeof item.to === "string" ? item.to : "#"}>{item.label}</NavLink>
               </li>

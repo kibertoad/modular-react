@@ -4,7 +4,7 @@ End-to-end examples of modular-react patterns. Each example is a self-contained 
 
 Examples are split by router integration. Pick the directory for the router you already use; each example is otherwise equivalent.
 
-```
+```text
 examples/
 ├── react-router/
 │   └── integration-manager/     Sibling modules sharing a screen (React Router)

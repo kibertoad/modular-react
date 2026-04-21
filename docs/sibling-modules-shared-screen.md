@@ -128,8 +128,8 @@ Each module owns its route, renders the shared component with its own config, an
 
 **React Router:**
 
-```typescript
-// modules/contentful/src/index.ts
+```tsx
+// modules/contentful/src/index.tsx
 import { defineModule } from "@react-router-modules/core";
 import type { RouteObject } from "react-router";
 import type {
@@ -187,8 +187,8 @@ export default defineModule<AppDependencies, AppSlots>({
 
 **TanStack Router:**
 
-```typescript
-// modules/contentful/src/index.ts
+```tsx
+// modules/contentful/src/index.tsx
 import { defineModule } from "@tanstack-react-modules/core";
 import { createRoute } from "@tanstack/react-router";
 import type { AppDependencies, AppSlots, IntegrationConfig } from "@myorg/app-shared";
@@ -245,11 +245,11 @@ Consumers still read it with the typed generic, so the shell is fully type-check
 
 ```typescript
 // app-shared/src/types.ts
-import type { AppRouteData, AppZones } from "./integrations.js";
+import type { AppRouteData } from "./integrations.js";
 
 declare module "@tanstack/router-core" {
   // StaticDataRouteOption is checked against staticData: { ... }
-  interface StaticDataRouteOption extends AppRouteData, AppZones {}
+  interface StaticDataRouteOption extends AppRouteData {}
 }
 ```
 

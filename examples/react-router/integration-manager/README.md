@@ -6,7 +6,7 @@ Three integration modules (Contentful, Strapi, GitHub) all render the same `<Int
 
 ## Layout
 
-```
+```text
 app-shared/                shared types (IntegrationConfig, AppRouteData, AppSlots, AppDependencies)
                            + the IntegrationManager shared component
 modules/

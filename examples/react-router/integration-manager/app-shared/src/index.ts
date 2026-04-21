@@ -3,7 +3,8 @@ export * from "./app-types.js";
 export { IntegrationManager } from "./IntegrationManager.js";
 export type { IntegrationManagerProps } from "./IntegrationManager.js";
 
-// Ambient type augmentation: declare that RouteObject.handle conforms to
-// AppRouteData across the app. Modules get autocomplete + compile-time
-// checking when they write `handle: { ... }` on a route.
+// Documentation-only side-effect import. React Router v7 does not expose a
+// module-augmentation point for `RouteObject.handle`, so modules instead
+// type their handle at the call site with `satisfies AppRouteData`.
+// See ./react-router-handle.ts for the rationale.
 import "./react-router-handle.js";
