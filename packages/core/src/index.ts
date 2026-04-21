@@ -37,6 +37,14 @@ export { mergeRouteStaticData } from "./route-data.js";
 // Lazy-module helpers
 export { warnIgnoredLazyFields } from "./lazy-module.js";
 
+// Remote capability manifests (JSON-safe descriptor subset)
+export { mergeRemoteManifests } from "./remote-manifest.js";
+export type {
+  RemoteModuleManifest,
+  RemoteNavigationItem,
+  MergedRemoteManifests,
+} from "./remote-manifest.js";
+
 // Validation
 export { validateNoDuplicateIds, validateDependencies } from "./validation.js";
 
