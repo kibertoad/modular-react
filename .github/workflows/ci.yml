@@ -115,6 +115,9 @@ jobs:
       - name: Typecheck examples
         run: pnpm turbo run typecheck --filter="./examples/**"
 
+      - name: Build examples
+        run: pnpm turbo run build --filter="./examples/**"
+
       - name: Test examples
         run: pnpm turbo run test --filter="./examples/**"
 

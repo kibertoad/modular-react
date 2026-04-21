@@ -29,6 +29,7 @@ export function ProjectPicker() {
       {projects.map((project) => {
         const isActive = project.id === activeProjectId;
         const isLoading = isActive && status === "loading";
+        const isDisabled = isLoading || (isActive && status === "ready");
         return (
           <button
             key={project.id}
@@ -36,7 +37,7 @@ export function ProjectPicker() {
             onClick={() => {
               void selectProject(project.id);
             }}
-            disabled={isLoading}
+            disabled={isDisabled}
             style={{
               display: "block",
               width: "100%",
@@ -46,7 +47,7 @@ export function ProjectPicker() {
               border: "1px solid transparent",
               backgroundColor: isActive ? "#ebf8ff" : "transparent",
               color: isActive ? "#2b6cb0" : "#4a5568",
-              cursor: isLoading ? "wait" : "pointer",
+              cursor: isLoading ? "wait" : isDisabled ? "default" : "pointer",
               marginBottom: "0.25rem",
               fontSize: "0.8125rem",
             }}

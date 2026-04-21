@@ -30,7 +30,7 @@ function validateManifest(raw: unknown): AppRemoteManifest {
 export function createIntegrationsClient(): IntegrationsClient {
   return {
     async fetchManifest(projectId) {
-      const response = await fetch(`/projects/${projectId}.json`);
+      const response = await fetch(`/projects/${encodeURIComponent(projectId)}.json`);
       if (response.status === 404) return null;
       if (!response.ok) {
         throw new Error(

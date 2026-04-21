@@ -38,30 +38,41 @@ export function Sidebar() {
           Home
         </Link>
 
-        {navigation.groups.map((group) => (
-          <div key={group.group} style={{ marginTop: "1rem" }}>
-            <h3
-              style={{
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-                color: "#a0aec0",
-                marginBottom: "0.5rem",
-                padding: "0 0.75rem",
-              }}
-            >
-              {group.group}
-            </h3>
-            {group.items
-              .filter((item) => !item.hidden)
-              .map((item) => (
+        {navigation.ungrouped
+          .filter((item) => !item.hidden)
+          .map((item) => (
+            <Link key={item.to} to={item.to} style={linkStyle(item.to)}>
+              {item.label}
+            </Link>
+          ))}
+
+        {navigation.groups.map((group) => {
+          const visibleItems = group.items.filter((item) => !item.hidden);
+          if (visibleItems.length === 0) return null;
+
+          return (
+            <div key={group.group} style={{ marginTop: "1rem" }}>
+              <h3
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  color: "#a0aec0",
+                  marginBottom: "0.5rem",
+                  padding: "0 0.75rem",
+                }}
+              >
+                {group.group}
+              </h3>
+              {visibleItems.map((item) => (
                 <Link key={item.to} to={item.to} style={linkStyle(item.to)}>
                   {item.label}
                 </Link>
               ))}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </nav>
 
       <ProjectPicker />

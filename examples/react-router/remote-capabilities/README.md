@@ -69,7 +69,7 @@ Open the printed URL, navigate to **Integrations** in the sidebar. You should se
 
 ## File tour
 
-```
+```text
 remote-capabilities/
 ├── app-shared/
 │   └── src/index.ts           # AppDependencies, AppSlots, AppRemoteManifest type alias,
