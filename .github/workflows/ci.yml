@@ -88,9 +88,39 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+  examples:
+    name: Build examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Library packages must be built first so the examples' typecheck
+      # and tests see emitted .d.ts files (the examples consume them via
+      # linked workspace packages).
+      - name: Build library packages
+        run: pnpm turbo run build --filter="./packages/*"
+
+      - name: Typecheck examples
+        run: pnpm turbo run typecheck --filter="./examples/**"
+
+      - name: Test examples
+        run: pnpm turbo run test --filter="./examples/**"
+
   automerge:
-    needs: [build, lint]
-    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.lint.result == 'success')
+    needs: [build, lint, examples]
+    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.lint.result == 'success') && (needs.examples.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write

@@ -315,6 +315,10 @@ Note that `resolveModule` will invoke `lifecycle.onRegister` — provide a stub 
 - **Don't concatenate manifests into a fake single descriptor.** Keep them as an array; `mergeRemoteManifests` is what folds them into the shapes the shell actually consumes.
 - **Don't share ids between remote manifests and local modules.** `mergeRemoteManifests` only dedupes within the remote set. Prefix remote ids (e.g. `integration:`, `partner:`) to rule out collisions by construction.
 
+## Runnable example
+
+A complete runnable walkthrough of this pattern lives at [`examples/react-router/remote-capabilities/`](../examples/react-router/remote-capabilities/README.md). It mirrors Steps 1–4 above with a mock backend (a static JSON served from the shell's `public/` directory), so you can edit the "response" and reload to see a new tile appear without touching any frontend code — the end-user-visible proof of the zero-FE-change promise.
+
 ## Reference
 
 - Type: [`RemoteModuleManifest`](../packages/core/src/remote-manifest.ts) — JSON-safe subset of `ModuleDescriptor`.

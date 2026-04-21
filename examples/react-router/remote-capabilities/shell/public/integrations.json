@@ -1,0 +1,74 @@
+[
+  {
+    "id": "integration:salesforce",
+    "version": "1.0.0",
+    "slots": {
+      "integrations": [
+        {
+          "id": "salesforce",
+          "name": "Salesforce",
+          "category": "crm",
+          "icon": "crm",
+          "description": "Sync contacts and pipeline between Salesforce and this workspace."
+        }
+      ]
+    },
+    "meta": {
+      "enabledBy": "license:crm-basic"
+    }
+  },
+  {
+    "id": "integration:hubspot",
+    "version": "1.0.0",
+    "slots": {
+      "integrations": [
+        {
+          "id": "hubspot",
+          "name": "HubSpot",
+          "category": "crm",
+          "icon": "crm",
+          "description": "Inbound marketing + CRM. Syncs lead lists and deal stages."
+        }
+      ]
+    },
+    "meta": {
+      "enabledBy": "license:crm-basic"
+    }
+  },
+  {
+    "id": "integration:zendesk",
+    "version": "1.0.0",
+    "slots": {
+      "integrations": [
+        {
+          "id": "zendesk",
+          "name": "Zendesk",
+          "category": "ticketing",
+          "icon": "ticketing",
+          "description": "Customer support ticketing. Links tickets to workspace records."
+        }
+      ]
+    },
+    "meta": {
+      "enabledBy": "license:support"
+    }
+  },
+  {
+    "id": "integration:mixpanel",
+    "version": "1.0.0",
+    "slots": {
+      "integrations": [
+        {
+          "id": "mixpanel",
+          "name": "Mixpanel",
+          "category": "analytics",
+          "icon": "analytics",
+          "description": "Product analytics. Streams events from this workspace to Mixpanel."
+        }
+      ]
+    },
+    "meta": {
+      "enabledBy": "license:analytics"
+    }
+  }
+]
