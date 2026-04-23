@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { createRegistry } from "@react-router-modules/runtime";
+import { JourneyProvider } from "@modular-react/journeys";
 import type { AppDependencies, AppSlots } from "@example-onboarding/app-shared";
 import profileModule from "@example-onboarding/profile-module";
 import planModule from "@example-onboarding/plan-module";
@@ -48,7 +49,7 @@ runtimeRef.current = journeys;
 {
   const { tabs } = tabsStore.getState();
   for (const tab of tabs) {
-    if (tab.kind !== "journey" || !journeys) continue;
+    if (tab.kind !== "journey") continue;
     const resolvedId = journeys.start(tab.journeyId, tab.input);
     if (resolvedId !== tab.instanceId) {
       tabsStore.getState().removeTab(tab.tabId);
@@ -59,16 +60,20 @@ runtimeRef.current = journeys;
 
 function Shell() {
   return (
-    <RootLayout>
-      <TabStrip tabsStore={tabsStore} workspace={workspace} />
-      <Home workspace={workspace} tabsStore={tabsStore} />
-      <TabContent
-        tabsStore={tabsStore}
-        workspace={workspace}
-        journeys={journeys}
-        moduleDescriptors={moduleDescriptors}
-      />
-    </RootLayout>
+    <JourneyProvider
+      runtime={journeys}
+      onModuleExit={(ev) => console.debug("[global module exit]", ev)}
+    >
+      <RootLayout>
+        <TabStrip tabsStore={tabsStore} workspace={workspace} />
+        <Home workspace={workspace} tabsStore={tabsStore} />
+        <TabContent
+          tabsStore={tabsStore}
+          workspace={workspace}
+          moduleDescriptors={moduleDescriptors}
+        />
+      </RootLayout>
+    </JourneyProvider>
   );
 }
 

@@ -1,14 +1,13 @@
 import { useSyncExternalStore } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import type { ModuleDescriptor } from "@modular-react/core";
-import { JourneyOutlet, ModuleTab, type JourneyRuntime } from "@modular-react/journeys";
+import { JourneyOutlet, ModuleTab } from "@modular-react/journeys";
 import type { WorkspaceActions } from "@example-onboarding/app-shared";
 import type { WorkspaceTabsState, Tab } from "../stores/workspace-tabs.js";
 
 export interface TabContentProps {
   readonly tabsStore: StoreApi<WorkspaceTabsState>;
   readonly workspace: WorkspaceActions;
-  readonly journeys: JourneyRuntime | null;
   readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
 }
 
@@ -19,7 +18,6 @@ function LoadingFallback() {
 export function TabContent({
   tabsStore,
   workspace,
-  journeys,
   moduleDescriptors,
 }: TabContentProps) {
   const state = useSyncExternalStore(tabsStore.subscribe, tabsStore.getState);
@@ -30,12 +28,7 @@ export function TabContent({
 
   return (
     <main style={{ flex: 1, padding: "1.5rem", backgroundColor: "#f7fafc" }}>
-      <TabBody
-        tab={tab}
-        workspace={workspace}
-        journeys={journeys}
-        moduleDescriptors={moduleDescriptors}
-      />
+      <TabBody tab={tab} workspace={workspace} moduleDescriptors={moduleDescriptors} />
     </main>
   );
 }
@@ -43,23 +36,18 @@ export function TabContent({
 function TabBody({
   tab,
   workspace,
-  journeys,
   moduleDescriptors,
 }: {
   readonly tab: Tab;
   readonly workspace: WorkspaceActions;
-  readonly journeys: JourneyRuntime | null;
   readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
 }) {
   if (tab.kind === "journey") {
-    if (!journeys) {
-      return <p style={{ color: "#c53030" }}>No journey runtime is registered.</p>;
-    }
+    // Runtime + module map come from the <JourneyProvider> mounted in main.tsx —
+    // no prop threading needed.
     return (
       <JourneyOutlet
-        runtime={journeys}
         instanceId={tab.instanceId}
-        modules={moduleDescriptors}
         loadingFallback={<LoadingFallback />}
         onFinished={() => workspace.closeTab(tab.tabId)}
       />
@@ -78,8 +66,7 @@ function TabBody({
       tabId={tab.tabId}
       onExit={(ev) => {
         workspace.closeTab(tab.tabId);
-        // Additional forwarding to manifest.onModuleExit can happen here; this
-        // example just closes the tab.
+        // `onModuleExit` wired on the provider also fires — see main.tsx.
         console.debug("[module exit]", ev);
       }}
     />

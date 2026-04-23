@@ -31,18 +31,21 @@ describe("registry.registerJourney + resolveManifest", () => {
     registry.register(moduleA);
     registry.registerJourney(journey);
     const manifest = registry.resolveManifest();
-    expect(manifest.journeys).not.toBeNull();
-    expect(manifest.journeys!.listDefinitions()).toEqual([
+    expect(manifest.journeys.listDefinitions()).toEqual([
       { id: "demo", version: "1.0.0", meta: undefined },
     ]);
     expect(manifest.moduleDescriptors.a).toBe(moduleA);
   });
 
-  it("manifest.journeys is null when no journey is registered", () => {
+  it("manifest.journeys is a no-op runtime when no journey is registered", () => {
     const registry = createRegistry({});
     registry.register(moduleA);
     const manifest = registry.resolveManifest();
-    expect(manifest.journeys).toBeNull();
+    expect(manifest.journeys.listDefinitions()).toEqual([]);
+    expect(manifest.journeys.listInstances()).toEqual([]);
+    // start() still throws "unknown journey id" as it would on a
+    // non-registered definition — same failure mode, no null-check needed.
+    expect(() => manifest.journeys.start("nope", {})).toThrow(/Unknown journey id/);
   });
 
   it("aggregates validation errors at resolveManifest time", () => {

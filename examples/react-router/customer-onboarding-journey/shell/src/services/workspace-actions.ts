@@ -10,6 +10,10 @@ import type { WorkspaceTabsState } from "../stores/workspace-tabs.js";
 export interface RuntimeRef {
   current: JourneyRuntime | null;
 }
+// Null only during the brief window between module load and `registry.resolve()`.
+// After resolve the runtime is always present — the framework returns a
+// no-op runtime when no journey is registered, so the null-check below is
+// purely about initialization order, not about "is a journey registered".
 
 let nextTabId = 1;
 function mintTabId(kind: "module" | "journey", key: string): string {
