@@ -73,4 +73,32 @@ describe("simulateJourney", () => {
     expect(sim.transitions.at(-1)!.to).toBeNull();
     expect(sim.transitions.at(-1)!.exit).toBe("pick");
   });
+
+  it("exposes terminalPayload and a persistence-shaped serialize()", () => {
+    const sim = simulateJourney(journey, undefined as unknown as void);
+    expect(sim.terminalPayload).toBeUndefined();
+    const beforeBlob = sim.serialize();
+    expect(beforeBlob.status).toBe("active");
+    expect(beforeBlob.step).toEqual({ moduleId: "menu", entry: "choose", input: undefined });
+
+    sim.fireExit("pick", { pick: "b" });
+
+    expect(sim.terminalPayload).toEqual({ chosen: "b" });
+    const after = sim.serialize();
+    expect(after.status).toBe("completed");
+    expect(after.step).toBeNull();
+    expect(after.terminalPayload).toEqual({ chosen: "b" });
+  });
+
+  it("snapshots TransitionEvent.history so later mutations don't leak back", () => {
+    const sim = simulateJourney(journey, undefined as unknown as void);
+    sim.fireExit("pick", { pick: "a" });
+    const secondEvent = sim.transitions.at(-1)!;
+    const historyLengthAtEmit = secondEvent.history.length;
+    // Advancing further grows the runtime's internal history. The captured
+    // event must still reflect the history as it was when it fired.
+    sim.fireExit("pick", { pick: "a" });
+    sim.fireExit("pick", { pick: "b" });
+    expect(secondEvent.history.length).toBe(historyLengthAtEmit);
+  });
 });

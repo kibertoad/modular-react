@@ -8,12 +8,12 @@ import type { JourneyDefinition, ModuleTypeMap } from "./types.js";
  * parameter while `TModules` and `TState` are supplied explicitly:
  *
  * ```ts
- * defineJourney<DebtJourneyModules, DebtState>()({
- *   id: "debt-resolution",
+ * defineJourney<OnboardingModules, OnboardingState>()({
+ *   id: "customer-onboarding",
  *   version: "1.0.0",
  *   initialState: (input: { customerId: string }) => ({ ... }),
  *   // TInput is inferred as { customerId: string }
- *   start: (state, input) => ({ module: "account", entry: "review", input: { customerId: input.customerId } }),
+ *   start: (state) => ({ module: "profile", entry: "review", input: { customerId: state.customerId } }),
  *   transitions: { ... },
  * });
  * ```

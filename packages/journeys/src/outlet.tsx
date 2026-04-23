@@ -9,7 +9,6 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import type { ModuleDescriptor } from "@modular-react/core";
-import { ModuleErrorBoundary } from "@modular-react/react";
 
 import { getInternals } from "./runtime.js";
 import { useJourneyContext } from "./provider.js";
@@ -213,7 +212,36 @@ class StepErrorBoundary extends Component<StepErrorBoundaryProps, StepErrorBound
 
   override render(): ReactNode {
     if (this.state.error) {
-      return createElement(ModuleErrorBoundary, { moduleId: this.props.moduleId, children: null });
+      // Render the fallback inline. Wrapping an empty child in
+      // `ModuleErrorBoundary` would not show anything: that boundary only
+      // renders its fallback when *its own* child throws, and a null child
+      // never does — so the outlet used to go blank after a step error. The
+      // visual language mirrors `@modular-react/react`'s `ModuleErrorBoundary`.
+      const err = this.state.error;
+      const message = err instanceof Error ? err.message : String(err);
+      return createElement(
+        "div",
+        {
+          style: {
+            padding: "1rem",
+            border: "1px solid #e53e3e",
+            borderRadius: "0.5rem",
+            margin: "1rem",
+          },
+          role: "alert",
+          "data-journey-step-error": this.props.moduleId,
+        },
+        createElement(
+          "h3",
+          { style: { color: "#e53e3e", margin: "0 0 0.5rem 0" } },
+          `Module "${this.props.moduleId}" encountered an error`,
+        ),
+        createElement(
+          "pre",
+          { style: { fontSize: "0.875rem", color: "#718096", whiteSpace: "pre-wrap" } },
+          message,
+        ),
+      );
     }
     return this.props.children;
   }

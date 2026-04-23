@@ -43,6 +43,13 @@ export interface InstanceRecord<TState = unknown> {
   pendingSave: SerializedJourney<TState> | null;
   saveInFlight: boolean;
   /**
+   * True when `removePersisted` fires while `saveInFlight` is still set:
+   * the remove is deferred until the save settles so adapters that don't
+   * serialize their own ops can't see remove→save reordering and leave
+   * an orphaned blob in storage.
+   */
+  pendingRemove: boolean;
+  /**
    * Monotonically incrementing revision bumped when an observable field
    * changes (status/step/state/history/terminalPayload). Used to memoize
    * the public `JourneyInstance` snapshot so that `getInstance(id)` returns
@@ -181,12 +188,6 @@ export function createJourneyRuntime(
     return perEntry?.allowBack === true;
   }
 
-  function computeKey(reg: RegisteredJourney, input: unknown): string | null {
-    const persistence = reg.options?.persistence;
-    if (!persistence) return null;
-    return persistence.keyFor({ journeyId: reg.definition.id, input });
-  }
-
   function cloneSnapshot<TState>(state: TState): TState {
     if (state === null || typeof state !== "object") return state;
     let cloned: TState;
@@ -250,7 +251,15 @@ export function createJourneyRuntime(
       }
     } finally {
       record.saveInFlight = false;
-      if (record.pendingSave) {
+      // A terminal transition arrived while the save was in flight. The
+      // remove was deferred to this point so adapters that do not serialize
+      // their own ops don't see remove → save reordering. Skip the pending
+      // save — its blob is about to be obsolete anyway.
+      if (record.pendingRemove) {
+        record.pendingRemove = false;
+        record.pendingSave = null;
+        if (record.persistenceKey) fireAndForgetRemove(persistence, record.persistenceKey);
+      } else if (record.pendingSave) {
         const next = record.pendingSave;
         record.pendingSave = null;
         void runSave(record, persistence, next);
@@ -266,6 +275,12 @@ export function createJourneyRuntime(
     record.pendingSave = null;
     const key = record.persistenceKey;
     keyIndex.delete(indexKey(record.journeyId, key));
+    if (record.saveInFlight) {
+      // Defer the remove until the save settles. `runSave`'s finally block
+      // picks this up and fires the remove with the same key.
+      record.pendingRemove = true;
+      return;
+    }
     fireAndForgetRemove(persistence, key);
   }
 
@@ -333,7 +348,11 @@ export function createJourneyRuntime(
       to,
       exit,
       state: record.state,
-      history: record.history,
+      // Defensive copy — `record.history` is mutated in place on every
+      // transition, and async consumers (analytics batchers, deferred
+      // telemetry) would otherwise observe later mutations when they
+      // finally inspect the event.
+      history: [...record.history],
     };
     try {
       reg.definition.onTransition?.(ev);
@@ -405,6 +424,27 @@ export function createJourneyRuntime(
 
     if ("next" in result) {
       const nextStep = stepFromSpec(result.next);
+      if (debug) {
+        // Validation at resolveManifest() catches static misconfiguration,
+        // but transition handlers branch at runtime and can return a
+        // dynamically-built `next` that points at a module or entry that
+        // isn't registered. The outlet would then render its generic
+        // "no entry on the registered modules" message with no hint about
+        // which transition was responsible. Warn here so the authoring loop
+        // surfaces the source.
+        if (Object.keys(moduleMap).length > 0) {
+          const mod = moduleMap[nextStep.moduleId];
+          if (!mod) {
+            console.warn(
+              `[@modular-react/journeys] Transition on "${previousStep?.moduleId}.${previousStep?.entry}" returned next.module="${nextStep.moduleId}" which is not in the runtime's module map — the outlet will render a "no entry" error.`,
+            );
+          } else if (!mod.entryPoints?.[nextStep.entry]) {
+            console.warn(
+              `[@modular-react/journeys] Transition on "${previousStep?.moduleId}.${previousStep?.entry}" returned next.entry="${nextStep.moduleId}.${nextStep.entry}" which is not a declared entry on that module.`,
+            );
+          }
+        }
+      }
       if (previousStep) {
         record.history.push(previousStep);
         // Clone the pre-state snapshot only when the step we're entering
@@ -513,7 +553,12 @@ export function createJourneyRuntime(
       result = handler({ state: record.state, input: step.input, output });
     } catch (err) {
       if (debug) console.error("[@modular-react/journeys] transition handler threw", err);
-      applyTransition(record, reg, { abort: { reason: "transition-error", error: err } }, exitName);
+      applyTransition(
+        record,
+        reg,
+        { abort: { reason: "transition-error", exit: exitName, error: err } },
+        exitName,
+      );
       return;
     }
     // Transitions must be pure and synchronous. A handler that returns a
@@ -659,6 +704,7 @@ export function createJourneyRuntime(
       listeners: new Set(),
       pendingSave: null,
       saveInFlight: false,
+      pendingRemove: false,
       revision: 0,
       cachedSnapshot: null,
       cachedCallbacks: null,
@@ -672,13 +718,9 @@ export function createJourneyRuntime(
   ): InstanceId {
     const def = reg.definition as JourneyDefinition<any, any, unknown>;
     const record =
-      existingRecord ??
-      createRecord(reg, mintInstanceId(), computeKey(reg, input), def.initialState(input));
+      existingRecord ?? createRecord(reg, mintInstanceId(), null, def.initialState(input));
     if (!existingRecord) {
       instances.set(record.id, record);
-      if (record.persistenceKey) {
-        keyIndex.set(indexKey(reg.definition.id, record.persistenceKey), record.id);
-      }
     } else {
       record.state = def.initialState(input);
     }
@@ -688,6 +730,10 @@ export function createJourneyRuntime(
     record.stepToken += 1;
     record.terminalFired = false;
     record.terminalPayload = undefined;
+    // A recycled record can carry a retry count from its previous life (an
+    // async-load failure that fell through to `startFresh`, for example).
+    // The new run is a fresh journey — reset the budget.
+    record.retryCount = 0;
     record.updatedAt = nowIso();
     record.cachedCallbacks = null;
     fireOnTransition(reg, record, null, startStep, null);

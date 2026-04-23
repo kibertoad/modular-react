@@ -46,13 +46,13 @@ Open the printed URL (default `http://localhost:5175`), click **Start for Alice 
 
 ## Differences from the React Router variant
 
-| Concern                  | React Router version                                       | TanStack Router version (this example)                                            |
-| ------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Runtime package          | `@react-router-modules/runtime`                            | `@tanstack-react-modules/runtime`                                                 |
-| Router package           | `react-router`                                             | `@tanstack/react-router`                                                          |
-| Root composition         | `rootComponent: Shell` with Home + TabContent as siblings. | `rootComponent: Shell` (sidebar + `<Outlet />`) with a routed `indexComponent`.   |
-| Index content            | Inline conditional inside Shell.                           | Dedicated `HomeOrTab` component wired as `indexComponent`.                        |
-| `useNavigation` consumer | Not used here (no nav items).                              | Not used here either — journeys sit on top of navigation, independent of routes.  |
+| Concern                  | React Router version                                       | TanStack Router version (this example)                                           |
+| ------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Runtime package          | `@react-router-modules/runtime`                            | `@tanstack-react-modules/runtime`                                                |
+| Router package           | `react-router`                                             | `@tanstack/react-router`                                                         |
+| Root composition         | `rootComponent: Shell` with Home + TabContent as siblings. | `rootComponent: Shell` (sidebar + `<Outlet />`) with a routed `indexComponent`.  |
+| Index content            | Inline conditional inside Shell.                           | Dedicated `HomeOrTab` component wired as `indexComponent`.                       |
+| `useNavigation` consumer | Not used here (no nav items).                              | Not used here either — journeys sit on top of navigation, independent of routes. |
 
 The journey logic, module contracts, and persistence layer are byte-identical between the two examples. That's the point: journeys don't depend on the router integration.
 

@@ -299,4 +299,55 @@ describe("JourneyOutlet", () => {
     expect(rt.getInstance(id)!.status).toBe("aborted");
     expect(onStepError.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
+
+  it("renders the step-error fallback card when onStepError returns 'ignore'", () => {
+    function Throwing(_props: ModuleEntryProps<{ customerId: string }, typeof accountExits>) {
+      throw new Error("kaboom");
+    }
+    const throwingModule = defineModule({
+      id: "account",
+      version: "1.0.0",
+      exitPoints: accountExits,
+      entryPoints: {
+        review: defineEntry({
+          component: Throwing,
+          input: schema<{ customerId: string }>(),
+        }),
+      },
+    });
+    const localModules = { account: throwingModule, debts: debtsModule };
+    type LocalModules = {
+      readonly account: typeof throwingModule;
+      readonly debts: typeof debtsModule;
+    };
+    const throwingJourney = defineJourney<LocalModules, { customerId: string }>()({
+      id: "ignoring",
+      version: "1.0.0",
+      initialState: (input: { customerId: string }) => ({ customerId: input.customerId }),
+      start: (s) => ({ module: "account", entry: "review", input: { customerId: s.customerId } }),
+      transitions: {},
+    });
+    const rt = createJourneyRuntime(
+      [{ definition: throwingJourney as never, options: undefined }],
+      { modules: localModules, debug: false },
+    );
+    const id = rt.start("ignoring", { customerId: "C-ignore" });
+    const restoreError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { container, getByText } = render(
+      <JourneyOutlet
+        runtime={rt}
+        instanceId={id}
+        modules={localModules}
+        onStepError={() => "ignore"}
+      />,
+    );
+    restoreError.mockRestore();
+    // Instance stays active — `ignore` keeps the boundary UI up without
+    // aborting. The fallback card must be visible (the blank-screen bug
+    // regression guard).
+    expect(rt.getInstance(id)!.status).toBe("active");
+    expect(container.querySelector('[data-journey-step-error="account"]')).toBeTruthy();
+    expect(getByText(/encountered an error/i)).toBeTruthy();
+    expect(getByText(/kaboom/)).toBeTruthy();
+  });
 });

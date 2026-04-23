@@ -632,6 +632,180 @@ describe("createJourneyRuntime — lifecycle extras", () => {
     expect(rt.getInstance(idB)!.journeyId).toBe("collect-v2");
   });
 
+  it("falls through to startFresh when persistence.load rejects", async () => {
+    const persistence = {
+      keyFor: () => "k:load-reject",
+      load: () => Promise.reject(new Error("backend down")),
+      save: async () => {},
+      remove: async () => {},
+    };
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    const rt = freshRuntime({ options: { persistence: persistence as any } });
+    const id = rt.start("collect", { customerId: "C-reject" });
+    // Instance is placeholder in `loading` until the rejected probe settles.
+    expect(rt.getInstance(id)!.status).toBe("loading");
+    await Promise.resolve();
+    await Promise.resolve();
+    // Failed load logs (debug defaults to NODE_ENV !== 'production') and the
+    // runtime recovers into a fresh active instance rather than leaving the
+    // placeholder stuck in `loading` forever.
+    expect(rt.getInstance(id)!.status).toBe("active");
+    expect(rt.getInstance(id)!.step!.moduleId).toBe("account");
+    warn.mockRestore();
+  });
+
+  it("hydrate() surfaces a JourneyHydrationError when onHydrate throws", () => {
+    const onHydrate = () => {
+      throw new Error("migration bailed");
+    };
+    const rt = createJourneyRuntime(
+      [{ definition: { ...journey, onHydrate } as never, options: undefined }],
+      { modules: { account: accountModule, debts: debtsModule }, debug: false },
+    );
+    const blob = {
+      definitionId: "collect",
+      version: "0.0.0",
+      instanceId: "ji_throw",
+      status: "active" as const,
+      step: { moduleId: "account", entry: "review", input: { customerId: "C-throw" } },
+      history: [] as never[],
+      state: { customerId: "C-throw", attempts: 0 },
+      startedAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    };
+    // `onHydrate` throwing maps to the same "migration failed" path as a
+    // version mismatch without `onHydrate` — the caller gets a typed
+    // `JourneyHydrationError` instead of the raw thrown error.
+    expect(() => rt.hydrate("collect", blob)).toThrow(/version mismatch/);
+  });
+
+  it("legacy blobs without rollbackSnapshots hydrate cleanly", () => {
+    const rt = freshRuntime();
+    const blob = {
+      definitionId: "collect",
+      version: "1.0.0",
+      instanceId: "ji_legacy",
+      status: "active" as const,
+      step: { moduleId: "debts", entry: "negotiate", input: { customerId: "C-legacy" } },
+      // One history entry, no rollbackSnapshots at all — the legacy blob
+      // shape from releases before rollback support shipped.
+      history: [{ moduleId: "account", entry: "review", input: { customerId: "C-legacy" } }],
+      state: { customerId: "C-legacy", attempts: 1 },
+      startedAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    };
+    const id = rt.hydrate("collect", blob);
+    const inst = rt.getInstance(id)!;
+    expect(inst.step!.entry).toBe("negotiate");
+    expect(inst.history).toHaveLength(1);
+    // The serialized round-trip omits rollbackSnapshots when no slot
+    // actually holds one — the in-memory record stays length-aligned with
+    // history regardless.
+    expect(inst.serialize().rollbackSnapshots).toBeUndefined();
+  });
+
+  it("defers persistence.remove until an in-flight save settles", async () => {
+    // A slow adapter that lets us observe the order of save/remove calls.
+    let releaseSave: () => void = () => {};
+    const savePromise = new Promise<void>((r) => {
+      releaseSave = r;
+    });
+    const calls: string[] = [];
+    const persistence = {
+      keyFor: () => "k:race",
+      load: () => null,
+      save: async (_k: string, _b: any) => {
+        calls.push("save-start");
+        await savePromise;
+        calls.push("save-end");
+      },
+      remove: async () => {
+        calls.push("remove");
+      },
+    };
+    const rt = freshRuntime({ options: { persistence: persistence as any } });
+    const id = rt.start("collect", { customerId: "C-race" });
+    // save-start has already been queued by the start(). Before it settles,
+    // fire the terminal transition — the runtime would otherwise call
+    // remove immediately and race the save.
+    const internals = getInternals(rt);
+    internals
+      .__bindStepCallbacks(internals.__getRecord(id)!, internals.__getRegistered("collect")!)
+      .exit("cancelled");
+    // remove should NOT have fired yet — it is deferred until save settles.
+    expect(calls).toEqual(["save-start"]);
+    releaseSave();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    // Final ordering: save finished first, remove ran afterwards.
+    expect(calls).toEqual(["save-start", "save-end", "remove"]);
+  });
+
+  it("coalesces pending saves even when an earlier save rejects", async () => {
+    const outcomes: string[] = [];
+    let attempts = 0;
+    let releaseFirst: () => void = () => {};
+    const firstGate = new Promise<void>((r) => {
+      releaseFirst = r;
+    });
+    const persistence = {
+      keyFor: () => "k:reject-coalesce",
+      load: () => null,
+      save: async (_k: string, b: any) => {
+        attempts += 1;
+        if (attempts === 1) {
+          await firstGate;
+          outcomes.push(`reject:${b.updatedAt}`);
+          throw new Error("transient");
+        }
+        outcomes.push(`ok:${b.updatedAt}`);
+      },
+      remove: async () => {},
+    };
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    const rt = freshRuntime({ options: { persistence: persistence as any } });
+    const id = rt.start("collect", { customerId: "C-coalesce-reject" });
+    const internals = getInternals(rt);
+    // Queue a second save on top of the blocked first one. The pending
+    // save should still flush after the first one rejects.
+    internals
+      .__bindStepCallbacks(internals.__getRecord(id)!, internals.__getRegistered("collect")!)
+      .exit("wantsToNegotiate", { customerId: "C-coalesce-reject" });
+    expect(attempts).toBe(1);
+    releaseFirst();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(attempts).toBe(2);
+    expect(outcomes[0]!.startsWith("reject")).toBe(true);
+    expect(outcomes[1]!.startsWith("ok")).toBe(true);
+    warn.mockRestore();
+  });
+
+  it("fires the definition onTransition before the registration-level onTransition", () => {
+    const order: string[] = [];
+    const defOnTransition = vi.fn(() => {
+      order.push("definition");
+    });
+    const regOnTransition = vi.fn(() => {
+      order.push("registration");
+    });
+    const rt = createJourneyRuntime(
+      [
+        {
+          definition: { ...journey, onTransition: defOnTransition },
+          options: { onTransition: regOnTransition },
+        },
+      ],
+      { modules: { account: accountModule, debts: debtsModule }, debug: false },
+    );
+    rt.start("collect", { customerId: "C-order" });
+    // Just the start transition is enough to observe the pair.
+    expect(order).toEqual(["definition", "registration"]);
+  });
+
   it("warns in debug mode when a transition handler returns a Promise", () => {
     const warn = vi.spyOn(console, "error").mockImplementation(() => {});
     const rt = createJourneyRuntime(

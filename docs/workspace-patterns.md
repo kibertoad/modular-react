@@ -473,9 +473,10 @@ export interface WorkspaceActions {
    * See [Journeys](../packages/journeys/README.md) for the typed entry/exit contracts and
    * persistence pipeline.
    */
-  openTab: (spec:
-    | { kind: 'module';  id: string; entry?: string; input?: unknown; title?: string }
-    | { kind: 'journey'; id: string; input?: unknown; title?: string }
+  openTab: (
+    spec:
+      | { kind: "module"; id: string; entry?: string; input?: unknown; title?: string }
+      | { kind: "journey"; id: string; input?: unknown; title?: string },
   ) => { tabId: string; instanceId?: string };
 }
 ```
@@ -500,28 +501,25 @@ function InvoiceActions({ invoiceId }: { invoiceId: string }) {
 
 ## Multi-module tabs: journeys
 
-Single-module tabs (`{ kind: 'module' }`) cover the common case: one module, one tab, self-contained. When a tab's work spans several modules with **shared state** — "look at the customer's account, then branch into either debt negotiation or payment collection, then run a payment plan setup" — the mechanics above start to bend: teams fan state through the shell's stores, modules grow implicit dependencies on each other's keys, and mid-flow recovery after a reload has to be built by hand.
+Single-module tabs (`{ kind: 'module' }`) cover the common case: one module, one tab, self-contained. When a tab's work spans several modules with **shared state** — "confirm the customer's profile, then branch into plan selection, then either collect a payment or activate a free trial" — the mechanics above start to bend: teams fan state through the shell's stores, modules grow implicit dependencies on each other's keys, and mid-flow recovery after a reload has to be built by hand.
 
 [Journeys](../packages/journeys/README.md) are the dedicated abstraction for this case. Modules declare typed `entryPoints` and `exitPoints`; a journey declares how one module's exit feeds the next module's entry and owns the shared state for the whole flow; the shell mounts a `<JourneyOutlet>` inside the tab.
 
 Mount one `<JourneyProvider>` near the top of the shell so outlets and module tabs read the runtime (and the global `onModuleExit`) from context — no prop threading:
 
 ```tsx
-import { JourneyProvider, JourneyOutlet, ModuleTab } from '@modular-react/journeys';
+import { JourneyProvider, JourneyOutlet, ModuleTab } from "@modular-react/journeys";
 
 function Shell({ manifest }: { manifest: ResolvedManifest }) {
   return (
-    <JourneyProvider
-      runtime={manifest.journeys}
-      onModuleExit={manifest.onModuleExit}
-    >
+    <JourneyProvider runtime={manifest.journeys} onModuleExit={manifest.onModuleExit}>
       {/* tabs, routes, … */}
     </JourneyProvider>
   );
 }
 
 function TabContent({ tab, manifest }: { tab: Tab; manifest: ResolvedManifest }) {
-  if (tab.kind === 'module') {
+  if (tab.kind === "module") {
     return (
       <ModuleTab
         module={manifest.moduleDescriptors[tab.moduleId]}
@@ -554,10 +552,10 @@ What each side owns:
 
 When to reach for it:
 
-| Your workflow… | Use |
-| --- | --- |
-| is one module with no explicit outcome routing | `{ kind: 'module' }` via `<ModuleTab>` |
-| emits named outcomes but the caller decides what happens next | `<ModuleTab>` + `onExit` in the shell |
+| Your workflow…                                                     | Use                                         |
+| ------------------------------------------------------------------ | ------------------------------------------- |
+| is one module with no explicit outcome routing                     | `{ kind: 'module' }` via `<ModuleTab>`      |
+| emits named outcomes but the caller decides what happens next      | `<ModuleTab>` + `onExit` in the shell       |
 | spans multiple modules and needs shared state that survives reload | `{ kind: 'journey' }` via `<JourneyOutlet>` |
 
 Journey state is serializable — pluggable `keyFor` / `load` / `save` / `remove` adapter lets you wire localStorage, a backend, or any session store. Two `runtime.start(id, input)` calls for the same key return the same `instanceId`, so mid-flow reload recovery is a few lines in `main.tsx`:
@@ -571,7 +569,7 @@ for (const tab of tabsStore.getState().tabs) {
 }
 ```
 
-See the [journeys package README](../packages/journeys/README.md) for the full contract, a worked debt-resolution example, testing utilities, and the error / edge-case guarantees. The [`examples/react-router/customer-onboarding-journey/`](../examples/react-router/customer-onboarding-journey/) example project demonstrates the pattern end-to-end with a localStorage persistence adapter and reload-recovery.
+See the [journeys package README](../packages/journeys/README.md) for the full contract, a worked customer-onboarding example, testing utilities, and the error / edge-case guarantees. The [`examples/react-router/customer-onboarding-journey/`](../examples/react-router/customer-onboarding-journey/) example project demonstrates the pattern end-to-end with a localStorage persistence adapter and reload-recovery.
 
 ## Zone initial state and tab navigation
 

@@ -438,7 +438,7 @@ Don't add event buses, custom pub/sub, or `connectStores()` helpers. Zustand's `
 
 ## Multi-module workflows with shared state
 
-The five channels above cover module-to-shell communication at a single point in time. When a domain workflow spans **several modules in sequence** — e.g. "look at the customer's account → branch into debt negotiation → collect a payment" — lifting that orchestration into the shell's stores keeps working but gradually couples unrelated modules through shared keys in the same store.
+The five channels above cover module-to-shell communication at a single point in time. When a domain workflow spans **several modules in sequence** — e.g. "confirm the customer's profile → branch into plan selection → collect a payment or activate a trial" — lifting that orchestration into the shell's stores keeps working but gradually couples unrelated modules through shared keys in the same store.
 
 [Journeys](../packages/journeys/README.md) are the dedicated abstraction for this case: modules declare typed entry/exit vocabularies, a journey declares the transitions between them, and the shell mounts a `<JourneyOutlet>` inside whatever container it already uses (tab, modal, route element). Journey state is serializable, so mid-flow reload recovery and cross-device hand-off work without any shell-level plumbing. Nothing about the channels above changes — journeys are additive and only relevant if your app actually has multi-module workflows.
 

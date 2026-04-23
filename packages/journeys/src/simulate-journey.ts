@@ -4,6 +4,7 @@ import type {
   JourneyDefinition,
   JourneyStep,
   ModuleTypeMap,
+  SerializedJourney,
   TransitionEvent,
 } from "./types.js";
 
@@ -28,10 +29,22 @@ export interface JourneySimulator<TModules extends ModuleTypeMap, TState> {
    * attach an `onTransition` by hand.
    */
   readonly transitions: readonly TransitionEvent[];
+  /**
+   * Terminal payload from the `complete` / `abort` transition that ended
+   * the journey. `undefined` while the journey is still active.
+   */
+  readonly terminalPayload: unknown;
 
   fireExit(name: string, output?: unknown): void;
   goBack(): void;
   end(reason?: unknown): void;
+  /**
+   * Serialize the simulator's current instance into the same blob shape
+   * a persistence adapter would see. Useful for pinning the exact blob
+   * shape tests expect to round-trip, and for asserting `rollbackSnapshots`
+   * alignment with `history` without reaching into runtime internals.
+   */
+  serialize(): SerializedJourney<TState>;
 }
 
 export function simulateJourney<TModules extends ModuleTypeMap, TState, TInput>(
@@ -82,6 +95,16 @@ export function simulateJourney<TModules extends ModuleTypeMap, TState, TInput>(
     },
     get transitions() {
       return transitions;
+    },
+    get terminalPayload() {
+      return record().terminalPayload;
+    },
+    serialize() {
+      const inst = runtime.getInstance(instanceId);
+      if (!inst) {
+        throw new Error(`[simulateJourney] instance ${instanceId} not found`);
+      }
+      return inst.serialize() as SerializedJourney<TState>;
     },
     fireExit(name, output) {
       const r = record();

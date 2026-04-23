@@ -82,4 +82,35 @@ describe("ModuleTab", () => {
     const { getByTestId } = render(<ModuleTab module={legacyMod} input={{ tag: "hi" }} />);
     expect(getByTestId("legacy").textContent).toBe("hi");
   });
+
+  it("renders a disambiguation notice when the entry prop is omitted on a multi-entry module", () => {
+    const multiMod = defineModule({
+      id: "multi",
+      version: "1.0.0",
+      exitPoints: exits,
+      entryPoints: {
+        review: defineEntry({
+          component: Review,
+          input: schema<{ customerId: string }>(),
+        }),
+        other: defineEntry({
+          component: Review,
+          input: schema<{ customerId: string }>(),
+        }),
+      },
+    });
+    const { getByText } = render(<ModuleTab module={multiMod} />);
+    // No `entry` prop was passed and the module has two — the notice asks
+    // the caller to disambiguate instead of silently picking one.
+    expect(getByText(/exposes multiple entries/)).toBeTruthy();
+    expect(getByText(/review, other/)).toBeTruthy();
+  });
+
+  it("renders an error notice when the entry prop names an unknown entry", () => {
+    const { getByText } = render(
+      <ModuleTab module={mod} entry="ghost" input={{ customerId: "C-miss" }} />,
+    );
+    expect(getByText(/no entry "ghost"/)).toBeTruthy();
+    expect(getByText(/review/)).toBeTruthy();
+  });
 });

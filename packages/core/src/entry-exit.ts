@@ -29,7 +29,7 @@ export const defineEntry = <TInput>(entry: ModuleEntryPoint<TInput>): ModuleEntr
  *
  * ```ts
  * const exits = {
- *   noDebtFound:      defineExit<{ customerId: string }>(),
+ *   profileComplete:  defineExit<{ customerId: string; hint: PlanHint }>(),
  *   cancelled:        defineExit(),
  * } as const;
  * ```
