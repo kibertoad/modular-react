@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { Outlet } from "@tanstack/react-router";
 import type { StoreApi } from "zustand/vanilla";
 import type { JourneyRuntime } from "@modular-react/journeys";
@@ -18,8 +17,12 @@ export interface ShellProps {
  * the outlet and module tabs rendered inside the content area can read the
  * runtime from context. `<Outlet />` hosts the index route (HomeOrTab).
  */
-export function createShell({ runtimeRef, tabsStore, workspace }: ShellProps): () => ReactNode {
-  return function Shell() {
+export function createShell({
+  runtimeRef,
+  tabsStore,
+  workspace,
+}: ShellProps): () => React.JSX.Element {
+  return function Shell(): React.JSX.Element {
     // runtimeRef.current is set in main.tsx right after registry.resolve(); it
     // is guaranteed non-null before the first render that reaches this point.
     const runtime = runtimeRef.current!;
