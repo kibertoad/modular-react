@@ -4,11 +4,13 @@ import type {
   JourneyDefinition,
   JourneyStep,
   ModuleTypeMap,
+  TransitionEvent,
 } from "./types.js";
 
 /**
  * Headless simulator for a journey definition. Fires exits / goBack without
- * mounting React and exposes state / step / history for assertions.
+ * mounting React and exposes state / step / history / the recorded
+ * `TransitionEvent` stream for assertions.
  *
  * Intended for pure-logic unit tests of transition graphs.
  */
@@ -20,6 +22,12 @@ export interface JourneySimulator<TModules extends ModuleTypeMap, TState> {
   readonly state: TState;
   readonly history: readonly JourneyStep[];
   readonly status: "loading" | "active" | "completed" | "aborted";
+  /**
+   * Every `TransitionEvent` the runtime has fired since the simulator
+   * started. Useful for assertions on analytics rules without having to
+   * attach an `onTransition` by hand.
+   */
+  readonly transitions: readonly TransitionEvent[];
 
   fireExit(name: string, output?: unknown): void;
   goBack(): void;
@@ -30,8 +38,19 @@ export function simulateJourney<TModules extends ModuleTypeMap, TState, TInput>(
   definition: JourneyDefinition<TModules, TState, TInput>,
   input: TInput,
 ): JourneySimulator<TModules, TState> {
+  // Attach our own recorder on top of whatever `onTransition` the definition
+  // declares — the runtime already invokes both (definition first, then
+  // registration option), so this does not shadow the journey's own hook.
+  const transitions: TransitionEvent[] = [];
   const runtime = createJourneyRuntime([
-    { definition: definition as AnyJourneyDefinition, options: undefined },
+    {
+      definition: definition as AnyJourneyDefinition,
+      options: {
+        onTransition: (ev) => {
+          transitions.push(ev);
+        },
+      },
+    },
   ]);
   const instanceId = runtime.start(definition.id, input);
   const internals = getInternals(runtime);
@@ -60,6 +79,9 @@ export function simulateJourney<TModules extends ModuleTypeMap, TState, TInput>(
     },
     get status() {
       return record().status;
+    },
+    get transitions() {
+      return transitions;
     },
     fireExit(name, output) {
       const r = record();

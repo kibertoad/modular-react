@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import type { ModuleDescriptor, ModuleEntryProps } from "@modular-react/core";
 import { ModuleErrorBoundary } from "@modular-react/react";
 
+import { useJourneyContext } from "./provider.js";
+
 export interface ModuleTabExitEvent {
   readonly moduleId: string;
   readonly entry: string;
@@ -26,9 +28,10 @@ export interface ModuleTabProps<TInput = unknown> {
   /** Opaque tab id threaded through to `onExit` for the shell to close it. */
   readonly tabId?: string;
   /**
-   * Called when the module emits an exit. Shell typically closes the tab
-   * inside this callback and optionally forwards to a global `onModuleExit`
-   * (see `manifest.onModuleExit`).
+   * Called when the module emits an exit. Runs *before* the provider's
+   * global `onModuleExit` (when a `<JourneyProvider>` is mounted above), so
+   * the shell can close the tab first and let the provider hook forward to
+   * analytics / routing.
    */
   readonly onExit?: (event: ModuleTabExitEvent) => void;
 }
@@ -40,6 +43,8 @@ export interface ModuleTabProps<TInput = unknown> {
  */
 export function ModuleTab<TInput = unknown>(props: ModuleTabProps<TInput>): ReactNode {
   const { module: mod, entry, input, tabId, onExit } = props;
+  const context = useJourneyContext();
+  const globalOnExit = context?.onModuleExit;
 
   const entryPoints = mod.entryPoints;
   const entryNames = entryPoints ? Object.keys(entryPoints) : [];
@@ -60,15 +65,20 @@ export function ModuleTab<TInput = unknown>(props: ModuleTabProps<TInput>): Reac
   const exit = useMemo(
     () => (exitName: string, output?: unknown) => {
       if (!resolvedName) return;
-      onExit?.({
+      const event: ModuleTabExitEvent = {
         moduleId: mod.id,
         entry: resolvedName,
         exit: exitName,
         output,
         tabId,
-      });
+      };
+      onExit?.(event);
+      // Forward to the provider-level handler so a shell that registers
+      // onModuleExit once at the root gets every module exit without
+      // threading the callback through every tab.
+      globalOnExit?.(event);
     },
-    [mod.id, resolvedName, tabId, onExit],
+    [mod.id, resolvedName, tabId, onExit, globalOnExit],
   );
 
   let content: ReactNode;

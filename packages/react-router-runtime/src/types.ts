@@ -71,8 +71,15 @@ export interface ApplicationManifest<
   /** Full module descriptors keyed by id (see {@link ResolvedManifest.moduleDescriptors}). */
   readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
 
-  /** Journey runtime — see {@link ResolvedManifest.journeys}. */
-  readonly journeys: JourneyRuntime | null;
+  /**
+   * Journey runtime — always present. When no journey is registered, the
+   * runtime is a no-op: `listDefinitions()` is empty, `listInstances()` is
+   * empty, and `start("anyId")` throws "unknown journey id" (same error as
+   * calling `start` with a typo'd id). Shells can rely on the value being
+   * non-null and skip the `manifest.journeys?.` / `if (!journeys) return`
+   * dance.
+   */
+  readonly journeys: JourneyRuntime;
 
   /**
    * Trigger re-evaluation of dynamic slots.
@@ -208,11 +215,13 @@ export interface ResolvedManifest<
   readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
 
   /**
-   * Journey runtime owning every registered journey instance. `null` when
-   * no journey was registered, so apps that don't use journeys pay no
-   * runtime cost beyond the package being statically linked.
+   * Journey runtime owning every registered journey instance. Always
+   * present — when no journey is registered, the runtime is a no-op:
+   * `listDefinitions()` / `listInstances()` return empty arrays and
+   * `start()` throws "unknown journey id". Shells can rely on the value
+   * being non-null.
    */
-  readonly journeys: JourneyRuntime | null;
+  readonly journeys: JourneyRuntime;
 
   /**
    * Resolved `onModuleExit` callback — surfaced for shells that wire

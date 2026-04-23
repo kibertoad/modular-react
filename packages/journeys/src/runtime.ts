@@ -16,6 +16,7 @@ import type {
   TransitionEvent,
   TransitionResult,
 } from "./types.js";
+import { JourneyHydrationError } from "./validation.js";
 
 export interface InstanceRecord<TState = unknown> {
   id: InstanceId;
@@ -36,6 +37,8 @@ export interface InstanceRecord<TState = unknown> {
   /** Persistence key computed on start. Stable for the instance's lifetime. */
   persistenceKey: string | null;
   terminalFired: boolean;
+  /** Total retries the outlet has consumed for this instance (across all steps). */
+  retryCount: number;
   listeners: Set<() => void>;
   pendingSave: SerializedJourney<TState> | null;
   saveInFlight: boolean;
@@ -72,9 +75,22 @@ const ASYNC_LOAD_PENDING = Symbol("asyncLoadPending");
 type AsyncLoadPending = typeof ASYNC_LOAD_PENDING;
 
 /**
+ * Module-private store of runtime internals. Keeps `__bindStepCallbacks`,
+ * `__getRecord`, `__getRegistered`, and the bound module descriptor map off
+ * the public `JourneyRuntime` surface (which would otherwise show up in
+ * autocomplete, `Object.keys`, etc.). Access via {@link getInternals}.
+ */
+const INTERNALS = new WeakMap<JourneyRuntime, JourneyRuntimeInternals>();
+
+/**
  * Create a journey runtime bound to a set of registered journeys. The
  * registry integration assembles this once at resolve time; the runtime is
  * owned by the manifest and exposed as `manifest.journeys`.
+ *
+ * Passing an empty `registered` array yields a no-op runtime: every public
+ * method is safe to call, and `start()` will throw "unknown journey id" —
+ * matching the normal "not registered" failure mode and letting shells skip
+ * null-guards on `manifest.journeys`.
  */
 export function createJourneyRuntime(
   registered: readonly RegisteredJourney[],
@@ -85,7 +101,15 @@ export function createJourneyRuntime(
   const definitions = new Map<string, RegisteredJourney>();
   for (const entry of registered) definitions.set(entry.definition.id, entry);
   const instances = new Map<InstanceId, InstanceRecord>();
+  // keyIndex is namespaced internally by journeyId so two journeys that
+  // happen to return the same `keyFor` string do not alias onto the same
+  // instance. The adapter sees only the user-defined portion; the prefix is
+  // applied inside the runtime.
   const keyIndex = new Map<string, InstanceId>();
+
+  function indexKey(journeyId: string, userKey: string): string {
+    return `${journeyId}::${userKey}`;
+  }
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -170,8 +194,21 @@ export function createJourneyRuntime(
 
   function cloneSnapshot<TState>(state: TState): TState {
     if (state === null || typeof state !== "object") return state;
-    if (Array.isArray(state)) return [...state] as unknown as TState;
-    return { ...(state as object) } as TState;
+    let cloned: TState;
+    if (Array.isArray(state)) cloned = [...state] as unknown as TState;
+    else cloned = { ...(state as object) } as TState;
+    // Dev-mode probe: freeze the snapshot so a transition that mutates
+    // rolled-back state in place fails loudly instead of silently corrupting
+    // the history. The freeze is shallow — deep mutation still slips through
+    // (documented limitation L8), but catches the most common footgun.
+    if (debug) {
+      try {
+        Object.freeze(cloned);
+      } catch {
+        // Some engines reject freezing exotic objects; swallow.
+      }
+    }
+    return cloned;
   }
 
   function trimHistory(record: InstanceRecord, reg: RegisteredJourney) {
@@ -233,7 +270,26 @@ export function createJourneyRuntime(
     if (!record.persistenceKey) return;
     record.pendingSave = null;
     const key = record.persistenceKey;
-    keyIndex.delete(key);
+    keyIndex.delete(indexKey(record.journeyId, key));
+    fireAndForgetRemove(persistence, key);
+  }
+
+  /**
+   * Delete a blob we've decided to discard (terminal, corrupt, unmigrateable)
+   * without mutating any live instance record. Used from the `start()` paths
+   * where we've probed the adapter and then chosen to mint a fresh instance.
+   */
+  function discardBlob<TState>(
+    persistence: JourneyPersistence<TState>,
+    key: string,
+  ) {
+    fireAndForgetRemove(persistence, key);
+  }
+
+  function fireAndForgetRemove<TState>(
+    persistence: JourneyPersistence<TState>,
+    key: string,
+  ) {
     try {
       const maybe = persistence.remove(key);
       if (maybe && typeof (maybe as Promise<void>).catch === "function") {
@@ -468,6 +524,25 @@ export function createJourneyRuntime(
       applyTransition(record, reg, { abort: { reason: "transition-error", error: err } }, exitName);
       return;
     }
+    // Transitions must be pure and synchronous. A handler that returns a
+    // thenable almost certainly forgot to put the async work inside a loading
+    // entry point — applying the thenable as the transition result would be
+    // a silent no-op (it is not `{ next | complete | abort }`), so warn and
+    // treat it as an abort.
+    if (result && typeof (result as { then?: unknown }).then === "function") {
+      if (debug) {
+        console.error(
+          `[@modular-react/journeys] Transition handler for ${step.moduleId}.${step.entry}."${exitName}" returned a Promise. Transitions must be synchronous and pure — put async work inside a loading entry point on a module.`,
+        );
+      }
+      applyTransition(
+        record,
+        reg,
+        { abort: { reason: "transition-returned-promise", exit: exitName } },
+        exitName,
+      );
+      return;
+    }
     applyTransition(record, reg, result, exitName);
   }
 
@@ -510,6 +585,21 @@ export function createJourneyRuntime(
       dispatchExit(record, reg, token, name, output);
     };
     const mode = entryAllowBackMode(record.step);
+    // Journey declares allowBack for this entry but the outlet was mounted
+    // without the module map — `goBack` would appear unreachable at runtime
+    // with no obvious cause. Warn once; the symptom otherwise shows up as
+    // "back button never renders".
+    if (
+      debug &&
+      mode === false &&
+      record.step &&
+      journeyAllowsBack(reg.definition, record.step) &&
+      !moduleMap[record.step.moduleId]
+    ) {
+      console.warn(
+        `[@modular-react/journeys] Journey "${reg.definition.id}" declares allowBack for ${record.step.moduleId}.${record.step.entry}, but the runtime was created without the "${record.step.moduleId}" module in its module map — goBack will not appear. Pass { modules } to createJourneyRuntime.`,
+      );
+    }
     const canGoBack =
       mode !== false &&
       journeyAllowsBack(reg.definition, record.step) &&
@@ -531,12 +621,18 @@ export function createJourneyRuntime(
     if (record.cachedSnapshot && record.cachedSnapshot.revision === record.revision) {
       return record.cachedSnapshot.instance;
     }
+    // Copy-on-build: history is mutated in place on every transition, so
+    // consumers that diff against a prior `instance.history` reference
+    // (React deps, effect closures, useMemo) need a frozen-per-revision
+    // snapshot. Cheap — bounded by the history cap, and only rebuilt when
+    // the revision bumps.
+    const historySnapshot: readonly JourneyStep[] = [...record.history];
     const instance: JourneyInstance = {
       id: record.id,
       journeyId: record.journeyId,
       status: record.status,
       step: record.step,
-      history: record.history,
+      history: historySnapshot,
       state: record.state,
       terminalPayload:
         record.status === "completed" || record.status === "aborted"
@@ -572,6 +668,7 @@ export function createJourneyRuntime(
       stepToken: 0,
       persistenceKey,
       terminalFired: false,
+      retryCount: 0,
       listeners: new Set(),
       pendingSave: null,
       saveInFlight: false,
@@ -592,7 +689,9 @@ export function createJourneyRuntime(
       createRecord(reg, mintInstanceId(), computeKey(reg, input), def.initialState(input));
     if (!existingRecord) {
       instances.set(record.id, record);
-      if (record.persistenceKey) keyIndex.set(record.persistenceKey, record.id);
+      if (record.persistenceKey) {
+        keyIndex.set(indexKey(reg.definition.id, record.persistenceKey), record.id);
+      }
     } else {
       record.state = def.initialState(input);
     }
@@ -612,6 +711,15 @@ export function createJourneyRuntime(
   }
 
   function hydrateInto(record: InstanceRecord, blob: SerializedJourney<unknown>) {
+    const historyLen = blob.history.length;
+    // Align rollbackSnapshots with history — mismatched lengths corrupt
+    // `goBack` (pop() would take the wrong pair). Reject upfront instead of
+    // silently misbehaving later.
+    if (blob.rollbackSnapshots && blob.rollbackSnapshots.length !== historyLen) {
+      throw new JourneyHydrationError(
+        `Blob for journey "${record.journeyId}" has rollbackSnapshots.length=${blob.rollbackSnapshots.length} but history.length=${historyLen}. Fix the persisted blob (pad rollbackSnapshots with null for non-rollback entries) or provide onHydrate to migrate.`,
+      );
+    }
     record.state = blob.state;
     record.step = blob.step;
     record.history = [...blob.history];
@@ -621,7 +729,9 @@ export function createJourneyRuntime(
       ) as (unknown | undefined)[];
       record.hasRollbackSnapshot = record.rollbackSnapshots.some((s) => s !== undefined);
     } else {
-      record.rollbackSnapshots = [];
+      // Legacy blobs without rollbackSnapshots — treat as if every history
+      // entry had no snapshot. Keeps the two arrays length-aligned.
+      record.rollbackSnapshots = new Array(historyLen).fill(undefined);
       record.hasRollbackSnapshot = false;
     }
     record.status = blob.status;
@@ -687,11 +797,12 @@ export function createJourneyRuntime(
           journeyId: reg.definition.id,
           input,
         });
+        const indexed = indexKey(reg.definition.id, key);
         // Idempotency: return the existing instance for this key whenever it
         // is still in flight — "active" OR "loading". Returning a fresh id
         // while a load is pending would orphan the loading instance and
         // trigger a second `load()`.
-        const existingId = keyIndex.get(key);
+        const existingId = keyIndex.get(indexed);
         const existing = existingId ? instances.get(existingId) : null;
         if (existing && (existing.status === "active" || existing.status === "loading")) {
           return existing.id;
@@ -708,21 +819,33 @@ export function createJourneyRuntime(
           const instanceId = mintInstanceId();
           const record = createRecord(reg, instanceId, key, def.initialState(input));
           instances.set(instanceId, record);
-          keyIndex.set(key, instanceId);
+          keyIndex.set(indexed, instanceId);
           notify(record);
 
           void (loaded as Promise<SerializedJourney<unknown> | null>).then(
             (blob) => {
               if (!blob || blob.status !== "active") {
+                // Discard terminal/missing blob and mint a fresh instance
+                // under the same key. A terminal blob left in storage would
+                // be re-fetched on every subsequent start().
+                if (blob) discardBlob(persistence as JourneyPersistence<unknown>, key);
                 startFresh(reg, input, record);
                 return;
               }
               const migrated = migrateBlob(reg, blob);
               if (!migrated) {
+                discardBlob(persistence as JourneyPersistence<unknown>, key);
                 startFresh(reg, input, record);
                 return;
               }
-              hydrateInto(record, migrated);
+              try {
+                hydrateInto(record, migrated);
+              } catch (err) {
+                if (debug) console.error("[@modular-react/journeys] hydrate after async load failed", err);
+                discardBlob(persistence as JourneyPersistence<unknown>, key);
+                startFresh(reg, input, record);
+                return;
+              }
               notify(record);
             },
             (err) => {
@@ -740,12 +863,31 @@ export function createJourneyRuntime(
             const instanceId = migrated.instanceId || mintInstanceId();
             const record = createRecord(reg, instanceId, key, def.initialState(input));
             instances.set(instanceId, record);
-            keyIndex.set(key, instanceId);
-            hydrateInto(record, migrated);
+            keyIndex.set(indexed, instanceId);
+            try {
+              hydrateInto(record, migrated);
+            } catch (err) {
+              if (debug) console.error("[@modular-react/journeys] hydrate during start failed", err);
+              // Cleanup the half-built record and fall through to startFresh
+              // under the same key.
+              instances.delete(instanceId);
+              keyIndex.delete(indexed);
+              discardBlob(persistence as JourneyPersistence<unknown>, key);
+              const freshId = mintInstanceId();
+              const freshRecord = createRecord(reg, freshId, key, def.initialState(input));
+              instances.set(freshId, freshRecord);
+              keyIndex.set(indexed, freshId);
+              return startFresh(reg, input, freshRecord);
+            }
             notify(record);
             return instanceId;
           }
-          // Migration failed: fall through to fresh start.
+          // Migration failed: discard the stale blob so it doesn't get
+          // re-fetched forever.
+          discardBlob(persistence as JourneyPersistence<unknown>, key);
+        } else if (blob) {
+          // Terminal blob — drop it before reusing the key for a fresh run.
+          discardBlob(persistence as JourneyPersistence<unknown>, key);
         }
 
         // No blob / terminal blob / migration failed — mint a fresh instance
@@ -754,7 +896,7 @@ export function createJourneyRuntime(
         const instanceId = mintInstanceId();
         const record = createRecord(reg, instanceId, key, def.initialState(input));
         instances.set(instanceId, record);
-        keyIndex.set(key, instanceId);
+        keyIndex.set(indexed, instanceId);
         return startFresh(reg, input, record);
       }
 
@@ -765,11 +907,18 @@ export function createJourneyRuntime(
       const reg = assertKnown(journeyId);
       const migrated = migrateBlob(reg, blob as SerializedJourney<unknown>);
       if (!migrated) {
-        throw new Error(
-          `[@modular-react/journeys] Hydrate version mismatch for "${journeyId}": blob=${blob.version} def=${reg.definition.version}. Provide onHydrate to migrate.`,
+        throw new JourneyHydrationError(
+          `Hydrate version mismatch for "${journeyId}": blob=${blob.version} def=${reg.definition.version}. Provide onHydrate to migrate.`,
         );
       }
       const instanceId = migrated.instanceId || mintInstanceId();
+      // Guard against silent overwrite — two hydrates of the same blob would
+      // otherwise clobber live state and orphan existing listeners.
+      if (instances.has(instanceId)) {
+        throw new JourneyHydrationError(
+          `Cannot hydrate journey "${journeyId}" with instance id "${instanceId}" — an instance with the same id is already in memory. Call forget(id) first if you intend to replace it.`,
+        );
+      }
 
       // If the migrated blob has an input we can use to compute the key, we
       // could re-index — but `SerializedJourney` doesn't carry the original
@@ -811,6 +960,14 @@ export function createJourneyRuntime(
       if (record.status === "completed" || record.status === "aborted") return;
       const reg = definitions.get(record.journeyId);
       if (!reg) return;
+      // An outlet that unmounts mid-load should still be able to tear the
+      // placeholder instance down. The journey never "started" as far as the
+      // author is concerned, so skip `onAbandon` (it would see a null step)
+      // and transition straight to `aborted` with the supplied reason.
+      if (record.status === "loading") {
+        applyTransition(record, reg, { abort: { reason: reason ?? "abandoned" } }, null);
+        return;
+      }
       let result: TransitionResult<ModuleTypeMap, unknown> = {
         abort: { reason: reason ?? "abandoned" },
       };
@@ -834,19 +991,37 @@ export function createJourneyRuntime(
       const record = instances.get(id);
       if (!record) return;
       if (record.status !== "completed" && record.status !== "aborted") return;
-      if (record.persistenceKey) keyIndex.delete(record.persistenceKey);
+      if (record.persistenceKey) keyIndex.delete(indexKey(record.journeyId, record.persistenceKey));
       record.listeners.clear();
       instances.delete(id);
     },
+
+    forgetTerminal() {
+      let removed = 0;
+      for (const [id, record] of instances) {
+        if (record.status === "completed" || record.status === "aborted") {
+          if (record.persistenceKey) {
+            keyIndex.delete(indexKey(record.journeyId, record.persistenceKey));
+          }
+          record.listeners.clear();
+          instances.delete(id);
+          removed += 1;
+        }
+      }
+      return removed;
+    },
   };
 
-  // Internals used by the outlet and testing helpers.
+  // Internals used by the outlet and testing helpers — kept on a WeakMap
+  // rather than on the runtime object to keep the public surface clean.
   const internals: JourneyRuntimeInternals = {
     __bindStepCallbacks: bindStepCallbacks,
     __getRecord: (id: InstanceId) => instances.get(id),
     __getRegistered: (id: string) => definitions.get(id),
+    __moduleMap: moduleMap,
+    __debug: debug,
   };
-  Object.assign(runtime, internals);
+  INTERNALS.set(runtime, internals);
 
   return runtime;
 }
@@ -871,8 +1046,21 @@ export interface JourneyRuntimeInternals {
   };
   __getRecord(id: InstanceId): InstanceRecord | undefined;
   __getRegistered(id: string): RegisteredJourney | undefined;
+  /** Module descriptors bound to this runtime — the `<JourneyOutlet>` reads
+   *  this to resolve step components without the caller threading `modules`
+   *  through as a prop. */
+  __moduleMap: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
+  /** Runtime's resolved debug flag — useful for dev-mode probes in the
+   *  outlet / module-tab. */
+  __debug: boolean;
 }
 
 export function getInternals(runtime: JourneyRuntime): JourneyRuntimeInternals {
-  return runtime as unknown as JourneyRuntimeInternals;
+  const internals = INTERNALS.get(runtime);
+  if (!internals) {
+    throw new Error(
+      "[@modular-react/journeys] getInternals() called on a runtime that was not produced by createJourneyRuntime().",
+    );
+  }
+  return internals;
 }

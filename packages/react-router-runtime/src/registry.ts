@@ -27,13 +27,16 @@ import { createSlotsSignal } from "@modular-react/react";
 import type { SlotsSignal } from "@modular-react/react";
 import {
   createJourneyRuntime,
+  JourneyValidationError,
   validateJourneyContracts,
+  validateJourneyDefinition,
 } from "@modular-react/journeys";
 import type {
   AnyJourneyDefinition,
   JourneyDefinition,
   JourneyRegisterOptions,
   JourneyRuntime,
+  ModuleTypeMap,
   RegisteredJourney,
 } from "@modular-react/journeys";
 
@@ -105,15 +108,16 @@ export interface ModuleRegistry<
 
   /**
    * Register a journey definition. Journeys compose entry/exit points across
-   * several modules behind a single serializable workflow. The definition is
-   * stored as-is and validated against the registered modules at
-   * `resolveManifest()` / `resolve()` time.
+   * several modules behind a single serializable workflow. The definition's
+   * structural shape is validated immediately (missing `id` / `version` /
+   * `transitions` etc.); module-level contracts are validated against the
+   * registered modules at `resolveManifest()` / `resolve()` time.
    *
    * `options.persistence` is typed against the journey's state — pass a
    * typed definition and the persistence adapter is checked end-to-end.
    */
-  registerJourney<TModules, TState, TInput>(
-    definition: JourneyDefinition<TModules extends Record<string, any> ? TModules : any, TState, TInput>,
+  registerJourney<TModules extends ModuleTypeMap, TState, TInput>(
+    definition: JourneyDefinition<TModules, TState, TInput>,
     options?: JourneyRegisterOptions<TState>,
   ): void;
 }
@@ -193,7 +197,7 @@ interface CommonAssembly<
   recalculateSlots: () => void;
   slotFilter: SlotFilter | undefined;
   providers: React.ComponentType<{ children: React.ReactNode }>[] | undefined;
-  journeys: JourneyRuntime | null;
+  journeys: JourneyRuntime;
 }
 
 export function createRegistry<
@@ -315,10 +319,12 @@ export function createRegistry<
     const moduleDescriptors: Record<string, ModuleDescriptor<any, any, any, any>> = {};
     for (const mod of modules) moduleDescriptors[mod.id] = mod as ModuleDescriptor<any, any, any, any>;
 
-    const journeyRuntime =
-      journeys.length > 0
-        ? createJourneyRuntime(journeys, { modules: moduleDescriptors })
-        : null;
+    // Always construct a runtime — even with zero registered journeys, the
+    // no-op runtime returns empty listings and throws "unknown journey id"
+    // on `start()`, so shells never have to null-guard `manifest.journeys`.
+    const journeyRuntime = createJourneyRuntime(journeys, {
+      modules: moduleDescriptors,
+    });
 
     return {
       modules: modules.map((mod) => ({
@@ -374,8 +380,13 @@ export function createRegistry<
 
     registerJourney(definition, options) {
       assertCanRegister();
+      const def = definition as AnyJourneyDefinition;
+      const structuralIssues = validateJourneyDefinition(def);
+      if (structuralIssues.length > 0) {
+        throw new JourneyValidationError(structuralIssues);
+      }
       journeys.push({
-        definition: definition as AnyJourneyDefinition,
+        definition: def,
         options: options as JourneyRegisterOptions | undefined,
       });
     },

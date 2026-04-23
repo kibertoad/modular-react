@@ -71,8 +71,10 @@ export interface ApplicationManifest<
   /** Full module descriptors keyed by id — used by `<JourneyOutlet>` and `<ModuleTab>`. */
   readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
 
-  /** Journey runtime — `null` when no journey was registered. */
-  readonly journeys: JourneyRuntime | null;
+  /** Journey runtime — always present. When no journey is registered, the
+   *  runtime is a no-op (`listDefinitions()` empty, `start()` throws
+   *  "unknown journey id"). Shells can skip null-guards on it. */
+  readonly journeys: JourneyRuntime;
 
   /**
    * Trigger re-evaluation of dynamic slots.
@@ -211,8 +213,10 @@ export interface ResolvedManifest<
   /** Full module descriptors keyed by id — used by `<JourneyOutlet>` and `<ModuleTab>`. */
   readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
 
-  /** Journey runtime — `null` when no journey was registered. */
-  readonly journeys: JourneyRuntime | null;
+  /** Journey runtime — always present. When no journey is registered, the
+   *  runtime is a no-op (`listDefinitions()` empty, `start()` throws
+   *  "unknown journey id"). Shells can skip null-guards on it. */
+  readonly journeys: JourneyRuntime;
 
   /** Resolved `onModuleExit` callback (see {@link ResolveManifestOptions.onModuleExit}). */
   readonly onModuleExit?: (event: {

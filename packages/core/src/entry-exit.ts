@@ -23,15 +23,22 @@ export const defineEntry = <TInput>(entry: ModuleEntryPoint<TInput>): ModuleEntr
   entry;
 
 /**
- * Identity helper used to preserve inference of `TOutput` on a single
- * {@link ExitPointSchema}. Called with no arguments, returns a void schema.
+ * Type-only brand that preserves inference of `TOutput` on a single
+ * {@link ExitPointSchema}. Called with no arguments and no runtime cost —
+ * the returned object is an empty placeholder tagged with the output type.
+ *
+ * ```ts
+ * const exits = {
+ *   noDebtFound:      defineExit<{ customerId: string }>(),
+ *   cancelled:        defineExit(),
+ * } as const;
+ * ```
+ *
+ * Apps that need runtime validation should wire zod/valibot through the
+ * registry's `validateInput` hook — `defineExit` itself stays declarative.
  */
-export function defineExit(): ExitPointSchema<void>;
-export function defineExit<TOutput>(schemaDecl?: ExitPointSchema<TOutput>): ExitPointSchema<TOutput>;
-export function defineExit<TOutput>(
-  schemaDecl?: ExitPointSchema<TOutput>,
-): ExitPointSchema<TOutput> {
-  return schemaDecl ?? ({} as ExitPointSchema<TOutput>);
+export function defineExit<TOutput = void>(): ExitPointSchema<TOutput> {
+  return {} as ExitPointSchema<TOutput>;
 }
 
 /**

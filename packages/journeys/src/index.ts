@@ -4,6 +4,7 @@
 // runtime factory + `JourneyOutlet`. Modules import nothing from this package.
 
 export { defineJourney } from "./define-journey.js";
+export { defineJourneyPersistence } from "./persistence.js";
 export {
   createJourneyRuntime,
   getInternals,
@@ -19,6 +20,8 @@ export { JourneyOutlet } from "./outlet.js";
 export type { JourneyOutletProps, JourneyStepErrorPolicy } from "./outlet.js";
 export { ModuleTab } from "./module-tab.js";
 export type { ModuleTabProps, ModuleTabExitEvent } from "./module-tab.js";
+export { JourneyProvider, useJourneyContext } from "./provider.js";
+export type { JourneyProviderProps, JourneyProviderValue } from "./provider.js";
 
 export type {
   AbandonCtx,

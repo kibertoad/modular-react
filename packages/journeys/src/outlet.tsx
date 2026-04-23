@@ -12,6 +12,7 @@ import type { ModuleDescriptor } from "@modular-react/core";
 import { ModuleErrorBoundary } from "@modular-react/react";
 
 import { getInternals } from "./runtime.js";
+import { useJourneyContext } from "./provider.js";
 import type { InstanceId, JourneyRuntime, JourneyStep, TerminalOutcome } from "./types.js";
 
 export type JourneyStepErrorPolicy = "abort" | "retry" | "ignore";
@@ -20,21 +21,28 @@ export type JourneyStepErrorPolicy = "abort" | "retry" | "ignore";
 const DEFAULT_RETRY_CAP = 2;
 
 export interface JourneyOutletProps {
-  readonly runtime: JourneyRuntime;
+  /**
+   * Runtime to drive the outlet against. Optional when a `<JourneyProvider>`
+   * is mounted above — the outlet reads the runtime from context in that
+   * case. Explicit prop overrides context, so one outlet can reach a
+   * different runtime when needed.
+   */
+  readonly runtime?: JourneyRuntime;
   readonly instanceId: InstanceId;
   /**
-   * Module descriptors the outlet resolves step components against. Usually
-   * supplied by a thin shell-side wrapper that pulls from the registry; the
-   * base outlet stays registry-agnostic.
+   * Module descriptors the outlet resolves step components against.
+   * Optional — when omitted, the outlet pulls the descriptors the runtime
+   * was constructed with (the common case).
    */
-  readonly modules: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
+  readonly modules?: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
   readonly loadingFallback?: ReactNode;
   readonly onFinished?: (outcome: TerminalOutcome) => void;
   readonly onStepError?: (err: unknown, ctx: { step: JourneyStep }) => JourneyStepErrorPolicy;
   /**
-   * Cap on consecutive `retry` responses before the outlet falls back to
-   * `abort`. Prevents infinite loops when a step throws on every render.
-   * Default: 2.
+   * Cap on `retry` responses before the outlet falls back to `abort`. The
+   * counter increments on every retry from `onStepError` and is never reset,
+   * so a step that causes a downstream step to also throw cannot bypass the
+   * cap by bumping the step token. Default: 2.
    */
   readonly retryLimit?: number;
 }
@@ -47,26 +55,34 @@ export interface JourneyOutletProps {
  * instance down on its first visit).
  */
 export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
+  const context = useJourneyContext();
   const {
-    runtime,
+    runtime: runtimeProp,
     instanceId,
-    modules,
+    modules: modulesProp,
     loadingFallback,
     onFinished,
     onStepError,
     retryLimit = DEFAULT_RETRY_CAP,
   } = props;
 
+  const runtime = runtimeProp ?? context?.runtime;
+  if (!runtime) {
+    throw new Error(
+      "[@modular-react/journeys] <JourneyOutlet> needs a runtime. Either pass `runtime` or mount a <JourneyProvider>.",
+    );
+  }
+
   const instance = useInstanceSnapshot(runtime, instanceId);
   const internals = getInternals(runtime);
+  const modules = modulesProp ?? internals.__moduleMap;
   const [retryKey, setRetryKey] = useState(0);
-  const retryCountRef = useRef(0);
-  const lastRetryStepTokenRef = useRef<number | null>(null);
 
-  // Abandon on unmount when still active. StrictMode in dev fires the cleanup
-  // synchronously and then remounts — deferring the abandon one microtask
-  // and re-checking "did I re-mount?" via a ref keeps the journey alive
-  // through that dance. Production single-mount behavior is unchanged.
+  // Abandon on unmount when still active OR still loading. StrictMode in dev
+  // fires the cleanup synchronously and then remounts — deferring the abandon
+  // one microtask and re-checking "did I re-mount?" via a ref keeps the
+  // journey alive through that dance. Production single-mount behavior is
+  // unchanged.
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -75,7 +91,7 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
       queueMicrotask(() => {
         if (mountedRef.current) return;
         const record = internals.__getRecord(instanceId);
-        if (record && record.status === "active") {
+        if (record && (record.status === "active" || record.status === "loading")) {
           runtime.end(instanceId, { reason: "unmounted" });
         }
       });
@@ -89,7 +105,12 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     if (instance.status !== "completed" && instance.status !== "aborted") return;
     if (finishedFiredRef.current) return;
     finishedFiredRef.current = true;
-    onFinished?.({ status: instance.status, payload: instance.terminalPayload });
+    onFinished?.({
+      status: instance.status,
+      payload: instance.terminalPayload,
+      instanceId: instance.id,
+      journeyId: instance.journeyId,
+    });
   }, [instance, onFinished]);
 
   if (!instance) return null;
@@ -113,20 +134,17 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
   const reg = internals.__getRegistered(instance.journeyId)!;
   const { exit, goBack } = internals.__bindStepCallbacks(record, reg);
 
-  // Reset retry counter whenever the step changes — each fresh step gets its
-  // own budget.
-  if (lastRetryStepTokenRef.current !== record.stepToken) {
-    lastRetryStepTokenRef.current = record.stepToken;
-    retryCountRef.current = 0;
-  }
-
   const handleError = (err: unknown): void => {
     let policy = onStepError?.(err, { step }) ?? "abort";
     if (policy === "retry") {
-      if (retryCountRef.current >= retryLimit) {
+      // The retry counter lives on the runtime record (not a ref) so it
+      // survives a transition side-effect that advances stepToken mid-retry:
+      // a step that throws during render and calls `exit()` in cleanup would
+      // otherwise reset the budget on every hop.
+      if (record.retryCount >= retryLimit) {
         policy = "abort";
       } else {
-        retryCountRef.current += 1;
+        record.retryCount += 1;
       }
     }
     if (policy === "abort") {

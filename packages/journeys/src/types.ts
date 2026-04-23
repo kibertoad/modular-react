@@ -282,11 +282,15 @@ export interface RegisteredJourney<TState = unknown> {
 /**
  * Terminal outcome surfaced to `JourneyOutlet.onFinished` and available on
  * `JourneyInstance.terminalPayload`. Matches the value returned by the
- * last transition (`{ complete }` or `{ abort }`).
+ * last transition (`{ complete }` or `{ abort }`). `instanceId` and
+ * `journeyId` are included so analytics / tab-close hooks can correlate
+ * without re-reading the outlet's props.
  */
 export interface TerminalOutcome {
   readonly status: "completed" | "aborted";
   readonly payload: unknown;
+  readonly instanceId: InstanceId;
+  readonly journeyId: string;
 }
 
 export interface JourneyRuntime {
@@ -311,4 +315,10 @@ export interface JourneyRuntime {
    * shells from leaking terminal records over time.
    */
   forget(id: InstanceId): void;
+  /**
+   * Drop every terminal (completed / aborted) instance in one call. Returns
+   * the number of records dropped. Useful hygiene for long-running shells
+   * that accumulate finished journeys over a session.
+   */
+  forgetTerminal(): number;
 }
