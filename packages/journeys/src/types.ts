@@ -210,6 +210,8 @@ export interface JourneyInstance<TState = unknown> {
   readonly step: JourneyStep | null;
   readonly history: readonly JourneyStep[];
   readonly state: TState;
+  /** Payload from the terminal transition; undefined until the journey ends. */
+  readonly terminalPayload?: unknown;
   readonly startedAt: string;
   readonly updatedAt: string;
   serialize(): SerializedJourney<TState>;
@@ -222,7 +224,14 @@ export interface SerializedJourney<TState = unknown> {
   readonly status: "active" | "completed" | "aborted";
   readonly step: JourneyStep | null;
   readonly history: readonly JourneyStep[];
-  readonly rollbackSnapshots?: readonly TState[];
+  /**
+   * Rollback snapshots indexed alongside `history`. Slots for non-rollback
+   * entries serialize as `null` (JSON-safe placeholder) so the array stays
+   * aligned with `history` across a round trip.
+   */
+  readonly rollbackSnapshots?: readonly (TState | null)[];
+  /** Terminal payload from `complete` / `abort`. Present only when terminal. */
+  readonly terminalPayload?: unknown;
   readonly state: TState;
   readonly startedAt: string;
   readonly updatedAt: string;
@@ -237,11 +246,17 @@ export interface JourneyDefinitionSummary {
 export type MaybePromise<T> = T | Promise<T>;
 
 export interface JourneyPersistence<TState = unknown> {
-  keyFor: (ctx: {
-    journeyId: string;
-    input: unknown;
-    instanceId: string;
-  }) => string;
+  /**
+   * Compute the persistence key from the journey id and the starting input.
+   * The key must be deterministic for identical inputs — `start()` probes
+   * this key to find an existing instance and achieve idempotency.
+   *
+   * `instanceId` is NOT part of the key contract: probing happens before
+   * an id exists, and the dominant patterns (per-customer, per-session)
+   * don't need it. If you need per-instance isolation, include a unique
+   * discriminator in `input` rather than relying on an instance id.
+   */
+  keyFor: (ctx: { journeyId: string; input: unknown }) => string;
   load: (key: string) => MaybePromise<SerializedJourney<TState> | null>;
   save: (key: string, blob: SerializedJourney<TState>) => MaybePromise<void>;
   remove: (key: string) => MaybePromise<void>;
@@ -250,12 +265,28 @@ export interface JourneyPersistence<TState = unknown> {
 export interface JourneyRegisterOptions<TState = unknown> {
   onTransition?: (ev: TransitionEvent) => void;
   persistence?: JourneyPersistence<TState>;
+  /**
+   * Maximum number of entries to keep in `history` (and the matching
+   * `rollbackSnapshots`). Oldest entries are dropped once the cap is
+   * exceeded. Omit for unbounded history (previous behavior).
+   */
+  maxHistory?: number;
 }
 
 /** Internal registration record — definition + options kept together. */
 export interface RegisteredJourney<TState = unknown> {
   readonly definition: AnyJourneyDefinition;
   readonly options: JourneyRegisterOptions<TState> | undefined;
+}
+
+/**
+ * Terminal outcome surfaced to `JourneyOutlet.onFinished` and available on
+ * `JourneyInstance.terminalPayload`. Matches the value returned by the
+ * last transition (`{ complete }` or `{ abort }`).
+ */
+export interface TerminalOutcome {
+  readonly status: "completed" | "aborted";
+  readonly payload: unknown;
 }
 
 export interface JourneyRuntime {
@@ -274,4 +305,10 @@ export interface JourneyRuntime {
    * the instance is already terminal or unknown.
    */
   end(id: InstanceId, reason?: unknown): void;
+  /**
+   * Drop a terminal instance from the runtime. No-op for active/loading
+   * instances (use `end()` first) and unknown ids. Prevents long-lived
+   * shells from leaking terminal records over time.
+   */
+  forget(id: InstanceId): void;
 }

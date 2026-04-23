@@ -271,6 +271,28 @@ describe("createJourneyRuntime — hydration", () => {
     expect(idA).toBe(idB);
   });
 
+  it("start() is idempotent while the load probe is still in flight (async)", async () => {
+    let resolveLoad: (blob: null) => void = () => {};
+    const loadPromise = new Promise<null>((r) => {
+      resolveLoad = r;
+    });
+    const persistence = {
+      keyFor: () => "customer:async:collect",
+      load: vi.fn(() => loadPromise),
+      save: vi.fn(async () => {}),
+      remove: vi.fn(async () => {}),
+    };
+    const rt = freshRuntime({ options: { persistence: persistence as any } });
+    const idA = rt.start("collect", { customerId: "C-async" });
+    const idB = rt.start("collect", { customerId: "C-async" });
+    expect(idA).toBe(idB);
+    expect(persistence.load).toHaveBeenCalledTimes(1);
+    resolveLoad(null);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(rt.getInstance(idA)!.status).toBe("active");
+  });
+
   it("explicit hydrate rejects version mismatch without onHydrate", () => {
     const rt = freshRuntime();
     const blob = {
@@ -311,5 +333,154 @@ describe("createJourneyRuntime — hydration", () => {
     const inst = rt.getInstance(id)!;
     expect((inst.state as State).attempts).toBe(2);
     expect(inst.step!.moduleId).toBe("account");
+  });
+
+  it("rollback snapshots survive a persistence round-trip", async () => {
+    const store = new Map<string, unknown>();
+    const persistence = {
+      keyFor: () => "k:roundtrip",
+      load: async (k: string) => (store.get(k) as any) ?? null,
+      save: async (k: string, b: any) => {
+        store.set(k, b);
+      },
+      remove: async (k: string) => {
+        store.delete(k);
+      },
+    };
+    const rt1 = freshRuntime({ options: { persistence: persistence as any } });
+    const id1 = rt1.start("collect", { customerId: "C-rt" });
+    const internals1 = getInternals(rt1);
+    const reg1 = internals1.__getRegistered("collect")!;
+    internals1
+      .__bindStepCallbacks(internals1.__getRecord(id1)!, reg1)
+      .exit("wantsToNegotiate", { customerId: "C-rt" });
+    // Drain save queue.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const rt2 = freshRuntime({ options: { persistence: persistence as any } });
+    const id2 = rt2.start("collect", { customerId: "C-rt" });
+    // Allow the async load + hydrate to settle.
+    await Promise.resolve();
+    await Promise.resolve();
+    const internals2 = getInternals(rt2);
+    const reg2 = internals2.__getRegistered("collect")!;
+    const cbs = internals2.__bindStepCallbacks(internals2.__getRecord(id2)!, reg2);
+    expect(cbs.goBack).toBeDefined();
+    cbs.goBack!();
+    const inst = rt2.getInstance(id2)!;
+    expect(inst.step!.entry).toBe("review");
+    expect((inst.state as State).attempts).toBe(0);
+  });
+});
+
+describe("createJourneyRuntime — lifecycle extras", () => {
+  it("forget() drops terminal instances but refuses active ones", () => {
+    const rt = freshRuntime();
+    const id = rt.start("collect", { customerId: "C-forget" });
+    rt.forget(id);
+    expect(rt.getInstance(id)).not.toBeNull();
+    const internals = getInternals(rt);
+    internals
+      .__bindStepCallbacks(internals.__getRecord(id)!, internals.__getRegistered("collect")!)
+      .exit("cancelled");
+    rt.forget(id);
+    expect(rt.getInstance(id)).toBeNull();
+  });
+
+  it("maxHistory drops the oldest step when the cap is exceeded", () => {
+    const rt = createJourneyRuntime(
+      [{ definition: journey, options: { maxHistory: 1 } }],
+      { modules: { account: accountModule, debts: debtsModule }, debug: false },
+    );
+    const id = rt.start("collect", { customerId: "C-cap" });
+    const internals = getInternals(rt);
+    const reg = internals.__getRegistered("collect")!;
+    internals
+      .__bindStepCallbacks(internals.__getRecord(id)!, reg)
+      .exit("wantsToNegotiate", { customerId: "C-cap" });
+    internals
+      .__bindStepCallbacks(internals.__getRecord(id)!, reg)
+      .goBack!();
+    // Two transitions each push once; cap=1 leaves history at length 1.
+    expect(rt.getInstance(id)!.history.length).toBe(1);
+  });
+
+  it("coalesces rapid saves so there is at most one in flight", async () => {
+    const saves: string[] = [];
+    let resolveFirst: () => void = () => {};
+    const firstDone = new Promise<void>((r) => {
+      resolveFirst = r;
+    });
+    let sawFirst = false;
+    const persistence = {
+      keyFor: () => "k:coalesce",
+      load: () => null,
+      save: async (_k: string, b: any) => {
+        saves.push(b.updatedAt);
+        if (!sawFirst) {
+          sawFirst = true;
+          await firstDone;
+        }
+      },
+      remove: async () => {},
+    };
+    const rt = freshRuntime({ options: { persistence: persistence as any } });
+    const id = rt.start("collect", { customerId: "C-coalesce" });
+    const internals = getInternals(rt);
+    const reg = internals.__getRegistered("collect")!;
+    // Fire three transitions rapid-fire — cancelled completes. Sequence:
+    // start (save queued), cancelled (save queued & coalesces on top of the
+    // first in-flight save). The runtime must have at most one save in
+    // flight at a time.
+    internals
+      .__bindStepCallbacks(internals.__getRecord(id)!, reg)
+      .exit("cancelled");
+    // First save is paused; the terminal save must have coalesced.
+    expect(saves.length).toBe(1);
+    resolveFirst();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  it("records the terminal payload on the instance", () => {
+    const rt = freshRuntime();
+    const id = rt.start("collect", { customerId: "C-term" });
+    const internals = getInternals(rt);
+    internals
+      .__bindStepCallbacks(internals.__getRecord(id)!, internals.__getRegistered("collect")!)
+      .exit("done");
+    const inst = rt.getInstance(id)!;
+    expect(inst.status).toBe("completed");
+    expect(inst.terminalPayload).toEqual({ result: "no-action" });
+  });
+
+  it("allows a transition to set state: undefined when in scope", () => {
+    type NullableState = State | undefined;
+    const j = defineJourney<Modules, NullableState>()({
+      id: "collect",
+      version: "1.0.0",
+      initialState: ({ customerId }: { customerId: string }) => ({ customerId, attempts: 0 }),
+      start: (s) => ({ module: "account", entry: "review", input: { customerId: (s as State).customerId } }),
+      transitions: {
+        account: {
+          review: {
+            wantsToNegotiate: () => ({ state: undefined, abort: { reason: "test" } }),
+            done: () => ({ complete: null }),
+            cancelled: () => ({ abort: { reason: "c" } }),
+          },
+        },
+      },
+    });
+    const rt = createJourneyRuntime(
+      [{ definition: j as never, options: undefined }],
+      { modules: { account: accountModule, debts: debtsModule }, debug: false },
+    );
+    const id = rt.start("collect", { customerId: "C-u" });
+    const internals = getInternals(rt);
+    internals
+      .__bindStepCallbacks(internals.__getRecord(id)!, internals.__getRegistered("collect")!)
+      .exit("wantsToNegotiate", { customerId: "C-u" });
+    expect(rt.getInstance(id)!.state).toBeUndefined();
   });
 });

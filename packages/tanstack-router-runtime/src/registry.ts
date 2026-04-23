@@ -14,6 +14,7 @@ import {
   collectDynamicSlotFactories,
   validateNoDuplicateIds,
   validateDependencies,
+  validateEntryExitShape,
 } from "@modular-react/core";
 import type {
   NavigationItem,
@@ -76,10 +77,13 @@ export interface ModuleRegistry<
   /**
    * Register a journey definition. Validation runs at `resolveManifest()` /
    * `resolve()` time against the registered modules.
+   *
+   * `options.persistence` is typed against the journey's state — pass a
+   * typed definition and the persistence adapter is checked end-to-end.
    */
-  registerJourney<TDef extends JourneyDefinition<any, any, any>>(
-    definition: TDef,
-    options?: JourneyRegisterOptions,
+  registerJourney<TModules, TState, TInput>(
+    definition: JourneyDefinition<TModules extends Record<string, any> ? TModules : any, TState, TInput>,
+    options?: JourneyRegisterOptions<TState>,
   ): void;
 
   /**
@@ -256,6 +260,7 @@ export function createRegistry<
   }): CommonAssembly<TSlots, TNavItem> {
     validateNoDuplicateIds(modules as ModuleDescriptor[], lazyModules as LazyModuleDescriptor[]);
     validateDependencies(modules as ModuleDescriptor[], availableKeys);
+    validateEntryExitShape(modules as ModuleDescriptor[]);
     if (journeys.length > 0) {
       validateJourneyContracts(journeys, modules as ModuleDescriptor[]);
     }
@@ -352,7 +357,10 @@ export function createRegistry<
 
     registerJourney(definition, options) {
       assertCanRegister();
-      journeys.push({ definition: definition as AnyJourneyDefinition, options });
+      journeys.push({
+        definition: definition as AnyJourneyDefinition,
+        options: options as JourneyRegisterOptions | undefined,
+      });
     },
 
     resolve(

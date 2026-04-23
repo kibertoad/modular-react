@@ -168,7 +168,7 @@ describe("JourneyOutlet", () => {
     expect(getByTestId("review-customer").textContent).toBe("C-4");
   });
 
-  it("fires onFinished once on completion", () => {
+  it("fires onFinished once on completion with the terminal payload", () => {
     const rt = makeRuntime();
     const id = rt.start("demo", { customerId: "C-5" });
     const onFinished = vi.fn();
@@ -184,17 +184,121 @@ describe("JourneyOutlet", () => {
     expect(onFinished).toHaveBeenCalledTimes(1);
     expect(onFinished).toHaveBeenCalledWith({
       status: "completed",
-      payload: expect.anything(),
+      payload: { amount: 42 },
     });
   });
 
-  it("abandons the instance on unmount when still active", () => {
+  it("abandons the instance on unmount when still active", async () => {
     const rt = makeRuntime();
     const id = rt.start("demo", { customerId: "C-6" });
     const { unmount } = render(
       <JourneyOutlet runtime={rt} instanceId={id} modules={modules} />,
     );
     unmount();
+    // Abandon is deferred one microtask so StrictMode's simulated
+    // mount/unmount/mount cycle cannot tear the instance down prematurely.
+    await Promise.resolve();
     expect(rt.getInstance(id)!.status).toBe("aborted");
+  });
+
+  it("survives a StrictMode-style cleanup/remount without aborting", async () => {
+    const rt = makeRuntime();
+    const id = rt.start("demo", { customerId: "C-7" });
+    // Render twice with the same instance id — imitates the second mount
+    // of React 19 StrictMode after the simulated teardown.
+    const first = render(
+      <JourneyOutlet runtime={rt} instanceId={id} modules={modules} />,
+    );
+    first.unmount();
+    render(<JourneyOutlet runtime={rt} instanceId={id} modules={modules} />);
+    await Promise.resolve();
+    expect(rt.getInstance(id)!.status).toBe("active");
+  });
+
+  it("renders loadingFallback while the instance is in loading status", async () => {
+    let resolveLoad: (blob: null) => void = () => {};
+    const loadPromise = new Promise<null>((r) => {
+      resolveLoad = r;
+    });
+    const rt = createJourneyRuntime(
+      [
+        {
+          definition: journey,
+          options: {
+            persistence: {
+              keyFor: () => "k",
+              load: () => loadPromise,
+              save: () => {},
+              remove: () => {},
+            },
+          },
+        },
+      ],
+      { modules, debug: false },
+    );
+    const id = rt.start("demo", { customerId: "C-8" });
+    const { getByText } = render(
+      <JourneyOutlet
+        runtime={rt}
+        instanceId={id}
+        modules={modules}
+        loadingFallback={<div>please wait</div>}
+      />,
+    );
+    expect(getByText("please wait")).toBeTruthy();
+    resolveLoad(null);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  it("caps onStepError retries before falling back to abort", () => {
+    function Throwing(_props: ModuleEntryProps<{ customerId: string }, typeof accountExits>) {
+      throw new Error("boom");
+    }
+    const throwingModule = defineModule({
+      id: "account",
+      version: "1.0.0",
+      exitPoints: accountExits,
+      entryPoints: {
+        review: defineEntry({
+          component: Throwing,
+          input: schema<{ customerId: string }>(),
+        }),
+      },
+    });
+    const localModules = { account: throwingModule, debts: debtsModule };
+    type LocalModules = {
+      readonly account: typeof throwingModule;
+      readonly debts: typeof debtsModule;
+    };
+    const throwingJourney = defineJourney<LocalModules, { customerId: string }>()({
+      id: "throwing",
+      version: "1.0.0",
+      initialState: (input: { customerId: string }) => ({ customerId: input.customerId }),
+      start: (s) => ({ module: "account", entry: "review", input: { customerId: s.customerId } }),
+      transitions: {},
+    });
+    const rt = createJourneyRuntime(
+      [{ definition: throwingJourney as never, options: undefined }],
+      { modules: localModules, debug: false },
+    );
+    const id = rt.start("throwing", { customerId: "C-9" });
+    const onStepError = vi.fn(() => "retry" as const);
+    // The boundary logs by design; keep test output clean.
+    const restoreError = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <JourneyOutlet
+        runtime={rt}
+        instanceId={id}
+        modules={localModules}
+        onStepError={onStepError}
+        retryLimit={1}
+      />,
+    );
+    restoreError.mockRestore();
+    // Initial render throws, retry runs once, retry throws, retry budget
+    // exhausted, falls back to abort.
+    expect(rt.getInstance(id)!.status).toBe("aborted");
+    expect(onStepError.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });

@@ -25,7 +25,10 @@ export interface InstanceRecord<TState = unknown> {
   history: JourneyStep[];
   /** Snapshots captured per history entry — indexed alongside history. */
   rollbackSnapshots: (TState | undefined)[];
+  /** True when any entry in `rollbackSnapshots` holds a real snapshot. */
+  hasRollbackSnapshot: boolean;
   state: TState;
+  terminalPayload: unknown;
   startedAt: string;
   updatedAt: string;
   /** Monotonically increasing token used to invalidate stale exit/goBack calls. */
@@ -33,19 +36,25 @@ export interface InstanceRecord<TState = unknown> {
   /** Persistence key computed on start. Stable for the instance's lifetime. */
   persistenceKey: string | null;
   terminalFired: boolean;
-  input: unknown;
   listeners: Set<() => void>;
   pendingSave: SerializedJourney<TState> | null;
   saveInFlight: boolean;
   /**
-   * Monotonically incrementing revision bumped on every observable change.
-   * Used to memoize the public `JourneyInstance` snapshot so that
-   * `getInstance(id)` returns a stable reference between changes — a
-   * requirement of `useSyncExternalStore`.
+   * Monotonically incrementing revision bumped when an observable field
+   * changes (status/step/state/history/terminalPayload). Used to memoize
+   * the public `JourneyInstance` snapshot so that `getInstance(id)` returns
+   * a stable reference between changes — a requirement of
+   * `useSyncExternalStore`.
    */
   revision: number;
   /** Cached snapshot keyed by `revision`; rebuilt on the next read if stale. */
   cachedSnapshot: { revision: number; instance: JourneyInstance } | null;
+  /** Cached exit/goBack closures keyed by stepToken. */
+  cachedCallbacks: {
+    stepToken: number;
+    exit: (name: string, output?: unknown) => void;
+    goBack: (() => void) | undefined;
+  } | null;
 }
 
 export interface JourneyRuntimeOptions {
@@ -58,6 +67,9 @@ export interface JourneyRuntimeOptions {
    */
   readonly modules?: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
 }
+
+const ASYNC_LOAD_PENDING = Symbol("asyncLoadPending");
+type AsyncLoadPending = typeof ASYNC_LOAD_PENDING;
 
 /**
  * Create a journey runtime bound to a set of registered journeys. The
@@ -96,6 +108,12 @@ export function createJourneyRuntime(
   }
 
   function mintInstanceId(): InstanceId {
+    try {
+      const cryptoObj = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+      if (cryptoObj?.randomUUID) return `ji_${cryptoObj.randomUUID()}`;
+    } catch {
+      // Fall through to the Math.random fallback.
+    }
     const rand = Math.random().toString(36).slice(2, 10);
     return `ji_${Date.now().toString(36)}_${rand}`;
   }
@@ -142,6 +160,28 @@ export function createJourneyRuntime(
     const perModule = (definition.transitions as Record<string, any> | undefined)?.[step.moduleId];
     const perEntry = perModule?.[step.entry];
     return perEntry?.allowBack === true;
+  }
+
+  function computeKey(reg: RegisteredJourney, input: unknown): string | null {
+    const persistence = reg.options?.persistence;
+    if (!persistence) return null;
+    return persistence.keyFor({ journeyId: reg.definition.id, input });
+  }
+
+  function cloneSnapshot<TState>(state: TState): TState {
+    if (state === null || typeof state !== "object") return state;
+    if (Array.isArray(state)) return [...state] as unknown as TState;
+    return { ...(state as object) } as TState;
+  }
+
+  function trimHistory(record: InstanceRecord, reg: RegisteredJourney) {
+    const cap = reg.options?.maxHistory;
+    if (cap === undefined || cap < 0) return;
+    while (record.history.length > cap) {
+      record.history.shift();
+      record.rollbackSnapshots.shift();
+    }
+    record.hasRollbackSnapshot = record.rollbackSnapshots.some((s) => s !== undefined);
   }
 
   // ---------------------------------------------------------------------------
@@ -217,9 +257,15 @@ export function createJourneyRuntime(
           : (record.status as SerializedJourney["status"]),
       step: record.step,
       history: [...record.history],
-      rollbackSnapshots: record.rollbackSnapshots.length
-        ? (record.rollbackSnapshots.filter((x) => x !== undefined) as TState[])
+      // Preserve alignment with `history` — map `undefined` to `null` so the
+      // shape survives JSON. Only emit when we actually hold snapshots.
+      rollbackSnapshots: record.hasRollbackSnapshot
+        ? record.rollbackSnapshots.map((s) => (s === undefined ? null : s))
         : undefined,
+      terminalPayload:
+        record.status === "completed" || record.status === "aborted"
+          ? record.terminalPayload
+          : undefined,
       state: record.state,
       startedAt: record.startedAt,
       updatedAt: record.updatedAt,
@@ -307,21 +353,35 @@ export function createJourneyRuntime(
     const previousStep = record.step;
     // Snapshot the *pre-transition* state (before any state update) — this
     // is what goBack should restore into the step we're about to leave.
+    // "state" in result signals an explicit write, even if the new value is
+    // `undefined` (legitimate for state types that allow it).
     const preState = record.state;
-    if ("state" in result && result.state !== undefined) {
-      record.state = result.state;
+    if ("state" in result) {
+      record.state = result.state as typeof record.state;
     }
 
     if ("next" in result) {
       const nextStep = stepFromSpec(result.next);
       if (previousStep) {
         record.history.push(previousStep);
-        record.rollbackSnapshots.push(preState);
+        // Clone the pre-state snapshot only when the step we're entering
+        // opts in to rollback — avoids unnecessary work for preserve-state
+        // / no-back entries. Shallow clone keeps the snapshot stable against
+        // accidental top-level mutation.
+        const nextMode = entryAllowBackModeForStep(nextStep);
+        if (nextMode === "rollback") {
+          record.rollbackSnapshots.push(cloneSnapshot(preState));
+          record.hasRollbackSnapshot = true;
+        } else {
+          record.rollbackSnapshots.push(undefined);
+        }
       }
       record.step = nextStep;
       record.status = "active";
       record.stepToken += 1;
       record.updatedAt = nowIso();
+      record.cachedCallbacks = null;
+      trimHistory(record, reg);
       fireOnTransition(reg, record, previousStep, nextStep, exitName);
     } else if ("complete" in result) {
       if (previousStep) {
@@ -330,8 +390,11 @@ export function createJourneyRuntime(
       }
       record.step = null;
       record.status = "completed";
+      record.terminalPayload = result.complete;
       record.stepToken += 1;
       record.updatedAt = nowIso();
+      record.cachedCallbacks = null;
+      trimHistory(record, reg);
       fireOnTransition(reg, record, previousStep, null, exitName);
       fireOnComplete(reg, record, result.complete);
     } else if ("abort" in result) {
@@ -341,8 +404,11 @@ export function createJourneyRuntime(
       }
       record.step = null;
       record.status = "aborted";
+      record.terminalPayload = result.abort;
       record.stepToken += 1;
       record.updatedAt = nowIso();
+      record.cachedCallbacks = null;
+      trimHistory(record, reg);
       fireOnTransition(reg, record, previousStep, null, exitName);
       fireOnAbort(reg, record, result.abort);
     }
@@ -354,6 +420,12 @@ export function createJourneyRuntime(
     }
 
     notify(record);
+  }
+
+  function entryAllowBackModeForStep(
+    step: JourneyStep | null,
+  ): "preserve-state" | "rollback" | false {
+    return entryAllowBackMode(step);
   }
 
   function dispatchExit(
@@ -415,9 +487,11 @@ export function createJourneyRuntime(
     if (mode === "rollback" && snapshot !== undefined) {
       record.state = snapshot as typeof record.state;
     }
+    record.hasRollbackSnapshot = record.rollbackSnapshots.some((s) => s !== undefined);
     record.step = previousStep;
     record.stepToken += 1;
     record.updatedAt = nowIso();
+    record.cachedCallbacks = null;
     fireOnTransition(reg, record, step, previousStep, null);
     const persistence = reg.options?.persistence;
     if (persistence) schedulePersist(record, persistence);
@@ -425,6 +499,12 @@ export function createJourneyRuntime(
   }
 
   function bindStepCallbacks(record: InstanceRecord, reg: RegisteredJourney) {
+    if (
+      record.cachedCallbacks &&
+      record.cachedCallbacks.stepToken === record.stepToken
+    ) {
+      return record.cachedCallbacks;
+    }
     const token = record.stepToken;
     const exit = (name: string, output?: unknown) => {
       dispatchExit(record, reg, token, name, output);
@@ -439,7 +519,8 @@ export function createJourneyRuntime(
           dispatchGoBack(record, reg, token);
         }
       : undefined;
-    return { exit, goBack, token };
+    record.cachedCallbacks = { stepToken: token, exit, goBack };
+    return record.cachedCallbacks;
   }
 
   // ---------------------------------------------------------------------------
@@ -457,6 +538,10 @@ export function createJourneyRuntime(
       step: record.step,
       history: record.history,
       state: record.state,
+      terminalPayload:
+        record.status === "completed" || record.status === "aborted"
+          ? record.terminalPayload
+          : undefined,
       startedAt: record.startedAt,
       updatedAt: record.updatedAt,
       serialize: () => serialize(record),
@@ -468,7 +553,8 @@ export function createJourneyRuntime(
   function createRecord(
     reg: RegisteredJourney,
     instanceId: InstanceId,
-    input: unknown,
+    persistenceKey: string | null,
+    initialState: unknown,
   ): InstanceRecord {
     const startedAt = nowIso();
     return {
@@ -478,44 +564,46 @@ export function createJourneyRuntime(
       step: null,
       history: [],
       rollbackSnapshots: [],
-      state: undefined as unknown,
+      hasRollbackSnapshot: false,
+      state: initialState,
+      terminalPayload: undefined,
       startedAt,
       updatedAt: startedAt,
       stepToken: 0,
-      persistenceKey: computeKey(reg, instanceId, input),
+      persistenceKey,
       terminalFired: false,
-      input,
       listeners: new Set(),
       pendingSave: null,
       saveInFlight: false,
       revision: 0,
       cachedSnapshot: null,
+      cachedCallbacks: null,
     };
   }
 
-  function computeKey(
+  function startFresh(
     reg: RegisteredJourney,
-    instanceId: InstanceId,
     input: unknown,
-  ): string | null {
-    const persistence = reg.options?.persistence;
-    if (!persistence) return null;
-    return persistence.keyFor({ journeyId: reg.definition.id, input, instanceId });
-  }
-
-  function startFresh(reg: RegisteredJourney, input: unknown, existingRecord?: InstanceRecord): InstanceId {
-    const record = existingRecord ?? createRecord(reg, mintInstanceId(), input);
+    existingRecord?: InstanceRecord,
+  ): InstanceId {
+    const def = reg.definition as JourneyDefinition<any, any, unknown>;
+    const record =
+      existingRecord ??
+      createRecord(reg, mintInstanceId(), computeKey(reg, input), def.initialState(input));
     if (!existingRecord) {
       instances.set(record.id, record);
       if (record.persistenceKey) keyIndex.set(record.persistenceKey, record.id);
+    } else {
+      record.state = def.initialState(input);
     }
-    const def = reg.definition as JourneyDefinition<any, any, unknown>;
-    record.state = def.initialState(input);
     const startStep = stepFromSpec(def.start(record.state, input));
     record.step = startStep;
     record.status = "active";
     record.stepToken += 1;
+    record.terminalFired = false;
+    record.terminalPayload = undefined;
     record.updatedAt = nowIso();
+    record.cachedCallbacks = null;
     fireOnTransition(reg, record, null, startStep, null);
     const persistence = reg.options?.persistence;
     if (persistence) schedulePersist(record, persistence);
@@ -527,12 +615,62 @@ export function createJourneyRuntime(
     record.state = blob.state;
     record.step = blob.step;
     record.history = [...blob.history];
-    record.rollbackSnapshots = blob.rollbackSnapshots ? [...blob.rollbackSnapshots] : [];
+    if (blob.rollbackSnapshots) {
+      record.rollbackSnapshots = blob.rollbackSnapshots.map((s) =>
+        s === null ? undefined : s,
+      ) as (unknown | undefined)[];
+      record.hasRollbackSnapshot = record.rollbackSnapshots.some((s) => s !== undefined);
+    } else {
+      record.rollbackSnapshots = [];
+      record.hasRollbackSnapshot = false;
+    }
     record.status = blob.status;
+    record.terminalPayload = blob.terminalPayload;
     record.startedAt = blob.startedAt;
     record.updatedAt = blob.updatedAt;
     record.stepToken += 1;
     record.terminalFired = blob.status !== "active";
+    record.cachedCallbacks = null;
+  }
+
+  function probeLoad(
+    reg: RegisteredJourney,
+    persistence: JourneyPersistence<unknown>,
+    key: string,
+  ): SerializedJourney<unknown> | null | AsyncLoadPending | Promise<SerializedJourney<unknown> | null> {
+    let loaded:
+      | SerializedJourney<unknown>
+      | null
+      | Promise<SerializedJourney<unknown> | null>;
+    try {
+      loaded = persistence.load(key) as
+        | SerializedJourney<unknown>
+        | null
+        | Promise<SerializedJourney<unknown> | null>;
+    } catch (err) {
+      if (debug) console.error("[@modular-react/journeys] persistence.load threw", err);
+      return null;
+    }
+    if (loaded && typeof (loaded as Promise<unknown>).then === "function") {
+      return loaded as Promise<SerializedJourney<unknown> | null>;
+    }
+    return loaded as SerializedJourney<unknown> | null;
+  }
+
+  function migrateBlob(
+    reg: RegisteredJourney,
+    blob: SerializedJourney<unknown>,
+  ): SerializedJourney<unknown> | null {
+    if (reg.definition.onHydrate) {
+      try {
+        return reg.definition.onHydrate(blob) as SerializedJourney<unknown>;
+      } catch (err) {
+        if (debug) console.error("[@modular-react/journeys] onHydrate threw", err);
+        return null;
+      }
+    }
+    if (blob.version !== reg.definition.version) return null;
+    return blob;
   }
 
   // ---------------------------------------------------------------------------
@@ -545,38 +683,32 @@ export function createJourneyRuntime(
       const persistence = reg.options?.persistence;
 
       if (persistence) {
-        const prospectiveKey = persistence.keyFor({
+        const key = persistence.keyFor({
           journeyId: reg.definition.id,
           input,
-          instanceId: "",
         });
-        const existingId = keyIndex.get(prospectiveKey);
-        if (existingId && instances.get(existingId)?.status === "active") {
-          return existingId;
+        // Idempotency: return the existing instance for this key whenever it
+        // is still in flight — "active" OR "loading". Returning a fresh id
+        // while a load is pending would orphan the loading instance and
+        // trigger a second `load()`.
+        const existingId = keyIndex.get(key);
+        const existing = existingId ? instances.get(existingId) : null;
+        if (existing && (existing.status === "active" || existing.status === "loading")) {
+          return existing.id;
         }
 
-        let loaded:
-          | SerializedJourney<unknown>
-          | null
-          | Promise<SerializedJourney<unknown> | null>;
-        try {
-          loaded = persistence.load(prospectiveKey) as
-            | SerializedJourney<unknown>
-            | null
-            | Promise<SerializedJourney<unknown> | null>;
-        } catch (err) {
-          if (debug) console.error("[@modular-react/journeys] persistence.load threw", err);
-          loaded = null;
-        }
+        const def = reg.definition as JourneyDefinition<any, any, unknown>;
+        const loaded = probeLoad(reg, persistence as JourneyPersistence<unknown>, key);
 
         if (loaded && typeof (loaded as Promise<unknown>).then === "function") {
           // Async probe — mint a placeholder instance in `loading` status,
-          // then either hydrate or fall through to fresh when the load settles.
+          // but initialize `state` from `initialState(input)` immediately so
+          // consumers reading state during loading never see `undefined`.
+          // If the blob later hydrates, state is overwritten.
           const instanceId = mintInstanceId();
-          const record = createRecord(reg, instanceId, input);
-          record.persistenceKey = prospectiveKey;
+          const record = createRecord(reg, instanceId, key, def.initialState(input));
           instances.set(instanceId, record);
-          keyIndex.set(prospectiveKey, instanceId);
+          keyIndex.set(key, instanceId);
           notify(record);
 
           void (loaded as Promise<SerializedJourney<unknown> | null>).then(
@@ -585,16 +717,8 @@ export function createJourneyRuntime(
                 startFresh(reg, input, record);
                 return;
               }
-              let migrated = blob;
-              if (reg.definition.onHydrate) {
-                try {
-                  migrated = reg.definition.onHydrate(blob);
-                } catch (err) {
-                  if (debug) console.error("[@modular-react/journeys] onHydrate threw", err);
-                  startFresh(reg, input, record);
-                  return;
-                }
-              } else if (blob.version !== reg.definition.version) {
+              const migrated = migrateBlob(reg, blob);
+              if (!migrated) {
                 startFresh(reg, input, record);
                 return;
               }
@@ -611,26 +735,27 @@ export function createJourneyRuntime(
 
         const blob = loaded as SerializedJourney<unknown> | null;
         if (blob && blob.status === "active") {
-          let migrated = blob;
-          if (reg.definition.onHydrate) {
-            try {
-              migrated = reg.definition.onHydrate(blob);
-            } catch (err) {
-              if (debug) console.error("[@modular-react/journeys] onHydrate threw", err);
-              return startFresh(reg, input);
-            }
-          } else if (blob.version !== reg.definition.version) {
-            return startFresh(reg, input);
+          const migrated = migrateBlob(reg, blob);
+          if (migrated) {
+            const instanceId = migrated.instanceId || mintInstanceId();
+            const record = createRecord(reg, instanceId, key, def.initialState(input));
+            instances.set(instanceId, record);
+            keyIndex.set(key, instanceId);
+            hydrateInto(record, migrated);
+            notify(record);
+            return instanceId;
           }
-          const instanceId = migrated.instanceId || mintInstanceId();
-          const record = createRecord(reg, instanceId, input);
-          record.persistenceKey = prospectiveKey;
-          instances.set(instanceId, record);
-          keyIndex.set(prospectiveKey, instanceId);
-          hydrateInto(record, migrated);
-          notify(record);
-          return instanceId;
+          // Migration failed: fall through to fresh start.
         }
+
+        // No blob / terminal blob / migration failed — mint a fresh instance
+        // that still owns the key, so subsequent `start()` calls are
+        // idempotent.
+        const instanceId = mintInstanceId();
+        const record = createRecord(reg, instanceId, key, def.initialState(input));
+        instances.set(instanceId, record);
+        keyIndex.set(key, instanceId);
+        return startFresh(reg, input, record);
       }
 
       return startFresh(reg, input);
@@ -638,16 +763,20 @@ export function createJourneyRuntime(
 
     hydrate<TState>(journeyId: string, blob: SerializedJourney<TState>): InstanceId {
       const reg = assertKnown(journeyId);
-      let migrated = blob as SerializedJourney<unknown>;
-      if (reg.definition.onHydrate) {
-        migrated = reg.definition.onHydrate(blob) as SerializedJourney<unknown>;
-      } else if (blob.version !== reg.definition.version) {
+      const migrated = migrateBlob(reg, blob as SerializedJourney<unknown>);
+      if (!migrated) {
         throw new Error(
           `[@modular-react/journeys] Hydrate version mismatch for "${journeyId}": blob=${blob.version} def=${reg.definition.version}. Provide onHydrate to migrate.`,
         );
       }
       const instanceId = migrated.instanceId || mintInstanceId();
-      const record = createRecord(reg, instanceId, undefined);
+
+      // If the migrated blob has an input we can use to compute the key, we
+      // could re-index — but `SerializedJourney` doesn't carry the original
+      // `input`, so explicit hydrate stays persistence-unlinked. Callers
+      // that want round-trip persistence should use `start()` which owns the
+      // key lifecycle. Document this on the API.
+      const record = createRecord(reg, instanceId, null, migrated.state);
       instances.set(instanceId, record);
       hydrateInto(record, migrated);
       notify(record);
@@ -700,6 +829,15 @@ export function createJourneyRuntime(
       }
       applyTransition(record, reg, result, null);
     },
+
+    forget(id) {
+      const record = instances.get(id);
+      if (!record) return;
+      if (record.status !== "completed" && record.status !== "aborted") return;
+      if (record.persistenceKey) keyIndex.delete(record.persistenceKey);
+      record.listeners.clear();
+      instances.delete(id);
+    },
   };
 
   // Internals used by the outlet and testing helpers.
@@ -729,7 +867,7 @@ export interface JourneyRuntimeInternals {
   ): {
     exit: (name: string, output?: unknown) => void;
     goBack?: () => void;
-    token: number;
+    stepToken: number;
   };
   __getRecord(id: InstanceId): InstanceRecord | undefined;
   __getRegistered(id: string): RegisteredJourney | undefined;

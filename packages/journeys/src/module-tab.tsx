@@ -15,8 +15,11 @@ export interface ModuleTabProps<TInput = unknown> {
   /** Full module descriptor — the shell looks this up by id. */
   readonly module: ModuleDescriptor<any, any, any, any>;
   /**
-   * Entry point name on the module. Falls back to the module's legacy
-   * `component` field when omitted and no entry by that name exists.
+   * Entry point name on the module. If omitted and the module exposes
+   * exactly one entry, that entry is used automatically. If the module
+   * exposes several entries, the name must be supplied — passing an
+   * unknown name renders an error notice. A module with no entry points
+   * falls back to the legacy `component` field.
    */
   readonly entry?: string;
   readonly input?: TInput;
@@ -24,7 +27,8 @@ export interface ModuleTabProps<TInput = unknown> {
   readonly tabId?: string;
   /**
    * Called when the module emits an exit. Shell typically closes the tab
-   * inside this callback and optionally forwards to a global `onModuleExit`.
+   * inside this callback and optionally forwards to a global `onModuleExit`
+   * (see `manifest.onModuleExit`).
    */
   readonly onExit?: (event: ModuleTabExitEvent) => void;
 }
@@ -37,36 +41,56 @@ export interface ModuleTabProps<TInput = unknown> {
 export function ModuleTab<TInput = unknown>(props: ModuleTabProps<TInput>): ReactNode {
   const { module: mod, entry, input, tabId, onExit } = props;
 
-  const entryName = entry ?? "default";
-  const entryPoint = mod.entryPoints?.[entryName];
+  const entryPoints = mod.entryPoints;
+  const entryNames = entryPoints ? Object.keys(entryPoints) : [];
+  let resolvedName: string | undefined = entry;
+  let missingEntryNotice: string | null = null;
+  if (entry === undefined) {
+    if (entryNames.length === 1) {
+      resolvedName = entryNames[0];
+    } else if (entryNames.length > 1) {
+      missingEntryNotice = `Module "${mod.id}" exposes multiple entries (${entryNames.join(", ")}); pass the \`entry\` prop to disambiguate.`;
+    }
+  } else if (entryPoints && !(entry in entryPoints)) {
+    missingEntryNotice = `Module "${mod.id}" has no entry "${entry}". Registered: ${entryNames.join(", ") || "(none)"}.`;
+  }
+
+  const entryPoint = resolvedName ? entryPoints?.[resolvedName] : undefined;
 
   const exit = useMemo(
     () => (exitName: string, output?: unknown) => {
+      if (!resolvedName) return;
       onExit?.({
         moduleId: mod.id,
-        entry: entryName,
+        entry: resolvedName,
         exit: exitName,
         output,
         tabId,
       });
     },
-    [mod.id, entryName, tabId, onExit],
+    [mod.id, resolvedName, tabId, onExit],
   );
 
   let content: ReactNode;
-  if (entryPoint) {
+  if (missingEntryNotice) {
+    content = createElement(
+      "div",
+      { style: { padding: "1rem", color: "#c53030" } },
+      missingEntryNotice,
+    );
+  } else if (entryPoint) {
     const Component = entryPoint.component as React.ComponentType<ModuleEntryProps<TInput, any>>;
     content = createElement(Component, { input: input as TInput, exit });
   } else if (mod.component) {
-    // Back-compat: render the legacy workspace component when no entry
-    // matches the requested name. Entry contracts are opt-in.
+    // Back-compat: render the legacy workspace component when the module
+    // exposes no entry points. Entry contracts are opt-in.
     const Component = mod.component as React.ComponentType<any>;
     content = createElement(Component, { input, tabId });
   } else {
     content = createElement(
       "div",
       { style: { padding: "1rem", color: "#c53030" } },
-      `Module "${mod.id}" has no entry "${entryName}" and no component.`,
+      `Module "${mod.id}" has no entry points and no component.`,
     );
   }
 

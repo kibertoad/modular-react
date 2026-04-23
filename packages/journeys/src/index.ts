@@ -44,6 +44,7 @@ export type {
   SerializedJourney,
   StepSpec,
   TerminalCtx,
+  TerminalOutcome,
   TransitionEvent,
   TransitionMap,
   TransitionResult,

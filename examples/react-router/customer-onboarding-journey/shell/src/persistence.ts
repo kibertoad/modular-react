@@ -44,7 +44,7 @@ export const journeyPersistence: JourneyPersistence = {
  */
 export function hasPersistedJourney(journeyId: string, customerId: string): boolean {
   if (typeof localStorage === "undefined") return false;
-  const key = journeyPersistence.keyFor({ journeyId, input: { customerId }, instanceId: "" });
+  const key = journeyPersistence.keyFor({ journeyId, input: { customerId } });
   const raw = localStorage.getItem(key);
   if (!raw) return false;
   try {
