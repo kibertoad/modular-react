@@ -168,7 +168,7 @@ describe("JourneyOutlet", () => {
     expect(getByTestId("review-customer").textContent).toBe("C-4");
   });
 
-  it("fires onFinished once on completion with the terminal payload", () => {
+  it("fires onFinished once on completion with the terminal payload and ids", () => {
     const rt = makeRuntime();
     const id = rt.start("demo", { customerId: "C-5" });
     const onFinished = vi.fn();
@@ -185,6 +185,8 @@ describe("JourneyOutlet", () => {
     expect(onFinished).toHaveBeenCalledWith({
       status: "completed",
       payload: { amount: 42 },
+      instanceId: id,
+      journeyId: "demo",
     });
   });
 

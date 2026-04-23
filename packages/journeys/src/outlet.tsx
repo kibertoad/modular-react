@@ -78,11 +78,18 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
   const modules = modulesProp ?? internals.__moduleMap;
   const [retryKey, setRetryKey] = useState(0);
 
-  // Abandon on unmount when still active OR still loading. StrictMode in dev
-  // fires the cleanup synchronously and then remounts — deferring the abandon
-  // one microtask and re-checking "did I re-mount?" via a ref keeps the
-  // journey alive through that dance. Production single-mount behavior is
-  // unchanged.
+  // Abandon on unmount while still active or still loading. Two defenses:
+  //
+  // 1. StrictMode fires cleanup synchronously and then remounts the same
+  //    component — deferring the abandon one microtask and re-checking the
+  //    same `mountedRef` keeps the journey alive through that dance.
+  //
+  // 2. Two independent outlets rendering the same instance back-to-back
+  //    (unmount outlet A, mount outlet B) show up as `mountedRef.current
+  //    === false` because they are different component instances. To keep
+  //    outlet B's instance alive we also consult `record.listeners.size` —
+  //    if any subscriber is still attached, another outlet has taken over
+  //    and we skip the `end()`.
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -91,9 +98,10 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
       queueMicrotask(() => {
         if (mountedRef.current) return;
         const record = internals.__getRecord(instanceId);
-        if (record && (record.status === "active" || record.status === "loading")) {
-          runtime.end(instanceId, { reason: "unmounted" });
-        }
+        if (!record) return;
+        if (record.status !== "active" && record.status !== "loading") return;
+        if (record.listeners.size > 0) return;
+        runtime.end(instanceId, { reason: "unmounted" });
       });
     };
   }, [runtime, instanceId, internals]);

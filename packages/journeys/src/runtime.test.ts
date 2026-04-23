@@ -349,12 +349,18 @@ describe("createJourneyRuntime — hydration", () => {
     };
     const rt1 = freshRuntime({ options: { persistence: persistence as any } });
     const id1 = rt1.start("collect", { customerId: "C-rt" });
+    // The initial load probe is async — wait for it to settle before
+    // dispatching an exit, otherwise the runtime is still in `loading` and
+    // would drop the exit on the floor.
+    await Promise.resolve();
+    await Promise.resolve();
     const internals1 = getInternals(rt1);
     const reg1 = internals1.__getRegistered("collect")!;
     internals1
       .__bindStepCallbacks(internals1.__getRecord(id1)!, reg1)
       .exit("wantsToNegotiate", { customerId: "C-rt" });
-    // Drain save queue.
+    // Drain the save queue (start save + post-transition save).
+    await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
 
@@ -399,11 +405,18 @@ describe("createJourneyRuntime — lifecycle extras", () => {
     internals
       .__bindStepCallbacks(internals.__getRecord(id)!, reg)
       .exit("wantsToNegotiate", { customerId: "C-cap" });
+    // After one exit: history=[review] (len=1, at cap).
+    expect(rt.getInstance(id)!.history).toHaveLength(1);
+    expect(rt.getInstance(id)!.history[0]!.entry).toBe("review");
+
+    // Terminal exit pushes negotiate onto history, trimmed to the cap so
+    // only the most recent entry survives — review drops off the front.
     internals
       .__bindStepCallbacks(internals.__getRecord(id)!, reg)
-      .goBack!();
-    // Two transitions each push once; cap=1 leaves history at length 1.
-    expect(rt.getInstance(id)!.history.length).toBe(1);
+      .exit("agreed", { amount: 100 });
+    const history = rt.getInstance(id)!.history;
+    expect(history).toHaveLength(1);
+    expect(history[0]!.entry).toBe("negotiate");
   });
 
   it("coalesces rapid saves so there is at most one in flight", async () => {
