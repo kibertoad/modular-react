@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@modular-react/core": "^1.2.0",
+    "@modular-react/journeys": "workspace:*",
     "@modular-react/react": "^1.2.0",
     "@react-router-modules/core": "^2.3.0",
     "@react-router-modules/runtime": "^2.3.0",
@@ -47,6 +48,7 @@
   },
   "peerDependencies": {
     "@modular-react/core": "^1.2.0",
+    "@modular-react/journeys": "^0.1.0",
     "@modular-react/react": "^1.2.0",
     "@react-router-modules/core": "^2.3.0",
     "@react-router-modules/runtime": "^2.3.0",

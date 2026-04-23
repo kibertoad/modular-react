@@ -464,10 +464,23 @@ Modules should never import store instances directly. Expose a workspace actions
 ```typescript
 // app-shared/src/index.ts
 export interface WorkspaceActions {
+  /** @deprecated Use openTab({ kind: 'module', id, input }) instead. */
   openModuleTab: (moduleId: string) => void;
   openSectionTab: (sectionId: string) => void;
+  /**
+   * Unified tab opener. `kind: 'module'` swaps in a module; `kind: 'journey'`
+   * starts (or resumes) a journey instance for a multi-module workflow.
+   * See [Journeys](journeys.md) for the typed entry/exit contracts and
+   * persistence pipeline.
+   */
+  openTab: (spec:
+    | { kind: 'module';  id: string; entry?: string; input?: unknown; title?: string }
+    | { kind: 'journey'; id: string; input?: unknown; title?: string }
+  ) => { tabId: string; instanceId?: string };
 }
 ```
+
+Single-module tabs are `{ kind: 'module' }`. When a domain workflow spans several modules with shared state, prefer `{ kind: 'journey' }` — the shell mounts a `<JourneyOutlet>` inside the tab and the journey owns transitions and serializable state. See [Journeys](journeys.md) for the full contract.
 
 The shell provides the implementation. Modules only know the interface:
 

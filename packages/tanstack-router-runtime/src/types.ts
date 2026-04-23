@@ -1,12 +1,14 @@
 import type { StoreApi } from "zustand";
 import type { Router } from "@tanstack/react-router";
 import type {
+  ModuleDescriptor,
   NavigationItem,
   NavigationItemBase,
   ReactiveService,
   SlotMap,
   SlotMapOf,
 } from "@modular-react/core";
+import type { JourneyRuntime } from "@modular-react/journeys";
 
 // Re-export shared runtime types from @modular-react/core
 export type { NavigationGroup, NavigationManifest, ModuleEntry } from "@modular-react/core";
@@ -66,6 +68,12 @@ export interface ApplicationManifest<
   /** Registered module summaries — use useModules() to access in components */
   readonly modules: readonly import("@modular-react/core").ModuleEntry[];
 
+  /** Full module descriptors keyed by id — used by `<JourneyOutlet>` and `<ModuleTab>`. */
+  readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
+
+  /** Journey runtime — `null` when no journey was registered. */
+  readonly journeys: JourneyRuntime | null;
+
   /**
    * Trigger re-evaluation of dynamic slots.
    *
@@ -108,6 +116,19 @@ export interface ResolveManifestOptions<
    * on every `recalculateSlots()` call.
    */
   slotFilter?: (slots: TSlots, deps: TSharedDependencies) => TSlots;
+
+  /**
+   * Called when a module emits an exit outside a journey host (the default
+   * `<ModuleTab>` path). Wire this to close the tab, navigate, or forward to
+   * analytics.
+   */
+  onModuleExit?: (event: {
+    readonly moduleId: string;
+    readonly entry: string;
+    readonly exit: string;
+    readonly output: unknown;
+    readonly tabId?: string;
+  }) => void;
 }
 
 /**
@@ -186,6 +207,21 @@ export interface ResolvedManifest<
 
   /** Registered module summaries — use useModules() to access in components */
   readonly modules: readonly import("@modular-react/core").ModuleEntry[];
+
+  /** Full module descriptors keyed by id — used by `<JourneyOutlet>` and `<ModuleTab>`. */
+  readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
+
+  /** Journey runtime — `null` when no journey was registered. */
+  readonly journeys: JourneyRuntime | null;
+
+  /** Resolved `onModuleExit` callback (see {@link ResolveManifestOptions.onModuleExit}). */
+  readonly onModuleExit?: (event: {
+    readonly moduleId: string;
+    readonly entry: string;
+    readonly exit: string;
+    readonly output: unknown;
+    readonly tabId?: string;
+  }) => void;
 
   /**
    * Trigger re-evaluation of dynamic slots. See {@link ApplicationManifest.recalculateSlots}.

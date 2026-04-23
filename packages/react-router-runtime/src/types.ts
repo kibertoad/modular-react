@@ -1,12 +1,14 @@
 import type { StoreApi } from "zustand";
 import type { DataRouter, RouteObject } from "react-router";
 import type {
+  ModuleDescriptor,
   NavigationItem,
   NavigationItemBase,
   ReactiveService,
   SlotMap,
   SlotMapOf,
 } from "@modular-react/core";
+import type { JourneyRuntime } from "@modular-react/journeys";
 
 // Re-export shared runtime types from @modular-react/core
 export type { NavigationGroup, NavigationManifest, ModuleEntry } from "@modular-react/core";
@@ -66,6 +68,12 @@ export interface ApplicationManifest<
   /** Registered module summaries — use useModules() to access in components */
   readonly modules: readonly import("@modular-react/core").ModuleEntry[];
 
+  /** Full module descriptors keyed by id (see {@link ResolvedManifest.moduleDescriptors}). */
+  readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
+
+  /** Journey runtime — see {@link ResolvedManifest.journeys}. */
+  readonly journeys: JourneyRuntime | null;
+
   /**
    * Trigger re-evaluation of dynamic slots.
    *
@@ -107,6 +115,19 @@ export interface ResolveManifestOptions<
    * on every `recalculateSlots()` call.
    */
   slotFilter?: (slots: TSlots, deps: TSharedDependencies) => TSlots;
+
+  /**
+   * Called when a module emits an exit outside a journey host (the default
+   * `<ModuleTab>` path). The shell typically uses this to close the tab,
+   * invoke navigation, or forward to analytics.
+   */
+  onModuleExit?: (event: {
+    readonly moduleId: string;
+    readonly entry: string;
+    readonly exit: string;
+    readonly output: unknown;
+    readonly tabId?: string;
+  }) => void;
 }
 
 /**
@@ -177,6 +198,33 @@ export interface ResolvedManifest<
 
   /** Registered module summaries — use useModules() to access in components */
   readonly modules: readonly import("@modular-react/core").ModuleEntry[];
+
+  /**
+   * Full module descriptors keyed by id — required by `<JourneyOutlet>` and
+   * `<ModuleTab>` to resolve `entryPoints[name].component`. The plain
+   * `modules` array exposes only summary info; this map carries the
+   * descriptors themselves.
+   */
+  readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
+
+  /**
+   * Journey runtime owning every registered journey instance. `null` when
+   * no journey was registered, so apps that don't use journeys pay no
+   * runtime cost beyond the package being statically linked.
+   */
+  readonly journeys: JourneyRuntime | null;
+
+  /**
+   * Resolved `onModuleExit` callback — surfaced for shells that wire
+   * `<ModuleTab>` themselves and want to forward to the configured handler.
+   */
+  readonly onModuleExit?: (event: {
+    readonly moduleId: string;
+    readonly entry: string;
+    readonly exit: string;
+    readonly output: unknown;
+    readonly tabId?: string;
+  }) => void;
 
   /**
    * Trigger re-evaluation of dynamic slots. See {@link ApplicationManifest.recalculateSlots}.

@@ -1,4 +1,25 @@
 import type { ModuleDescriptor, LazyModuleDescriptor } from "./types.js";
+import { validateModuleEntryExit } from "./entry-exit.js";
+
+/**
+ * Runs {@link validateModuleEntryExit} on every module and throws an
+ * aggregated error if any issues are found. Non-breaking: modules without
+ * `entryPoints` / `exitPoints` pass through untouched.
+ */
+export function validateEntryExitShape(modules: readonly ModuleDescriptor[]): void {
+  const errors: string[] = [];
+  for (const mod of modules) {
+    const issues = validateModuleEntryExit(mod);
+    for (const issue of issues) {
+      errors.push(`module "${mod.id}": ${issue}`);
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(
+      `[@modular-react/core] Invalid entry/exit declarations:\n  - ${errors.join("\n  - ")}`,
+    );
+  }
+}
 
 export function validateNoDuplicateIds(
   modules: ModuleDescriptor[],

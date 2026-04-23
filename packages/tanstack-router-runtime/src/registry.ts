@@ -24,6 +24,17 @@ import type {
 } from "@modular-react/core";
 import { createSlotsSignal } from "@modular-react/react";
 import type { SlotsSignal } from "@modular-react/react";
+import {
+  createJourneyRuntime,
+  validateJourneyContracts,
+} from "@modular-react/journeys";
+import type {
+  AnyJourneyDefinition,
+  JourneyDefinition,
+  JourneyRegisterOptions,
+  JourneyRuntime,
+  RegisteredJourney,
+} from "@modular-react/journeys";
 
 import type {
   RegistryConfig,
@@ -61,6 +72,15 @@ export interface ModuleRegistry<
    * `createRoutes` for component-level code splitting.
    */
   registerLazy(descriptor: LazyModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>): void;
+
+  /**
+   * Register a journey definition. Validation runs at `resolveManifest()` /
+   * `resolve()` time against the registered modules.
+   */
+  registerJourney<TDef extends JourneyDefinition<any, any, any>>(
+    definition: TDef,
+    options?: JourneyRegisterOptions,
+  ): void;
 
   /**
    * Resolve all modules and produce the application manifest, including a
@@ -161,6 +181,7 @@ interface CommonAssembly<
   TNavItem extends NavigationItemBase = NavigationItem,
 > {
   modules: readonly ModuleEntry[];
+  moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
   navigation: NavigationManifest<TNavItem>;
   slots: TSlots;
   stores: Record<string, StoreApi<unknown>>;
@@ -171,6 +192,7 @@ interface CommonAssembly<
   recalculateSlots: () => void;
   slotFilter: SlotFilter | undefined;
   providers: React.ComponentType<{ children: React.ReactNode }>[] | undefined;
+  journeys: JourneyRuntime | null;
 }
 
 export function createRegistry<
@@ -182,6 +204,7 @@ export function createRegistry<
 ): ModuleRegistry<TSharedDependencies, TSlots, TNavItem> {
   const modules: ModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>[] = [];
   const lazyModules: LazyModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>[] = [];
+  const journeys: RegisteredJourney[] = [];
 
   // A registry commits to one mode on first call:
   //   - "resolve"          → library owns the router; single-use
@@ -233,6 +256,9 @@ export function createRegistry<
   }): CommonAssembly<TSlots, TNavItem> {
     validateNoDuplicateIds(modules as ModuleDescriptor[], lazyModules as LazyModuleDescriptor[]);
     validateDependencies(modules as ModuleDescriptor[], availableKeys);
+    if (journeys.length > 0) {
+      validateJourneyContracts(journeys, modules as ModuleDescriptor[]);
+    }
 
     if (!onRegisterRan) {
       const deps = buildDepsObject<TSharedDependencies>(config);
@@ -283,6 +309,13 @@ export function createRegistry<
     const hasDynamicSlots = dynamicSlotFactories.length > 0 || slotFilter != null;
     const recalculateSlots = hasDynamicSlots ? () => slotsSignal.notify() : () => {};
 
+    const moduleDescriptors: Record<string, ModuleDescriptor<any, any, any, any>> = {};
+    for (const mod of modules) moduleDescriptors[mod.id] = mod as ModuleDescriptor<any, any, any, any>;
+    const journeyRuntime =
+      journeys.length > 0
+        ? createJourneyRuntime(journeys, { modules: moduleDescriptors })
+        : null;
+
     return {
       modules: modules.map((mod) => ({
         id: mod.id,
@@ -291,6 +324,7 @@ export function createRegistry<
         component: mod.component,
         zones: mod.zones,
       })),
+      moduleDescriptors,
       navigation,
       slots,
       stores,
@@ -301,6 +335,7 @@ export function createRegistry<
       recalculateSlots,
       slotFilter,
       providers: options.providers,
+      journeys: journeyRuntime,
     };
   }
 
@@ -313,6 +348,11 @@ export function createRegistry<
     registerLazy(descriptor) {
       assertCanRegister();
       lazyModules.push(descriptor);
+    },
+
+    registerJourney(definition, options) {
+      assertCanRegister();
+      journeys.push({ definition: definition as AnyJourneyDefinition, options });
     },
 
     resolve(
@@ -375,6 +415,8 @@ export function createRegistry<
         navigation: assembly.navigation,
         slots: assembly.slots,
         modules: assembly.modules,
+        moduleDescriptors: assembly.moduleDescriptors,
+        journeys: assembly.journeys,
         recalculateSlots: assembly.recalculateSlots,
       };
     },
@@ -452,6 +494,9 @@ export function createRegistry<
         navigation: assembly.navigation,
         slots: assembly.slots,
         modules: assembly.modules,
+        moduleDescriptors: assembly.moduleDescriptors,
+        journeys: assembly.journeys,
+        onModuleExit: capturedOptions?.onModuleExit,
         recalculateSlots: assembly.recalculateSlots,
       };
 

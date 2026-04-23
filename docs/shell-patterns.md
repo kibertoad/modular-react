@@ -436,8 +436,15 @@ defineModule({
 
 Don't add event buses, custom pub/sub, or `connectStores()` helpers. Zustand's `subscribe` already provides exactly the right primitive. Adding an abstraction on top would hide what's happening and make debugging harder. If you find yourself wanting an event bus, that's a signal that the cross-cutting concern should be modeled as a shared store instead.
 
+## Multi-module workflows with shared state
+
+The five channels above cover module-to-shell communication at a single point in time. When a domain workflow spans **several modules in sequence** — e.g. "look at the customer's account → branch into debt negotiation → collect a payment" — lifting that orchestration into the shell's stores keeps working but gradually couples unrelated modules through shared keys in the same store.
+
+[Journeys](journeys.md) are the dedicated abstraction for this case: modules declare typed entry/exit vocabularies, a journey declares the transitions between them, and the shell mounts a `<JourneyOutlet>` inside whatever container it already uses (tab, modal, route element). Journey state is serializable, so mid-flow reload recovery and cross-device hand-off work without any shell-level plumbing. Nothing about the channels above changes — journeys are additive and only relevant if your app actually has multi-module workflows.
+
 ## Where to go next
 
 - [Shell Patterns for React Router](shell-patterns-react-router.md): route-level zones via `handle`, `authenticatedRoute` with `loader`, `shellRoutes`, module route shape.
 - [Shell Patterns for TanStack Router](shell-patterns-tanstack-router.md): route-level zones via `staticData`, `authenticatedRoute` with `beforeLoad`, `createRoute` / `getParentRoute`.
 - [Workspace Patterns](workspace-patterns.md): tabbed workspaces, component-only modules, `useActiveZones`, per-session scoped stores.
+- [Journeys](journeys.md): typed multi-module workflows with serializable shared state.
