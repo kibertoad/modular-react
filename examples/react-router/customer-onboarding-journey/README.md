@@ -43,4 +43,4 @@ Open the printed URL, click **Start for customer C-1**. Walk through the flow; r
 
 ## Why a separate example
 
-See `docs/journeys.md` §16 Phase 8. Journeys are a distinct concern from the CMS/integration story in `integration-manager`; mixing them would clutter both.
+Journeys are a distinct concern from the CMS/integration story in `integration-manager`; mixing them would clutter both. See the [journeys package README](../../../packages/journeys/README.md) for the full contract and API surface.

@@ -12,6 +12,8 @@ modular-react lets each feature own a single `modules/<name>/` directory that fu
 
 Good for: plugin-style apps, apps where many teams contribute features, and apps that have grown past the point where one `App.tsx` is still comfortable to edit.
 
+When a domain flow must span **several modules in sequence** (e.g. "look at the customer's account → branch into debt negotiation → collect a payment"), an optional [Journeys](packages/journeys/README.md) layer composes those modules into a typed, serializable workflow without leaking state into the shell.
+
 ## What a running app looks like
 
 ```
@@ -79,6 +81,7 @@ Conceptual documentation for building apps with the framework. Start with a gett
 | [Shell Patterns for React Router](docs/shell-patterns-react-router.md)             | Module route shape, route zones via `handle`, `useRouteData` for non-component metadata, auth guards, public shell routes.                 |
 | [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)       | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `useRouteData`, `beforeLoad` auth.                   |
 | [Workspace Patterns](docs/workspace-patterns.md)                                   | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                                    |
+| [Journeys](packages/journeys/README.md)                                            | Typed multi-module workflows with serializable shared state — entry/exit contracts, branch/complete/abort transitions, pluggable persistence. |
 | [Remote Capability Manifests](docs/remote-capability-manifests.md)                 | Drive slots/navigation from backend JSON — `RemoteModuleManifest`, `mergeRemoteManifests`, validation, SSR, and the single-module pattern. |
 
 ## What the code looks like
@@ -167,9 +170,10 @@ See [Framework-mode (TanStack Router & Start) guide](docs/framework-mode-tanstac
 
 | Package                                      | Description                                                                                               |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| [`@modular-react/core`](packages/core)       | Types, slots, navigation, validation, and a lightweight store. No React runtime dependency.               |
-| [`@modular-react/react`](packages/react)     | React bindings: context providers, hooks (`useStore`, `useSlots`, `useNavigation`, etc.), error boundary. |
-| [`@modular-react/testing`](packages/testing) | Test utilities for resolving modules without rendering.                                                   |
+| [`@modular-react/core`](packages/core)         | Types, slots, navigation, validation, and a lightweight store. No React runtime dependency.               |
+| [`@modular-react/react`](packages/react)       | React bindings: context providers, hooks (`useStore`, `useSlots`, `useNavigation`, etc.), error boundary. |
+| [`@modular-react/testing`](packages/testing)   | Test utilities for resolving modules without rendering.                                                   |
+| [`@modular-react/journeys`](packages/journeys) | Typed, serializable multi-module workflows with entry/exit contracts and a pluggable persistence adapter. |
 
 ### React Router integration
 

@@ -470,7 +470,7 @@ export interface WorkspaceActions {
   /**
    * Unified tab opener. `kind: 'module'` swaps in a module; `kind: 'journey'`
    * starts (or resumes) a journey instance for a multi-module workflow.
-   * See [Journeys](journeys.md) for the typed entry/exit contracts and
+   * See [Journeys](../packages/journeys/README.md) for the typed entry/exit contracts and
    * persistence pipeline.
    */
   openTab: (spec:
@@ -480,7 +480,7 @@ export interface WorkspaceActions {
 }
 ```
 
-Single-module tabs are `{ kind: 'module' }`. When a domain workflow spans several modules with shared state, prefer `{ kind: 'journey' }` — the shell mounts a `<JourneyOutlet>` inside the tab and the journey owns transitions and serializable state. See [Journeys](journeys.md) for the full contract.
+Single-module tabs are `{ kind: 'module' }`. When a domain workflow spans several modules with shared state, prefer `{ kind: 'journey' }` — the shell mounts a `<JourneyOutlet>` inside the tab and the journey owns transitions and serializable state. See [Journeys](../packages/journeys/README.md) for the full contract.
 
 The shell provides the implementation. Modules only know the interface:
 
@@ -497,6 +497,66 @@ function InvoiceActions({ invoiceId }: { invoiceId: string }) {
   )
 }
 ```
+
+## Multi-module tabs: journeys
+
+Single-module tabs (`{ kind: 'module' }`) cover the common case: one module, one tab, self-contained. When a tab's work spans several modules with **shared state** — "look at the customer's account, then branch into either debt negotiation or payment collection, then run a payment plan setup" — the mechanics above start to bend: teams fan state through the shell's stores, modules grow implicit dependencies on each other's keys, and mid-flow recovery after a reload has to be built by hand.
+
+[Journeys](../packages/journeys/README.md) are the dedicated abstraction for this case. Modules declare typed `entryPoints` and `exitPoints`; a journey declares how one module's exit feeds the next module's entry and owns the shared state for the whole flow; the shell mounts a `<JourneyOutlet>` inside the tab.
+
+```tsx
+import { JourneyOutlet, ModuleTab } from '@modular-react/journeys';
+
+function TabContent({ tab, manifest }: { tab: Tab; manifest: ResolvedManifest }) {
+  if (tab.kind === 'module') {
+    return (
+      <ModuleTab
+        module={manifest.moduleDescriptors[tab.moduleId]}
+        entry={tab.entry}
+        input={tab.input}
+        tabId={tab.tabId}
+        onExit={(ev) => { workspace.closeTab(tab.tabId); manifest.onModuleExit?.(ev); }}
+      />
+    );
+  }
+  return (
+    <JourneyOutlet
+      runtime={manifest.journeys!}
+      instanceId={tab.instanceId}
+      modules={manifest.moduleDescriptors}
+      loadingFallback={<LoadingSpinner />}
+      onFinished={() => workspace.closeTab(tab.tabId)}
+    />
+  );
+}
+```
+
+What each side owns:
+
+- **Modules** stay journey-unaware. They declare typed entries (input → component) and typed exits (outcome names + output shapes). The host — whether that host is `<JourneyOutlet>` or the standalone `<ModuleTab>` — supplies a typed `exit(name, output)` callback. A module's component code never branches on "am I in a journey?".
+- **The journey definition** declares the module map (`import type` only — no runtime coupling), the transition graph, and its own private state. Transitions are pure synchronous functions.
+- **The shell** registers journeys on the registry (`registry.registerJourney(def, { persistence })`) and mounts `<JourneyOutlet>` inside its existing tab, modal, or route container. It doesn't learn anything about specific journeys' logic.
+
+When to reach for it:
+
+| Your workflow… | Use |
+| --- | --- |
+| is one module with no explicit outcome routing | `{ kind: 'module' }` via `<ModuleTab>` |
+| emits named outcomes but the caller decides what happens next | `<ModuleTab>` + `onExit` in the shell |
+| spans multiple modules and needs shared state that survives reload | `{ kind: 'journey' }` via `<JourneyOutlet>` |
+
+Journey state is serializable — pluggable `keyFor` / `load` / `save` / `remove` adapter lets you wire localStorage, a backend, or any session store. Two `runtime.start(id, input)` calls for the same key return the same `instanceId`, so mid-flow reload recovery is a few lines in `main.tsx`:
+
+```ts
+const { journeys } = registry.resolve(...);
+for (const tab of tabsStore.getState().tabs) {
+  if (tab.kind !== 'journey' || !journeys) continue;
+  const resolvedId = journeys.start(tab.journeyId, tab.input);
+  if (resolvedId !== tab.instanceId) tabsStore.getState().replaceInstanceId(tab.tabId, resolvedId);
+}
+```
+
+See the [journeys package README](../packages/journeys/README.md) for the full contract, a worked debt-resolution example, testing utilities, and the error / edge-case guarantees. The [`examples/react-router/customer-onboarding-journey/`](../examples/react-router/customer-onboarding-journey/) example project demonstrates the pattern end-to-end with a localStorage persistence adapter and reload-recovery.
 
 ## Zone initial state and tab navigation
 
