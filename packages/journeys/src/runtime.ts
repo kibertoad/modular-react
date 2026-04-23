@@ -209,7 +209,10 @@ export function createJourneyRuntime(
 
   function trimHistory(record: InstanceRecord, reg: RegisteredJourney) {
     const cap = reg.options?.maxHistory;
-    if (cap === undefined || cap < 0) return;
+    // `undefined`, zero, and negative all mean "unbounded" — zero is treated
+    // as the same escape hatch as a negative cap so a misconfigured `0`
+    // cannot silently disable `goBack` by trimming history on every transition.
+    if (cap === undefined || cap <= 0) return;
     while (record.history.length > cap) {
       record.history.shift();
       record.rollbackSnapshots.shift();
@@ -901,7 +904,15 @@ export function createJourneyRuntime(
         if (blob && blob.status === "active") {
           const migrated = migrateBlob(reg, blob);
           if (migrated) {
-            const instanceId = migrated.instanceId || mintInstanceId();
+            // Guard against a blob whose recorded id collides with a live
+            // instance (corrupted / hand-edited blob, or two journeys sharing
+            // a persistence keyspace). Mint a fresh id instead of clobbering
+            // the existing entry — matches `hydrate()`'s existing rejection
+            // of re-hydrate over an existing id.
+            const instanceId =
+              migrated.instanceId && !instances.has(migrated.instanceId)
+                ? migrated.instanceId
+                : mintInstanceId();
             const record = createRecord(reg, instanceId, key, def.initialState(input));
             instances.set(instanceId, record);
             keyIndex.set(indexed, instanceId);

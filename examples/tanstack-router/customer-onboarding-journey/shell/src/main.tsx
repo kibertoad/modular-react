@@ -73,8 +73,8 @@ descriptorsRef.current = moduleDescriptors;
     if (tab.kind !== "journey") continue;
     const resolvedId = journeys.start(tab.journeyId, tab.input);
     if (resolvedId !== tab.instanceId) {
-      tabsStore.getState().removeTab(tab.tabId);
-      tabsStore.getState().addTab({ ...tab, instanceId: resolvedId });
+      // Update in place so the tab keeps its original slot in the strip.
+      tabsStore.getState().updateTab(tab.tabId, { instanceId: resolvedId });
     }
   }
 }

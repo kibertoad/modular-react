@@ -113,4 +113,20 @@ describe("ModuleTab", () => {
     expect(getByText(/no entry "ghost"/)).toBeTruthy();
     expect(getByText(/review/)).toBeTruthy();
   });
+
+  it("surfaces a notice instead of the legacy component when entry is passed to a module with no entry points", () => {
+    const Legacy = () => <div data-testid="legacy-marker">legacy</div>;
+    const legacyMod = defineModule({
+      id: "legacy-only",
+      version: "1.0.0",
+      component: Legacy,
+    });
+    const { getByText, queryByTestId } = render(
+      <ModuleTab module={legacyMod} entry="review" input={{ tag: "hi" }} />,
+    );
+    // An explicit `entry` prop is an opt-in to the entry contract; silently
+    // falling through to the legacy component would hide the misconfiguration.
+    expect(getByText(/has no entry points/)).toBeTruthy();
+    expect(queryByTestId("legacy-marker")).toBeNull();
+  });
 });

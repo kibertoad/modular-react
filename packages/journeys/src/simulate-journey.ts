@@ -15,7 +15,7 @@ import type {
  *
  * Intended for pure-logic unit tests of transition graphs.
  */
-export interface JourneySimulator<TModules extends ModuleTypeMap, TState> {
+export interface JourneySimulator<_TModules extends ModuleTypeMap, TState> {
   readonly journeyId: string;
   readonly instanceId: string;
   /** Current step — null once the journey completes or aborts. */

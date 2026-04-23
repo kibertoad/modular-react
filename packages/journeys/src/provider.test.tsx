@@ -103,7 +103,9 @@ describe("JourneyProvider", () => {
     expect(globalOnExit).toHaveBeenCalledWith(event);
     // Both hooks fire for every exit — useful for shells that want a global
     // telemetry hook without dropping per-tab handling.
-    expect(globalOnExit).toHaveBeenCalledAfter(localOnExit);
+    expect(localOnExit.mock.invocationCallOrder[0]!).toBeLessThan(
+      globalOnExit.mock.invocationCallOrder[0]!,
+    );
   });
 
   it("explicit prop runtime still wins over the provider's runtime", () => {

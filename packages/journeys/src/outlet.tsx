@@ -137,8 +137,12 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     );
   }
 
-  const record = internals.__getRecord(instanceId)!;
-  const reg = internals.__getRegistered(instance.journeyId)!;
+  // Degrade gracefully if the record/registration was forgotten mid-render
+  // (e.g. a sibling effect calling `runtime.forget`) — matches the existing
+  // `if (!instance) return null` path above instead of throwing.
+  const record = internals.__getRecord(instanceId);
+  const reg = internals.__getRegistered(instance.journeyId);
+  if (!record || !reg) return null;
   const { exit, goBack } = internals.__bindStepCallbacks(record, reg);
 
   const handleError = (err: unknown): void => {

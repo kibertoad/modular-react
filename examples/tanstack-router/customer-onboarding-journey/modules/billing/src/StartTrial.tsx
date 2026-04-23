@@ -13,7 +13,7 @@ function makeTrialId(): string {
 
 function trialEndDate(): string {
   const d = new Date();
-  d.setDate(d.getDate() + 14);
+  d.setUTCDate(d.getUTCDate() + 14);
   return d.toISOString().slice(0, 10);
 }
 

@@ -26,11 +26,27 @@ export interface WorkspaceTabsState {
 
   readonly addTab: (tab: Tab) => void;
   readonly removeTab: (tabId: string) => void;
+  readonly updateTab: (tabId: string, patch: Partial<Tab>) => void;
   readonly activateTab: (tabId: string | null) => void;
   readonly findJourneyTabByInstance: (instanceId: string) => Tab | null;
 }
 
 const STORAGE_KEY = "workspace-tabs";
+
+function isValidTab(value: unknown): value is Tab {
+  if (typeof value !== "object" || value === null) return false;
+  const t = value as { tabId?: unknown; kind?: unknown; title?: unknown };
+  if (typeof t.tabId !== "string" || typeof t.title !== "string") return false;
+  if (t.kind === "journey") {
+    const jt = value as { journeyId?: unknown; instanceId?: unknown };
+    return typeof jt.journeyId === "string" && typeof jt.instanceId === "string";
+  }
+  if (t.kind === "module") {
+    const mt = value as { moduleId?: unknown };
+    return typeof mt.moduleId === "string";
+  }
+  return false;
+}
 
 function loadInitial(): Pick<WorkspaceTabsState, "tabs" | "activeTabId"> {
   if (typeof localStorage === "undefined") {
@@ -39,14 +55,20 @@ function loadInitial(): Pick<WorkspaceTabsState, "tabs" | "activeTabId"> {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return { tabs: [], activeTabId: null };
   try {
-    const parsed = JSON.parse(raw) as {
-      tabs?: readonly Tab[];
-      activeTabId?: string | null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== "object" || parsed === null) {
+      return { tabs: [], activeTabId: null };
+    }
+    const { tabs, activeTabId } = parsed as {
+      tabs?: unknown;
+      activeTabId?: unknown;
     };
-    return {
-      tabs: parsed.tabs ?? [],
-      activeTabId: parsed.activeTabId ?? null,
-    };
+    const safeTabs = Array.isArray(tabs) ? tabs.filter(isValidTab) : [];
+    const safeActiveTabId =
+      typeof activeTabId === "string" && safeTabs.some((t) => t.tabId === activeTabId)
+        ? activeTabId
+        : null;
+    return { tabs: safeTabs, activeTabId: safeActiveTabId };
   } catch {
     localStorage.removeItem(STORAGE_KEY);
     return { tabs: [], activeTabId: null };
@@ -82,6 +104,13 @@ export function createWorkspaceTabsStore(): StoreApi<WorkspaceTabsState> {
           s.activeTabId === tabId ? (tabs[tabs.length - 1]?.tabId ?? null) : s.activeTabId;
         return { ...s, tabs, activeTabId };
       });
+    },
+
+    updateTab: (tabId, patch) => {
+      set((s) => ({
+        ...s,
+        tabs: s.tabs.map((t) => (t.tabId === tabId ? ({ ...t, ...patch } as Tab) : t)),
+      }));
     },
 
     activateTab: (tabId) => {

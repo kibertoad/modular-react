@@ -20,8 +20,10 @@ export interface ModuleTabProps<TInput = unknown> {
    * Entry point name on the module. If omitted and the module exposes
    * exactly one entry, that entry is used automatically. If the module
    * exposes several entries, the name must be supplied — passing an
-   * unknown name renders an error notice. A module with no entry points
-   * falls back to the legacy `component` field.
+   * unknown name renders an error notice. If `entry` is omitted and the
+   * module has no entry points, the component falls back to the legacy
+   * `component` field; passing `entry` to such a module instead renders
+   * the error notice so misconfiguration is surfaced.
    */
   readonly entry?: string;
   readonly input?: TInput;
@@ -58,6 +60,12 @@ export function ModuleTab<TInput = unknown>(props: ModuleTabProps<TInput>): Reac
     }
   } else if (entryPoints && !(entry in entryPoints)) {
     missingEntryNotice = `Module "${mod.id}" has no entry "${entry}". Registered: ${entryNames.join(", ") || "(none)"}.`;
+  } else if (!entryPoints) {
+    // `entry` requested but module exposes no entry points at all — surface
+    // the misconfiguration instead of silently falling through to the legacy
+    // `component` path.
+    resolvedName = undefined;
+    missingEntryNotice = `Module "${mod.id}" has no entry points; \`entry="${entry}"\` cannot be resolved.`;
   }
 
   const entryPoint = resolvedName ? entryPoints?.[resolvedName] : undefined;

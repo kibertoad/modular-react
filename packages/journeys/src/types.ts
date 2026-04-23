@@ -121,7 +121,10 @@ export type TransitionMap<TModules extends ModuleTypeMap, TState> = {
 // Observation hook payloads
 // -----------------------------------------------------------------------------
 
-export interface TransitionEvent<TModules extends ModuleTypeMap = ModuleTypeMap, TState = unknown> {
+export interface TransitionEvent<
+  _TModules extends ModuleTypeMap = ModuleTypeMap,
+  TState = unknown,
+> {
   readonly journeyId: string;
   readonly instanceId: InstanceId;
   readonly from: JourneyStep | null;
@@ -244,7 +247,8 @@ export interface JourneyRegisterOptions<TState = unknown> {
   /**
    * Maximum number of entries to keep in `history` (and the matching
    * `rollbackSnapshots`). Oldest entries are dropped once the cap is
-   * exceeded. Omit for unbounded history (previous behavior).
+   * exceeded. Omit — or pass `0` or a negative number — for unbounded
+   * history (the default).
    *
    * **Caveat with `allowBack`.** A cap smaller than the deepest
    * back-enabled chain will silently break `goBack` past the trim

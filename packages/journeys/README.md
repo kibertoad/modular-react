@@ -346,7 +346,7 @@ If a transition needs to fetch data between steps, put the fetch inside a dedica
 
 ### Journey lifecycle
 
-```
+```text
 user triggers exit('X', output)
   → runtime checks step token matches (stale callbacks are dropped)
   → runs transition handler (pure)
@@ -583,6 +583,8 @@ registry.registerJourney(journey, { maxHistory: 50 });
 
 Caveat: a cap smaller than the deepest reachable back-chain silently breaks `goBack` past the trim point (the rollback snapshot `goBack` would restore is among the dropped entries). Size it to at least the longest user-reachable back chain, or treat it as a hard "no-one will navigate back this far" window.
 
+Omitting `maxHistory`, or passing `0` or a negative number, leaves history unbounded.
+
 ## Runtime surface
 
 `manifest.journeys` implements `JourneyRuntime`:
@@ -652,7 +654,7 @@ Primarily useful for diagnostics, command palettes, or admin tooling. A "launch 
 
 Explicit `runtime` / `modules` props on `<JourneyOutlet>` still win — useful when a single tree needs to reach two distinct runtimes (split-screen agents, multi-tenant dashboards). `useJourneyContext()` exposes the current value (or `null` when no provider is mounted) for shells that need the runtime for non-React-rendering work — e.g. opening a new tab from a command-palette handler.
 
-Because `useJourneyContext()` can return `null`, examples that use the non-null bang (`useJourneyContext()!.runtime`) are only safe **inside a tree where the provider is guaranteed to be mounted** — typically the subtree below `<JourneyProvider>` in your shell. In code paths that can legitimately run outside the provider (e.g. a shared utility callable from both journey-aware and journey-unaware hosts), null-check the return value instead and fall back to whatever the caller supplied.
+Because `useJourneyContext()` can return `null`, examples that use the non-null assertion (`useJourneyContext()!.runtime`) are only safe **inside a tree where the provider is guaranteed to be mounted** — typically the subtree below `<JourneyProvider>` in your shell. In code paths that can legitimately run outside the provider (e.g. a shared utility callable from both journey-aware and journey-unaware hosts), null-check the return value instead and fall back to whatever the caller supplied.
 
 ## Persistence
 

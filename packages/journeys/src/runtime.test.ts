@@ -413,6 +413,24 @@ describe("createJourneyRuntime — lifecycle extras", () => {
     expect(history[0]!.entry).toBe("negotiate");
   });
 
+  it("treats maxHistory <= 0 as unbounded so history is preserved", () => {
+    // A cap of 0 used to clear the entire history on every transition,
+    // silently disabling goBack. It is now treated the same as a negative
+    // value: unbounded. This pins that behavior.
+    const rt = createJourneyRuntime([{ definition: journey, options: { maxHistory: 0 } }], {
+      modules: { account: accountModule, debts: debtsModule },
+      debug: false,
+    });
+    const id = rt.start("collect", { customerId: "C-zero" });
+    const internals = getInternals(rt);
+    const reg = internals.__getRegistered("collect")!;
+    internals
+      .__bindStepCallbacks(internals.__getRecord(id)!, reg)
+      .exit("wantsToNegotiate", { customerId: "C-zero" });
+    expect(rt.getInstance(id)!.history).toHaveLength(1);
+    expect(rt.getInstance(id)!.history[0]!.entry).toBe("review");
+  });
+
   it("coalesces rapid saves so there is at most one in flight", async () => {
     const saves: string[] = [];
     let resolveFirst: () => void = () => {};
@@ -587,6 +605,47 @@ describe("createJourneyRuntime — lifecycle extras", () => {
     };
     rt.hydrate("collect", blob);
     expect(() => rt.hydrate("collect", blob)).toThrow(/already in memory/);
+  });
+
+  it("start() mints a fresh id when a loaded blob's instanceId collides with a live instance", () => {
+    // Seed a live instance via explicit hydrate so "ji_collide" is occupied.
+    const liveBlob = {
+      definitionId: "collect",
+      version: "1.0.0",
+      instanceId: "ji_collide",
+      status: "active" as const,
+      step: { moduleId: "account", entry: "review", input: { customerId: "C-live" } },
+      history: [] as never[],
+      state: { customerId: "C-live", attempts: 0 },
+      startedAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    };
+    // A separate, unrelated blob reachable via start()'s persistence probe —
+    // same id, different customer. A corrupted / hand-edited blob would look
+    // like this.
+    const persistedBlob = {
+      ...liveBlob,
+      step: { moduleId: "account", entry: "review", input: { customerId: "C-persisted" } },
+      state: { customerId: "C-persisted", attempts: 0 },
+    };
+    const persistence = {
+      keyFor: () => "customer:persisted:collect",
+      load: () => persistedBlob,
+      save: async () => {},
+      remove: async () => {},
+    } as never;
+    const rt = createJourneyRuntime([{ definition: journey, options: { persistence } }], {
+      modules: { account: accountModule, debts: debtsModule },
+      debug: false,
+    });
+    const liveId = rt.hydrate("collect", liveBlob);
+    expect(liveId).toBe("ji_collide");
+    const startedId = rt.start("collect", { customerId: "C-persisted" });
+    // Must not clobber the live instance, even though the persisted blob
+    // advertised its id.
+    expect(startedId).not.toBe("ji_collide");
+    expect(rt.getInstance("ji_collide")!.state).toEqual(liveBlob.state);
+    expect(rt.getInstance(startedId)!.state).toEqual(persistedBlob.state);
   });
 
   it("hydrate() rejects a blob whose rollbackSnapshots length disagrees with history", () => {

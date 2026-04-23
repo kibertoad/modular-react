@@ -7,7 +7,7 @@ afterEach(() => {
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import type { ModuleEntryProps } from "@modular-react/core";
 import { defineJourney } from "./define-journey.js";
-import { createJourneyRuntime } from "./runtime.js";
+import { createJourneyRuntime, getInternals } from "./runtime.js";
 import { JourneyOutlet } from "./outlet.js";
 
 // --- Modules with real components --------------------------------------------
@@ -211,6 +211,22 @@ describe("JourneyOutlet", () => {
     render(<JourneyOutlet runtime={rt} instanceId={id} modules={modules} />);
     await Promise.resolve();
     expect(rt.getInstance(id)!.status).toBe("active");
+  });
+
+  it("survives outlet-A unmount while outlet-B mounts against the same instance", async () => {
+    const rt = makeRuntime();
+    const id = rt.start("demo", { customerId: "C-7b" });
+    // Outlet A mounts, outlet B mounts (both attached), outlet A unmounts.
+    // The listener-count check in the cleanup microtask must keep the
+    // instance alive because outlet B is still subscribed.
+    const outletA = render(<JourneyOutlet runtime={rt} instanceId={id} modules={modules} />);
+    render(<JourneyOutlet runtime={rt} instanceId={id} modules={modules} />);
+    outletA.unmount();
+    await Promise.resolve();
+    expect(rt.getInstance(id)!.status).toBe("active");
+    // Outlet B is still subscribed, so the record must have a live listener.
+    const internals = getInternals(rt);
+    expect(internals.__getRecord(id)!.listeners.size).toBeGreaterThan(0);
   });
 
   it("renders loadingFallback while the instance is in loading status", async () => {
