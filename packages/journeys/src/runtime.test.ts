@@ -565,7 +565,7 @@ describe("createJourneyRuntime — lifecycle extras", () => {
   });
 
   it("start() removes a terminal blob from persistence before minting a fresh instance", async () => {
-    const remove = vi.fn<[string], void>();
+    const remove = vi.fn<(key: string) => void>();
     const terminalBlob = {
       definitionId: "collect",
       version: "1.0.0",

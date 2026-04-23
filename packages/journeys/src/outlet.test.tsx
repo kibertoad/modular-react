@@ -229,6 +229,31 @@ describe("JourneyOutlet", () => {
     expect(internals.__getRecord(id)!.listeners.size).toBeGreaterThan(0);
   });
 
+  it("survives a same-commit handoff: outlet A unmounts and outlet B mounts in one render", async () => {
+    const rt = makeRuntime();
+    const id = rt.start("demo", { customerId: "C-7c" });
+    // Force a single commit that both unmounts outlet A and mounts outlet B
+    // by changing `key`. React runs cleanups for the old subtree and then
+    // mounts the new subtree in the same commit, so outlet A's deferred
+    // abandon microtask will only see a non-zero listener count if outlet
+    // B's `useSyncExternalStore` subscribed synchronously during commit
+    // — which is exactly the invariant the listener-count check relies on.
+    function Wrapper({ which }: { which: "a" | "b" }) {
+      return <JourneyOutlet key={which} runtime={rt} instanceId={id} modules={modules} />;
+    }
+    const { rerender } = render(<Wrapper which="a" />);
+    act(() => {
+      rerender(<Wrapper which="b" />);
+    });
+    await Promise.resolve();
+    const internals = getInternals(rt);
+    const record = internals.__getRecord(id);
+    expect(record).toBeDefined();
+    expect(record!.status).toBe("active");
+    // Outlet B took over the subscription during commit.
+    expect(record!.listeners.size).toBeGreaterThan(0);
+  });
+
   it("renders loadingFallback while the instance is in loading status", async () => {
     let resolveLoad: (blob: null) => void = () => {};
     const loadPromise = new Promise<null>((r) => {
