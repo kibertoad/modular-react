@@ -16,11 +16,7 @@ const CATALOG: Readonly<Record<PlanTier, SubscriptionPlan>> = {
 
 const TIER_ORDER: readonly PlanTier[] = ["standard", "pro", "enterprise"];
 
-export function ChoosePlan({
-  input,
-  exit,
-  goBack,
-}: ModuleEntryProps<ChoosePlanInput, PlanExits>) {
+export function ChoosePlan({ input, exit, goBack }: ModuleEntryProps<ChoosePlanInput, PlanExits>) {
   const [selectedTier, setSelectedTier] = useState<PlanTier>(input.hint.suggestedTier);
   const plan = CATALOG[selectedTier];
 

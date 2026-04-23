@@ -102,12 +102,7 @@ export type TransitionResult<TModules extends ModuleTypeMap, TState> =
  * into the previous step from this entry; must agree with the target
  * entry's own `allowBack` declaration (checked at resolveManifest time).
  */
-export type EntryTransitions<
-  TModules extends ModuleTypeMap,
-  TState,
-  TMod,
-  TEntry,
-> = {
+export type EntryTransitions<TModules extends ModuleTypeMap, TState, TMod, TEntry> = {
   readonly [X in ExitNamesOf<TMod>]?: (
     ctx: ExitCtx<TState, ExitOutputOf<TMod, X>, EntryInputOf<TMod, TEntry>>,
   ) => TransitionResult<TModules, TState>;
@@ -118,12 +113,7 @@ export type EntryTransitions<
 /** Map of module id → entry name → exit transitions. */
 export type TransitionMap<TModules extends ModuleTypeMap, TState> = {
   readonly [M in keyof TModules]?: {
-    readonly [E in EntryNamesOf<TModules[M]>]?: EntryTransitions<
-      TModules,
-      TState,
-      TModules[M],
-      E
-    >;
+    readonly [E in EntryNamesOf<TModules[M]>]?: EntryTransitions<TModules, TState, TModules[M], E>;
   };
 };
 
@@ -131,10 +121,7 @@ export type TransitionMap<TModules extends ModuleTypeMap, TState> = {
 // Observation hook payloads
 // -----------------------------------------------------------------------------
 
-export interface TransitionEvent<
-  TModules extends ModuleTypeMap = ModuleTypeMap,
-  TState = unknown,
-> {
+export interface TransitionEvent<TModules extends ModuleTypeMap = ModuleTypeMap, TState = unknown> {
   readonly journeyId: string;
   readonly instanceId: InstanceId;
   readonly from: JourneyStep | null;
@@ -144,10 +131,7 @@ export interface TransitionEvent<
   readonly history: readonly JourneyStep[];
 }
 
-export interface AbandonCtx<
-  _TModules extends ModuleTypeMap = ModuleTypeMap,
-  TState = unknown,
-> {
+export interface AbandonCtx<_TModules extends ModuleTypeMap = ModuleTypeMap, TState = unknown> {
   readonly journeyId: string;
   readonly instanceId: InstanceId;
   readonly step: JourneyStep | null;
@@ -166,11 +150,7 @@ export interface TerminalCtx<TState = unknown> {
 // Journey definition
 // -----------------------------------------------------------------------------
 
-export interface JourneyDefinition<
-  TModules extends ModuleTypeMap,
-  TState,
-  TInput = void,
-> {
+export interface JourneyDefinition<TModules extends ModuleTypeMap, TState, TInput = void> {
   readonly id: string;
   readonly version: string;
   readonly meta?: Readonly<Record<string, unknown>>;
@@ -181,14 +161,10 @@ export interface JourneyDefinition<
   readonly transitions: TransitionMap<TModules, TState>;
 
   readonly onTransition?: (ev: TransitionEvent<TModules, TState>) => void;
-  readonly onAbandon?: (
-    ctx: AbandonCtx<TModules, TState>,
-  ) => TransitionResult<TModules, TState>;
+  readonly onAbandon?: (ctx: AbandonCtx<TModules, TState>) => TransitionResult<TModules, TState>;
   readonly onComplete?: (ctx: TerminalCtx<TState>, result: unknown) => void;
   readonly onAbort?: (ctx: TerminalCtx<TState>, reason: unknown) => void;
-  readonly onHydrate?: (
-    blob: SerializedJourney<TState>,
-  ) => SerializedJourney<TState>;
+  readonly onHydrate?: (blob: SerializedJourney<TState>) => SerializedJourney<TState>;
 }
 
 /** Erased shape used by the registry — `any` on the generics lets the
@@ -269,6 +245,14 @@ export interface JourneyRegisterOptions<TState = unknown> {
    * Maximum number of entries to keep in `history` (and the matching
    * `rollbackSnapshots`). Oldest entries are dropped once the cap is
    * exceeded. Omit for unbounded history (previous behavior).
+   *
+   * **Caveat with `allowBack`.** A cap smaller than the deepest
+   * back-enabled chain will silently break `goBack` past the trim
+   * point — the rollback snapshot that `goBack` would restore is among
+   * the dropped entries. Treat `maxHistory` as "prune old entries that
+   * no one will ever navigate back to" rather than a hard window on
+   * `goBack` distance. If an app needs both back-navigation and a tight
+   * cap, size the cap to at least the longest user-reachable back chain.
    */
   maxHistory?: number;
 }
@@ -295,10 +279,7 @@ export interface TerminalOutcome {
 
 export interface JourneyRuntime {
   start<TInput>(journeyId: string, input: TInput): InstanceId;
-  hydrate<TState>(
-    journeyId: string,
-    blob: SerializedJourney<TState>,
-  ): InstanceId;
+  hydrate<TState>(journeyId: string, blob: SerializedJourney<TState>): InstanceId;
   getInstance(id: InstanceId): JourneyInstance | null;
   listInstances(): readonly InstanceId[];
   listDefinitions(): readonly JourneyDefinitionSummary[];

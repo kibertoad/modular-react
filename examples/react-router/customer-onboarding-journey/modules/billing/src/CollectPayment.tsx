@@ -31,10 +31,7 @@ export function CollectPayment({
         >
           Process payment
         </button>
-        <button
-          type="button"
-          onClick={() => exit("failed", { reason: "card declined" })}
-        >
+        <button type="button" onClick={() => exit("failed", { reason: "card declined" })}>
           Payment failed
         </button>
         <button type="button" onClick={() => exit("cancelled")}>

@@ -193,9 +193,7 @@ describe("JourneyOutlet", () => {
   it("abandons the instance on unmount when still active", async () => {
     const rt = makeRuntime();
     const id = rt.start("demo", { customerId: "C-6" });
-    const { unmount } = render(
-      <JourneyOutlet runtime={rt} instanceId={id} modules={modules} />,
-    );
+    const { unmount } = render(<JourneyOutlet runtime={rt} instanceId={id} modules={modules} />);
     unmount();
     // Abandon is deferred one microtask so StrictMode's simulated
     // mount/unmount/mount cycle cannot tear the instance down prematurely.
@@ -208,9 +206,7 @@ describe("JourneyOutlet", () => {
     const id = rt.start("demo", { customerId: "C-7" });
     // Render twice with the same instance id — imitates the second mount
     // of React 19 StrictMode after the simulated teardown.
-    const first = render(
-      <JourneyOutlet runtime={rt} instanceId={id} modules={modules} />,
-    );
+    const first = render(<JourneyOutlet runtime={rt} instanceId={id} modules={modules} />);
     first.unmount();
     render(<JourneyOutlet runtime={rt} instanceId={id} modules={modules} />);
     await Promise.resolve();

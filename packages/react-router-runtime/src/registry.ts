@@ -317,7 +317,8 @@ export function createRegistry<
     const recalculateSlots = hasDynamicSlots ? () => slotsSignal.notify() : () => {};
 
     const moduleDescriptors: Record<string, ModuleDescriptor<any, any, any, any>> = {};
-    for (const mod of modules) moduleDescriptors[mod.id] = mod as ModuleDescriptor<any, any, any, any>;
+    for (const mod of modules)
+      moduleDescriptors[mod.id] = mod as ModuleDescriptor<any, any, any, any>;
 
     // Always construct a runtime — even with zero registered journeys, the
     // no-op runtime returns empty listings and throws "unknown journey id"

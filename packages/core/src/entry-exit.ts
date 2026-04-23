@@ -60,7 +60,9 @@ export function validateModuleEntryExit(
         continue;
       }
       if (typeof entry.component !== "function") {
-        issues.push(`entry "${name}" must declare a React component (got ${typeof entry.component})`);
+        issues.push(
+          `entry "${name}" must declare a React component (got ${typeof entry.component})`,
+        );
       }
       const allowBack = entry.allowBack;
       if (

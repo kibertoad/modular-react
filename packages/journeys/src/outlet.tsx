@@ -213,10 +213,7 @@ class StepErrorBoundary extends Component<StepErrorBoundaryProps, StepErrorBound
 
   override render(): ReactNode {
     if (this.state.error) {
-      return createElement(
-        ModuleErrorBoundary,
-        { moduleId: this.props.moduleId, children: null },
-      );
+      return createElement(ModuleErrorBoundary, { moduleId: this.props.moduleId, children: null });
     }
     return this.props.children;
   }

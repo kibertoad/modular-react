@@ -160,10 +160,10 @@ describe("createJourneyRuntime — basic state machine", () => {
 
   it("aborts on cancelled exit", () => {
     const onAbort = vi.fn();
-    const rt = createJourneyRuntime(
-      [{ definition: { ...journey, onAbort }, options: undefined }],
-      { modules: { account: accountModule, debts: debtsModule }, debug: false },
-    );
+    const rt = createJourneyRuntime([{ definition: { ...journey, onAbort }, options: undefined }], {
+      modules: { account: accountModule, debts: debtsModule },
+      debug: false,
+    });
     const id = rt.start("collect", { customerId: "C-4" });
     const internals = getInternals(rt);
     internals
@@ -174,9 +174,7 @@ describe("createJourneyRuntime — basic state machine", () => {
   });
 
   it("end() fires onAbandon and transitions to terminal", () => {
-    const onAbandon = vi
-      .fn()
-      .mockReturnValue({ abort: { reason: "forced" } });
+    const onAbandon = vi.fn().mockReturnValue({ abort: { reason: "forced" } });
     const rt = createJourneyRuntime(
       [{ definition: { ...journey, onAbandon }, options: undefined }],
       { modules: { account: accountModule, debts: debtsModule }, debug: false },
@@ -224,9 +222,7 @@ describe("createJourneyRuntime — basic state machine", () => {
 
   it("listDefinitions reports registered summaries", () => {
     const rt = freshRuntime();
-    expect(rt.listDefinitions()).toEqual([
-      { id: "collect", version: "1.0.0", meta: undefined },
-    ]);
+    expect(rt.listDefinitions()).toEqual([{ id: "collect", version: "1.0.0", meta: undefined }]);
   });
 
   it("goBack returns to previous step and rolls back state when entry opts in", () => {
@@ -395,10 +391,10 @@ describe("createJourneyRuntime — lifecycle extras", () => {
   });
 
   it("maxHistory drops the oldest step when the cap is exceeded", () => {
-    const rt = createJourneyRuntime(
-      [{ definition: journey, options: { maxHistory: 1 } }],
-      { modules: { account: accountModule, debts: debtsModule }, debug: false },
-    );
+    const rt = createJourneyRuntime([{ definition: journey, options: { maxHistory: 1 } }], {
+      modules: { account: accountModule, debts: debtsModule },
+      debug: false,
+    });
     const id = rt.start("collect", { customerId: "C-cap" });
     const internals = getInternals(rt);
     const reg = internals.__getRegistered("collect")!;
@@ -411,9 +407,7 @@ describe("createJourneyRuntime — lifecycle extras", () => {
 
     // Terminal exit pushes negotiate onto history, trimmed to the cap so
     // only the most recent entry survives — review drops off the front.
-    internals
-      .__bindStepCallbacks(internals.__getRecord(id)!, reg)
-      .exit("agreed", { amount: 100 });
+    internals.__bindStepCallbacks(internals.__getRecord(id)!, reg).exit("agreed", { amount: 100 });
     const history = rt.getInstance(id)!.history;
     expect(history).toHaveLength(1);
     expect(history[0]!.entry).toBe("negotiate");
@@ -446,9 +440,7 @@ describe("createJourneyRuntime — lifecycle extras", () => {
     // start (save queued), cancelled (save queued & coalesces on top of the
     // first in-flight save). The runtime must have at most one save in
     // flight at a time.
-    internals
-      .__bindStepCallbacks(internals.__getRecord(id)!, reg)
-      .exit("cancelled");
+    internals.__bindStepCallbacks(internals.__getRecord(id)!, reg).exit("cancelled");
     // First save is paused; the terminal save must have coalesced.
     expect(saves.length).toBe(1);
     resolveFirst();
@@ -474,7 +466,11 @@ describe("createJourneyRuntime — lifecycle extras", () => {
       id: "collect",
       version: "1.0.0",
       initialState: ({ customerId }: { customerId: string }) => ({ customerId, attempts: 0 }),
-      start: (s) => ({ module: "account", entry: "review", input: { customerId: (s as State).customerId } }),
+      start: (s) => ({
+        module: "account",
+        entry: "review",
+        input: { customerId: (s as State).customerId },
+      }),
       transitions: {
         account: {
           review: {
@@ -485,10 +481,10 @@ describe("createJourneyRuntime — lifecycle extras", () => {
         },
       },
     });
-    const rt = createJourneyRuntime(
-      [{ definition: j as never, options: undefined }],
-      { modules: { account: accountModule, debts: debtsModule }, debug: false },
-    );
+    const rt = createJourneyRuntime([{ definition: j as never, options: undefined }], {
+      modules: { account: accountModule, debts: debtsModule },
+      debug: false,
+    });
     const id = rt.start("collect", { customerId: "C-u" });
     const internals = getInternals(rt);
     internals
@@ -601,9 +597,7 @@ describe("createJourneyRuntime — lifecycle extras", () => {
       instanceId: "ji_badlen",
       status: "active" as const,
       step: { moduleId: "account", entry: "review", input: { customerId: "C-badlen" } },
-      history: [
-        { moduleId: "debts", entry: "negotiate", input: { customerId: "C-badlen" } },
-      ],
+      history: [{ moduleId: "debts", entry: "negotiate", input: { customerId: "C-badlen" } }],
       rollbackSnapshots: [] as never[],
       state: { customerId: "C-badlen", attempts: 0 },
       startedAt: "2024-01-01T00:00:00.000Z",
@@ -669,9 +663,7 @@ describe("createJourneyRuntime — lifecycle extras", () => {
       .exit("wantsToNegotiate", { customerId: "C-async-handler" });
     expect(rt.getInstance(id)!.status).toBe("aborted");
     expect(
-      warn.mock.calls.some((args) =>
-        String(args[0] ?? "").includes("returned a Promise"),
-      ),
+      warn.mock.calls.some((args) => String(args[0] ?? "").includes("returned a Promise")),
     ).toBe(true);
     warn.mockRestore();
   });

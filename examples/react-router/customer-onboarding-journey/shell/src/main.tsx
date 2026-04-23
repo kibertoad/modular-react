@@ -32,7 +32,14 @@ registry.registerJourney(customerOnboardingJourney, {
   persistence: journeyPersistence,
   onTransition: (ev) => {
     // Host-level observability hook — in a real app this goes to analytics.
-    console.debug("[journey transition]", ev.journeyId, ev.from?.moduleId, "->", ev.to?.moduleId, ev.exit);
+    console.debug(
+      "[journey transition]",
+      ev.journeyId,
+      ev.from?.moduleId,
+      "->",
+      ev.to?.moduleId,
+      ev.exit,
+    );
   },
 });
 

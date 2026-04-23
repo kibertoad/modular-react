@@ -6,10 +6,7 @@ export interface ReviewProfileInput {
   readonly customerId: string;
 }
 
-export function ReviewProfile({
-  input,
-  exit,
-}: ModuleEntryProps<ReviewProfileInput, ProfileExits>) {
+export function ReviewProfile({ input, exit }: ModuleEntryProps<ReviewProfileInput, ProfileExits>) {
   const customer = loadCustomer(input.customerId);
   const hint = suggestPlan(customer);
   const selfServe = selfServeAmount(customer);
@@ -52,9 +49,7 @@ export function ReviewProfile({
           <>
             <button
               type="button"
-              onClick={() =>
-                exit("profileComplete", { customerId: input.customerId, hint })
-              }
+              onClick={() => exit("profileComplete", { customerId: input.customerId, hint })}
             >
               Pick a plan
             </button>

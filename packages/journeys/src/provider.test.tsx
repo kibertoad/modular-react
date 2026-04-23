@@ -15,10 +15,7 @@ afterEach(() => {
 
 const exits = { confirmed: defineExit<{ id: string }>() } as const;
 
-function Review({
-  input,
-  exit,
-}: ModuleEntryProps<{ customerId: string }, typeof exits>) {
+function Review({ input, exit }: ModuleEntryProps<{ customerId: string }, typeof exits>) {
   return (
     <div>
       <span data-testid="cid">{input.customerId}</span>
@@ -63,10 +60,10 @@ const journey = defineJourney<Modules, { customerId: string }>()({
 
 describe("JourneyProvider", () => {
   it("lets JourneyOutlet resolve runtime + modules from context without threading props", () => {
-    const runtime = createJourneyRuntime(
-      [{ definition: journey, options: undefined }],
-      { modules: { review: mod }, debug: false },
-    );
+    const runtime = createJourneyRuntime([{ definition: journey, options: undefined }], {
+      modules: { review: mod },
+      debug: false,
+    });
     const instanceId = runtime.start("j", { customerId: "CTX-1" });
     const { getByTestId } = render(
       <JourneyProvider runtime={runtime}>
@@ -114,10 +111,10 @@ describe("JourneyProvider", () => {
       modules: { review: mod },
       debug: false,
     });
-    const realRuntime = createJourneyRuntime(
-      [{ definition: journey, options: undefined }],
-      { modules: { review: mod }, debug: false },
-    );
+    const realRuntime = createJourneyRuntime([{ definition: journey, options: undefined }], {
+      modules: { review: mod },
+      debug: false,
+    });
     const instanceId = realRuntime.start("j", { customerId: "CTX-2" });
     const { getByTestId } = render(
       <JourneyProvider runtime={providerRuntime}>
@@ -130,9 +127,7 @@ describe("JourneyProvider", () => {
   it("throws when no runtime is provided via either prop or context", () => {
     // Error boundary catches the throw so the test can assert on it cleanly.
     const restore = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(() => render(<JourneyOutlet instanceId="x" />)).toThrow(
-      /needs a runtime/,
-    );
+    expect(() => render(<JourneyOutlet instanceId="x" />)).toThrow(/needs a runtime/);
     restore.mockRestore();
   });
 });

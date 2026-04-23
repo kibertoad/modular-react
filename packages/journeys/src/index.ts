@@ -5,11 +5,7 @@
 
 export { defineJourney } from "./define-journey.js";
 export { defineJourneyPersistence } from "./persistence.js";
-export {
-  createJourneyRuntime,
-  getInternals,
-  type JourneyRuntimeOptions,
-} from "./runtime.js";
+export { createJourneyRuntime, getInternals, type JourneyRuntimeOptions } from "./runtime.js";
 export {
   JourneyValidationError,
   JourneyHydrationError,

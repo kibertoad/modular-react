@@ -10,9 +10,7 @@ import type { AnyJourneyDefinition, RegisteredJourney } from "./types.js";
 export class JourneyValidationError extends Error {
   readonly issues: readonly string[];
   constructor(issues: readonly string[]) {
-    super(
-      `[@modular-react/journeys] Invalid journey registration:\n  - ${issues.join("\n  - ")}`,
-    );
+    super(`[@modular-react/journeys] Invalid journey registration:\n  - ${issues.join("\n  - ")}`);
     this.name = "JourneyValidationError";
     this.issues = issues;
   }
@@ -54,9 +52,7 @@ export function validateJourneyContracts(
       for (const [entryName, perEntry] of Object.entries(perModule)) {
         const entry = mod.entryPoints?.[entryName];
         if (!entry) {
-          issues.push(
-            `journey "${def.id}" references unknown entry "${moduleId}.${entryName}"`,
-          );
+          issues.push(`journey "${def.id}" references unknown entry "${moduleId}.${entryName}"`);
           continue;
         }
         for (const exitName of Object.keys(perEntry)) {

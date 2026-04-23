@@ -63,7 +63,10 @@ describe("validateJourneyContracts", () => {
       validateJourneyContracts(
         [
           {
-            definition: { ...bad, transitions: { ghost: { start: { ok: () => ({ abort: null }) } } } as any },
+            definition: {
+              ...bad,
+              transitions: { ghost: { start: { ok: () => ({ abort: null }) } } } as any,
+            },
             options: undefined,
           },
         ],

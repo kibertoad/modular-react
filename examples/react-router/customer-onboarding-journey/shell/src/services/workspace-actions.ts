@@ -1,10 +1,6 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { JourneyRuntime } from "@modular-react/journeys";
-import type {
-  OpenTabResult,
-  OpenTabSpec,
-  WorkspaceActions,
-} from "@example-onboarding/app-shared";
+import type { OpenTabResult, OpenTabSpec, WorkspaceActions } from "@example-onboarding/app-shared";
 import type { WorkspaceTabsState } from "../stores/workspace-tabs.js";
 
 export interface RuntimeRef {

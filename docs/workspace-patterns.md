@@ -504,8 +504,21 @@ Single-module tabs (`{ kind: 'module' }`) cover the common case: one module, one
 
 [Journeys](../packages/journeys/README.md) are the dedicated abstraction for this case. Modules declare typed `entryPoints` and `exitPoints`; a journey declares how one module's exit feeds the next module's entry and owns the shared state for the whole flow; the shell mounts a `<JourneyOutlet>` inside the tab.
 
+Mount one `<JourneyProvider>` near the top of the shell so outlets and module tabs read the runtime (and the global `onModuleExit`) from context — no prop threading:
+
 ```tsx
-import { JourneyOutlet, ModuleTab } from '@modular-react/journeys';
+import { JourneyProvider, JourneyOutlet, ModuleTab } from '@modular-react/journeys';
+
+function Shell({ manifest }: { manifest: ResolvedManifest }) {
+  return (
+    <JourneyProvider
+      runtime={manifest.journeys}
+      onModuleExit={manifest.onModuleExit}
+    >
+      {/* tabs, routes, … */}
+    </JourneyProvider>
+  );
+}
 
 function TabContent({ tab, manifest }: { tab: Tab; manifest: ResolvedManifest }) {
   if (tab.kind === 'module') {
@@ -515,21 +528,23 @@ function TabContent({ tab, manifest }: { tab: Tab; manifest: ResolvedManifest })
         entry={tab.entry}
         input={tab.input}
         tabId={tab.tabId}
-        onExit={(ev) => { workspace.closeTab(tab.tabId); manifest.onModuleExit?.(ev); }}
+        // Provider-level onModuleExit fires automatically — only wire a
+        // per-tab onExit when you need extra shell-specific behavior.
+        onExit={(ev) => workspace.closeTab(tab.tabId)}
       />
     );
   }
   return (
     <JourneyOutlet
-      runtime={manifest.journeys!}
       instanceId={tab.instanceId}
-      modules={manifest.moduleDescriptors}
       loadingFallback={<LoadingSpinner />}
       onFinished={() => workspace.closeTab(tab.tabId)}
     />
   );
 }
 ```
+
+`manifest.journeys` is always a runtime — even when no journey is registered it is a no-op runtime (`listDefinitions() === []`, `start()` throws "unknown journey id"), so shells don't null-guard it.
 
 What each side owns:
 
@@ -550,7 +565,7 @@ Journey state is serializable — pluggable `keyFor` / `load` / `save` / `remove
 ```ts
 const { journeys } = registry.resolve(...);
 for (const tab of tabsStore.getState().tabs) {
-  if (tab.kind !== 'journey' || !journeys) continue;
+  if (tab.kind !== 'journey') continue;
   const resolvedId = journeys.start(tab.journeyId, tab.input);
   if (resolvedId !== tab.instanceId) tabsStore.getState().replaceInstanceId(tab.tabId, resolvedId);
 }

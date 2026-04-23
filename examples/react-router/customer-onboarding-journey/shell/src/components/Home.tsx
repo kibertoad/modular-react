@@ -16,7 +16,10 @@ const CUSTOMERS = [
 ];
 
 export function Home({ workspace, tabsStore }: HomeProps) {
-  const activeTabId = useSyncExternalStore(tabsStore.subscribe, () => tabsStore.getState().activeTabId);
+  const activeTabId = useSyncExternalStore(
+    tabsStore.subscribe,
+    () => tabsStore.getState().activeTabId,
+  );
 
   if (activeTabId) {
     return null;
@@ -26,9 +29,9 @@ export function Home({ workspace, tabsStore }: HomeProps) {
     <div style={{ padding: "1.5rem", flex: 1 }}>
       <h2 style={{ marginBottom: "0.5rem" }}>Customer onboarding</h2>
       <p style={{ color: "#4a5568", marginBottom: "1rem", maxWidth: "55ch" }}>
-        Pick a customer to start the journey. State is persisted to{" "}
-        <code>localStorage</code> on every transition — reload the page mid-flow and the tab
-        resumes at the exact step where you left off.
+        Pick a customer to start the journey. State is persisted to <code>localStorage</code> on
+        every transition — reload the page mid-flow and the tab resumes at the exact step where you
+        left off.
       </p>
 
       <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "0.5rem" }}>

@@ -15,16 +15,11 @@ import {
 } from "@modular-react/journeys";
 import type { StoreApi } from "zustand";
 
-export interface RenderJourneyOptions<
-  TSharedDependencies extends Record<string, any>,
-  TInput,
-> {
+export interface RenderJourneyOptions<TSharedDependencies extends Record<string, any>, TInput> {
   readonly modules: readonly ModuleDescriptor<TSharedDependencies, any, any, any>[];
   readonly input: TInput;
   readonly deps: Partial<{
-    [K in keyof TSharedDependencies]:
-      | StoreApi<TSharedDependencies[K]>
-      | TSharedDependencies[K];
+    [K in keyof TSharedDependencies]: StoreApi<TSharedDependencies[K]> | TSharedDependencies[K];
   }>;
   /** Optional persistence + onTransition forwarded into the runtime. */
   readonly journeyOptions?: JourneyRegisterOptions;

@@ -165,9 +165,7 @@ export function createJourneyRuntime(
     return { moduleId: s.module, entry: s.entry, input: s.input };
   }
 
-  function entryAllowBackMode(
-    step: JourneyStep | null,
-  ): "preserve-state" | "rollback" | false {
+  function entryAllowBackMode(step: JourneyStep | null): "preserve-state" | "rollback" | false {
     if (!step) return false;
     const mod = moduleMap[step.moduleId];
     const entry = mod?.entryPoints?.[step.entry];
@@ -176,10 +174,7 @@ export function createJourneyRuntime(
     return false;
   }
 
-  function journeyAllowsBack(
-    definition: AnyJourneyDefinition,
-    step: JourneyStep | null,
-  ): boolean {
+  function journeyAllowsBack(definition: AnyJourneyDefinition, step: JourneyStep | null): boolean {
     if (!step) return false;
     const perModule = (definition.transitions as Record<string, any> | undefined)?.[step.moduleId];
     const perEntry = perModule?.[step.entry];
@@ -279,17 +274,11 @@ export function createJourneyRuntime(
    * without mutating any live instance record. Used from the `start()` paths
    * where we've probed the adapter and then chosen to mint a fresh instance.
    */
-  function discardBlob<TState>(
-    persistence: JourneyPersistence<TState>,
-    key: string,
-  ) {
+  function discardBlob<TState>(persistence: JourneyPersistence<TState>, key: string) {
     fireAndForgetRemove(persistence, key);
   }
 
-  function fireAndForgetRemove<TState>(
-    persistence: JourneyPersistence<TState>,
-    key: string,
-  ) {
+  function fireAndForgetRemove<TState>(persistence: JourneyPersistence<TState>, key: string) {
     try {
       const maybe = persistence.remove(key);
       if (maybe && typeof (maybe as Promise<void>).catch === "function") {
@@ -308,9 +297,7 @@ export function createJourneyRuntime(
       version: definitions.get(record.journeyId)!.definition.version,
       instanceId: record.id,
       status:
-        record.status === "loading"
-          ? "active"
-          : (record.status as SerializedJourney["status"]),
+        record.status === "loading" ? "active" : (record.status as SerializedJourney["status"]),
       step: record.step,
       history: [...record.history],
       // Preserve alignment with `history` — map `undefined` to `null` so the
@@ -502,11 +489,16 @@ export function createJourneyRuntime(
     }
     const step = record.step;
     if (!step) return;
-    const perModule =
-      (reg.definition.transitions as Record<string, any> | undefined)?.[step.moduleId];
+    const perModule = (reg.definition.transitions as Record<string, any> | undefined)?.[
+      step.moduleId
+    ];
     const perEntry = perModule?.[step.entry];
     const handler = perEntry?.[exitName] as
-      | ((ctx: { state: unknown; input: unknown; output: unknown }) => TransitionResult<ModuleTypeMap, unknown>)
+      | ((ctx: {
+          state: unknown;
+          input: unknown;
+          output: unknown;
+        }) => TransitionResult<ModuleTypeMap, unknown>)
       | undefined;
     if (typeof handler !== "function") {
       if (debug) {
@@ -574,10 +566,7 @@ export function createJourneyRuntime(
   }
 
   function bindStepCallbacks(record: InstanceRecord, reg: RegisteredJourney) {
-    if (
-      record.cachedCallbacks &&
-      record.cachedCallbacks.stepToken === record.stepToken
-    ) {
+    if (record.cachedCallbacks && record.cachedCallbacks.stepToken === record.stepToken) {
       return record.cachedCallbacks;
     }
     const token = record.stepToken;
@@ -601,9 +590,7 @@ export function createJourneyRuntime(
       );
     }
     const canGoBack =
-      mode !== false &&
-      journeyAllowsBack(reg.definition, record.step) &&
-      record.history.length > 0;
+      mode !== false && journeyAllowsBack(reg.definition, record.step) && record.history.length > 0;
     const goBack = canGoBack
       ? () => {
           dispatchGoBack(record, reg, token);
@@ -731,7 +718,7 @@ export function createJourneyRuntime(
     } else {
       // Legacy blobs without rollbackSnapshots — treat as if every history
       // entry had no snapshot. Keeps the two arrays length-aligned.
-      record.rollbackSnapshots = new Array(historyLen).fill(undefined);
+      record.rollbackSnapshots = Array.from({ length: historyLen }, () => undefined);
       record.hasRollbackSnapshot = false;
     }
     record.status = blob.status;
@@ -747,11 +734,12 @@ export function createJourneyRuntime(
     reg: RegisteredJourney,
     persistence: JourneyPersistence<unknown>,
     key: string,
-  ): SerializedJourney<unknown> | null | AsyncLoadPending | Promise<SerializedJourney<unknown> | null> {
-    let loaded:
-      | SerializedJourney<unknown>
-      | null
-      | Promise<SerializedJourney<unknown> | null>;
+  ):
+    | SerializedJourney<unknown>
+    | null
+    | AsyncLoadPending
+    | Promise<SerializedJourney<unknown> | null> {
+    let loaded: SerializedJourney<unknown> | null | Promise<SerializedJourney<unknown> | null>;
     try {
       loaded = persistence.load(key) as
         | SerializedJourney<unknown>
@@ -824,6 +812,11 @@ export function createJourneyRuntime(
 
           void (loaded as Promise<SerializedJourney<unknown> | null>).then(
             (blob) => {
+              // The caller may have ended the instance before the load
+              // settled (tab closed, navigation, explicit `runtime.end`).
+              // In that case the record is already terminal and we must
+              // not resurrect it with startFresh or a hydrate.
+              if (record.status !== "loading") return;
               if (!blob || blob.status !== "active") {
                 // Discard terminal/missing blob and mint a fresh instance
                 // under the same key. A terminal blob left in storage would
@@ -841,7 +834,8 @@ export function createJourneyRuntime(
               try {
                 hydrateInto(record, migrated);
               } catch (err) {
-                if (debug) console.error("[@modular-react/journeys] hydrate after async load failed", err);
+                if (debug)
+                  console.error("[@modular-react/journeys] hydrate after async load failed", err);
                 discardBlob(persistence as JourneyPersistence<unknown>, key);
                 startFresh(reg, input, record);
                 return;
@@ -850,6 +844,7 @@ export function createJourneyRuntime(
             },
             (err) => {
               if (debug) console.error("[@modular-react/journeys] persistence.load rejected", err);
+              if (record.status !== "loading") return;
               startFresh(reg, input, record);
             },
           );
@@ -867,7 +862,8 @@ export function createJourneyRuntime(
             try {
               hydrateInto(record, migrated);
             } catch (err) {
-              if (debug) console.error("[@modular-react/journeys] hydrate during start failed", err);
+              if (debug)
+                console.error("[@modular-react/journeys] hydrate during start failed", err);
               // Cleanup the half-built record and fall through to startFresh
               // under the same key.
               instances.delete(instanceId);

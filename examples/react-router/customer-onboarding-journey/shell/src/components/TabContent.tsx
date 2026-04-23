@@ -15,11 +15,7 @@ function LoadingFallback() {
   return <div style={{ color: "#4a5568" }}>Loading journey…</div>;
 }
 
-export function TabContent({
-  tabsStore,
-  workspace,
-  moduleDescriptors,
-}: TabContentProps) {
+export function TabContent({ tabsStore, workspace, moduleDescriptors }: TabContentProps) {
   const state = useSyncExternalStore(tabsStore.subscribe, tabsStore.getState);
 
   if (state.activeTabId === null) return null;

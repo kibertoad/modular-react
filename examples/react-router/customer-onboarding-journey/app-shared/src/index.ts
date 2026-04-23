@@ -31,8 +31,19 @@ export interface AppSlots {
 // ---- Workspace actions contract ----
 
 export type OpenTabSpec =
-  | { readonly kind: "module"; readonly id: string; readonly entry?: string; readonly input?: unknown; readonly title?: string }
-  | { readonly kind: "journey"; readonly id: string; readonly input?: unknown; readonly title?: string };
+  | {
+      readonly kind: "module";
+      readonly id: string;
+      readonly entry?: string;
+      readonly input?: unknown;
+      readonly title?: string;
+    }
+  | {
+      readonly kind: "journey";
+      readonly id: string;
+      readonly input?: unknown;
+      readonly title?: string;
+    };
 
 export interface OpenTabResult {
   readonly tabId: string;

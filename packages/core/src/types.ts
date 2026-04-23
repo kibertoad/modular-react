@@ -287,11 +287,8 @@ export type ExitFn<TExits extends ExitPointMap> = <K extends keyof TExits & stri
   ...args: ExitOutputArg<TExits[K]>
 ) => void;
 
-type ExitOutputArg<S> = S extends ExitPointSchema<infer T>
-  ? [T] extends [void]
-    ? []
-    : [output: T]
-  : [];
+type ExitOutputArg<S> =
+  S extends ExitPointSchema<infer T> ? ([T] extends [void] ? [] : [output: T]) : [];
 
 /**
  * A single navigation item contributed by a module.

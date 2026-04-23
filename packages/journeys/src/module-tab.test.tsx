@@ -10,10 +10,7 @@ afterEach(() => {
 
 const exits = { confirmed: defineExit<{ id: string }>(), cancelled: defineExit() } as const;
 
-function Review({
-  input,
-  exit,
-}: ModuleEntryProps<{ customerId: string }, typeof exits>) {
+function Review({ input, exit }: ModuleEntryProps<{ customerId: string }, typeof exits>) {
   return (
     <div>
       <span data-testid="cid">{input.customerId}</span>
@@ -51,7 +48,13 @@ describe("ModuleTab", () => {
   it("renders the named entry with input and threads exits to onExit", () => {
     const onExit = vi.fn();
     const { getByText, getByTestId } = render(
-      <ModuleTab module={mod} entry="review" input={{ customerId: "C-1" }} tabId="t1" onExit={onExit} />,
+      <ModuleTab
+        module={mod}
+        entry="review"
+        input={{ customerId: "C-1" }}
+        tabId="t1"
+        onExit={onExit}
+      />,
     );
     expect(getByTestId("cid").textContent).toBe("C-1");
 
