@@ -44,7 +44,7 @@ const journey = defineJourney<Modules, { selections: string[] }>()({
 describe("simulateJourney", () => {
   it("drives transitions headlessly and exposes state", () => {
     const sim = simulateJourney(journey, undefined as unknown as void);
-    expect(sim.step).toEqual({ moduleId: "menu", entry: "choose", input: undefined });
+    expect(sim.currentStep).toEqual({ moduleId: "menu", entry: "choose", input: undefined });
 
     sim.fireExit("pick", { pick: "a" });
     sim.fireExit("pick", { pick: "a" });
@@ -53,6 +53,13 @@ describe("simulateJourney", () => {
     sim.fireExit("pick", { pick: "b" });
     expect(sim.status).toBe("completed");
     expect(sim.step).toBeNull();
+  });
+
+  it("`currentStep` throws once the journey terminates, with the status in the message", () => {
+    const sim = simulateJourney(journey, undefined as unknown as void);
+    sim.fireExit("pick", { pick: "b" });
+    expect(sim.status).toBe("completed");
+    expect(() => sim.currentStep).toThrow(/status=completed/);
   });
 
   it("records every transition event the runtime fires on `sim.transitions`", () => {

@@ -20,6 +20,14 @@ export interface JourneySimulator<_TModules extends ModuleTypeMap, TState> {
   readonly instanceId: string;
   /** Current step — null once the journey completes or aborts. */
   readonly step: JourneyStep | null;
+  /**
+   * Same as `step`, but throws if the journey has terminated. Use this in
+   * tests to skip optional chaining on the common "still running" path —
+   * the throw spells out the unexpected status (`completed` / `aborted`)
+   * and is far easier to debug than a `Cannot read property 'moduleId' of
+   * null` thrown by an assertion line.
+   */
+  readonly currentStep: JourneyStep;
   readonly state: TState;
   readonly history: readonly JourneyStep[];
   readonly status: "loading" | "active" | "completed" | "aborted";
@@ -83,6 +91,15 @@ export function simulateJourney<TModules extends ModuleTypeMap, TState, TInput>(
     instanceId,
     get step() {
       return record().step;
+    },
+    get currentStep() {
+      const r = record();
+      if (!r.step) {
+        throw new Error(
+          `[simulateJourney] no current step (status=${r.status}). Use \`step\` if a null step is expected.`,
+        );
+      }
+      return r.step;
     },
     get state() {
       return record().state as TState;

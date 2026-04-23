@@ -243,6 +243,12 @@ export interface JourneyPersistence<TState = unknown> {
 
 export interface JourneyRegisterOptions<TState = unknown> {
   onTransition?: (ev: TransitionEvent) => void;
+  /**
+   * Optional. Without it, journeys live in memory only — every
+   * `runtime.start()` mints a fresh instance and nothing is written to
+   * storage. Add an adapter when you want reload recovery or idempotent
+   * `start` (same input → same `instanceId`).
+   */
   persistence?: JourneyPersistence<TState>;
   /**
    * Maximum number of entries to keep in `history` (and the matching

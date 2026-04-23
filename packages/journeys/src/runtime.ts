@@ -804,20 +804,27 @@ export function createJourneyRuntime(
     return loaded as SerializedJourney<unknown> | null;
   }
 
-  function migrateBlob(
-    reg: RegisteredJourney,
-    blob: SerializedJourney<unknown>,
-  ): SerializedJourney<unknown> | null {
+  type MigrateResult =
+    | { ok: true; blob: SerializedJourney<unknown> }
+    | { ok: false; reason: "version-mismatch" }
+    | { ok: false; reason: "on-hydrate-threw"; cause: unknown };
+
+  function migrateBlob(reg: RegisteredJourney, blob: SerializedJourney<unknown>): MigrateResult {
     if (reg.definition.onHydrate) {
       try {
-        return reg.definition.onHydrate(blob) as SerializedJourney<unknown>;
+        return {
+          ok: true,
+          blob: reg.definition.onHydrate(blob) as SerializedJourney<unknown>,
+        };
       } catch (err) {
         if (debug) console.error("[@modular-react/journeys] onHydrate threw", err);
-        return null;
+        return { ok: false, reason: "on-hydrate-threw", cause: err };
       }
     }
-    if (blob.version !== reg.definition.version) return null;
-    return blob;
+    if (blob.version !== reg.definition.version) {
+      return { ok: false, reason: "version-mismatch" };
+    }
+    return { ok: true, blob };
   }
 
   // ---------------------------------------------------------------------------
@@ -875,13 +882,13 @@ export function createJourneyRuntime(
                 return;
               }
               const migrated = migrateBlob(reg, blob);
-              if (!migrated) {
+              if (!migrated.ok) {
                 discardBlob(persistence as JourneyPersistence<unknown>, key);
                 startFresh(reg, input, record);
                 return;
               }
               try {
-                hydrateInto(record, migrated);
+                hydrateInto(record, migrated.blob);
               } catch (err) {
                 if (debug)
                   console.error("[@modular-react/journeys] hydrate after async load failed", err);
@@ -903,21 +910,21 @@ export function createJourneyRuntime(
         const blob = loaded as SerializedJourney<unknown> | null;
         if (blob && blob.status === "active") {
           const migrated = migrateBlob(reg, blob);
-          if (migrated) {
+          if (migrated.ok) {
             // Guard against a blob whose recorded id collides with a live
             // instance (corrupted / hand-edited blob, or two journeys sharing
             // a persistence keyspace). Mint a fresh id instead of clobbering
             // the existing entry — matches `hydrate()`'s existing rejection
             // of re-hydrate over an existing id.
             const instanceId =
-              migrated.instanceId && !instances.has(migrated.instanceId)
-                ? migrated.instanceId
+              migrated.blob.instanceId && !instances.has(migrated.blob.instanceId)
+                ? migrated.blob.instanceId
                 : mintInstanceId();
             const record = createRecord(reg, instanceId, key, def.initialState(input));
             instances.set(instanceId, record);
             keyIndex.set(indexed, instanceId);
             try {
-              hydrateInto(record, migrated);
+              hydrateInto(record, migrated.blob);
             } catch (err) {
               if (debug)
                 console.error("[@modular-react/journeys] hydrate during start failed", err);
@@ -959,12 +966,21 @@ export function createJourneyRuntime(
     hydrate<TState>(journeyId: string, blob: SerializedJourney<TState>): InstanceId {
       const reg = assertKnown(journeyId);
       const migrated = migrateBlob(reg, blob as SerializedJourney<unknown>);
-      if (!migrated) {
+      if (!migrated.ok) {
+        if (migrated.reason === "on-hydrate-threw") {
+          // Surface the original throw via `.cause` so callers can
+          // distinguish a migrator bug from a true version mismatch and
+          // log the underlying error without losing the stack.
+          throw new JourneyHydrationError(
+            `onHydrate threw while migrating blob for "${journeyId}" (blob=${blob.version} def=${reg.definition.version}).`,
+            { cause: migrated.cause },
+          );
+        }
         throw new JourneyHydrationError(
           `Hydrate version mismatch for "${journeyId}": blob=${blob.version} def=${reg.definition.version}. Provide onHydrate to migrate.`,
         );
       }
-      const instanceId = migrated.instanceId || mintInstanceId();
+      const instanceId = migrated.blob.instanceId || mintInstanceId();
       // Guard against silent overwrite — two hydrates of the same blob would
       // otherwise clobber live state and orphan existing listeners.
       if (instances.has(instanceId)) {
@@ -978,9 +994,9 @@ export function createJourneyRuntime(
       // `input`, so explicit hydrate stays persistence-unlinked. Callers
       // that want round-trip persistence should use `start()` which owns the
       // key lifecycle. Document this on the API.
-      const record = createRecord(reg, instanceId, null, migrated.state);
+      const record = createRecord(reg, instanceId, null, migrated.blob.state);
       instances.set(instanceId, record);
-      hydrateInto(record, migrated);
+      hydrateInto(record, migrated.blob);
       notify(record);
       return instanceId;
     },

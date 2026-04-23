@@ -3,6 +3,7 @@ import { defineEntry, defineExit, defineModule, schema } from "@modular-react/co
 import { defineJourney } from "./define-journey.js";
 import { createJourneyRuntime, getInternals } from "./runtime.js";
 import type { RegisteredJourney } from "./types.js";
+import { JourneyHydrationError } from "./validation.js";
 
 // --- Minimal fixture modules -------------------------------------------------
 
@@ -713,7 +714,7 @@ describe("createJourneyRuntime — lifecycle extras", () => {
     warn.mockRestore();
   });
 
-  it("hydrate() surfaces a JourneyHydrationError when onHydrate throws", () => {
+  it("hydrate() surfaces a JourneyHydrationError when onHydrate throws, with the original error as `.cause`", () => {
     const onHydrate = () => {
       throw new Error("migration bailed");
     };
@@ -732,10 +733,19 @@ describe("createJourneyRuntime — lifecycle extras", () => {
       startedAt: "2024-01-01T00:00:00.000Z",
       updatedAt: "2024-01-01T00:00:00.000Z",
     };
-    // `onHydrate` throwing maps to the same "migration failed" path as a
-    // version mismatch without `onHydrate` — the caller gets a typed
-    // `JourneyHydrationError` instead of the raw thrown error.
-    expect(() => rt.hydrate("collect", blob)).toThrow(/version mismatch/);
+    // The wrapped error names `onHydrate` (not "version mismatch") so the
+    // caller can tell a migrator bug from a true version mismatch, and the
+    // original throw is preserved on `.cause` for debugging.
+    let caught: unknown;
+    try {
+      rt.hydrate("collect", blob);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(JourneyHydrationError);
+    expect((caught as Error).message).toMatch(/onHydrate threw/);
+    expect((caught as Error).cause).toBeInstanceOf(Error);
+    expect(((caught as Error).cause as Error).message).toBe("migration bailed");
   });
 
   it("legacy blobs without rollbackSnapshots hydrate cleanly", () => {

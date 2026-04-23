@@ -33,7 +33,7 @@ Routes, slots, navigation, workspaces — none of that changes. Journeys sit **o
 - [Integration patterns](#integration-patterns) — tabs, modals, routes, wizards, command palette
 - [Debugging](#debugging) — dev-mode warnings and introspection
 - [Errors, races, and edge cases](#errors-races-and-edge-cases)
-- [Limitations (v1)](#limitations-v1)
+- [Limitations](#limitations)
 - [TypeScript inference notes](#typescript-inference-notes)
 - [API reference](#api-reference)
 - [Example projects](#example-projects)
@@ -221,6 +221,9 @@ registry.register(profileModule);
 registry.register(planModule);
 registry.register(billingModule);
 
+// All registration options shown below are optional — a bare
+// `registry.registerJourney(customerOnboardingJourney)` is valid and
+// gives you an in-memory journey with no reload recovery.
 registry.registerJourney(customerOnboardingJourney, {
   persistence: defineJourneyPersistence<OnboardingInput, OnboardingState>({
     keyFor: ({ input }) => `journey:${input.customerId}:customer-onboarding`,
@@ -309,6 +312,8 @@ Two additive (optional) fields on `ModuleDescriptor`:
 | `exitPoints`  | `{ [name]: { output? } }`                       | The module's full outcome vocabulary.                       |
 
 `ModuleEntryProps<TInput, TExits>` typed props for the component — `{ input, exit, goBack? }`, with `exit(name, output)` cross-checked against `TExits` at compile time.
+
+Exits are **module-level, not per-entry** — every entry on a module shares the same `exitPoints` vocabulary. The journey's transition map (not the module) decides which exits a given entry actually uses, so two entries on the same module can map the same exit name to entirely different next steps.
 
 ### `allowBack` — three values
 
@@ -658,7 +663,9 @@ Because `useJourneyContext()` can return `null`, examples that use the non-null 
 
 ## Persistence
 
-Plug an adapter in at registration. The preferred shape is `defineJourneyPersistence<TInput, TState>` — it types `keyFor`'s `input` against the journey's `TInput` and `load` / `save` against its `TState`, so there's no `as` cast at the call site:
+**Persistence is optional.** Skip it and journeys live in memory only — every `runtime.start()` mints a fresh instance and nothing is written to storage. Add an adapter when you want reload recovery (resuming after a refresh) or idempotent `start` (the same input returning the same `instanceId`).
+
+When you do want it, plug an adapter in at registration. The preferred shape is `defineJourneyPersistence<TInput, TState>` — it types `keyFor`'s `input` against the journey's `TInput` and `load` / `save` against its `TState`, so there's no `as` cast at the call site:
 
 ```ts
 import { defineJourneyPersistence } from "@modular-react/journeys";
@@ -736,8 +743,10 @@ They serve different purposes:
 
 Every serialized blob carries the journey's `version`. On hydrate:
 
-- **Default (strict):** throw `JourneyHydrationError` if `blob.version !== definition.version`.
-- **With `onHydrate`:** the hook receives the loaded blob and returns the blob to use (possibly after migration). Throwing from `onHydrate` aborts the hydrate.
+- **Default (strict):** throw `JourneyHydrationError` if `blob.version !== definition.version`. The error message names "version mismatch".
+- **With `onHydrate`:** the hook receives the loaded blob and returns the blob to use (possibly after migration). Throwing from `onHydrate` aborts the hydrate. The wrapped error names `onHydrate` (so callers can distinguish a migrator bug from a true version mismatch) and the original throw is preserved on `.cause` for logging / re-raising.
+
+`runtime.start()` (the persistence-aware path) treats both failure modes the same: the stale blob is discarded via `persistence.remove(key)` and a fresh instance is minted under the same key. The distinction matters for `runtime.hydrate()`, where the caller is the one deciding what to do with the error.
 
 Always supply `onHydrate` in production apps that ship new journey versions over time. A minimal pattern:
 
@@ -935,17 +944,20 @@ Headless. No React. Fires exits against the transition graph and exposes state /
 import { simulateJourney } from "@modular-react/journeys/testing";
 
 const sim = simulateJourney(customerOnboardingJourney, { customerId: "C-1" });
-expect(sim.step?.moduleId).toBe("profile");
+// `currentStep` is `step` with a non-null assertion baked in: throws if the
+// journey has terminated, so test assertions on the live path stay terse.
+// Use `sim.step` (which is `JourneyStep | null`) when a null is expected.
+expect(sim.currentStep.moduleId).toBe("profile");
 
 sim.fireExit("profileComplete", {
   customerId: "C-1",
   hint: { suggestedTier: "pro", rationale: "12 seats" },
 });
-expect(sim.step?.moduleId).toBe("plan");
+expect(sim.currentStep.moduleId).toBe("plan");
 expect(sim.state.hint?.suggestedTier).toBe("pro");
 
 sim.fireExit("choseStandard", { plan: { tier: "pro", monthly: 79 } });
-expect(sim.step?.moduleId).toBe("billing");
+expect(sim.currentStep.moduleId).toBe("billing");
 
 // Initial start + two hops since the simulator started.
 expect(sim.transitions).toHaveLength(3);
@@ -1153,19 +1165,23 @@ For a fully-headless trace, drive a scenario through `simulateJourney` and inspe
 - **Hydrate blob whose `rollbackSnapshots` length disagrees with `history`** — rejected with `JourneyHydrationError`. Use `onHydrate` to migrate or pad the blob.
 - **Duplicate `instanceId` on hydrate** — `runtime.hydrate()` throws if an instance with that id is already live. Call `forget(id)` first if the replace-in-place is intentional.
 - **Circular transitions** — allowed; `history` grows. Long-running journeys should use `maxHistory` or be designed to terminate.
+- **Deep mutation of journey state corrupts rollback snapshots** — snapshots are **shallow clones**, so a mutation that reaches into nested objects updates the snapshot too. Treat state as immutable; produce new objects rather than mutating in place. In development the runtime shallow-freezes each captured snapshot, so a top-level mutation throws immediately — deep mutations still slip through.
+- **Runtime input validation is not built in** — `schema<T>()` is type-only and gives you compile-time checking on entry inputs. The runtime does not validate at the boundary. If `start()` / `hydrate()` inputs come from untrusted sources (URL params, server payloads), wire `zod` / `valibot` / your validator of choice in front of them.
 
-## Limitations (v1)
+## Limitations
 
-These are intentional and documented so you know what's out of scope today.
+Things that aren't implemented today but may land later — these are gaps, not architectural choices.
 
-- Transitions are synchronous and pure. Async lives inside modules.
-- History grows unbounded by default. Set `maxHistory` at registration or terminate the journey.
-- **`maxHistory` and `allowBack` interact.** A cap smaller than the deepest reachable back chain silently loses the rollback snapshot that `goBack` would restore — the trim drops oldest entries including their snapshots. Size the cap to at least the longest user-reachable back chain if you need both.
-- Exit vocabulary is module-level, not per-entry. Transitions decide which exits a given entry actually uses.
-- No URL reflection of journey state — journeys are route-agnostic. Deep-linking into mid-journey steps is an app-level concern (read URL → `runtime.hydrate` → mount outlet).
-- No sub-journeys in v1. Branches only.
-- Rollback snapshots are **shallow clones**. Deep mutation of nested state still corrupts snapshots — treat state as immutable. In development the runtime shallow-freezes each captured snapshot, so a top-level mutation throws immediately; deep mutation still slips through.
-- No built-in runtime input validation. `schema<T>()` is type-only. Wire zod/valibot yourself where it matters.
+- **No URL reflection of journey state.** Journeys are route-agnostic by design. Deep-linking into a mid-journey step is currently an app-level concern (read URL → `runtime.hydrate` → mount outlet).
+- **No sub-journeys.** Branches only — a transition can choose between two next steps, but it can't compose another whole journey as a subroutine.
+
+Cross-references for things that are sometimes mistaken for limitations:
+
+- _"Transitions can't be async."_ True, by design — see [Transition handlers are pure and synchronous](#transition-handlers-are-pure-and-synchronous).
+- _"Exits are module-level, not per-entry."_ Same — see [Entry points and exit points on a module](#entry-points-and-exit-points-on-a-module).
+- _"`history` grows unbounded by default."_ Configurable — see [Pattern — bounded history (`maxHistory`)](#pattern--bounded-history-maxhistory) and the rollback-snapshot caveat there.
+- _"State mutation can corrupt rollback snapshots."_ Treat state as immutable — see the snapshot bullet in [Errors, races, and edge cases](#errors-races-and-edge-cases).
+- _"There's no runtime input validation."_ `schema<T>()` is type-only — see the validation bullet in [Errors, races, and edge cases](#errors-races-and-edge-cases).
 
 ## TypeScript inference notes
 
@@ -1309,10 +1325,10 @@ interface SerializedJourney<TState> {
 
 ### Testing (`@modular-react/journeys/testing`)
 
-| Export             | Purpose                                                                                                                                                  |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `simulateJourney`  | Headless simulator: fires exits / goBack, exposes `step` / `state` / `history` / `status` / `transitions` / `terminalPayload` / `serialize()`, no React. |
-| `JourneySimulator` | Type for the object returned by `simulateJourney`.                                                                                                       |
+| Export             | Purpose                                                                                                                                                                                       |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `simulateJourney`  | Headless simulator: fires exits / goBack, exposes `step` / `currentStep` (throws if terminal) / `state` / `history` / `status` / `transitions` / `terminalPayload` / `serialize()`, no React. |
+| `JourneySimulator` | Type for the object returned by `simulateJourney`.                                                                                                                                            |
 
 ### From the router runtime packages
 
