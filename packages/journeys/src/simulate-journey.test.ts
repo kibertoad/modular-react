@@ -54,4 +54,23 @@ describe("simulateJourney", () => {
     expect(sim.status).toBe("completed");
     expect(sim.step).toBeNull();
   });
+
+  it("records every transition event the runtime fires on `sim.transitions`", () => {
+    const sim = simulateJourney(journey, undefined as unknown as void);
+    // Initial transition — start step — is already recorded.
+    expect(sim.transitions).toHaveLength(1);
+    expect(sim.transitions[0]!.from).toBeNull();
+    expect(sim.transitions[0]!.to).toEqual({
+      moduleId: "menu",
+      entry: "choose",
+      input: undefined,
+    });
+
+    sim.fireExit("pick", { pick: "a" });
+    sim.fireExit("pick", { pick: "b" });
+    // Start + two hops (including the terminal one).
+    expect(sim.transitions).toHaveLength(3);
+    expect(sim.transitions.at(-1)!.to).toBeNull();
+    expect(sim.transitions.at(-1)!.exit).toBe("pick");
+  });
 });

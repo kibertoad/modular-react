@@ -496,4 +496,183 @@ describe("createJourneyRuntime — lifecycle extras", () => {
       .exit("wantsToNegotiate", { customerId: "C-u" });
     expect(rt.getInstance(id)!.state).toBeUndefined();
   });
+
+  it("forgetTerminal() drops every terminal instance in one call", () => {
+    const rt = freshRuntime();
+    const a = rt.start("collect", { customerId: "A" });
+    const b = rt.start("collect", { customerId: "B" });
+    const internals = getInternals(rt);
+    // A completes, B is still active.
+    internals
+      .__bindStepCallbacks(internals.__getRecord(a)!, internals.__getRegistered("collect")!)
+      .exit("done");
+    expect(rt.forgetTerminal()).toBe(1);
+    expect(rt.getInstance(a)).toBeNull();
+    expect(rt.getInstance(b)).not.toBeNull();
+    // Second call with nothing to sweep returns 0.
+    expect(rt.forgetTerminal()).toBe(0);
+  });
+
+  it("end() tears down an instance that is still loading without firing onAbandon", async () => {
+    let resolveLoad: (blob: null) => void = () => {};
+    const loadPromise = new Promise<null>((r) => {
+      resolveLoad = r;
+    });
+    const onAbandon = vi.fn().mockReturnValue({ abort: { reason: "should-not-fire" } });
+    const rt = createJourneyRuntime(
+      [
+        {
+          definition: { ...journey, onAbandon },
+          options: {
+            persistence: {
+              keyFor: () => "k:loading-end",
+              load: () => loadPromise,
+              save: async () => {},
+              remove: async () => {},
+            } as never,
+          },
+        },
+      ],
+      { modules: { account: accountModule, debts: debtsModule }, debug: false },
+    );
+    const id = rt.start("collect", { customerId: "C-end-load" });
+    // Still loading at this point — no step, no prior transitions.
+    expect(rt.getInstance(id)!.status).toBe("loading");
+    rt.end(id, "close-during-load");
+    // Terminal immediately; onAbandon skipped because the journey never
+    // actually started.
+    expect(rt.getInstance(id)!.status).toBe("aborted");
+    expect(onAbandon).not.toHaveBeenCalled();
+    // Letting the load settle afterwards is safe — no duplicate transitions.
+    resolveLoad(null);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(rt.getInstance(id)!.status).toBe("aborted");
+  });
+
+  it("start() removes a terminal blob from persistence before minting a fresh instance", async () => {
+    const remove = vi.fn<[string], void>();
+    const terminalBlob = {
+      definitionId: "collect",
+      version: "1.0.0",
+      instanceId: "ji_old",
+      status: "completed" as const,
+      step: null,
+      history: [] as never[],
+      state: { customerId: "C-stale", attempts: 0 },
+      startedAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    };
+    const persistence = {
+      keyFor: () => "k:terminal",
+      load: () => terminalBlob,
+      save: async () => {},
+      remove: (k: string) => {
+        remove(k);
+      },
+    } as never;
+    const rt = freshRuntime({ options: { persistence } });
+    rt.start("collect", { customerId: "C-stale" });
+    expect(remove).toHaveBeenCalledWith("k:terminal");
+  });
+
+  it("hydrate() throws when an instance with the same id is already live", () => {
+    const rt = freshRuntime();
+    const blob = {
+      definitionId: "collect",
+      version: "1.0.0",
+      instanceId: "ji_dupe",
+      status: "active" as const,
+      step: { moduleId: "account", entry: "review", input: { customerId: "C-dupe" } },
+      history: [] as never[],
+      state: { customerId: "C-dupe", attempts: 0 },
+      startedAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    };
+    rt.hydrate("collect", blob);
+    expect(() => rt.hydrate("collect", blob)).toThrow(/already in memory/);
+  });
+
+  it("hydrate() rejects a blob whose rollbackSnapshots length disagrees with history", () => {
+    const rt = freshRuntime();
+    const blob = {
+      definitionId: "collect",
+      version: "1.0.0",
+      instanceId: "ji_badlen",
+      status: "active" as const,
+      step: { moduleId: "account", entry: "review", input: { customerId: "C-badlen" } },
+      history: [
+        { moduleId: "debts", entry: "negotiate", input: { customerId: "C-badlen" } },
+      ],
+      rollbackSnapshots: [] as never[],
+      state: { customerId: "C-badlen", attempts: 0 },
+      startedAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    };
+    expect(() => rt.hydrate("collect", blob)).toThrow(/rollbackSnapshots\.length=0/);
+  });
+
+  it("keyFor collisions across journeys do not alias onto the same instance", async () => {
+    // Two different journeys that happen to produce the same key string.
+    const secondJourney = defineJourney<Modules, State>()({
+      ...journey,
+      id: "collect-v2",
+    });
+    const persistence = {
+      keyFor: () => "shared-key",
+      load: () => null,
+      save: async () => {},
+      remove: async () => {},
+    } as never;
+    const rt = createJourneyRuntime(
+      [
+        { definition: journey, options: { persistence } },
+        { definition: secondJourney, options: { persistence } },
+      ],
+      { modules: { account: accountModule, debts: debtsModule }, debug: false },
+    );
+    const idA = rt.start("collect", { customerId: "X" });
+    const idB = rt.start("collect-v2", { customerId: "X" });
+    expect(idA).not.toBe(idB);
+    expect(rt.getInstance(idA)!.journeyId).toBe("collect");
+    expect(rt.getInstance(idB)!.journeyId).toBe("collect-v2");
+  });
+
+  it("warns in debug mode when a transition handler returns a Promise", () => {
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    const rt = createJourneyRuntime(
+      [
+        {
+          definition: {
+            ...journey,
+            transitions: {
+              account: {
+                review: {
+                  wantsToNegotiate: (() =>
+                    Promise.resolve({ abort: { reason: "async-bad" } })) as never,
+                  done: journey.transitions.account!.review!.done!,
+                  cancelled: journey.transitions.account!.review!.cancelled!,
+                },
+              },
+              debts: journey.transitions.debts!,
+            },
+          },
+          options: undefined,
+        },
+      ],
+      { modules: { account: accountModule, debts: debtsModule }, debug: true },
+    );
+    const id = rt.start("collect", { customerId: "C-async-handler" });
+    const internals = getInternals(rt);
+    internals
+      .__bindStepCallbacks(internals.__getRecord(id)!, internals.__getRegistered("collect")!)
+      .exit("wantsToNegotiate", { customerId: "C-async-handler" });
+    expect(rt.getInstance(id)!.status).toBe("aborted");
+    expect(
+      warn.mock.calls.some((args) =>
+        String(args[0] ?? "").includes("returned a Promise"),
+      ),
+    ).toBe(true);
+    warn.mockRestore();
+  });
 });

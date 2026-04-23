@@ -67,4 +67,13 @@ describe("registry.registerJourney + resolveManifest", () => {
     const manifest = registry.resolveManifest({ onModuleExit });
     expect(manifest.onModuleExit).toBe(onModuleExit);
   });
+
+  it("throws at registerJourney time on a structurally invalid definition", () => {
+    const registry = createRegistry({});
+    registry.register(moduleA);
+    const malformed = { ...journey, id: "", transitions: undefined };
+    expect(() => registry.registerJourney(malformed as never)).toThrow(
+      /Invalid journey registration/,
+    );
+  });
 });
