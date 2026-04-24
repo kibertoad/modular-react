@@ -123,9 +123,16 @@ export function createWebStoragePersistence<TInput, TState>(
   const { keyFor, storage } = options;
 
   const resolve = (): Storage | null => {
-    if (typeof storage === "function") return storage();
-    if (storage !== undefined) return storage;
-    return typeof localStorage !== "undefined" ? localStorage : null;
+    try {
+      if (typeof storage === "function") return storage();
+      if (storage !== undefined) return storage;
+      return typeof localStorage !== "undefined" ? localStorage : null;
+    } catch {
+      // `SecurityError` when storage is access-blocked (sandboxed iframe,
+      // cookies disabled, strict privacy settings). Degrade to the SSR
+      // no-op path instead of crashing the runtime.
+      return null;
+    }
   };
 
   return {
@@ -133,13 +140,24 @@ export function createWebStoragePersistence<TInput, TState>(
     load: (key) => {
       const s = resolve();
       if (!s) return null;
-      const raw = s.getItem(key);
+      let raw: string | null;
+      try {
+        raw = s.getItem(key);
+      } catch {
+        // Read-side access failure — fall back to "no existing instance"
+        // so the runtime mints a fresh one rather than wedging the page.
+        return null;
+      }
       if (raw === null) return null;
       try {
         return JSON.parse(raw) as SerializedJourney<TState>;
       } catch {
         // Don't let a single bad write wedge future loads for this key.
-        s.removeItem(key);
+        try {
+          s.removeItem(key);
+        } catch {
+          // Best-effort cleanup; ignore secondary access denials.
+        }
         return null;
       }
     },

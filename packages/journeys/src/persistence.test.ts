@@ -96,6 +96,39 @@ describe("createWebStoragePersistence", () => {
     expect(() => adapter.remove("k")).not.toThrow();
   });
 
+  it("treats SecurityError on storage resolve as the SSR no-op path", () => {
+    // Sandboxed iframes and strict privacy settings can throw SecurityError
+    // on `localStorage` access itself. Adapter degrades to the storage-null
+    // path so the runtime can still mint fresh instances.
+    const adapter = createWebStoragePersistence<TInput, TState>({
+      keyFor: ({ input }) => `x:${input.customerId}`,
+      storage: () => {
+        throw new DOMException("denied", "SecurityError");
+      },
+    });
+    expect(adapter.load("k")).toBeNull();
+    expect(() => adapter.save("k", makeBlob())).not.toThrow();
+    expect(() => adapter.remove("k")).not.toThrow();
+  });
+
+  it("returns null when getItem throws (read-side access failure)", () => {
+    const fakeStorage: Storage = {
+      length: 0,
+      clear: () => {},
+      getItem: () => {
+        throw new DOMException("denied", "SecurityError");
+      },
+      key: () => null,
+      removeItem: () => {},
+      setItem: () => {},
+    };
+    const adapter = createWebStoragePersistence<TInput, TState>({
+      keyFor: ({ input }) => `x:${input.customerId}`,
+      storage: fakeStorage,
+    });
+    expect(adapter.load("k")).toBeNull();
+  });
+
   it("evaluates a lazy storage getter on every call so feature detection can flip at runtime", () => {
     let available = false;
     const adapter = createWebStoragePersistence<TInput, TState>({
