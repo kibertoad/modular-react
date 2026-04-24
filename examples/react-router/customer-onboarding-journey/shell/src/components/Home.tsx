@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { StoreApi } from "zustand/vanilla";
+import { useJourneyContext } from "@modular-react/journeys";
 import type { WorkspaceActions } from "@example-onboarding/app-shared";
 import type { WorkspaceTabsState } from "../stores/workspace-tabs.js";
 import { hasPersistedJourney } from "../persistence.js";
@@ -20,10 +21,30 @@ export function Home({ workspace, tabsStore }: HomeProps) {
     tabsStore.subscribe,
     () => tabsStore.getState().activeTabId,
   );
+  // Mounted by journeysPlugin() — safe to assume non-null here because the
+  // shell is configured with the plugin. Keep the null-coalesce only if you
+  // have non-journey shells reusing this component.
+  const journeyCtx = useJourneyContext();
 
   if (activeTabId) {
     return null;
   }
+
+  const startOnboarding = (customerId: string, customerName: string) => {
+    if (!journeyCtx) {
+      throw new Error(
+        "[Home] useJourneyContext() returned null — journeysPlugin() must be attached to the registry.",
+      );
+    }
+    const input = { customerId };
+    const instanceId = journeyCtx.runtime.start("customer-onboarding", input);
+    workspace.addJourneyTab({
+      instanceId,
+      journeyId: "customer-onboarding",
+      input,
+      title: `Onboard · ${customerName}`,
+    });
+  };
 
   return (
     <div style={{ padding: "1.5rem", flex: 1 }}>
@@ -41,14 +62,7 @@ export function Home({ workspace, tabsStore }: HomeProps) {
             <li key={customer.id}>
               <button
                 type="button"
-                onClick={() =>
-                  workspace.openTab({
-                    kind: "journey",
-                    id: "customer-onboarding",
-                    input: { customerId: customer.id },
-                    title: `Onboard · ${customer.name}`,
-                  })
-                }
+                onClick={() => startOnboarding(customer.id, customer.name)}
               >
                 {resuming ? "Resume" : "Start"} — {customer.name}{" "}
                 <span style={{ color: "#718096" }}>({customer.id})</span>

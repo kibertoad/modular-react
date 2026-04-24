@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { createRegistry } from "@tanstack-react-modules/runtime";
+import { journeysPlugin } from "@modular-react/journeys";
 import type { ModuleDescriptor } from "@modular-react/core";
 import type { AppDependencies, AppSlots } from "@example-tsr-onboarding/app-shared";
 import profileModule from "@example-tsr-onboarding/profile-module";
@@ -8,14 +9,15 @@ import billingModule from "@example-tsr-onboarding/billing-module";
 import { customerOnboardingJourney } from "@example-tsr-onboarding/customer-onboarding-journey";
 
 import { createWorkspaceTabsStore } from "./stores/workspace-tabs.js";
-import { createWorkspaceActions, type RuntimeRef } from "./services/workspace-actions.js";
+import { createWorkspaceActions } from "./services/workspace-actions.js";
 import { journeyPersistence } from "./persistence.js";
 import { createShell } from "./components/Shell.js";
 import { HomeOrTab } from "./components/HomeOrTab.js";
 
 const tabsStore = createWorkspaceTabsStore();
-const runtimeRef: RuntimeRef = { current: null };
-const workspace = createWorkspaceActions(tabsStore, runtimeRef);
+// Pure tab bookkeeping — no journey runtime dep. Starting journeys happens at
+// the call site (see Home.tsx) so there's no chicken-and-egg at construction.
+const workspace = createWorkspaceActions(tabsStore);
 
 // Descriptor map is populated after `registry.resolve()` — the `indexComponent`
 // passed into resolve needs to close over this ref, not the destructured value.
@@ -26,7 +28,11 @@ const descriptorsRef: {
 const registry = createRegistry<AppDependencies, AppSlots>({
   services: { workspace },
   slots: { commands: [] },
-});
+}).use(
+  journeysPlugin({
+    onModuleExit: (ev) => console.debug("[global module exit]", ev),
+  }),
+);
 
 registry.register(profileModule);
 registry.register(planModule);
@@ -47,7 +53,7 @@ registry.registerJourney(customerOnboardingJourney, {
   },
 });
 
-const Shell = createShell({ runtimeRef, tabsStore, workspace });
+const Shell = createShell({ tabsStore, workspace });
 
 const { App, moduleDescriptors, journeys } = registry.resolve({
   rootComponent: Shell,
@@ -60,7 +66,6 @@ const { App, moduleDescriptors, journeys } = registry.resolve({
   ),
 });
 
-runtimeRef.current = journeys;
 descriptorsRef.current = moduleDescriptors;
 
 // Rehydrate any journey tabs restored from localStorage: calling start() with

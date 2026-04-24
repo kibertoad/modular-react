@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
-import { defineJourney } from "@modular-react/journeys";
+import { defineJourney, journeysPlugin } from "@modular-react/journeys";
 import { createRegistry } from "./registry.js";
 
 const aExits = { go: defineExit<{ amount: number }>(), done: defineExit() } as const;
@@ -27,18 +27,28 @@ const journey = defineJourney<Modules, { id: string }>()({
 
 describe("registry.registerJourney + resolveManifest", () => {
   it("exposes manifest.journeys when at least one is registered", () => {
-    const registry = createRegistry({});
+    const registry = createRegistry({}).use(journeysPlugin());
     registry.register(moduleA);
     registry.registerJourney(journey);
     const manifest = registry.resolveManifest();
     expect(manifest.journeys.listDefinitions()).toEqual([
       { id: "demo", version: "1.0.0", meta: undefined },
     ]);
+    expect(manifest.extensions.journeys).toBe(manifest.journeys);
     expect(manifest.moduleDescriptors.a).toBe(moduleA);
   });
 
-  it("manifest.journeys is a no-op runtime when no journey is registered", () => {
+  it("registerJourney is unavailable without the journeys plugin", () => {
     const registry = createRegistry({});
+    registry.register(moduleA);
+    const manifest = registry.resolveManifest();
+    // @ts-expect-error registerJourney is not part of the base registry type
+    expect(registry.registerJourney).toBeUndefined();
+    expect(manifest.extensions).toEqual({});
+  });
+
+  it("manifest.journeys is a no-op runtime when the plugin is loaded with no journey", () => {
+    const registry = createRegistry({}).use(journeysPlugin());
     registry.register(moduleA);
     const manifest = registry.resolveManifest();
     expect(manifest.journeys.listDefinitions()).toEqual([]);
@@ -49,7 +59,7 @@ describe("registry.registerJourney + resolveManifest", () => {
   });
 
   it("aggregates validation errors at resolveManifest time", () => {
-    const registry = createRegistry({});
+    const registry = createRegistry({}).use(journeysPlugin());
     registry.register(moduleA);
     const bad = {
       ...journey,
@@ -61,7 +71,7 @@ describe("registry.registerJourney + resolveManifest", () => {
   });
 
   it("forwards onModuleExit on the manifest", () => {
-    const registry = createRegistry({});
+    const registry = createRegistry({}).use(journeysPlugin());
     registry.register(moduleA);
     const onModuleExit = () => {};
     const manifest = registry.resolveManifest({ onModuleExit });
@@ -69,7 +79,7 @@ describe("registry.registerJourney + resolveManifest", () => {
   });
 
   it("throws at registerJourney time on a structurally invalid definition", () => {
-    const registry = createRegistry({});
+    const registry = createRegistry({}).use(journeysPlugin());
     registry.register(moduleA);
     const malformed = { ...journey, id: "", transitions: undefined };
     expect(() => registry.registerJourney(malformed as never)).toThrow(

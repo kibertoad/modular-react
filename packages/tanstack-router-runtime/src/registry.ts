@@ -19,26 +19,14 @@ import {
 import type {
   NavigationItem,
   NavigationItemBase,
+  PluginRuntimesOf,
+  RegistryPlugin,
   SlotFilter,
   NavigationManifest,
   ModuleEntry,
 } from "@modular-react/core";
 import { createSlotsSignal } from "@modular-react/react";
 import type { SlotsSignal } from "@modular-react/react";
-import {
-  createJourneyRuntime,
-  JourneyValidationError,
-  validateJourneyContracts,
-  validateJourneyDefinition,
-} from "@modular-react/journeys";
-import type {
-  AnyJourneyDefinition,
-  JourneyDefinition,
-  JourneyRegisterOptions,
-  JourneyRuntime,
-  ModuleTypeMap,
-  RegisteredJourney,
-} from "@modular-react/journeys";
 
 import type {
   RegistryConfig,
@@ -50,10 +38,17 @@ import { buildRouteTree, type RouteBuilderOptions } from "./route-builder.js";
 import { createAppComponent } from "./app.js";
 import { createProvidersComponent } from "./providers.js";
 
+/**
+ * Registry surface produced by `createRegistry`. Plugins attach via
+ * {@link ModuleRegistry.use} — each `use` call returns `this` intersected
+ * with the plugin's `extend` surface, so TypeScript sees plugin-contributed
+ * methods (e.g. `registerJourney`) on the returned reference.
+ */
 export interface ModuleRegistry<
   TSharedDependencies extends Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TNavItem extends NavigationItemBase = NavigationItem,
+  TPlugins extends readonly RegistryPlugin<string, any, any>[] = readonly [],
 > {
   /**
    * Register an eager module. The module's `TNavItem` must match the
@@ -65,64 +60,44 @@ export interface ModuleRegistry<
 
   /**
    * Register a lazily-loaded module. The loaded descriptor's `component` is
-   * rendered at `basePath/$` via TanStack's `lazyRouteComponent` — every
-   * other field (including `createRoutes`) is ignored because TanStack's
-   * route tree is frozen at `createRouter` time. See
-   * {@link LazyModuleDescriptor} for the full field list and rationale.
+   * rendered at `basePath/$` via TanStack's `lazyRouteComponent`.
    *
-   * Not supported in framework mode (`resolveManifest()`) — the host owns
-   * route composition, so there's no parent for the catch-all. Register
-   * eagerly instead, with `lazyRouteComponent()` inside the module's own
-   * `createRoutes` for component-level code splitting.
+   * Not supported in framework mode (`resolveManifest()`).
    */
   registerLazy(descriptor: LazyModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>): void;
 
   /**
-   * Register a journey definition. The definition's structural shape is
-   * validated immediately (missing `id` / `version` / `transitions` etc.);
-   * module-level contracts are validated against the registered modules at
-   * `resolveManifest()` / `resolve()` time.
+   * Attach a plugin. The plugin's `extend` return is intersected onto the
+   * returned registry type — methods and state contributed by the plugin
+   * become callable on the same reference. The registry is mutated in place
+   * and the return value is the same object, typed wider.
    *
-   * `options.persistence` is typed against the journey's state — pass a
-   * typed definition and the persistence adapter is checked end-to-end.
+   * Must be called before `resolve()` / `resolveManifest()`. Plugin name
+   * collisions and method-name collisions throw loud.
    */
-  registerJourney<TModules extends ModuleTypeMap, TState, TInput>(
-    definition: JourneyDefinition<TModules, TState, TInput>,
-    options?: JourneyRegisterOptions<TState>,
-  ): void;
+  use<TPlugin extends RegistryPlugin<string, any, any>>(
+    plugin: TPlugin,
+  ): ModuleRegistry<TSharedDependencies, TSlots, TNavItem, readonly [...TPlugins, TPlugin]> &
+    (TPlugin extends RegistryPlugin<any, infer TExt, any> ? TExt : object);
 
   /**
    * Resolve all modules and produce the application manifest, including a
    * `<RouterProvider />`-wrapped `App` component and a ready-to-use
    * TanStack `Router`. Single-use — throws on a second call.
-   *
-   * Use this in apps where the library owns routing. If your host owns
-   * routing (TanStack Router file-based mode with `@tanstack/router-plugin`,
-   * TanStack Start, etc.), use {@link ModuleRegistry.resolveManifest} instead.
    */
   resolve(
     options?: ResolveOptions<TSharedDependencies, TSlots>,
-  ): ApplicationManifest<TSlots, TNavItem>;
+  ): ApplicationManifest<TSlots, TNavItem, PluginRuntimesOf<TPlugins>>;
 
   /**
    * Resolve all modules for framework-mode integrations. Returns the
    * navigation manifest, resolved slots, module entries, and a `Providers`
    * component that wraps the full context stack. Does NOT create or own a
    * router.
-   *
-   * Idempotent — may be called multiple times (e.g. from a shared registry
-   * module imported by `__root.tsx` and elsewhere). The first call does all
-   * work and caches the result; later calls return the cached manifest.
-   * Options are honored only on the first call; passing options on a
-   * subsequent call throws, so misconfiguration is loud instead of silently
-   * ignored.
-   *
-   * May not be mixed with `resolve()` — the registry commits to one
-   * router-ownership mode on first call.
    */
   resolveManifest(
     options?: ResolveManifestOptions<TSharedDependencies, TSlots>,
-  ): ResolvedManifest<TSlots, TNavItem>;
+  ): ResolvedManifest<TSlots, TNavItem, PluginRuntimesOf<TPlugins>>;
 }
 
 export interface ResolveOptions<
@@ -201,7 +176,7 @@ interface CommonAssembly<
   recalculateSlots: () => void;
   slotFilter: SlotFilter | undefined;
   providers: React.ComponentType<{ children: React.ReactNode }>[] | undefined;
-  journeys: JourneyRuntime;
+  extensions: Record<string, unknown>;
 }
 
 export function createRegistry<
@@ -210,10 +185,11 @@ export function createRegistry<
   TNavItem extends NavigationItemBase = NavigationItem,
 >(
   config: RegistryConfig<TSharedDependencies, TSlots>,
-): ModuleRegistry<TSharedDependencies, TSlots, TNavItem> {
+): ModuleRegistry<TSharedDependencies, TSlots, TNavItem, readonly []> {
   const modules: ModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>[] = [];
   const lazyModules: LazyModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>[] = [];
-  const journeys: RegisteredJourney[] = [];
+  const plugins: RegistryPlugin<string, any, any>[] = [];
+  const seenPluginNames = new Set<string>();
 
   // A registry commits to one mode on first call:
   //   - "resolve"          → library owns the router; single-use
@@ -225,7 +201,7 @@ export function createRegistry<
 
   // Cached manifest — populated on the first resolveManifest() call so later
   // calls from a second site return the same Providers/navigation/etc.
-  let cachedManifest: ResolvedManifest<TSlots, TNavItem> | null = null;
+  let cachedManifest: ResolvedManifest<TSlots, TNavItem, Record<string, unknown>> | null = null;
 
   // Options captured from the first resolveManifest() invocation, honored by
   // every subsequent call (including retries after a failed buildAssembly).
@@ -266,8 +242,9 @@ export function createRegistry<
     validateNoDuplicateIds(modules as ModuleDescriptor[], lazyModules as LazyModuleDescriptor[]);
     validateDependencies(modules as ModuleDescriptor[], availableKeys);
     validateEntryExitShape(modules as ModuleDescriptor[]);
-    if (journeys.length > 0) {
-      validateJourneyContracts(journeys, modules as ModuleDescriptor[]);
+
+    for (const plugin of plugins) {
+      plugin.validate?.({ modules });
     }
 
     if (!onRegisterRan) {
@@ -322,12 +299,26 @@ export function createRegistry<
     const moduleDescriptors: Record<string, ModuleDescriptor<any, any, any, any>> = {};
     for (const mod of modules)
       moduleDescriptors[mod.id] = mod as ModuleDescriptor<any, any, any, any>;
-    // Always construct a runtime — even with zero registered journeys, the
-    // no-op runtime returns empty listings and throws "unknown journey id"
-    // on `start()`, so shells never have to null-guard `manifest.journeys`.
-    const journeyRuntime = createJourneyRuntime(journeys, {
-      modules: moduleDescriptors,
-    });
+
+    // Plugin onResolve: collect runtimes by name and append any React
+    // providers after user-supplied providers.
+    const extensions: Record<string, unknown> = {};
+    const pluginProviders: React.ComponentType<{ children: React.ReactNode }>[] = [];
+    for (const plugin of plugins) {
+      const runtime = plugin.onResolve?.({
+        modules,
+        moduleDescriptors,
+        debug: false,
+      });
+      extensions[plugin.name] = runtime;
+      const contributed = plugin.providers?.({ runtime });
+      if (contributed) pluginProviders.push(...contributed);
+    }
+
+    const combinedProviders =
+      options.providers || pluginProviders.length > 0
+        ? [...(options.providers ?? []), ...pluginProviders]
+        : undefined;
 
     return {
       modules: modules.map((mod) => ({
@@ -347,38 +338,49 @@ export function createRegistry<
       slotsSignal,
       recalculateSlots,
       slotFilter,
-      providers: options.providers,
-      journeys: journeyRuntime,
+      providers: combinedProviders,
+      extensions,
     };
   }
 
-  return {
-    register(module) {
+  // Build the base registry object. Plugin `extend` merges onto it in-place
+  // when `use()` is called; the public return is the same reference, retyped.
+  const registry: Record<string, unknown> = {
+    register(module: ModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>) {
       assertCanRegister();
       modules.push(module);
     },
 
-    registerLazy(descriptor) {
+    registerLazy(descriptor: LazyModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>) {
       assertCanRegister();
       lazyModules.push(descriptor);
     },
 
-    registerJourney(definition, options) {
+    use(plugin: RegistryPlugin<string, any, any>) {
       assertCanRegister();
-      const def = definition as AnyJourneyDefinition;
-      const structuralIssues = validateJourneyDefinition(def);
-      if (structuralIssues.length > 0) {
-        throw new JourneyValidationError(structuralIssues);
+      if (seenPluginNames.has(plugin.name)) {
+        throw new Error(
+          `[@tanstack-react-modules/runtime] Duplicate plugin name "${plugin.name}" — each plugin may be registered at most once.`,
+        );
       }
-      journeys.push({
-        definition: def,
-        options: options as JourneyRegisterOptions | undefined,
-      });
+      seenPluginNames.add(plugin.name);
+      plugins.push(plugin);
+
+      const extension = plugin.extend({ markDirty: () => {} });
+      for (const [key, value] of Object.entries(extension)) {
+        if (key in registry) {
+          throw new Error(
+            `[@tanstack-react-modules/runtime] Plugin "${plugin.name}" attempted to overwrite registry method "${key}".`,
+          );
+        }
+        registry[key] = value;
+      }
+      return registry as unknown as ModuleRegistry<TSharedDependencies, TSlots, TNavItem, any>;
     },
 
     resolve(
       options?: ResolveOptions<TSharedDependencies, TSlots>,
-    ): ApplicationManifest<TSlots, TNavItem> {
+    ): ApplicationManifest<TSlots, TNavItem, Record<string, unknown>> {
       if (mode === "resolveManifest") {
         throw new Error(
           "[@tanstack-react-modules/runtime] resolve() cannot be called after resolveManifest() — the registry is already in framework-mode.",
@@ -437,14 +439,19 @@ export function createRegistry<
         slots: assembly.slots,
         modules: assembly.modules,
         moduleDescriptors: assembly.moduleDescriptors,
-        journeys: assembly.journeys,
+        extensions: assembly.extensions,
+        journeys: assembly.extensions.journeys as ApplicationManifest<
+          TSlots,
+          TNavItem,
+          Record<string, unknown>
+        >["journeys"],
         recalculateSlots: assembly.recalculateSlots,
       };
     },
 
     resolveManifest(
       options?: ResolveManifestOptions<TSharedDependencies, TSlots>,
-    ): ResolvedManifest<TSlots, TNavItem> {
+    ): ResolvedManifest<TSlots, TNavItem, Record<string, unknown>> {
       if (mode === "resolve") {
         throw new Error(
           "[@tanstack-react-modules/runtime] resolveManifest() cannot be called after resolve() — the registry already owns a router.",
@@ -452,37 +459,17 @@ export function createRegistry<
       }
 
       if (firstCallCompleted) {
-        // Idempotent: first call captured options; later calls must pass none.
-        // Enforced here (rather than gated on `cachedManifest`) so that a
-        // retry after a failed first call can't slip different options past
-        // the guard — the captured options win either way.
         if (options !== undefined) {
           throw new Error(
             "[@tanstack-react-modules/runtime] resolveManifest() has already been called — options may only be passed on the first call. Extract the manifest into a shared module and import it from both sites.",
           );
         }
         if (cachedManifest) return cachedManifest;
-        // Fall through: first call threw before producing a manifest; retry
-        // using the captured options.
       } else {
         capturedOptions = options;
         firstCallCompleted = true;
       }
 
-      // `registerLazy()` contributes a whole module descriptor under a
-      // runtime-loaded catch-all parent — it's a library-level mechanism for
-      // plugin-host apps where the route *structure* isn't known until
-      // runtime. In framework mode the host owns route composition, so
-      // there's nowhere to attach such a catch-all. Silently accepting
-      // lazy-module registrations would produce a working-looking manifest
-      // missing every lazy-module route — throw instead.
-      //
-      // Note: this does NOT disable lazy *code-splitting*. Use TanStack
-      // Router's built-in primitives (`lazyRouteComponent(() =>
-      // import(...))` inside a regular module's `createRoutes`, or
-      // file-based `.lazy.tsx` / `createLazyFileRoute`) to code-split
-      // routes in framework mode. Those work independently of the module
-      // system.
       if (lazyModules.length > 0) {
         throw new Error(
           `[@tanstack-react-modules/runtime] resolveManifest() does not support registerLazy() — the host owns route composition in framework mode, so there is no parent route to attach a lazy catch-all to. Register the module(s) eagerly with register() (use lazyRouteComponent() or .lazy.tsx inside the module's route files for code-splitting), or use resolve() if you need runtime-loaded route structure. Lazy modules registered: ${lazyModules.map((m) => m.id).join(", ")}.`,
@@ -516,7 +503,12 @@ export function createRegistry<
         slots: assembly.slots,
         modules: assembly.modules,
         moduleDescriptors: assembly.moduleDescriptors,
-        journeys: assembly.journeys,
+        extensions: assembly.extensions,
+        journeys: assembly.extensions.journeys as ResolvedManifest<
+          TSlots,
+          TNavItem,
+          Record<string, unknown>
+        >["journeys"],
         onModuleExit: capturedOptions?.onModuleExit,
         recalculateSlots: assembly.recalculateSlots,
       };
@@ -524,6 +516,13 @@ export function createRegistry<
       return cachedManifest;
     },
   };
+
+  return registry as unknown as ModuleRegistry<
+    TSharedDependencies,
+    TSlots,
+    TNavItem,
+    readonly []
+  >;
 }
 
 function buildDepsObject<TSharedDependencies extends Record<string, any>>(

@@ -15,7 +15,7 @@ Modules are journey-unaware: each declares typed entry points and typed exit poi
 - `defineJourney` composing the three modules with typed transitions.
 - `registry.registerJourney(...)` with a **localStorage persistence adapter** — reload the page mid-flow and the journey resumes where you left off.
 - `<JourneyOutlet>` rendering the current step inside a tab; `onFinished` closes the tab.
-- `WorkspaceActions.openTab({ kind: 'journey', ... })` as the shell-facing API, with `openModuleTab` kept as a `@deprecated` shim.
+- `WorkspaceActions.addJourneyTab(...)` for tab bookkeeping after the caller mints an instance via `useJourneyContext().runtime.start(...)`. `openTab({ kind: 'module', ... })` handles plain module tabs; `openModuleTab` is a `@deprecated` shim.
 
 ## Layout
 

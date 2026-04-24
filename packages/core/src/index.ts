@@ -70,3 +70,43 @@ export type {
   ModuleEntry,
 } from "./runtime-types.js";
 export { buildDepsSnapshot, runLifecycleHooks } from "./runtime-types.js";
+
+// Plugin API — runtime packages call plugin hooks during registration and
+// resolve; plugins live in their own packages (e.g. @modular-react/journeys).
+export type {
+  RegistryPlugin,
+  PluginExtendCtx,
+  PluginValidateCtx,
+  PluginResolveCtx,
+  PluginProvidersCtx,
+  PluginExtensionsOf,
+  PluginRuntimesOf,
+} from "./plugin.js";
+
+// Journey contracts — type-only surfaces describing a journey runtime. The
+// implementation lives in @modular-react/journeys.
+export type {
+  ModuleTypeMap,
+  EntryNamesOf,
+  ExitNamesOf,
+  EntryInputOf,
+  ExitOutputOf,
+  StepSpec,
+  JourneyStep,
+  ExitCtx,
+  TransitionResult,
+  EntryTransitions,
+  TransitionMap,
+  TransitionEvent,
+  AbandonCtx,
+  TerminalCtx,
+  InstanceId,
+  JourneyStatus,
+  JourneyInstance,
+  SerializedJourney,
+  JourneyDefinitionSummary,
+  MaybePromise,
+  JourneyPersistence,
+  TerminalOutcome,
+  JourneyRuntime,
+} from "./journey-contracts.js";

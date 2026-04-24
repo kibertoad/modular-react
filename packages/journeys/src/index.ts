@@ -19,6 +19,11 @@ export type { ModuleTabProps, ModuleTabExitEvent } from "./module-tab.js";
 export { JourneyProvider, useJourneyContext } from "./provider.js";
 export type { JourneyProviderProps, JourneyProviderValue } from "./provider.js";
 
+// Plugin — pass `journeysPlugin()` to `createRegistry({ plugins: [...] })`
+// to enable journey registration and outlet rendering.
+export { journeysPlugin } from "./plugin.js";
+export type { JourneysPluginOptions, JourneysPluginExtension } from "./plugin.js";
+
 export type {
   AbandonCtx,
   AnyJourneyDefinition,

@@ -8,7 +8,6 @@ import type {
   SlotMap,
   SlotMapOf,
 } from "@modular-react/core";
-import type { JourneyRuntime } from "@modular-react/journeys";
 
 // Re-export shared runtime types from @modular-react/core
 export type { NavigationGroup, NavigationManifest, ModuleEntry } from "@modular-react/core";
@@ -20,6 +19,10 @@ export type { NavigationGroup, NavigationManifest, ModuleEntry } from "@modular-
  * - **stores** — zustand StoreApi instances (reactive, supports selectors)
  * - **services** — plain objects (non-reactive, static references)
  * - **reactiveServices** — external sources with subscribe/getSnapshot (reactive via useSyncExternalStore)
+ *
+ * Plus opt-in plugins — pass `journeysPlugin()` (or other plugins) to enable
+ * plugin-contributed features. The runtime package has no hard dependency on
+ * any specific plugin package.
  */
 export interface RegistryConfig<
   TSharedDependencies extends Record<string, any>,
@@ -51,6 +54,7 @@ export interface RegistryConfig<
 export interface ApplicationManifest<
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TNavItem extends NavigationItemBase = NavigationItem,
+  TExtensions extends Record<string, unknown> = Record<string, unknown>,
 > {
   /** The root React component with all providers wired, including `<RouterProvider />` */
   readonly App: React.ComponentType;
@@ -72,14 +76,20 @@ export interface ApplicationManifest<
   readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
 
   /**
-   * Journey runtime — always present. When no journey is registered, the
-   * runtime is a no-op: `listDefinitions()` is empty, `listInstances()` is
-   * empty, and `start("anyId")` throws "unknown journey id" (same error as
-   * calling `start` with a typo'd id). Shells can rely on the value being
-   * non-null and skip the `manifest.journeys?.` / `if (!journeys) return`
-   * dance.
+   * Plugin-contributed runtimes keyed by plugin name. Typed via the
+   * `TExtensions` generic so well-known keys like `journeys` land with their
+   * specific runtime type when the plugin is loaded. Plugins that aren't
+   * loaded do not appear here.
    */
-  readonly journeys: JourneyRuntime;
+  readonly extensions: TExtensions;
+
+  /**
+   * Convenience alias — `manifest.extensions.journeys` surfaced as
+   * `manifest.journeys` when the journeys plugin is loaded. `never` when
+   * the plugin is absent, so reading it produces a compile error instead
+   * of a surprise `undefined` at runtime.
+   */
+  readonly journeys: TExtensions extends { journeys: infer R } ? R : never;
 
   /**
    * Trigger re-evaluation of dynamic slots.
@@ -169,6 +179,7 @@ export interface ResolveManifestOptions<
 export interface ResolvedManifest<
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TNavItem extends NavigationItemBase = NavigationItem,
+  TExtensions extends Record<string, unknown> = Record<string, unknown>,
 > {
   /**
    * Context provider component — wraps children with SharedDependencies,
@@ -215,13 +226,17 @@ export interface ResolvedManifest<
   readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
 
   /**
-   * Journey runtime owning every registered journey instance. Always
-   * present — when no journey is registered, the runtime is a no-op:
-   * `listDefinitions()` / `listInstances()` return empty arrays and
-   * `start()` throws "unknown journey id". Shells can rely on the value
-   * being non-null.
+   * Plugin-contributed runtimes keyed by plugin name. Typed via the
+   * `TExtensions` generic; see {@link ApplicationManifest.extensions}.
    */
-  readonly journeys: JourneyRuntime;
+  readonly extensions: TExtensions;
+
+  /**
+   * Convenience alias — `manifest.extensions.journeys` surfaced as
+   * `manifest.journeys` when the journeys plugin is loaded. `never` when
+   * the plugin is absent.
+   */
+  readonly journeys: TExtensions extends { journeys: infer R } ? R : never;
 
   /**
    * Resolved `onModuleExit` callback — surfaced for shells that wire

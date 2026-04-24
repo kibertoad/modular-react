@@ -30,35 +30,51 @@ export interface AppSlots {
 
 // ---- Workspace actions contract ----
 
-export type OpenTabSpec =
-  | {
-      readonly kind: "module";
-      readonly id: string;
-      readonly entry?: string;
-      readonly input?: unknown;
-      readonly title?: string;
-    }
-  | {
-      readonly kind: "journey";
-      readonly id: string;
-      readonly input?: unknown;
-      readonly title?: string;
-    };
+/**
+ * Intent for opening a module-backed tab. Journey tabs are created via
+ * `addJourneyTab` instead, so that starting the journey (which needs the
+ * runtime) stays separate from tab bookkeeping (which does not).
+ */
+export interface OpenTabSpec {
+  readonly kind: "module";
+  readonly id: string;
+  readonly entry?: string;
+  readonly input?: unknown;
+  readonly title?: string;
+}
 
 export interface OpenTabResult {
   readonly tabId: string;
-  readonly instanceId?: string;
+}
+
+/**
+ * Intent for tracking an already-started journey as a tab. The caller mints
+ * the `instanceId` via `journeys.start(...)` (where the runtime is already
+ * in scope — e.g. `useJourneyContext()` in React land, or `manifest.journeys`
+ * at bootstrap), then hands off here for tab-strip bookkeeping.
+ */
+export interface AddJourneyTabSpec {
+  readonly instanceId: string;
+  readonly journeyId: string;
+  readonly input: unknown;
+  readonly title?: string;
+}
+
+export interface AddJourneyTabResult {
+  readonly tabId: string;
+  readonly alreadyOpen: boolean;
 }
 
 /**
  * The shell implements this; modules consume it via `useService('workspace')`.
- * Journey-aware tabs go through `openTab({ kind: 'journey', ... })`; plain
- * module tabs stay on the same surface for uniformity.
+ * Pure tab bookkeeping — no knowledge of the journey runtime. Starting a
+ * journey happens at the call site; this surface only records/activates tabs.
  */
 export interface WorkspaceActions {
   /** @deprecated Use `openTab({ kind: 'module', id, input })` instead. */
   readonly openModuleTab: (moduleId: string, input?: unknown) => OpenTabResult;
   readonly openTab: (spec: OpenTabSpec) => OpenTabResult;
+  readonly addJourneyTab: (spec: AddJourneyTabSpec) => AddJourneyTabResult;
   readonly closeTab: (tabId: string) => void;
 }
 
