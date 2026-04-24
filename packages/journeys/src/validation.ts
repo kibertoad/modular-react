@@ -23,6 +23,25 @@ export class JourneyHydrationError extends Error {
   }
 }
 
+/**
+ * Thrown when `runtime.start()` / `runtime.hydrate()` is called with a
+ * journey id that is not registered. Distinct class so shells can
+ * discriminate "this journey is gone after an upgrade, drop the tab"
+ * from transient or validation failures.
+ */
+export class UnknownJourneyError extends Error {
+  readonly journeyId: string;
+  constructor(journeyId: string, registered: readonly string[]) {
+    super(
+      `[@modular-react/journeys] Unknown journey id "${journeyId}". Registered: ${
+        registered.join(", ") || "(none)"
+      }`,
+    );
+    this.name = "UnknownJourneyError";
+    this.journeyId = journeyId;
+  }
+}
+
 export function validateJourneyContracts(
   journeys: readonly RegisteredJourney[],
   modules: readonly ModuleDescriptor<any, any, any, any>[],

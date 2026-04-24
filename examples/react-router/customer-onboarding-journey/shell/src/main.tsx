@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { createRegistry } from "@react-router-modules/runtime";
-import { journeysPlugin } from "@modular-react/journeys";
+import { journeysPlugin, UnknownJourneyError } from "@modular-react/journeys";
 import type { AppDependencies, AppSlots } from "@example-onboarding/app-shared";
 import profileModule from "@example-onboarding/profile-module";
 import planModule from "@example-onboarding/plan-module";
@@ -56,14 +56,43 @@ const { App, moduleDescriptors, journeys } = registry.resolve({
 // the same input resolves via the persistence adapter and returns the stored
 // instance id. If something changed (blob was cleared out-of-band), update
 // the tab; if the blob is gone entirely, a fresh instance spins up seamlessly.
+//
+// Errors are discriminated:
+//   - `UnknownJourneyError` — the journey was renamed/removed between deploys.
+//     Expected after version skew; drop the tab quietly.
+//   - anything else — likely a real bug (corrupted input, throwing onHydrate,
+//     invariant violation). Warn loudly and drop so the shell still boots.
+//
+// A production shell should surface the dropped-tab count to the user instead
+// of relying on console — see README.md "Rehydration" section.
 {
   const { tabs } = tabsStore.getState();
   for (const tab of tabs) {
     if (tab.kind !== "journey") continue;
-    const resolvedId = journeys.start(tab.journeyId, tab.input);
-    if (resolvedId !== tab.instanceId) {
-      // Update in place so the tab keeps its original slot in the strip.
-      tabsStore.getState().updateTab(tab.tabId, { instanceId: resolvedId });
+    if (!journeys.isRegistered(tab.journeyId)) {
+      console.debug(
+        `[shell] Dropping journey tab "${tab.tabId}" — journey "${tab.journeyId}" is no longer registered.`,
+      );
+      tabsStore.getState().removeTab(tab.tabId);
+      continue;
+    }
+    try {
+      const resolvedId = journeys.start(tab.journeyId, tab.input);
+      if (resolvedId !== tab.instanceId) {
+        // Update in place so the tab keeps its original slot in the strip.
+        tabsStore.getState().updateTab(tab.tabId, { instanceId: resolvedId });
+      }
+    } catch (err) {
+      if (err instanceof UnknownJourneyError) {
+        // Races with a concurrent unregister; treat same as the pre-check.
+        tabsStore.getState().removeTab(tab.tabId);
+        continue;
+      }
+      console.warn(
+        `[shell] Dropping journey tab "${tab.tabId}" (${tab.journeyId}) after rehydration failure:`,
+        err,
+      );
+      tabsStore.getState().removeTab(tab.tabId);
     }
   }
 }

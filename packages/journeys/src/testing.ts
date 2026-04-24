@@ -73,11 +73,14 @@ export function createTestHarness(runtime: JourneyRuntime): JourneyTestHarness {
     },
     inspect<TState = unknown>(id: InstanceId): InstanceSnapshot<TState> {
       const record = recordOrThrow(id);
+      // Snapshot — `history` is a live array on the runtime record and will
+      // grow as the journey advances. Copy so assertions captured by the
+      // caller stay stable when the next `fireExit` runs.
       return {
         status: record.status,
         step: record.step,
         state: record.state as TState,
-        history: record.history,
+        history: [...record.history],
         stepToken: record.stepToken,
         retryCount: record.retryCount,
       };

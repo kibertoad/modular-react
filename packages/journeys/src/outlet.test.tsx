@@ -348,12 +348,7 @@ describe("JourneyOutlet", () => {
       <div data-testid="custom-not-found">{`${moduleId}/${entry}`}</div>
     );
     const { getByTestId } = render(
-      <JourneyOutlet
-        runtime={rt}
-        instanceId={id}
-        modules={{}}
-        notFoundComponent={NotFound}
-      />,
+      <JourneyOutlet runtime={rt} instanceId={id} modules={{}} notFoundComponent={NotFound} />,
     );
     expect(getByTestId("custom-not-found").textContent).toBe("account/review");
   });

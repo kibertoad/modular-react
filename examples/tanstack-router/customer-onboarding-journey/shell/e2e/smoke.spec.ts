@@ -51,3 +51,66 @@ test("starting a journey mounts JourneyOutlet without errors", async ({ page }) 
 
   assertNoErrors(errors);
 });
+
+test("advancing a journey, then reloading, resumes on the same step", async ({ page }) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /Start — Alice Martin/i }).click();
+  await expect(page.getByRole("heading", { name: /Profile · /i })).toBeVisible();
+
+  await page.getByRole("button", { name: /^Pick a plan$/ }).click();
+  await expect(page.getByRole("heading", { name: /Choose a plan/i })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: /Choose a plan/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Profile · /i })).not.toBeVisible();
+
+  assertNoErrors(errors);
+});
+
+test("closing a journey tab returns the shell to home and clears the tab", async ({ page }) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /Start — Alice Martin/i }).click();
+  const tabButton = page.getByRole("button", { name: /^Onboard · Alice Martin/ });
+  await expect(tabButton).toBeVisible();
+
+  await page.getByRole("button", { name: /^Close Onboard · Alice Martin/ }).click();
+
+  await expect(tabButton).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /customer onboarding/i })).toBeVisible();
+
+  assertNoErrors(errors);
+});
+
+test("rehydration drops tabs whose journey is no longer registered", async ({ page }) => {
+  const errors = attachErrorCollectors(page);
+
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "workspace-tabs",
+      JSON.stringify({
+        tabs: [
+          {
+            tabId: "journey:ghost-journey:999",
+            kind: "journey",
+            title: "Ghost",
+            journeyId: "ghost-journey",
+            instanceId: "ji_ghost",
+            input: { customerId: "X" },
+          },
+        ],
+        activeTabId: "journey:ghost-journey:999",
+      }),
+    );
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: /customer onboarding/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Ghost/ })).toHaveCount(0);
+
+  assertNoErrors(errors);
+});

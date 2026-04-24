@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@modular-react/core": "^1.2.0",
+    "@modular-react/journeys": "workspace:*",
     "@modular-react/react": "^1.2.0",
     "@tanstack-react-modules/core": "^2.3.0",
     "@tanstack/react-router": "^1.168.8",

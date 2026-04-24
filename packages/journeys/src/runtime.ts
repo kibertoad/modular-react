@@ -16,7 +16,7 @@ import type {
   TransitionEvent,
   TransitionResult,
 } from "./types.js";
-import { JourneyHydrationError } from "./validation.js";
+import { JourneyHydrationError, UnknownJourneyError } from "./validation.js";
 
 export interface InstanceRecord<TState = unknown> {
   id: InstanceId;
@@ -160,9 +160,7 @@ export function createJourneyRuntime(
   function assertKnown(journeyId: string): RegisteredJourney {
     const reg = definitions.get(journeyId);
     if (!reg) {
-      throw new Error(
-        `[@modular-react/journeys] Unknown journey id "${journeyId}". Registered: ${[...definitions.keys()].join(", ") || "(none)"}`,
-      );
+      throw new UnknownJourneyError(journeyId, [...definitions.keys()]);
     }
     return reg;
   }
@@ -1061,6 +1059,10 @@ export function createJourneyRuntime(
       return [...definitions.values()].map(summarize);
     },
 
+    isRegistered(journeyId) {
+      return definitions.has(journeyId);
+    },
+
     subscribe(id, listener) {
       const record = instances.get(id);
       if (!record) return () => {};
@@ -1102,7 +1104,12 @@ export function createJourneyRuntime(
             reason: reason ?? "abandoned",
           }) as TransitionResult<ModuleTypeMap, unknown>;
         } catch (err) {
+          // Surface the handler crash through the registration-level onError
+          // hook before falling back to the default abort. Without this,
+          // a throw in a shell's onAbandon is indistinguishable from an
+          // intentional abort and silently loses telemetry.
           if (debug) console.error("[@modular-react/journeys] onAbandon threw", err);
+          fireOnError(reg, record, err, record.step);
         }
       }
       applyTransition(record, reg, result, null);

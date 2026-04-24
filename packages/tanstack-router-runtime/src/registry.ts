@@ -363,16 +363,23 @@ export function createRegistry<
           `[@tanstack-react-modules/runtime] Duplicate plugin name "${plugin.name}" — each plugin may be registered at most once.`,
         );
       }
-      seenPluginNames.add(plugin.name);
-      plugins.push(plugin);
 
+      // Fully resolve the plugin's contribution before mutating registry
+      // bookkeeping, so a throw in extend() or a method collision leaves
+      // the registry clean and the caller can retry with a fixed plugin.
       const extension = plugin.extend({ markDirty: () => {} });
-      for (const [key, value] of Object.entries(extension)) {
+      const entries = Object.entries(extension);
+      for (const [key] of entries) {
         if (key in registry) {
           throw new Error(
             `[@tanstack-react-modules/runtime] Plugin "${plugin.name}" attempted to overwrite registry method "${key}".`,
           );
         }
+      }
+
+      seenPluginNames.add(plugin.name);
+      plugins.push(plugin);
+      for (const [key, value] of entries) {
         registry[key] = value;
       }
       return registry as unknown as ModuleRegistry<TSharedDependencies, TSlots, TNavItem, any>;
@@ -517,12 +524,7 @@ export function createRegistry<
     },
   };
 
-  return registry as unknown as ModuleRegistry<
-    TSharedDependencies,
-    TSlots,
-    TNavItem,
-    readonly []
-  >;
+  return registry as unknown as ModuleRegistry<TSharedDependencies, TSlots, TNavItem, readonly []>;
 }
 
 function buildDepsObject<TSharedDependencies extends Record<string, any>>(

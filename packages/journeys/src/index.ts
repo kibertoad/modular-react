@@ -13,6 +13,7 @@ export { createJourneyRuntime, type JourneyRuntimeOptions } from "./runtime.js";
 export {
   JourneyValidationError,
   JourneyHydrationError,
+  UnknownJourneyError,
   validateJourneyContracts,
   validateJourneyDefinition,
 } from "./validation.js";

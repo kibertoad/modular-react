@@ -1,9 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
-import type {
-  JourneyRuntime,
-  ModuleTypeMap,
-  RegistryPlugin,
-} from "@modular-react/core";
+import type { JourneyRuntime, ModuleTypeMap, RegistryPlugin } from "@modular-react/core";
 import { createJourneyRuntime } from "./runtime.js";
 import {
   JourneyValidationError,
@@ -60,15 +56,21 @@ export interface JourneysPluginOptions {
 }
 
 /**
- * Creates the journeys plugin. Pass to `createRegistry({ plugins: [...] })`
- * to enable journey registration and outlet rendering without the runtime
+ * Creates the journeys plugin. Pass to `registry.use(journeysPlugin())` to
+ * enable journey registration and outlet rendering without the runtime
  * packages depending on `@modular-react/journeys` directly.
  *
  * The plugin:
  *   - contributes `registerJourney(...)` onto the registry (type-safe)
  *   - validates contracts against registered modules at resolve time
- *   - produces a `JourneyRuntime` on `manifest.extensions.journeys`
+ *   - produces a `JourneyRuntime` on `manifest.extensions.journeys` (also
+ *     surfaced as the `manifest.journeys` convenience alias)
  *   - wraps the provider stack in `<JourneyProvider runtime={...} />`
+ *
+ * **Instantiate per registry.** The returned object closes over a
+ * journey-registration list; passing the same instance to two
+ * `createRegistry()` calls causes them to share that list. Call
+ * `journeysPlugin()` once per registry.
  */
 export function journeysPlugin(
   options: JourneysPluginOptions = {},

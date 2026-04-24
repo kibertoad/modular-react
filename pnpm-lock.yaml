@@ -832,6 +832,9 @@ importers:
       '@modular-react/core':
         specifier: ^1.2.0
         version: link:../core
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../journeys
       '@modular-react/react':
         specifier: ^1.2.0
         version: link:../react
@@ -992,6 +995,9 @@ importers:
       '@modular-react/core':
         specifier: ^1.2.0
         version: link:../core
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../journeys
       '@modular-react/react':
         specifier: ^1.2.0
         version: link:../react

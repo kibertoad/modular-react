@@ -141,4 +141,3 @@ export interface RegisteredJourney<TState = unknown> {
   readonly definition: AnyJourneyDefinition;
   readonly options: JourneyRegisterOptions<TState> | undefined;
 }
-

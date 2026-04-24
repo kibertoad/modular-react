@@ -268,6 +268,13 @@ export interface JourneyRuntime {
   getInstance(id: InstanceId): JourneyInstance | null;
   listInstances(): readonly InstanceId[];
   listDefinitions(): readonly JourneyDefinitionSummary[];
+  /**
+   * Cheap predicate for "is this journey id known to this runtime?" —
+   * useful when a shell rehydrates tabs from persisted storage and wants
+   * to drop unknown journeys before calling `start()` (which would throw
+   * `UnknownJourneyError`). Returns `true` only for exact id matches.
+   */
+  isRegistered(journeyId: string): boolean;
   /** Subscribe to changes for one instance. Returns unsubscribe. */
   subscribe(id: InstanceId, listener: () => void): () => void;
   /**

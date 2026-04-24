@@ -765,6 +765,44 @@ onHydrate: (blob) => {
 
 If migration would be destructive or the blob is no longer trusted, let `onHydrate` throw — the runtime discards the blob via `persistence.remove(key)` and mints a fresh instance under the same key. That's usually preferable to resuming into a malformed state.
 
+### Rehydrating shell-level work (tabs, task queues, drafts)
+
+Shells that persist user work outside the journey (tabs pointing at journey instances, a task queue, a draft list) need a rehydration pass on boot. The shape is inherently app-specific — every shell has a different "persisted work" concept — so the runtime doesn't ship a helper. Write the loop yourself, but discriminate failure modes:
+
+```ts
+import { UnknownJourneyError } from "@modular-react/journeys";
+
+for (const tab of persistedTabs) {
+  if (!journeys.isRegistered(tab.journeyId)) {
+    // The journey was renamed or removed between deploys. Expected after
+    // version skew; drop the tab cleanly.
+    tabsStore.getState().removeTab(tab.tabId);
+    continue;
+  }
+  try {
+    const resolvedId = journeys.start(tab.journeyId, tab.input);
+    if (resolvedId !== tab.instanceId) {
+      tabsStore.getState().updateTab(tab.tabId, { instanceId: resolvedId });
+    }
+  } catch (err) {
+    if (err instanceof UnknownJourneyError) {
+      // Raced with a concurrent unregister; same policy as the pre-check.
+      tabsStore.getState().removeTab(tab.tabId);
+      continue;
+    }
+    // A real bug (corrupted input, throwing onHydrate, invariant violation).
+    // Drop so the shell still boots, but warn loudly and surface it to the user.
+    notifyUser(`We couldn't restore tab "${tab.title}"`, err);
+    tabsStore.getState().removeTab(tab.tabId);
+  }
+}
+```
+
+Two things worth underlining:
+
+- `runtime.isRegistered(id)` is a cheap pre-filter. It's not sufficient on its own (a tab might rehydrate fine past the id check and still fail on validation or a user `onHydrate` throw), but it keeps the expected-drop path out of the exception channel so real bugs stand out in logs.
+- **Don't silently drop in production.** The example shells in this repo use `console.warn` only because they're examples. A real shell should surface the drop to the user — an in-app banner ("We couldn't restore N tab(s)"), an affordance to report the offending blob, or a quarantine store so support can replay it. Users lose trust fast when work vanishes without explanation.
+
 ## Rendering — `JourneyOutlet`
 
 ### Props

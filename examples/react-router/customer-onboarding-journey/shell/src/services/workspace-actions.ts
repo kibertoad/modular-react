@@ -19,9 +19,7 @@ function mintTabId(kind: "module" | "journey", key: string): string {
  * `useJourneyContext()` (or `manifest.journeys` at bootstrap) and then hand
  * the resulting `instanceId` to `addJourneyTab` below.
  */
-export function createWorkspaceActions(
-  tabsStore: StoreApi<WorkspaceTabsState>,
-): WorkspaceActions {
+export function createWorkspaceActions(tabsStore: StoreApi<WorkspaceTabsState>): WorkspaceActions {
   function openTab(spec: OpenTabSpec): OpenTabResult {
     const tabId = mintTabId("module", spec.id);
     tabsStore.getState().addTab({

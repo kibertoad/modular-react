@@ -16,7 +16,7 @@ const CUSTOMERS = [
   { id: "C-3", name: "Casey Rivera · Rivera Consulting (profile blocked)" },
 ];
 
-export function Home({ workspace }: HomeProps) {
+export function Home({ workspace, tabsStore }: HomeProps) {
   const journeyCtx = useJourneyContext();
 
   const startOnboarding = (customerId: string, customerName: string) => {
@@ -24,6 +24,23 @@ export function Home({ workspace }: HomeProps) {
       throw new Error(
         "[Home] useJourneyContext() returned null — journeysPlugin() must be attached to the registry.",
       );
+    }
+    // Dedup on journeyId+customerId before calling start(). With persistence
+    // configured, runtime.start() is itself idempotent via the persistence
+    // key, so this guard mostly matters for shells that skip persistence —
+    // without it, a double-click mints two live instances for the same
+    // customer and opens two competing tabs.
+    const existing = tabsStore
+      .getState()
+      .tabs.find(
+        (t) =>
+          t.kind === "journey" &&
+          t.journeyId === customerOnboardingHandle.id &&
+          (t.input as { customerId?: string } | undefined)?.customerId === customerId,
+      );
+    if (existing) {
+      tabsStore.getState().activateTab(existing.tabId);
+      return;
     }
     const input = { customerId };
     // Handle form — TS enforces `input` matches the journey's declared
@@ -52,10 +69,7 @@ export function Home({ workspace }: HomeProps) {
           const resuming = hasPersistedJourney("customer-onboarding", customer.id);
           return (
             <li key={customer.id}>
-              <button
-                type="button"
-                onClick={() => startOnboarding(customer.id, customer.name)}
-              >
+              <button type="button" onClick={() => startOnboarding(customer.id, customer.name)}>
                 {resuming ? "Resume" : "Start"} — {customer.name}{" "}
                 <span style={{ color: "#718096" }}>({customer.id})</span>
               </button>

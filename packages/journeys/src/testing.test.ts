@@ -92,6 +92,18 @@ describe("createTestHarness", () => {
     expect(harness.inspect(id).step?.entry).toBe("first");
   });
 
+  it("inspect returns a stable history snapshot that does not mutate as the runtime advances", () => {
+    const rt = makeRuntime();
+    const harness = createTestHarness(rt);
+    const id = rt.start("t", { id: "d" });
+    harness.fireExit(id, "next", { amount: 4 });
+    const snap = harness.inspect(id);
+    const historyLen = snap.history.length;
+    harness.goBack(id);
+    harness.fireExit(id, "next", { amount: 5 });
+    expect(snap.history.length).toBe(historyLen);
+  });
+
   it("throws a readable error when the instance id is unknown", () => {
     const rt = makeRuntime();
     const harness = createTestHarness(rt);

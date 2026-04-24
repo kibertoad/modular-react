@@ -20,10 +20,8 @@ export type JourneyHandle<TId extends string = string, TInput = unknown> = Journ
  * `{ id: def.id }`; the returned object is typed so callers get
  * `input`-checking through the `start` overload.
  */
-export function defineJourneyHandle<
-  TModules extends ModuleTypeMap,
-  TState,
-  TInput,
->(def: JourneyDefinition<TModules, TState, TInput>): JourneyHandle<string, TInput> {
+export function defineJourneyHandle<TModules extends ModuleTypeMap, TState, TInput>(
+  def: JourneyDefinition<TModules, TState, TInput>,
+): JourneyHandle<string, TInput> {
   return { id: def.id };
 }
