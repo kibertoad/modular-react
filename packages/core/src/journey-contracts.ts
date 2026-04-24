@@ -288,3 +288,17 @@ export interface JourneyRuntime {
    */
   forgetTerminal(): number;
 }
+
+// -----------------------------------------------------------------------------
+// Status predicates
+// -----------------------------------------------------------------------------
+
+/**
+ * True when the instance has reached a terminal state (`completed` or
+ * `aborted`). Callers often need this disjunction; direct comparisons
+ * against `status === "active"` / `"loading"` are already type-safe against
+ * the `JourneyStatus` union and do not earn their own predicates.
+ */
+export function isTerminal(instance: JourneyInstance): boolean {
+  return instance.status === "completed" || instance.status === "aborted";
+}

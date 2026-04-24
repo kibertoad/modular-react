@@ -111,3 +111,4 @@ export type {
   JourneyRuntime,
   JourneyHandleRef,
 } from "./journey-contracts.js";
+export { isTerminal } from "./journey-contracts.js";
