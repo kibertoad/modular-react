@@ -65,11 +65,7 @@ export function TopNav({ onAction }: TopNavProps) {
         }
         if (typeof item.to === "string" && item.to.length > 0) {
           return (
-            <Link
-              key={key}
-              to={item.to}
-              style={{ fontSize: "0.9rem", alignSelf: "center" }}
-            >
+            <Link key={key} to={item.to} style={{ fontSize: "0.9rem", alignSelf: "center" }}>
               {item.label}
             </Link>
           );
@@ -79,4 +75,3 @@ export function TopNav({ onAction }: TopNavProps) {
     </nav>
   );
 }
-

@@ -122,9 +122,7 @@ describe("ModuleRoute", () => {
   });
 
   it("auto-resolves the single entry when `entry` is omitted", () => {
-    const { getByTestId } = render(
-      <ModuleRoute module={mod} input={{ customerId: "C-auto" }} />,
-    );
+    const { getByTestId } = render(<ModuleRoute module={mod} input={{ customerId: "C-auto" }} />);
     expect(getByTestId("cid").textContent).toBe("C-auto");
   });
 
@@ -193,11 +191,7 @@ describe("ModuleRoute", () => {
       readonly goBack?: () => void;
     }) {
       return (
-        <button
-          onClick={() => gb?.()}
-          data-testid="cid"
-          data-cid={input.customerId}
-        >
+        <button onClick={() => gb?.()} data-testid="cid" data-cid={input.customerId}>
           back
         </button>
       );

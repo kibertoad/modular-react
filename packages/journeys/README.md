@@ -24,6 +24,7 @@ Routes, slots, navigation, workspaces — none of that changes. Journeys sit **o
 - [Authoring patterns](#authoring-patterns) — module entries, exits, loading flows, `goBack` opt-in
 - [Journey definition patterns](#journey-definition-patterns) — branching, terminals, state rewrites, bounded history
 - [Runtime surface](#runtime-surface) — the `JourneyRuntime` you get back from `manifest.journeys`
+- [Journey handles](#journey-handles) — typed tokens for `runtime.start(handle, input)`
 - [`JourneyProvider` + context](#journeyprovider--context)
 - [Persistence](#persistence) — adapters, key design, save queue, hydrate vs start, versioning
 - [Rendering — `JourneyOutlet`](#rendering--journeyoutlet) — props, error policies, host rules
@@ -212,11 +213,23 @@ Module imports are `import type` — the journey never pulls a module into its b
 
 ### 3. Register the journey in the shell
 
+Attach the journeys plugin to enable `registry.registerJourney`. Without `.use(journeysPlugin())` the method isn't on the base registry:
+
 ```ts
 import { createRegistry } from "@react-router-modules/runtime"; // or @tanstack-react-modules/runtime
+import { journeysPlugin } from "@modular-react/journeys";
 import { customerOnboardingJourney } from "@myorg/journey-customer-onboarding";
 
-const registry = createRegistry<AppDeps, AppSlots>({ stores, services });
+const registry = createRegistry<AppDeps, AppSlots>({ stores, services }).use(
+  // Call once per registry — the plugin closes over its own registration
+  // list. The optional `onModuleExit` is the shell-wide dispatcher for
+  // module exits fired outside a journey step (see "`JourneyProvider` +
+  // context" below).
+  journeysPlugin({
+    onModuleExit: (ev) => workspace.closeTab(ev.tabId),
+  }),
+);
+
 registry.register(profileModule);
 registry.register(planModule);
 registry.register(billingModule);
@@ -245,18 +258,10 @@ export const manifest = registry.resolveManifest();
 
 ### 4. Render the journey in a tab (or any container)
 
-Mount a single `<JourneyProvider>` at the top of the shell so descendant outlets and module tabs can read the runtime from context — no prop threading through every container. The explicit-prop form still works as an escape hatch when you need to reach a different runtime from the same tree.
+The plugin mounts `<JourneyProvider>` automatically — descendant `<JourneyOutlet>` / `<ModuleTab>` nodes read the runtime (and the plugin-level `onModuleExit`) from context with no extra wiring. Just render the outlet wherever the step should live:
 
 ```tsx
-import { JourneyProvider, JourneyOutlet, ModuleTab } from "@modular-react/journeys";
-
-function Shell({ manifest }: { manifest: ResolvedManifest }) {
-  return (
-    <JourneyProvider runtime={manifest.journeys} onModuleExit={manifest.onModuleExit}>
-      {/* tabs, routes, … */}
-    </JourneyProvider>
-  );
-}
+import { JourneyOutlet, ModuleTab } from "@modular-react/journeys";
 
 function TabContent({ tab, manifest }: { tab: Tab; manifest: ResolvedManifest }) {
   if (tab.kind === "module") {
@@ -266,9 +271,9 @@ function TabContent({ tab, manifest }: { tab: Tab; manifest: ResolvedManifest })
         entry={tab.entry}
         input={tab.input}
         tabId={tab.tabId}
-        // `onModuleExit` wired on <JourneyProvider> fires for every module tab
-        // automatically — no need to forward it here unless you want a
-        // per-tab override.
+        // The plugin's `onModuleExit` fires automatically for every module
+        // tab; pass `onExit` only for a per-tab override (typically "close
+        // this tab").
         onExit={(ev) => workspace.closeTab(tab.tabId)}
       />
     );
@@ -283,22 +288,34 @@ function TabContent({ tab, manifest }: { tab: Tab; manifest: ResolvedManifest })
 }
 ```
 
+If the shell needs to reach a different runtime from the same tree (multi-tenant dashboards, split-screen agents), mount an explicit `<JourneyProvider runtime={otherRuntime}>` locally — the explicit prop wins over the plugin's provider. The manual-mount path is also still how you'd wire journeys in a shell that doesn't use `@react-router-modules/runtime` / `@tanstack-react-modules/runtime` at all.
+
 `manifest.journeys` is always a runtime — even when no journey is registered it's a no-op runtime whose `listDefinitions()` / `listInstances()` return empty and whose `start()` throws the usual "unknown journey id" error. Shells don't need to null-guard it.
 
 ### 5. Open the journey
 
-The shell typically exposes a single `openTab` service that covers both modules and journeys:
+Export a **handle** alongside the journey definition so callers can open it with a typed `input` without importing the journey's runtime code:
 
 ```ts
-workspace.openTab({
-  kind: "journey",
-  id: "customer-onboarding",
+// journeys/customer-onboarding/src/index.ts
+import { defineJourneyHandle } from "@modular-react/journeys";
+export const customerOnboardingHandle = defineJourneyHandle(customerOnboardingJourney);
+```
+
+The shell (or any module) then passes the handle to `runtime.start`. Typically this lives inside an `openTab`-style service so the workspace bookkeeping and the journey start are one call-site:
+
+```ts
+// In the shell, with `manifest.journeys` in scope:
+const instanceId = manifest.journeys.start(customerOnboardingHandle, { customerId });
+workspace.addJourneyTab({
+  instanceId,
+  journeyId: customerOnboardingHandle.id,
   input: { customerId },
   title: `Onboarding — ${customerName}`,
 });
 ```
 
-Internally that calls `manifest.journeys.start('customer-onboarding', { customerId })` and stores the returned `instanceId` on the tab record. See the [customer-onboarding-journey example](../../examples/react-router/customer-onboarding-journey/) for a complete working shell.
+See the [customer-onboarding-journey example](../../examples/react-router/customer-onboarding-journey/) for a complete working shell, including the dispatcher that also handles the string-id form used by plugin-contributed navbar actions.
 
 ## Core concepts
 
@@ -597,8 +614,17 @@ Omitting `maxHistory`, or passing `0` or a negative number, leaves history unbou
 ```ts
 interface JourneyRuntime {
   /**
-   * Start a fresh instance, or — if a persistence key matches a live/stored
-   * active blob — return the existing instance's id. Idempotent per key.
+   * Handle form (preferred) — `input` is type-checked against the handle's
+   * phantom `TInput`. See "Journey handles" below for the pattern.
+   */
+  start<TId extends string, TInput>(
+    handle: JourneyHandleRef<TId, TInput>,
+    input: TInput,
+  ): InstanceId;
+  /**
+   * String-id form — accepts any `input`. Useful for dynamic dispatch
+   * where the id only exists at runtime (e.g. a navbar action carrying
+   * `{ kind: "journey-start", journeyId }`).
    */
   start<TInput>(journeyId: string, input: TInput): InstanceId;
 
@@ -612,6 +638,15 @@ interface JourneyRuntime {
   getInstance(id: InstanceId): JourneyInstance | null;
   listInstances(): readonly InstanceId[];
   listDefinitions(): readonly JourneyDefinitionSummary[];
+
+  /**
+   * Cheap predicate for "is this journey id known to this runtime?"
+   * Useful when rehydrating persisted shell state (tabs, task queue, …)
+   * to drop entries for journeys renamed or removed between deploys —
+   * avoids routing expected drops through the `UnknownJourneyError`
+   * exception channel.
+   */
+  isRegistered(journeyId: string): boolean;
 
   /** Subscribe to changes on one instance. Returns unsubscribe. */
   subscribe(id: InstanceId, listener: () => void): () => void;
@@ -630,22 +665,66 @@ interface JourneyRuntime {
 }
 ```
 
+Both `start` overloads resolve to the same runtime call; the handle form only exists to type-check `input`. Prefer handles in new code — see [Journey handles](#journey-handles) for the full pattern.
+
 ### When to call which
 
-| Situation                                                             | Use                                                  |
-| --------------------------------------------------------------------- | ---------------------------------------------------- |
-| User clicks "start customer onboarding".                              | `runtime.start(journeyId, { customerId })`           |
-| Reloading the shell and restoring tabs from localStorage.             | `runtime.start(…)` again — persistence resumes.      |
-| Read-only "show me what this journey looked like in audit log #1234". | `runtime.hydrate(journeyId, blob)` — no persistence. |
-| Shell wants to react to state changes (tab title, breadcrumb).        | `runtime.subscribe(id, listener)`                    |
-| User closes a journey tab before it completes.                        | Let `<JourneyOutlet>` unmount — it calls `end()`.    |
-| Shell explicitly cancels (e.g. "end shift").                          | `runtime.end(id, { reason: 'end-of-shift' })`        |
-| Long-running workspace accumulated finished journeys; free memory.    | `runtime.forgetTerminal()`                           |
-| After `onFinished`, prune this specific terminal instance.            | `runtime.forget(id)`                                 |
+| Situation                                                             | Use                                                              |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| User clicks "start customer onboarding".                              | `runtime.start(onboardingHandle, { customerId })` — handle form. |
+| Dynamic dispatch (navbar action / command palette with an opaque id). | `runtime.start(action.journeyId, input)` — string-id form.       |
+| Reloading the shell and restoring tabs from localStorage.             | `runtime.start(…)` again — persistence resumes.                  |
+| Filter persisted shell state before calling `start()`.                | `runtime.isRegistered(journeyId)` — cheap pre-check.             |
+| Read-only "show me what this journey looked like in audit log #1234". | `runtime.hydrate(journeyId, blob)` — no persistence.             |
+| Shell wants to react to state changes (tab title, breadcrumb).        | `runtime.subscribe(id, listener)`                                |
+| User closes a journey tab before it completes.                        | Let `<JourneyOutlet>` unmount — it calls `end()`.                |
+| Shell explicitly cancels (e.g. "end shift").                          | `runtime.end(id, { reason: 'end-of-shift' })`                    |
+| Long-running workspace accumulated finished journeys; free memory.    | `runtime.forgetTerminal()`                                       |
+| After `onFinished`, prune this specific terminal instance.            | `runtime.forget(id)`                                             |
 
 ### `listDefinitions()` and `listInstances()`
 
 Primarily useful for diagnostics, command palettes, or admin tooling. A "launch journey" picker can render `runtime.listDefinitions()` directly; a "which journeys are open for this user" debug panel can walk `runtime.listInstances()` and `getInstance(id)`.
+
+### Journey handles
+
+A **journey handle** is a typed token a journey package exports so shells and modules can open it with a correctly-shaped `input` without importing the journey's runtime code. Export one per journey:
+
+```ts
+// journeys/customer-onboarding/src/customer-onboarding.ts
+import { defineJourney, defineJourneyHandle } from "@modular-react/journeys";
+
+export const customerOnboardingJourney = defineJourney<Modules, State>()({
+  id: "customer-onboarding",
+  version: "1.0.0",
+  initialState: ({ customerId }: { customerId: string }) => ({
+    /* … */
+  }),
+  /* … */
+});
+
+// Publish a handle alongside the journey definition — same package, same file.
+export const customerOnboardingHandle = defineJourneyHandle(customerOnboardingJourney);
+```
+
+At the call site, pass the handle to `runtime.start`:
+
+```ts
+import { customerOnboardingHandle } from "@myorg/journey-customer-onboarding";
+
+const instanceId = runtime.start(customerOnboardingHandle, { customerId: "C-1" });
+// input is type-checked end-to-end — wrong shape = compile error.
+```
+
+`defineJourneyHandle(def)` returns `{ id: def.id }` at runtime; the input-type check lives entirely in the type system (the `__input` field is phantom — no value, never read). This is why modules and shells can `import type`-only from a journey package and still get full `input` checking without pulling the journey definition into their bundle.
+
+Why handles exist:
+
+- **No runtime coupling.** A module that launches a journey imports the handle via `import type` — the journey's transition code never enters the module's bundle.
+- **Type-safe `input`.** The handle carries `TInput` as a phantom; `runtime.start(handle, input)` is the overload that type-checks it. The string-id form accepts any input and is the right call only for dynamic dispatch (e.g. a nav action carrying an opaque `journeyId`).
+- **Single canonical id.** `handle.id === def.id` at runtime; dedup/lookup code can compare handles or ids interchangeably without casing on which one it received.
+
+The string-id `start()` overload stays supported precisely because plugin-contributed nav items carry `{ kind: "journey-start", journeyId }` — a dispatcher can't hold a handle reference for every registered journey, so it falls back to the string form.
 
 ## `JourneyProvider` + context
 
@@ -823,6 +902,28 @@ interface JourneyOutletProps {
   onStepError?: (err: unknown, ctx: { step: JourneyStep }) => "abort" | "retry" | "ignore";
   /** Global retry cap per instance (retries do NOT reset on step change). Default: 2. */
   retryLimit?: number;
+  /**
+   * Replaces the default red notice when the current step points at a
+   * `(moduleId, entry)` pair the runtime doesn't resolve to a registered
+   * module+entry. Shells almost always want to brand this.
+   */
+  notFoundComponent?: ComponentType<JourneyOutletNotFoundProps>;
+  /**
+   * Replaces the default red notice when a step component throws.
+   * Receives the raw error so shells can route it through their own
+   * error-reporting pipeline.
+   */
+  errorComponent?: ComponentType<JourneyOutletErrorProps>;
+}
+
+interface JourneyOutletNotFoundProps {
+  readonly moduleId: string;
+  readonly entry: string;
+}
+
+interface JourneyOutletErrorProps {
+  readonly moduleId: string;
+  readonly error: unknown;
 }
 
 interface TerminalOutcome {
@@ -1294,10 +1395,11 @@ Every export you're likely to call, grouped by role.
 
 ### Authoring (`@modular-react/journeys`)
 
-| Export                     | Signature                                                                                   | Purpose                                                                                                       |
-| -------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `defineJourney`            | `<TModules, TState>() => <TInput>(def: JourneyDefinition<TModules, TState, TInput>) => def` | Identity helper with full inference on transitions and state. Curried so `TInput` infers from `initialState`. |
-| `defineJourneyPersistence` | `<TInput, TState>(adapter) => JourneyPersistence<TState>`                                   | Types `keyFor`'s `input` against `TInput`, `load`/`save` against `TState`.                                    |
+| Export                     | Signature                                                                                   | Purpose                                                                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defineJourney`            | `<TModules, TState>() => <TInput>(def: JourneyDefinition<TModules, TState, TInput>) => def` | Identity helper with full inference on transitions and state. Curried so `TInput` infers from `initialState`.                                              |
+| `defineJourneyHandle`      | `<TModules, TState, TInput>(def) => JourneyHandle<string, TInput>`                          | Builds a typed token from a journey definition so modules and shells can call `runtime.start(handle, input)` without importing the journey's runtime code. |
+| `defineJourneyPersistence` | `<TInput, TState>(adapter) => JourneyPersistence<TState>`                                   | Types `keyFor`'s `input` against `TInput`, `load`/`save` against `TState`.                                                                                 |
 
 ### Rendering + context (`@modular-react/journeys`)
 
@@ -1310,32 +1412,81 @@ Every export you're likely to call, grouped by role.
 
 ### Runtime + validation (`@modular-react/journeys`)
 
-| Export                      | Purpose                                                                                                                                                         |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createJourneyRuntime`      | Low-level runtime factory. Normally called by the registry; exported for advanced use (test harnesses, custom hosts).                                           |
-| `validateJourneyContracts`  | Cross-checks a journey's transitions against registered modules. Runs automatically at `resolveManifest()` / `resolve()`; exported for custom validation flows. |
-| `validateJourneyDefinition` | Structural sanity check on a definition's own shape. Runs automatically in `registerJourney`.                                                                   |
-| `JourneyValidationError`    | Aggregated validation error. `.issues: readonly string[]`.                                                                                                      |
-| `JourneyHydrationError`     | Thrown from `hydrate` / async-load when the blob is unusable.                                                                                                   |
+| Export                      | Purpose                                                                                                                                                                                                                                                                      |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createJourneyRuntime`      | Low-level runtime factory. Normally called by the registry; exported for advanced use (test harnesses, custom hosts).                                                                                                                                                        |
+| `validateJourneyContracts`  | Cross-checks a journey's transitions against registered modules. Runs automatically at `resolveManifest()` / `resolve()`; exported for custom validation flows.                                                                                                              |
+| `validateJourneyDefinition` | Structural sanity check on a definition's own shape. Runs automatically in `registerJourney`.                                                                                                                                                                                |
+| `JourneyValidationError`    | Aggregated validation error. `.issues: readonly string[]`.                                                                                                                                                                                                                   |
+| `JourneyHydrationError`     | Thrown from `hydrate` / async-load when the blob is unusable.                                                                                                                                                                                                                |
+| `UnknownJourneyError`       | Thrown from `runtime.start(journeyId, input)` when `journeyId` is not registered. Catch this specifically in shell-state rehydration loops (see [Rehydrating shell-level work](#rehydrating-shell-level-work-tabs-task-queues-drafts)); surface anything else as a real bug. |
 
 ### Runtime methods (the `JourneyRuntime` returned as `manifest.journeys`)
 
-| Method                                  | Description                                                                                                    |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `start(journeyId, input)`               | Start or resume an instance. Idempotent per persistence key. Returns `InstanceId`.                             |
-| `hydrate(journeyId, blob)`              | Explicit read-only hydrate. Persistence-unlinked. Returns `InstanceId`.                                        |
-| `getInstance(id)`                       | Current snapshot of an instance, or `null`. Stable-identity between changes (for `useSyncExternalStore`).      |
-| `listInstances()` / `listDefinitions()` | Enumerate. Useful for admin tooling.                                                                           |
-| `subscribe(id, listener)`               | Subscribe to change notifications for one instance. Returns unsubscribe.                                       |
-| `end(id, reason?)`                      | Force-terminate. Fires `onAbandon` if active; treats `loading` as a direct abort without firing `onAbandon`.   |
-| `forget(id)` / `forgetTerminal()`       | Drop terminal instances from memory. `forget` is a no-op on active/loading; `forgetTerminal` batches them all. |
+| Method                                  | Description                                                                                                                                                    |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `start(handle, input)`                  | **Preferred.** Start or resume an instance via a handle (`defineJourneyHandle`); `input` is type-checked end-to-end. Idempotent per persistence key.           |
+| `start(journeyId, input)`               | String-id form for dynamic dispatch (e.g. navbar `{ kind: "journey-start", journeyId }`). Accepts any `input`.                                                 |
+| `hydrate(journeyId, blob)`              | Explicit read-only hydrate. Persistence-unlinked. Returns `InstanceId`.                                                                                        |
+| `getInstance(id)`                       | Current snapshot of an instance, or `null`. Stable-identity between changes (for `useSyncExternalStore`).                                                      |
+| `listInstances()` / `listDefinitions()` | Enumerate. Useful for admin tooling.                                                                                                                           |
+| `isRegistered(journeyId)`               | Cheap "is this id known?" predicate. Use to filter persisted shell state before calling `start()` — keeps the expected-drop path out of the exception channel. |
+| `subscribe(id, listener)`               | Subscribe to change notifications for one instance. Returns unsubscribe.                                                                                       |
+| `end(id, reason?)`                      | Force-terminate. Fires `onAbandon` if active; treats `loading` as a direct abort without firing `onAbandon`.                                                   |
+| `forget(id)` / `forgetTerminal()`       | Drop terminal instances from memory. `forget` is a no-op on active/loading; `forgetTerminal` batches them all.                                                 |
 
 ### Registration options (passed to `registry.registerJourney`)
 
 ```ts
 interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
+  /**
+   * Fires after every transition, in addition to the definition's
+   * `onTransition`. Useful for shell telemetry that doesn't belong in
+   * journey authoring code.
+   */
   onTransition?: (ev: TransitionEvent) => void;
+  /**
+   * Fires when the journey reaches `{ complete }`. Runs after the
+   * definition-level `onComplete` (both fire). Shell-level completion
+   * analytics belong here.
+   */
+  onComplete?: (ctx: TerminalCtx<TState>, result: unknown) => void;
+  /**
+   * Fires on abort (via `{ abort }` transition, a thrown handler, or
+   * `runtime.end(id)`). Runs after the definition-level `onAbort`.
+   */
+  onAbort?: (ctx: TerminalCtx<TState>, reason: unknown) => void;
+  /**
+   * Overrides the definition's `onAbandon` when `runtime.end(id)` is
+   * called on an active instance. Use to swap abandon behaviour for a
+   * specific deployment (e.g. "save as completed on end-of-shift" vs
+   * the journey author's default "abort").
+   */
+  onAbandon?: (ctx: AbandonCtx) => TransitionResult;
+  /**
+   * Layered on top of the definition-level `onHydrate` — runs **after**
+   * the definition transforms the blob. Useful for shell-level migrations
+   * the journey author doesn't know about (redacting env-specific ids on
+   * load, etc.).
+   */
+  onHydrate?: (blob: SerializedJourney<TState>) => SerializedJourney<TState>;
+  /**
+   * Observation-only error hook. Fires whenever a step component throws
+   * or a transition handler throws for an instance of this journey. The
+   * runtime still aborts / retries according to the outlet's
+   * `onStepError` policy — use this for telemetry, not control flow.
+   */
+  onError?: (err: unknown, ctx: { step: JourneyStep | null }) => void;
+  /**
+   * Optional. Without it, journeys live in memory only — every
+   * `runtime.start()` mints a fresh instance and nothing is written to
+   * storage.
+   */
   persistence?: JourneyPersistence<TState>;
+  /**
+   * Maximum `history` entries retained (oldest dropped). See the caveat
+   * with `allowBack` below.
+   */
   maxHistory?: number;
   /**
    * Optional nav contribution. When set, the journeys plugin emits a
@@ -1414,7 +1565,7 @@ interface SerializedJourney<TState> {
 
 ### Exported types (for annotations and adapters)
 
-`JourneyDefinition`, `TransitionMap`, `EntryTransitions`, `StepSpec`, `TransitionResult`, `ExitCtx`, `JourneyInstance`, `JourneyStatus`, `JourneyStep`, `SerializedJourney`, `JourneyRuntime`, `JourneyRegisterOptions`, `JourneyNavContribution`, `JourneyPersistence`, `ModuleTypeMap`, `EntryInputOf`, `EntryNamesOf`, `ExitNamesOf`, `ExitOutputOf`, `TransitionEvent`, `AbandonCtx`, `TerminalCtx`, `TerminalOutcome`, `InstanceId`, `AnyJourneyDefinition`, `RegisteredJourney`, `MaybePromise`, `JourneyProviderProps`, `JourneyProviderValue`, `JourneyOutletProps`, `JourneyStepErrorPolicy`, `ModuleTabProps`, `ModuleTabExitEvent`, `JourneyDefaultNavItem`, `JourneyNavItemBuilder`, `JourneysPluginOptions`.
+`JourneyDefinition`, `TransitionMap`, `EntryTransitions`, `StepSpec`, `TransitionResult`, `ExitCtx`, `JourneyInstance`, `JourneyStatus`, `JourneyStep`, `JourneyDefinitionSummary`, `SerializedJourney`, `JourneyRuntime`, `JourneyRuntimeOptions`, `JourneyRegisterOptions`, `JourneyNavContribution`, `JourneyPersistence`, `JourneyHandle`, `ModuleTypeMap`, `EntryInputOf`, `EntryNamesOf`, `ExitNamesOf`, `ExitOutputOf`, `TransitionEvent`, `AbandonCtx`, `TerminalCtx`, `TerminalOutcome`, `InstanceId`, `AnyJourneyDefinition`, `RegisteredJourney`, `MaybePromise`, `JourneyProviderProps`, `JourneyProviderValue`, `JourneyOutletProps`, `JourneyOutletNotFoundProps`, `JourneyOutletErrorProps`, `JourneyStepErrorPolicy`, `ModuleTabProps`, `ModuleTabExitEvent`, `JourneyDefaultNavItem`, `JourneyNavItemBuilder`, `JourneysPluginOptions`, `JourneysPluginExtension`.
 
 ## Example projects
 

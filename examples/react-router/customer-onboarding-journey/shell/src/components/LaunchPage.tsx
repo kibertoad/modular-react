@@ -14,12 +14,7 @@ export function LaunchPage() {
       <p style={{ marginBottom: "1rem", fontSize: "0.85rem", color: "#718096" }}>
         <Link to="/">← Home</Link>
       </p>
-      <ModuleRoute
-        module={launcherModule}
-        entry="pickWorkflow"
-        input={{}}
-        routeId="/launch"
-      />
+      <ModuleRoute module={launcherModule} entry="pickWorkflow" input={{}} routeId="/launch" />
     </div>
   );
 }

@@ -53,9 +53,7 @@ export interface RegistryPlugin<
    * accept a `buildNavItem` adapter in their own options (see
    * `journeysPlugin`'s typed factory).
    */
-  readonly contributeNavigation?: (
-    ctx: PluginNavigationCtx,
-  ) => readonly NavigationItemBase[];
+  readonly contributeNavigation?: (ctx: PluginNavigationCtx) => readonly NavigationItemBase[];
 
   /**
    * Contribute React providers to the provider stack. Applied after user

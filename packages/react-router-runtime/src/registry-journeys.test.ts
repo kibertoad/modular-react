@@ -102,7 +102,7 @@ describe("journey-contributed navigation", () => {
     });
     const manifest = registry.resolveManifest();
     expect(manifest.navigation.items).toHaveLength(1);
-    const item = manifest.navigation.items[0] as typeof manifest.navigation.items[number] & {
+    const item = manifest.navigation.items[0] as (typeof manifest.navigation.items)[number] & {
       action: { kind: string; journeyId: string; buildInput?: () => unknown };
     };
     expect(item.label).toBe("Start demo");
@@ -152,7 +152,7 @@ describe("journey-contributed navigation", () => {
     });
     const manifest = registry.resolveManifest();
     expect(manifest.navigation.items).toHaveLength(1);
-    const item = manifest.navigation.items[0] as typeof manifest.navigation.items[number] & {
+    const item = manifest.navigation.items[0] as (typeof manifest.navigation.items)[number] & {
       meta: { analytics: string };
     };
     expect(item.meta.analytics).toBe("launch-demo");

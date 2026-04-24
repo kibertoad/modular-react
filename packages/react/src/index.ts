@@ -67,16 +67,8 @@ export { ModuleErrorBoundary } from "./error-boundary.js";
 // React-specific: module-exit plumbing (hosted by ModuleTab / ModuleRoute;
 // the "step 0" pattern — modules fire exits outside a journey, composition
 // root decides what they mean).
-export {
-  ModuleExitProvider,
-  useModuleExit,
-  useModuleExitDispatcher,
-} from "./module-exit.js";
-export type {
-  ModuleExitEvent,
-  ModuleExitHandler,
-  ModuleExitProviderProps,
-} from "./module-exit.js";
+export { ModuleExitProvider, useModuleExit, useModuleExitDispatcher } from "./module-exit.js";
+export type { ModuleExitEvent, ModuleExitHandler, ModuleExitProviderProps } from "./module-exit.js";
 
 // React-specific: router-mode module host (step 0 outside a workspace tab).
 export { ModuleRoute } from "./module-route.js";

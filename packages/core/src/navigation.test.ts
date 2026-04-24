@@ -32,10 +32,7 @@ describe("buildNavigationManifest", () => {
   describe("extraItems (non-module contributions)", () => {
     it("merges extra items with module items into the same manifest", () => {
       const m = mod([{ label: "ModuleItem", to: "/m" }]);
-      const result = buildNavigationManifest(
-        [m],
-        [{ label: "PluginItem", to: "/p" }],
-      );
+      const result = buildNavigationManifest([m], [{ label: "PluginItem", to: "/p" }]);
       expect(result.items.map((i) => i.label)).toEqual(["ModuleItem", "PluginItem"]);
     });
 

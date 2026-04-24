@@ -1,11 +1,7 @@
 import { createElement } from "react";
 import type { ReactNode } from "react";
 import type { ModuleDescriptor, ModuleEntryProps } from "@modular-react/core";
-import {
-  ModuleErrorBoundary,
-  useModuleExit,
-  type ModuleExitEvent,
-} from "@modular-react/react";
+import { ModuleErrorBoundary, useModuleExit, type ModuleExitEvent } from "@modular-react/react";
 
 /**
  * Exit event fired by a module rendered inside a `<ModuleTab>`.

@@ -57,12 +57,7 @@ describe("ModuleExitProvider / useModuleExit", () => {
     });
     const { getByText } = render(
       <ModuleExitProvider onExit={globalOnExit}>
-        <Trigger
-          moduleId="m1"
-          entry="default"
-          exitName="cancelled"
-          localOnExit={localOnExit}
-        />
+        <Trigger moduleId="m1" entry="default" exitName="cancelled" localOnExit={localOnExit} />
       </ModuleExitProvider>,
     );
     fireEvent.click(getByText("fire"));
@@ -83,9 +78,7 @@ describe("ModuleExitProvider / useModuleExit", () => {
   });
 
   it("is a safe no-op when no provider is mounted", () => {
-    const { getByText } = render(
-      <Trigger moduleId="m1" entry="default" exitName="done" />,
-    );
+    const { getByText } = render(<Trigger moduleId="m1" entry="default" exitName="done" />);
     expect(() => fireEvent.click(getByText("fire"))).not.toThrow();
   });
 

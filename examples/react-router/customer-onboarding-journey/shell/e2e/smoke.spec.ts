@@ -109,7 +109,9 @@ test("/launch renders the workflow launcher without errors", async ({ page }) =>
   await expect(page.getByRole("heading", { name: /Launch a workflow/i })).toBeVisible();
   // All three workflow options render — one button per journey.
   await expect(page.getByRole("button", { name: /^New customer onboarding$/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Existing customer — plan switch$/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^Existing customer — plan switch$/ }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: /^One-off charge \(quick bill\)$/ })).toBeVisible();
 
   assertNoErrors(errors);
@@ -132,9 +134,7 @@ test("launcher dispatches startOnboarding exit into the onboarding journey and r
   assertNoErrors(errors);
 });
 
-test("launcher dispatches startPlanSwitch exit into the plan-switch journey", async ({
-  page,
-}) => {
+test("launcher dispatches startPlanSwitch exit into the plan-switch journey", async ({ page }) => {
   const errors = attachErrorCollectors(page);
   await page.goto("/launch");
 
@@ -149,9 +149,7 @@ test("launcher dispatches startPlanSwitch exit into the plan-switch journey", as
   assertNoErrors(errors);
 });
 
-test("launcher dispatches startQuickBill exit into the quick-bill journey", async ({
-  page,
-}) => {
+test("launcher dispatches startQuickBill exit into the quick-bill journey", async ({ page }) => {
   const errors = attachErrorCollectors(page);
   await page.goto("/launch");
 
@@ -227,9 +225,7 @@ test("clicking the journey-contributed nav button starts the journey and opens a
   assertNoErrors(errors);
 });
 
-test("clicking the journey-contributed nav button twice dedups to one tab", async ({
-  page,
-}) => {
+test("clicking the journey-contributed nav button twice dedups to one tab", async ({ page }) => {
   const errors = attachErrorCollectors(page);
   await page.goto("/");
 

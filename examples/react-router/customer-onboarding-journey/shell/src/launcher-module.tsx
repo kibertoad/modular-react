@@ -85,9 +85,9 @@ function PickWorkflow({ exit }: ModuleEntryProps<PickWorkflowInput, typeof launc
       <header>
         <h2 style={{ margin: 0 }}>Launch a workflow</h2>
         <p style={{ margin: "0.25rem 0 0", color: "#4a5568", maxWidth: "60ch" }}>
-          Pure module · rendered via <code>&lt;ModuleRoute&gt;</code>. Each action below
-          emits a distinct exit; the composition root is the single place that decides
-          which journey the exit maps to.
+          Pure module · rendered via <code>&lt;ModuleRoute&gt;</code>. Each action below emits a
+          distinct exit; the composition root is the single place that decides which journey the
+          exit maps to.
         </p>
       </header>
 

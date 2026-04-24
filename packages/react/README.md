@@ -34,13 +34,7 @@ import { useSlots, useNavigation, useModules } from "@modular-react/react";
 import { ModuleExitProvider, ModuleRoute } from "@modular-react/react";
 
 function LaunchPage() {
-  return (
-    <ModuleRoute
-      module={launcherModule}
-      entry="pickWorkflow"
-      routeId="/launch"
-    />
-  );
+  return <ModuleRoute module={launcherModule} entry="pickWorkflow" routeId="/launch" />;
 }
 
 // Composition root decides which exit becomes which action.
@@ -50,7 +44,7 @@ function LaunchPage() {
   }}
 >
   <RouterProvider router={router} />
-</ModuleExitProvider>
+</ModuleExitProvider>;
 ```
 
 `<JourneyProvider>` from `@modular-react/journeys` composes over
