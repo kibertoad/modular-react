@@ -195,6 +195,54 @@ test("clicking the same launcher button twice dedups to one journey tab", async 
   assertNoErrors(errors);
 });
 
+test("top navbar renders a module-contributed link and a journey-contributed button", async ({
+  page,
+}) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/");
+
+  // Module-contributed nav entry — plain `to`, renders as a Link.
+  await expect(page.getByRole("link", { name: /^Workflow launcher$/ })).toBeVisible();
+  // Journey-contributed nav entry — carries an `action`, renders as a button
+  // (the shell's TopNav dispatcher differentiates on `action` presence).
+  await expect(page.getByRole("button", { name: /^Start a quick bill$/ })).toBeVisible();
+
+  assertNoErrors(errors);
+});
+
+test("clicking the journey-contributed nav button starts the journey and opens a tab", async ({
+  page,
+}) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /^Start a quick bill$/ }).click();
+
+  // The nav dispatcher calls runtime.start(journeyId, buildInput()) and adds
+  // a journey tab titled by the shell's `titleForAction` (customer id C-4).
+  await expect(page.getByRole("button", { name: /^Quick bill · C-4/ })).toBeVisible();
+  // Quick-bill lands on billing/collect — same terminal UI as the /launch variant.
+  await expect(page.getByRole("heading", { name: /Collect payment/i })).toBeVisible();
+
+  assertNoErrors(errors);
+});
+
+test("clicking the journey-contributed nav button twice dedups to one tab", async ({
+  page,
+}) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /^Start a quick bill$/ }).click();
+  await expect(page.getByRole("button", { name: /^Quick bill · C-4/ })).toHaveCount(1);
+  // Close the tab back to the launcher surface would require navigating
+  // around — simpler: click the nav button again and verify still 1 tab.
+  await page.getByRole("button", { name: /^Start a quick bill$/ }).click();
+  await expect(page.getByRole("button", { name: /^Quick bill · C-4/ })).toHaveCount(1);
+
+  assertNoErrors(errors);
+});
+
 test("rehydration drops tabs whose journey is no longer registered", async ({ page }) => {
   const errors = attachErrorCollectors(page);
 

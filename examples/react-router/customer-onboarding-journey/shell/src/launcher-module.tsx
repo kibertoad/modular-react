@@ -141,6 +141,12 @@ export const launcherModule = defineModule({
     name: "Workflow launcher",
     description: "Step-0 workflow picker — routes the user into one of several journeys.",
   },
+  navigation: [
+    // Plain-URL nav entry — renders in the TopNav alongside the
+    // journey-contributed "Start a quick bill" button. Lets the example show
+    // both shapes (link + action) in the same navbar renderer.
+    { label: "Workflow launcher", to: "/launch", order: 1 },
+  ],
   exitPoints: launcherExits,
   entryPoints: {
     pickWorkflow: defineEntry({

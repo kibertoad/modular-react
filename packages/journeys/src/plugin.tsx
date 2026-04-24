@@ -1,5 +1,10 @@
 import type { ComponentType, ReactNode } from "react";
-import type { JourneyRuntime, ModuleTypeMap, RegistryPlugin } from "@modular-react/core";
+import type {
+  JourneyRuntime,
+  ModuleTypeMap,
+  NavigationItemBase,
+  RegistryPlugin,
+} from "@modular-react/core";
 import { createJourneyRuntime } from "./runtime.js";
 import {
   JourneyValidationError,
@@ -10,6 +15,7 @@ import { JourneyProvider } from "./provider.js";
 import type {
   AnyJourneyDefinition,
   JourneyDefinition,
+  JourneyNavContribution,
   JourneyRegisterOptions,
   RegisteredJourney,
 } from "./types.js";
@@ -26,16 +32,56 @@ export interface JourneysPluginExtension {
    * module-level contracts are validated at `resolveManifest()` /
    * `resolve()` time.
    *
-   * `options.persistence` is typed against the journey's state — pass a
-   * typed definition and the persistence adapter is checked end-to-end.
+   * `options.persistence` is typed against the journey's state, and
+   * `options.nav.buildInput` is typed against the journey's input — pass a
+   * typed definition and both are checked end-to-end.
    */
   registerJourney<TModules extends ModuleTypeMap, TState, TInput>(
     definition: JourneyDefinition<TModules, TState, TInput>,
-    options?: JourneyRegisterOptions<TState>,
+    options?: JourneyRegisterOptions<TState, TInput>,
   ): void;
 }
 
-export interface JourneysPluginOptions {
+/**
+ * Default shape the journeys plugin emits for each `nav`-carrying journey.
+ * When {@link JourneysPluginOptions.buildNavItem} is provided, the plugin
+ * hands this default (plus the journey's id and buildInput factory) to the
+ * adapter so apps can reshape the item into their narrowed `TNavItem`.
+ */
+export interface JourneyDefaultNavItem extends NavigationItemBase {
+  readonly label: string;
+  /**
+   * Always empty for a journey launcher — the dispatchable action lives in
+   * {@link JourneyDefaultNavItem.action}, so there is no URL to follow. An
+   * empty string keeps the structural `NavigationItemBase.to` satisfied
+   * without suggesting the shell should treat this item as a link.
+   */
+  readonly to: "";
+  readonly icon?: string | ComponentType<{ className?: string }>;
+  readonly group?: string;
+  readonly order?: number;
+  readonly hidden?: boolean;
+  readonly meta?: unknown;
+  readonly action: {
+    readonly kind: "journey-start";
+    readonly journeyId: string;
+    readonly buildInput?: (ctx?: unknown) => unknown;
+  };
+}
+
+/**
+ * Signature for the optional typed adapter that reshapes the plugin's
+ * default nav item into the app's narrowed `TNavItem`. The adapter is
+ * called once per `nav`-carrying journey at manifest time.
+ */
+export type JourneyNavItemBuilder<TNavItem extends NavigationItemBase> = (
+  defaults: JourneyDefaultNavItem,
+  raw: JourneyNavContribution<unknown> & { readonly journeyId: string },
+) => TNavItem;
+
+export interface JourneysPluginOptions<
+  TNavItem extends NavigationItemBase = JourneyDefaultNavItem,
+> {
   /**
    * Enable verbose transition / rollback logging in the runtime. Defaults to
    * `false`; plugins propagate the registry-level debug flag when set.
@@ -53,6 +99,16 @@ export interface JourneysPluginOptions {
     readonly output: unknown;
     readonly tabId?: string;
   }) => void;
+  /**
+   * Optional adapter that reshapes the plugin's default nav item into the
+   * app's narrowed `TNavItem`. Apps that use a typed `NavigationItem`
+   * alias (typed label union, typed action union, typed meta bag) should
+   * supply this so contributed items land in `manifest.navigation` with
+   * the correct narrowed type. When omitted, the plugin emits items as
+   * {@link JourneyDefaultNavItem} and the framework widens them to
+   * `TNavItem` at the assembly boundary.
+   */
+  readonly buildNavItem?: JourneyNavItemBuilder<TNavItem>;
 }
 
 /**
@@ -72,8 +128,8 @@ export interface JourneysPluginOptions {
  * `createRegistry()` calls causes them to share that list. Call
  * `journeysPlugin()` once per registry.
  */
-export function journeysPlugin(
-  options: JourneysPluginOptions = {},
+export function journeysPlugin<TNavItem extends NavigationItemBase = JourneyDefaultNavItem>(
+  options: JourneysPluginOptions<TNavItem> = {},
 ): RegistryPlugin<"journeys", JourneysPluginExtension, JourneyRuntime> {
   const registered: RegisteredJourney[] = [];
 
@@ -84,7 +140,7 @@ export function journeysPlugin(
       return {
         registerJourney<TModules extends ModuleTypeMap, TState, TInput>(
           definition: JourneyDefinition<TModules, TState, TInput>,
-          regOpts?: JourneyRegisterOptions<TState>,
+          regOpts?: JourneyRegisterOptions<TState, TInput>,
         ): void {
           const def = definition as AnyJourneyDefinition;
           const issues = validateJourneyDefinition(def);
@@ -110,6 +166,39 @@ export function journeysPlugin(
         modules: moduleDescriptors,
         debug: options.debug ?? debug,
       });
+    },
+
+    contributeNavigation() {
+      const items: NavigationItemBase[] = [];
+      for (const reg of registered) {
+        const nav = reg.options?.nav;
+        if (!nav) continue;
+        const defaults: JourneyDefaultNavItem = {
+          label: nav.label,
+          to: "",
+          ...(nav.icon !== undefined ? { icon: nav.icon } : {}),
+          ...(nav.group !== undefined ? { group: nav.group } : {}),
+          ...(nav.order !== undefined ? { order: nav.order } : {}),
+          ...(nav.hidden !== undefined ? { hidden: nav.hidden } : {}),
+          ...(nav.meta !== undefined ? { meta: nav.meta } : {}),
+          action: {
+            kind: "journey-start",
+            journeyId: reg.definition.id,
+            ...(nav.buildInput ? { buildInput: nav.buildInput } : {}),
+          },
+        };
+        if (options.buildNavItem) {
+          items.push(
+            options.buildNavItem(defaults, {
+              ...(nav as JourneyNavContribution<unknown>),
+              journeyId: reg.definition.id,
+            }),
+          );
+        } else {
+          items.push(defaults);
+        }
+      }
+      return items;
     },
 
     providers({ runtime }) {

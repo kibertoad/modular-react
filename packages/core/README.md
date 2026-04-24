@@ -32,7 +32,7 @@ import type { ModuleDescriptor, Store } from "@modular-react/core";
 
 ## Generic NavigationItem
 
-`NavigationItem` has three optional generics that let hosts opt into stricter typing — typed i18n labels, dynamic-href context, and an app-owned `meta` bag:
+`NavigationItem` has four optional generics that let hosts opt into stricter typing — typed i18n labels, dynamic-href context, an app-owned `meta` bag, and an app-owned dispatchable `action` union:
 
 ```typescript
 import type { NavigationItem } from "@modular-react/core";
@@ -50,16 +50,25 @@ interface NavContext {
 // Defined by the host app — whatever set of permission actions the shell
 // gates nav items on. The library doesn't care what shape it is; `meta` is
 // opaque.
-type Action = "managePortalRequests" | "viewReports";
+type Permission = "managePortalRequests" | "viewReports";
 
 interface NavMeta {
-  action?: Action;
+  permission?: Permission;
   badge?: "beta" | "new";
 }
 
+// App-owned action union — shell's navbar dispatcher switches on `kind`.
+// Plugins can publish suggested shapes (e.g. the journeys plugin's
+// `{ kind: "journey-start", ... }`); apps merge them into this union.
+type NavAction =
+  | { kind: "open-module"; moduleId: string; entry: string; input?: unknown }
+  | { kind: "journey-start"; journeyId: string; buildInput?: (ctx?: unknown) => unknown };
+
 // Alias once in app-shared and use everywhere
-export type AppNavItem = NavigationItem<ParseKeys, NavContext, NavMeta>;
+export type AppNavItem = NavigationItem<ParseKeys, NavContext, NavMeta, NavAction>;
 ```
+
+`action` defaults to `never`, so apps that don't need dispatchable nav intents pay no cost — the field is absent from the item surface.
 
 Thread through `defineModule`:
 

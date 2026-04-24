@@ -78,6 +78,7 @@ export type {
   PluginExtendCtx,
   PluginValidateCtx,
   PluginResolveCtx,
+  PluginNavigationCtx,
   PluginProvidersCtx,
   PluginExtensionsOf,
   PluginRuntimesOf,

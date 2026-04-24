@@ -25,6 +25,7 @@ import { TabStrip } from "./components/TabStrip.js";
 import { TabContent } from "./components/TabContent.js";
 import { Home } from "./components/Home.js";
 import { LaunchPage } from "./components/LaunchPage.js";
+import { TopNav, type NavAction } from "./components/TopNav.js";
 import { launcherModule } from "./launcher-module.js";
 
 const tabsStore = createWorkspaceTabsStore();
@@ -124,6 +125,37 @@ function handleModuleExit(ev: ModuleExitEvent): void {
   }
 }
 
+// Dispatcher for navbar-level actions. Items contributed by the journeys
+// plugin arrive here as `{ kind: "journey-start", journeyId, buildInput }` —
+// this is the single place that knows which journey id starts which
+// journey, mirroring the exit → journey wiring above. Modules and journey
+// definitions stay agnostic of the navbar.
+function dispatchNavAction(action: NavAction): void {
+  if (!journeyRuntime) return;
+  if (action.kind !== "journey-start") return;
+  const input = action.buildInput?.();
+  const customerId = (input as { customerId?: string } | undefined)?.customerId;
+  if (customerId && dedupJourneyTab(action.journeyId, customerId)) {
+    navigateHome?.();
+    return;
+  }
+  const instanceId = journeyRuntime.start(action.journeyId, input);
+  workspace.addJourneyTab({
+    instanceId,
+    journeyId: action.journeyId,
+    input,
+    title: titleForAction(action.journeyId, customerId),
+  });
+  navigateHome?.();
+}
+
+function titleForAction(journeyId: string, customerId: string | undefined): string {
+  if (journeyId === quickBillHandle.id) {
+    return `Quick bill · ${customerId ?? "launcher"}`;
+  }
+  return `Launched · ${journeyId}`;
+}
+
 const registry = createRegistry<AppDependencies, AppSlots>({
   services: { workspace },
   slots: { commands: [] },
@@ -153,7 +185,18 @@ registry.registerJourney(customerOnboardingJourney, {
   },
 });
 registry.registerJourney(planSwitchJourney);
-registry.registerJourney(quickBillJourney);
+// Journey-contributed nav: the quick-bill journey surfaces itself as a
+// navbar entry so the shell can start it without a shadow module or a
+// bespoke Home button. `buildInput` produces the journey's input at click
+// time (typed against `QuickBillInput`); the navbar dispatcher hands it
+// straight to `runtime.start(handle, input)`.
+registry.registerJourney(quickBillJourney, {
+  nav: {
+    label: "Start a quick bill",
+    order: 10,
+    buildInput: () => ({ customerId: "C-4", amount: 49 }),
+  },
+});
 
 const { App, moduleDescriptors, journeys, router } = registry.resolve({
   rootComponent: Shell,
@@ -219,6 +262,7 @@ navigateHome = () => {
 function Shell() {
   return (
     <RootLayout>
+      <TopNav onAction={dispatchNavAction} />
       <TabStrip tabsStore={tabsStore} workspace={workspace} />
       <Outlet />
     </RootLayout>

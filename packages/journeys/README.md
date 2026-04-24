@@ -1333,12 +1333,46 @@ Every export you're likely to call, grouped by role.
 ### Registration options (passed to `registry.registerJourney`)
 
 ```ts
-interface JourneyRegisterOptions<TState = unknown> {
+interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
   onTransition?: (ev: TransitionEvent) => void;
   persistence?: JourneyPersistence<TState>;
   maxHistory?: number;
+  /**
+   * Optional nav contribution. When set, the journeys plugin emits a
+   * navigation item for this journey so pure launchers don't need a
+   * shadow module to host them. The contributed item carries
+   * `action: { kind: "journey-start", journeyId, buildInput }`; the
+   * shell's navbar dispatcher starts the journey on click.
+   */
+  nav?: JourneyNavContribution<TInput>;
+}
+
+interface JourneyNavContribution<TInput = unknown> {
+  label: string;
+  icon?: string | React.ComponentType<{ className?: string }>;
+  group?: string;
+  order?: number;
+  hidden?: boolean;
+  meta?: unknown;
+  /** Builds the journey's `input` at click time. Typed against `TInput`. */
+  buildInput?: (ctx?: unknown) => TInput;
 }
 ```
+
+**Journey-contributed nav.** Set `options.nav` on `registerJourney` when the journey is reachable from a top-level navbar entry without a dedicated launcher module. The journeys plugin collects every `nav` block at manifest time and merges them into `manifest.navigation` alongside module-contributed items. Items the plugin emits carry an `action: { kind: "journey-start", journeyId, buildInput }` — the framework stays agnostic about how the shell dispatches the action; the shell's navbar renderer switches on `action` to start the journey via `runtime.start(journeyId, buildInput?.())`.
+
+Apps with a narrowed `TNavItem` (typed i18n labels, typed action union, typed meta bag) should supply a `buildNavItem` adapter on `journeysPlugin({ buildNavItem })` to reshape the plugin's default item into the app-narrowed type:
+
+```ts
+journeysPlugin<AppNavItem>({
+  buildNavItem: (defaults, raw) => ({
+    ...defaults,
+    meta: { analytics: `launch-${raw.journeyId}` },
+  }),
+});
+```
+
+See the React Router example shell (`examples/react-router/customer-onboarding-journey/shell/`) for an end-to-end wiring: the `quick-bill` journey surfaces itself as the navbar "Start a quick bill" button; the shell's `TopNav` component renders items based on whether they carry an `action` or a plain `to`.
 
 ### Serialized shape (persistence)
 
@@ -1380,7 +1414,7 @@ interface SerializedJourney<TState> {
 
 ### Exported types (for annotations and adapters)
 
-`JourneyDefinition`, `TransitionMap`, `EntryTransitions`, `StepSpec`, `TransitionResult`, `ExitCtx`, `JourneyInstance`, `JourneyStatus`, `JourneyStep`, `SerializedJourney`, `JourneyRuntime`, `JourneyRegisterOptions`, `JourneyPersistence`, `ModuleTypeMap`, `EntryInputOf`, `EntryNamesOf`, `ExitNamesOf`, `ExitOutputOf`, `TransitionEvent`, `AbandonCtx`, `TerminalCtx`, `TerminalOutcome`, `InstanceId`, `AnyJourneyDefinition`, `RegisteredJourney`, `MaybePromise`, `JourneyProviderProps`, `JourneyProviderValue`, `JourneyOutletProps`, `JourneyStepErrorPolicy`, `ModuleTabProps`, `ModuleTabExitEvent`.
+`JourneyDefinition`, `TransitionMap`, `EntryTransitions`, `StepSpec`, `TransitionResult`, `ExitCtx`, `JourneyInstance`, `JourneyStatus`, `JourneyStep`, `SerializedJourney`, `JourneyRuntime`, `JourneyRegisterOptions`, `JourneyNavContribution`, `JourneyPersistence`, `ModuleTypeMap`, `EntryInputOf`, `EntryNamesOf`, `ExitNamesOf`, `ExitOutputOf`, `TransitionEvent`, `AbandonCtx`, `TerminalCtx`, `TerminalOutcome`, `InstanceId`, `AnyJourneyDefinition`, `RegisteredJourney`, `MaybePromise`, `JourneyProviderProps`, `JourneyProviderValue`, `JourneyOutletProps`, `JourneyStepErrorPolicy`, `ModuleTabProps`, `ModuleTabExitEvent`, `JourneyDefaultNavItem`, `JourneyNavItemBuilder`, `JourneysPluginOptions`.
 
 ## Example projects
 

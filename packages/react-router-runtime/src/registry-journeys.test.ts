@@ -87,3 +87,85 @@ describe("registry.registerJourney + resolveManifest", () => {
     );
   });
 });
+
+describe("journey-contributed navigation", () => {
+  it("emits a nav item for each journey registered with a nav block", () => {
+    const registry = createRegistry({}).use(journeysPlugin());
+    registry.register(moduleA);
+    registry.registerJourney(journey, {
+      nav: {
+        label: "Start demo",
+        group: "workflows",
+        order: 10,
+        buildInput: () => ({ id: "seed" }),
+      },
+    });
+    const manifest = registry.resolveManifest();
+    expect(manifest.navigation.items).toHaveLength(1);
+    const item = manifest.navigation.items[0] as typeof manifest.navigation.items[number] & {
+      action: { kind: string; journeyId: string; buildInput?: () => unknown };
+    };
+    expect(item.label).toBe("Start demo");
+    expect(item.to).toBe("");
+    expect(item.group).toBe("workflows");
+    expect(item.order).toBe(10);
+    expect(item.action.kind).toBe("journey-start");
+    expect(item.action.journeyId).toBe("demo");
+    expect(typeof item.action.buildInput).toBe("function");
+    expect((item.action.buildInput as () => unknown)()).toEqual({ id: "seed" });
+  });
+
+  it("journeys without a nav block contribute nothing", () => {
+    const registry = createRegistry({}).use(journeysPlugin());
+    registry.register(moduleA);
+    registry.registerJourney(journey);
+    const manifest = registry.resolveManifest();
+    expect(manifest.navigation.items).toHaveLength(0);
+  });
+
+  it("module-contributed nav and journey-contributed nav coexist and sort together", () => {
+    const modWithNav = defineModule({
+      id: "home",
+      version: "1.0.0",
+      navigation: [{ label: "Home", to: "/", order: 1 }],
+    });
+    const registry = createRegistry({}).use(journeysPlugin());
+    registry.register(moduleA);
+    registry.register(modWithNav);
+    registry.registerJourney(journey, { nav: { label: "Start demo", order: 2 } });
+    const manifest = registry.resolveManifest();
+    expect(manifest.navigation.items.map((i) => i.label)).toEqual(["Home", "Start demo"]);
+  });
+
+  it("buildNavItem adapter reshapes the default item into the app's narrowed TNavItem", () => {
+    const registry = createRegistry({}).use(
+      journeysPlugin({
+        buildNavItem: (defaults, raw) => ({
+          ...defaults,
+          meta: { analytics: `launch-${raw.journeyId}` },
+        }),
+      }),
+    );
+    registry.register(moduleA);
+    registry.registerJourney(journey, {
+      nav: { label: "Start demo" },
+    });
+    const manifest = registry.resolveManifest();
+    expect(manifest.navigation.items).toHaveLength(1);
+    const item = manifest.navigation.items[0] as typeof manifest.navigation.items[number] & {
+      meta: { analytics: string };
+    };
+    expect(item.meta.analytics).toBe("launch-demo");
+  });
+
+  it("hidden contributions still land in manifest.items (shell may still filter them)", () => {
+    const registry = createRegistry({}).use(journeysPlugin());
+    registry.register(moduleA);
+    registry.registerJourney(journey, {
+      nav: { label: "Hidden launcher", hidden: true },
+    });
+    const manifest = registry.resolveManifest();
+    expect(manifest.navigation.items).toHaveLength(1);
+    expect(manifest.navigation.items[0].hidden).toBe(true);
+  });
+});

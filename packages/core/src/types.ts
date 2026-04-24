@@ -293,7 +293,7 @@ type ExitOutputArg<S> =
 /**
  * A single navigation item contributed by a module.
  *
- * Three generics let the host opt into stricter typing:
+ * Four generics let the host opt into stricter typing:
  *
  * - `TLabel extends string = string` — tighten `label` to an i18n key union
  *   so typos fail at compile time. Widens to `string` by default for
@@ -311,6 +311,13 @@ type ExitOutputArg<S> =
  *   `unknown` / intersect with your own shape, or alias
  *   `NavigationItem<…, …, MyMeta>` once and use that throughout.
  *
+ * - `TAction = never` — app-owned dispatchable action shape. Nav items that
+ *   should fire a non-navigation intent (start a journey, open a module as a
+ *   tab, raise a modal) carry the intent here. The library treats `action`
+ *   as opaque, exactly like `meta` — the shell's navbar renderer switches on
+ *   `action.kind` and dispatches. Defaults to `never`, which removes the
+ *   field from the surface.
+ *
  * Typical local alias in a host app:
  *
  * ```ts
@@ -318,12 +325,20 @@ type ExitOutputArg<S> =
  * import type { ParseKeys } from "i18next"
  *
  * interface NavCtx { workspaceId: string }
- * interface NavMeta { action?: Action; badge?: "beta" | "new" }
+ * interface NavMeta { badge?: "beta" | "new" }
+ * type NavAction =
+ *   | { kind: "open-module"; moduleId: string; entry: string }
+ *   | { kind: "journey-start"; journeyId: string; buildInput?: (ctx: NavCtx) => unknown }
  *
- * export type AppNavItem = NavigationItem<ParseKeys, NavCtx, NavMeta>
+ * export type AppNavItem = NavigationItem<ParseKeys, NavCtx, NavMeta, NavAction>
  * ```
  */
-export interface NavigationItem<TLabel extends string = string, TContext = void, TMeta = unknown> {
+export interface NavigationItem<
+  TLabel extends string = string,
+  TContext = void,
+  TMeta = unknown,
+  TAction = never,
+> {
   /** Display label — narrow `TLabel` to an i18n key union for compile-time validation. */
   readonly label: TLabel;
 
@@ -359,6 +374,16 @@ export interface NavigationItem<TLabel extends string = string, TContext = void,
    * pattern).
    */
   readonly meta?: TMeta;
+
+  /**
+   * App-owned dispatchable action. Use this instead of overloading `meta`
+   * when a nav entry should fire an intent at click time (e.g. start a
+   * journey, open a module as a tab). The library treats `action` as
+   * opaque — the shell's navbar renderer switches on `action.kind` and
+   * dispatches. Defaulted to `never`, so the field is absent from the
+   * surface until an app opts in via `TAction`.
+   */
+  readonly action?: TAction;
 }
 
 /**
@@ -379,6 +404,7 @@ export interface NavigationItemBase {
   readonly order?: number;
   readonly hidden?: boolean;
   readonly meta?: unknown;
+  readonly action?: unknown;
 }
 
 export interface ModuleLifecycle<

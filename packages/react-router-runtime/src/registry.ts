@@ -278,7 +278,21 @@ export function createRegistry<
       onRegisterRan = true;
     }
 
-    const navigation = buildNavigationManifest<TNavItem>(modules);
+    // Collect plugin-contributed nav items before building the manifest so
+    // they participate in the same sort / group logic as module items.
+    // Plugins only see the structural `NavigationItemBase` bound, so the
+    // returned items are widened to `TNavItem` at the assembly boundary —
+    // plugins that need narrowed typing accept their own `buildNavItem`
+    // adapter (see `journeysPlugin`).
+    const pluginNavItems: NavigationItemBase[] = [];
+    for (const plugin of plugins) {
+      const contributed = plugin.contributeNavigation?.({ modules });
+      if (contributed && contributed.length > 0) pluginNavItems.push(...contributed);
+    }
+    const navigation = buildNavigationManifest<TNavItem>(
+      modules,
+      pluginNavItems as unknown as readonly TNavItem[],
+    );
     const slots = buildSlotsManifest<TSlots>(modules, config.slots);
     const dynamicSlotFactories = collectDynamicSlotFactories(modules as ModuleDescriptor[]);
     const slotFilter = options.slotFilter as SlotFilter | undefined;

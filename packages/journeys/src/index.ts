@@ -32,7 +32,12 @@ export type { JourneyProviderProps, JourneyProviderValue } from "./provider.js";
 // Plugin — pass `journeysPlugin()` to `createRegistry({ plugins: [...] })`
 // to enable journey registration and outlet rendering.
 export { journeysPlugin } from "./plugin.js";
-export type { JourneysPluginOptions, JourneysPluginExtension } from "./plugin.js";
+export type {
+  JourneysPluginOptions,
+  JourneysPluginExtension,
+  JourneyDefaultNavItem,
+  JourneyNavItemBuilder,
+} from "./plugin.js";
 
 // Handles — export a handle from each journey package so modules and shells
 // open journeys with typed `input` without importing the journey's runtime.
@@ -52,6 +57,7 @@ export type {
   JourneyDefinition,
   JourneyDefinitionSummary,
   JourneyInstance,
+  JourneyNavContribution,
   JourneyPersistence,
   JourneyRegisterOptions,
   JourneyRuntime,

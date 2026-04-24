@@ -18,6 +18,7 @@ Modules are journey-unaware: each declares typed entry points and typed exit poi
 - `WorkspaceActions.addJourneyTab(...)` for tab bookkeeping after the caller mints an instance via `useJourneyContext().runtime.start(...)`. `openTab({ kind: 'module', ... })` handles plain module tabs; `openModuleTab` is a `@deprecated` shim.
 - **Multiple cohesive journeys in one package** — `customer-onboarding`, `plan-switch`, and `quick-bill` all live under `journeys/customer-onboarding/` (each in its own file). Nothing forces one-journey-per-package; a team-owned, same-domain package keeps related journeys together.
 - **Router-mode "step 0" with `<ModuleRoute>`** — visit `/launch` to see a launcher module render standalone as a route element. Clicking a workflow option emits a typed exit; the shell's `onModuleExit` dispatcher is the single place that knows which exit maps to which journey. Same pattern works for `<ModuleTab>` in workspace-mode shells.
+- **Journey-contributed nav** — the `quick-bill` journey registers itself with a `nav` block on `registerJourney(...)`, and the journeys plugin merges the item into the navigation manifest tagged with `action: { kind: "journey-start", ... }`. The shell's `TopNav` component (in `components/TopNav.tsx`) renders the manifest: items with plain `to` become `<Link>`s (e.g. the launcher module's `/launch` entry); items carrying an `action` become buttons that flow through the same `dispatchNavAction` site that the rest of the shell uses for journey start-up. No shadow module is needed to host a pure launcher.
 
 ## Layout
 
@@ -34,6 +35,7 @@ journeys/
     quick-bill.ts              billing only (one-step charge)
 shell/                       minimal tabbed shell + localStorage persistence
   launcher-module.tsx          step-0 workflow picker (renders at /launch)
+  components/TopNav.tsx        renders journey-contributed + module-contributed nav
 ```
 
 ## Running

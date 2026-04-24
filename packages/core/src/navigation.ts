@@ -12,9 +12,14 @@ import type { NavigationManifest, NavigationGroup } from "./runtime-types.js";
  * labels, typed dynamic-href context, typed meta) are preserved end-to-end —
  * call `buildNavigationManifest<AppNavItem>([...])` or let inference pick it
  * up from the module list.
+ *
+ * Pass `extraItems` to merge additional items from non-module sources
+ * (e.g. plugin-contributed items via `RegistryPlugin.contributeNavigation`).
+ * They participate in the same sort/group logic as module items.
  */
 export function buildNavigationManifest<TNavItem extends NavigationItemBase = NavigationItem>(
   modules: readonly AnyModuleDescriptor<TNavItem>[],
+  extraItems?: readonly TNavItem[],
 ): NavigationManifest<TNavItem> {
   const allItems: TNavItem[] = [];
 
@@ -22,6 +27,10 @@ export function buildNavigationManifest<TNavItem extends NavigationItemBase = Na
     if (mod.navigation) {
       allItems.push(...mod.navigation);
     }
+  }
+
+  if (extraItems && extraItems.length > 0) {
+    allItems.push(...extraItems);
   }
 
   // Sort by order (lower first), then by label lexicographically.

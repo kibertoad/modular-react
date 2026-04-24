@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
-import type { ModuleDescriptor } from "./types.js";
+import type { ModuleDescriptor, NavigationItemBase } from "./types.js";
 
 /**
  * Plugin contract — plugins extend the registry without forcing runtime
@@ -43,6 +43,21 @@ export interface RegistryPlugin<
   readonly onResolve?: (ctx: PluginResolveCtx) => TRuntime;
 
   /**
+   * Contribute extra navigation items into the manifest. The returned items
+   * are merged with module-contributed nav at `buildNavigationManifest`
+   * time and participate in the same ordering / grouping logic.
+   *
+   * Plugins don't know the app's narrowed `TNavItem`, so the return type is
+   * the structural `NavigationItemBase` bound — the assembly site widens.
+   * Plugins that want to respect a host's narrowed nav-item shape should
+   * accept a `buildNavItem` adapter in their own options (see
+   * `journeysPlugin`'s typed factory).
+   */
+  readonly contributeNavigation?: (
+    ctx: PluginNavigationCtx,
+  ) => readonly NavigationItemBase[];
+
+  /**
    * Contribute React providers to the provider stack. Applied after user
    * providers; first element is outermost.
    */
@@ -64,6 +79,10 @@ export interface PluginResolveCtx {
   readonly modules: readonly ModuleDescriptor<any, any, any, any>[];
   readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
   readonly debug: boolean;
+}
+
+export interface PluginNavigationCtx {
+  readonly modules: readonly ModuleDescriptor<any, any, any, any>[];
 }
 
 export interface PluginProvidersCtx<TRuntime> {
