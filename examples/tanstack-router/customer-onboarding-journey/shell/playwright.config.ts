@@ -18,7 +18,7 @@ export default defineConfig({
     // built workspace packages served by Vite dev, so vite's dep-optimizer
     // pre-bundles the runtime and we catch duplicate-module regressions
     // (see packages/journeys/src/runtime.ts `getInternals`).
-    command: `node node_modules/vite/bin/vite.js --port ${PORT} --strictPort`,
+    command: `pnpm exec vite --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}/`,
     reuseExistingServer: false,
     timeout: 60_000,

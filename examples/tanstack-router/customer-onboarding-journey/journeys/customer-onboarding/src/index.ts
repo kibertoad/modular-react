@@ -141,7 +141,16 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
   },
 
   onAbandon: ({ step, state }) => ({
-    abort: { reason: "abandoned", at: step?.moduleId, state },
+    // Project only non-identifying fields — the full state carries `customerId`,
+    // and shell-level analytics sinks (Sentry tags, event logs) would exfiltrate
+    // it by default if it rode along in the abort payload.
+    abort: {
+      reason: "abandoned",
+      at: step?.moduleId,
+      hint: state.hint,
+      selectedPlan: state.selectedPlan,
+      outcome: state.outcome,
+    },
   }),
 
   onHydrate: (blob) => {

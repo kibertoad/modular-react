@@ -14,12 +14,12 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}`,
   },
   webServer: {
-    // Run the shell exactly the way a developer would after `pnpm build` —
-    // against the built workspace packages served by Vite's dev server.
-    // That's the scenario Markus reported: vite's dep-optimizer pre-bundles
-    // the runtime, and if journeys ever leaks into that pre-bundle the
-    // shell and runtime end up with duplicate module copies.
-    command: `node node_modules/vite/bin/vite.js --port ${PORT} --strictPort`,
+    // Run the shell on Vite's dev server — the same path the duplicate-module
+    // regression surfaced through (Markus reported it via
+    // `pnpm --filter customer-onboarding-shell dev`). The dev dep-optimizer
+    // pre-bundles the runtime, and if journeys ever leaks into that pre-bundle
+    // the shell and runtime end up with duplicate module copies.
+    command: `pnpm exec vite --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}/`,
     reuseExistingServer: false,
     timeout: 60_000,

@@ -19,10 +19,7 @@ function attachErrorCollectors(page: Page) {
   });
   page.on("console", (msg: ConsoleMessage) => {
     if (msg.type() !== "error") return;
-    const text = msg.text();
-    // React's dev build yells loudly about DOM hydration warnings in StrictMode;
-    // keep only real failures. Extend if the example adds known-noisy logs.
-    consoleErrors.push(text);
+    consoleErrors.push(msg.text());
   });
   return { pageErrors, consoleErrors };
 }

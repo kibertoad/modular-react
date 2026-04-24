@@ -19,7 +19,7 @@ Modules are journey-unaware: each declares typed entry points and typed exit poi
 
 ## Layout
 
-```
+```text
 app-shared/                  AppDependencies, AppSlots, WorkspaceActions
 modules/
   profile/                   entry: review

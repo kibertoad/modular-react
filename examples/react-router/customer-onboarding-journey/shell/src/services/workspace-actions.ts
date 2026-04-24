@@ -8,9 +8,16 @@ import type {
 } from "@example-onboarding/app-shared";
 import type { WorkspaceTabsState } from "../stores/workspace-tabs.js";
 
-let nextTabId = 1;
 function mintTabId(kind: "module" | "journey", key: string): string {
-  return `${kind}:${key}:${nextTabId++}`;
+  // Must be unique across reloads, because persisted tabs carry their old ids
+  // into the rehydrated store. A monotonic in-memory counter would reset to 1
+  // on reload and collide with persisted tabs (the store then silently
+  // activates the existing tab instead of opening a new one).
+  const cryptoObj = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  const suffix = cryptoObj?.randomUUID
+    ? cryptoObj.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${kind}:${key}:${suffix}`;
 }
 
 /**
