@@ -132,12 +132,7 @@ Each module owns its route, renders the shared component with its own config, an
 // modules/contentful/src/index.tsx
 import { defineModule } from "@react-router-modules/core";
 import type { RouteObject } from "react-router";
-import type {
-  AppDependencies,
-  AppRouteData,
-  AppSlots,
-  IntegrationConfig,
-} from "@myorg/app-shared";
+import type { AppDependencies, AppRouteData, AppSlots, IntegrationConfig } from "@myorg/app-shared";
 import { IntegrationManager } from "@myorg/integration-manager";
 
 const contentfulConfig: IntegrationConfig = {
@@ -306,14 +301,14 @@ If the command palette should include per-integration entries only while that in
 
 Both patterns solve a superficially similar problem — "one screen, per-item variance driven by config" — but they live on different axes and the choice is usually obvious once you name them:
 
-|                       | Sibling modules (this guide)                         | [Remote Capability Manifests](remote-capability-manifests.md)              |
-| --------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------- |
-| **Source of truth**   | Module source, known at build time                   | Backend JSON, fetched at runtime                                           |
-| **Per integration**   | Its own module, its own route, its own code bundle   | One row in a manifest array, surfaced as a slot item                       |
-| **Adding a new one**  | Create a module → register it → ship FE              | Backend adds a row → next fetch → no FE ship                               |
-| **Carries**           | React components, route config, lifecycle, typed handles | Data only (ids, labels, flags, capability names)                           |
-| **Typical scenario**  | ~3–20 integrations; you want per-integration routes and typed config | Long tail / open-ended catalog; uniform tile or capability-gated component |
-| **Per-integration logic** | Anywhere (component, exits, lifecycle) — it's code | None — all behavior is in the shared renderer, gated on declared capabilities |
+|                           | Sibling modules (this guide)                                         | [Remote Capability Manifests](remote-capability-manifests.md)                 |
+| ------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Source of truth**       | Module source, known at build time                                   | Backend JSON, fetched at runtime                                              |
+| **Per integration**       | Its own module, its own route, its own code bundle                   | One row in a manifest array, surfaced as a slot item                          |
+| **Adding a new one**      | Create a module → register it → ship FE                              | Backend adds a row → next fetch → no FE ship                                  |
+| **Carries**               | React components, route config, lifecycle, typed handles             | Data only (ids, labels, flags, capability names)                              |
+| **Typical scenario**      | ~3–20 integrations; you want per-integration routes and typed config | Long tail / open-ended catalog; uniform tile or capability-gated component    |
+| **Per-integration logic** | Anywhere (component, exits, lifecycle) — it's code                   | None — all behavior is in the shared renderer, gated on declared capabilities |
 
 They're **orthogonal, not competing**. Real apps often run both: sibling modules for the integrations with bespoke flows, and a remote-manifest module alongside for the long-tail catalog. The runnable [`remote-capabilities`](../examples/react-router/remote-capabilities/README.md) and [`active-project-manifest`](../examples/react-router/active-project-manifest/README.md) examples show the manifest side.
 
