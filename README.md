@@ -167,7 +167,7 @@ See [Framework-mode (TanStack Router & Start) guide](docs/framework-mode-tanstac
 
 ## Examples
 
-Runnable examples live under [`examples/`](examples/), split by router integration. Each is a self-contained pnpm workspace that consumes the library via `workspace:*`:
+Runnable examples live under [`examples/`](examples/), split by router integration. Each is a self-contained pnpm workspace that resolves the library packages from this repo, so changes in `packages/*` are reflected the next time you run the example (some examples pin `workspace:*` on every dep, others declare library deps with semver ranges and rely on the repo's `.npmrc` `link-workspace-packages=true` — either way the local source wins):
 
 - [`examples/react-router/integration-manager/`](examples/react-router/integration-manager) — sibling modules sharing a screen (React Router)
 - [`examples/tanstack-router/integration-manager/`](examples/tanstack-router/integration-manager) — sibling modules sharing a screen (TanStack Router)
