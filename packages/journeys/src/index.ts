@@ -5,7 +5,11 @@
 
 export { defineJourney } from "./define-journey.js";
 export { defineJourneyPersistence } from "./persistence.js";
-export { createJourneyRuntime, getInternals, type JourneyRuntimeOptions } from "./runtime.js";
+// `getInternals` intentionally omitted from the public surface — test code
+// that used to reach through it should migrate to `createTestHarness` in
+// `@modular-react/journeys/testing`. The symbol is still exported from
+// `./runtime.js` for internal use (the outlet, the test harness itself).
+export { createJourneyRuntime, type JourneyRuntimeOptions } from "./runtime.js";
 export {
   JourneyValidationError,
   JourneyHydrationError,

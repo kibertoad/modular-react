@@ -1,4 +1,5 @@
-import { createJourneyRuntime, getInternals } from "./runtime.js";
+import { createJourneyRuntime } from "./runtime.js";
+import { createTestHarness } from "./testing.js";
 import type {
   AnyJourneyDefinition,
   JourneyDefinition,
@@ -74,64 +75,56 @@ export function simulateJourney<TModules extends ModuleTypeMap, TState, TInput>(
     },
   ]);
   const instanceId = runtime.start(definition.id, input);
-  const internals = getInternals(runtime);
+  const harness = createTestHarness(runtime);
 
-  function record() {
-    const r = internals.__getRecord(instanceId);
-    if (!r) throw new Error(`[simulateJourney] instance ${instanceId} not found`);
-    return r;
+  function snapshot() {
+    return harness.inspect<TState>(instanceId);
   }
 
-  function reg() {
-    return internals.__getRegistered(definition.id)!;
+  function instanceOrThrow() {
+    const inst = runtime.getInstance(instanceId);
+    if (!inst) throw new Error(`[simulateJourney] instance ${instanceId} not found`);
+    return inst;
   }
 
   return {
     journeyId: definition.id,
     instanceId,
     get step() {
-      return record().step;
+      return snapshot().step;
     },
     get currentStep() {
-      const r = record();
-      if (!r.step) {
+      const snap = snapshot();
+      if (!snap.step) {
         throw new Error(
-          `[simulateJourney] no current step (status=${r.status}). Use \`step\` if a null step is expected.`,
+          `[simulateJourney] no current step (status=${snap.status}). Use \`step\` if a null step is expected.`,
         );
       }
-      return r.step;
+      return snap.step;
     },
     get state() {
-      return record().state as TState;
+      return snapshot().state;
     },
     get history() {
-      return record().history;
+      return snapshot().history;
     },
     get status() {
-      return record().status;
+      return snapshot().status;
     },
     get transitions() {
       return transitions;
     },
     get terminalPayload() {
-      return record().terminalPayload;
+      return instanceOrThrow().terminalPayload;
     },
     serialize() {
-      const inst = runtime.getInstance(instanceId);
-      if (!inst) {
-        throw new Error(`[simulateJourney] instance ${instanceId} not found`);
-      }
-      return inst.serialize() as SerializedJourney<TState>;
+      return instanceOrThrow().serialize() as SerializedJourney<TState>;
     },
     fireExit(name, output) {
-      const r = record();
-      const { exit } = internals.__bindStepCallbacks(r, reg());
-      exit(name, output);
+      harness.fireExit(instanceId, name, output);
     },
     goBack() {
-      const r = record();
-      const { goBack } = internals.__bindStepCallbacks(r, reg());
-      goBack?.();
+      harness.goBack(instanceId);
     },
     end(reason) {
       runtime.end(instanceId, reason);
