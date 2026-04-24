@@ -90,6 +90,9 @@ jobs:
 
   examples:
     name: Build examples
+    # Lint + typecheck + build every example workspace. Runs on every PR —
+    # examples depend on the library packages via `workspace:*`, so any
+    # library change that breaks an example surfaces here.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

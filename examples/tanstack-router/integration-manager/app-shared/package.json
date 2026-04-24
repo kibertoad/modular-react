@@ -1,0 +1,29 @@
+{
+  "name": "@example-tsr-integration-manager/app-shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@tanstack/react-router": "^1.168.8",
+    "@tanstack/router-core": "^1.168.7",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "^6.0.2"
+  },
+  "peerDependencies": {
+    "@tanstack/react-router": "^1.0.0",
+    "@tanstack/router-core": "^1.0.0",
+    "react": "^19.0.0"
+  }
+}

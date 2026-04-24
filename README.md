@@ -70,19 +70,20 @@ For the walkthrough of what the scaffold produces and how to extend it, see the 
 
 Conceptual documentation for building apps with the framework. Start with a getting-started guide, then dig into the shell patterns once you want to go beyond the defaults.
 
-| Guide                                                                              | What it covers                                                                                                                                |
-| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Getting started with React Router](docs/getting-started-react-router.md)          | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                                       |
-| [Getting started with TanStack Router](docs/getting-started-tanstack-router.md)    | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.                           |
-| [Framework-mode (React Router v7)](docs/framework-mode-react-router.md)            | `resolveManifest()` integration with `@react-router/dev/vite` — keep file-based `routes.ts`, `+types/route.ts`, HMR, and SSR.                 |
-| [Framework-mode (TanStack Router & Start)](docs/framework-mode-tanstack-router.md) | `resolveManifest()` integration with `@tanstack/router-plugin` and TanStack Start — keep file-based `routeTree.gen.ts`, typed routes, SSR.    |
-| [Navigation: typed labels, dynamic hrefs, meta](docs/navigation.md)                | `NavigationItem<TLabel, TContext, TMeta>` — typed i18n keys, context-aware `to`, app-owned `meta` for permissions/badges.                     |
-| [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                            | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination.                |
-| [Shell Patterns for React Router](docs/shell-patterns-react-router.md)             | Module route shape, route zones via `handle`, `useRouteData` for non-component metadata, auth guards, public shell routes.                    |
-| [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)       | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `useRouteData`, `beforeLoad` auth.                      |
-| [Workspace Patterns](docs/workspace-patterns.md)                                   | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                                       |
-| [Journeys](packages/journeys/README.md)                                            | Typed multi-module workflows with serializable shared state — entry/exit contracts, branch/complete/abort transitions, pluggable persistence. |
-| [Remote Capability Manifests](docs/remote-capability-manifests.md)                 | Drive slots/navigation from backend JSON — `RemoteModuleManifest`, `mergeRemoteManifests`, validation, SSR, and the single-module pattern.    |
+| Guide                                                                              | What it covers                                                                                                                                                                           |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Getting started with React Router](docs/getting-started-react-router.md)          | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                                                                                  |
+| [Getting started with TanStack Router](docs/getting-started-tanstack-router.md)    | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.                                                                      |
+| [Framework-mode (React Router v7)](docs/framework-mode-react-router.md)            | `resolveManifest()` integration with `@react-router/dev/vite` — keep file-based `routes.ts`, `+types/route.ts`, HMR, and SSR.                                                            |
+| [Framework-mode (TanStack Router & Start)](docs/framework-mode-tanstack-router.md) | `resolveManifest()` integration with `@tanstack/router-plugin` and TanStack Start — keep file-based `routeTree.gen.ts`, typed routes, SSR.                                               |
+| [Navigation: typed labels, dynamic hrefs, meta](docs/navigation.md)                | `NavigationItem<TLabel, TContext, TMeta>` — typed i18n keys, context-aware `to`, app-owned `meta` for permissions/badges.                                                                |
+| [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                            | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination.                                                           |
+| [Shell Patterns for React Router](docs/shell-patterns-react-router.md)             | Module route shape, route zones via `handle`, `useRouteData` for non-component metadata, auth guards, public shell routes.                                                               |
+| [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)       | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `useRouteData`, `beforeLoad` auth.                                                                 |
+| [Workspace Patterns](docs/workspace-patterns.md)                                   | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                                                                                  |
+| [Sibling modules sharing a screen](docs/sibling-modules-shared-screen.md)          | One generic screen (e.g. an integration manager) rendered by several sibling modules with per-module config flowing through typed handle (React Router) or staticData (TanStack Router). |
+| [Journeys](packages/journeys/README.md)                                            | Typed multi-module workflows with serializable shared state — entry/exit contracts, branch/complete/abort transitions, pluggable persistence.                                            |
+| [Remote Capability Manifests](docs/remote-capability-manifests.md)                 | Drive slots/navigation from backend JSON — `RemoteModuleManifest`, `mergeRemoteManifests`, validation, SSR, and the single-module pattern.                                               |
 
 ## What the code looks like
 
@@ -163,6 +164,19 @@ authStore.subscribe(manifest.recalculateSlots);
 ```
 
 See [Framework-mode (TanStack Router & Start) guide](docs/framework-mode-tanstack-router.md) for the full walkthrough and the SSR considerations.
+
+## Examples
+
+Runnable examples live under [`examples/`](examples/), split by router integration. Each is a self-contained pnpm workspace that resolves the library packages from this repo, so changes in `packages/*` are reflected the next time you run the example (some examples pin `workspace:*` on every dep, others declare library deps with semver ranges and rely on the repo's `.npmrc` `link-workspace-packages=true` — either way the local source wins):
+
+- [`examples/react-router/integration-manager/`](examples/react-router/integration-manager) — sibling modules sharing a screen (React Router)
+- [`examples/tanstack-router/integration-manager/`](examples/tanstack-router/integration-manager) — sibling modules sharing a screen (TanStack Router)
+- [`examples/react-router/customer-onboarding-journey/`](examples/react-router/customer-onboarding-journey) — multi-module workflow with typed journeys (React Router)
+- [`examples/tanstack-router/customer-onboarding-journey/`](examples/tanstack-router/customer-onboarding-journey) — multi-module workflow with typed journeys (TanStack Router)
+- [`examples/react-router/remote-capabilities/`](examples/react-router/remote-capabilities) — slots/navigation driven by a backend-served remote manifest
+- [`examples/react-router/active-project-manifest/`](examples/react-router/active-project-manifest) — per-project remote manifests swapped at runtime
+
+See [`examples/README.md`](examples/README.md) for how to run them and how to add new ones.
 
 ## Packages
 
