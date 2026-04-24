@@ -121,9 +121,87 @@ jobs:
       - name: Test examples
         run: pnpm turbo run test --filter="./examples/**"
 
+  examples-e2e:
+    name: E2E smoke (${{ matrix.shell }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shell: customer-onboarding-shell
+            example_path: examples/react-router/customer-onboarding-journey
+            runtime_path: packages/react-router-runtime
+            core_path: packages/react-router-core
+          - shell: customer-onboarding-shell-tsr
+            example_path: examples/tanstack-router/customer-onboarding-journey
+            runtime_path: packages/tanstack-router-runtime
+            core_path: packages/tanstack-router-core
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Detect relevant changes
+        id: changes
+        uses: tj-actions/changed-files@7dee1b0c1557f278e5c7dc244927139d78c0e22a # v47.0.4
+        with:
+          # Run when the target example changes, or when any package the
+          # example links to changes. Journeys + the runtime + core are the
+          # paths where a duplicate-module regression would surface.
+          files: |
+            ${{ matrix.example_path }}/**
+            ${{ matrix.runtime_path }}/**
+            ${{ matrix.core_path }}/**
+            packages/journeys/**
+            packages/react/**
+            packages/core/**
+            .github/workflows/ci.yml
+          # Skip docs-only and test-only edits — neither changes the
+          # shipped dist bundle that the shell links against, so they
+          # can't cause the duplicate-module regression this job guards.
+          files_ignore: |
+            **/*.md
+            **/LICENSE
+            **/CHANGELOG*
+            **/*.test.ts
+            **/*.test.tsx
+
+      - name: Setup Node
+        if: steps.changes.outputs.any_changed == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+
+      - name: Install pnpm
+        if: steps.changes.outputs.any_changed == 'true'
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install
+        if: steps.changes.outputs.any_changed == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build library packages
+        if: steps.changes.outputs.any_changed == 'true'
+        run: pnpm turbo run build --filter="./packages/*"
+
+      - name: Install Playwright browsers
+        if: steps.changes.outputs.any_changed == 'true'
+        run: pnpm --filter ${{ matrix.shell }} exec playwright install --with-deps chromium
+
+      - name: Run E2E smoke test
+        if: steps.changes.outputs.any_changed == 'true'
+        run: pnpm --filter ${{ matrix.shell }} test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure() && steps.changes.outputs.any_changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.shell }}
+          path: ${{ matrix.example_path }}/shell/playwright-report/
+          retention-days: 7
+
   automerge:
-    needs: [build, lint, examples]
-    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.lint.result == 'success') && (needs.examples.result == 'success')
+    needs: [build, lint, examples, examples-e2e]
+    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.lint.result == 'success') && (needs.examples.result == 'success') && (needs.examples-e2e.result == 'success' || needs.examples-e2e.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write

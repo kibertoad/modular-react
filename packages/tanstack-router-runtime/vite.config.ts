@@ -20,6 +20,7 @@ export default defineConfig({
         "@tanstack-react-modules/core",
         "@modular-react/core",
         "@modular-react/react",
+        "@modular-react/journeys",
       ],
     },
     sourcemap: true,
