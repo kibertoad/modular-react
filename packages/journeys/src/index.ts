@@ -17,7 +17,12 @@ export {
   validateJourneyDefinition,
 } from "./validation.js";
 export { JourneyOutlet } from "./outlet.js";
-export type { JourneyOutletProps, JourneyStepErrorPolicy } from "./outlet.js";
+export type {
+  JourneyOutletProps,
+  JourneyStepErrorPolicy,
+  JourneyOutletNotFoundProps,
+  JourneyOutletErrorProps,
+} from "./outlet.js";
 export { ModuleTab } from "./module-tab.js";
 export type { ModuleTabProps, ModuleTabExitEvent } from "./module-tab.js";
 export { JourneyProvider, useJourneyContext } from "./provider.js";

@@ -7,7 +7,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { ModuleDescriptor } from "@modular-react/core";
 
 import { getInternals } from "./runtime.js";
@@ -18,6 +18,16 @@ export type JourneyStepErrorPolicy = "abort" | "retry" | "ignore";
 
 /** Maximum automatic retries before falling back to `abort`. */
 const DEFAULT_RETRY_CAP = 2;
+
+export interface JourneyOutletNotFoundProps {
+  readonly moduleId: string;
+  readonly entry: string;
+}
+
+export interface JourneyOutletErrorProps {
+  readonly moduleId: string;
+  readonly error: unknown;
+}
 
 export interface JourneyOutletProps {
   /**
@@ -44,6 +54,17 @@ export interface JourneyOutletProps {
    * cap by bumping the step token. Default: 2.
    */
   readonly retryLimit?: number;
+  /**
+   * Rendered when the current step points at a module/entry that is not
+   * registered with the runtime. Defaults to a plain red notice.
+   */
+  readonly notFoundComponent?: ComponentType<JourneyOutletNotFoundProps>;
+  /**
+   * Rendered when a step component throws. Defaults to a plain red notice
+   * with the error message. Receives the raw error so shells can route it
+   * through their own reporting.
+   */
+  readonly errorComponent?: ComponentType<JourneyOutletErrorProps>;
 }
 
 /**
@@ -63,6 +84,8 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     onFinished,
     onStepError,
     retryLimit = DEFAULT_RETRY_CAP,
+    notFoundComponent,
+    errorComponent,
   } = props;
 
   const runtime = runtimeProp ?? context?.runtime;
@@ -130,11 +153,8 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
   const mod = modules[step.moduleId];
   const entry = mod?.entryPoints?.[step.entry];
   if (!mod || !entry) {
-    return createElement(
-      "div",
-      { style: { padding: "1rem", color: "#c53030" } },
-      `Journey outlet: no entry "${step.moduleId}.${step.entry}" on the registered modules.`,
-    );
+    const NotFound = notFoundComponent ?? DefaultNotFound;
+    return createElement(NotFound, { moduleId: step.moduleId, entry: step.entry });
   }
 
   // Degrade gracefully if the record/registration was forgotten mid-render
@@ -183,12 +203,53 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
 
   return createElement(
     StepErrorBoundary,
-    { moduleId: step.moduleId, onError: handleError, key: stepKey, children: null },
+    {
+      moduleId: step.moduleId,
+      onError: handleError,
+      errorComponent,
+      key: stepKey,
+      children: null,
+    },
     createElement(StepComponent, {
       input: step.input,
       exit,
       goBack,
     }),
+  );
+}
+
+function DefaultNotFound({ moduleId, entry }: JourneyOutletNotFoundProps): ReactNode {
+  return createElement(
+    "div",
+    { style: { padding: "1rem", color: "#c53030" } },
+    `Journey outlet: no entry "${moduleId}.${entry}" on the registered modules.`,
+  );
+}
+
+function DefaultError({ moduleId, error }: JourneyOutletErrorProps): ReactNode {
+  const message = error instanceof Error ? error.message : String(error);
+  return createElement(
+    "div",
+    {
+      style: {
+        padding: "1rem",
+        border: "1px solid #e53e3e",
+        borderRadius: "0.5rem",
+        margin: "1rem",
+      },
+      role: "alert",
+      "data-journey-step-error": moduleId,
+    },
+    createElement(
+      "h3",
+      { style: { color: "#e53e3e", margin: "0 0 0.5rem 0" } },
+      `Module "${moduleId}" encountered an error`,
+    ),
+    createElement(
+      "pre",
+      { style: { fontSize: "0.875rem", color: "#718096", whiteSpace: "pre-wrap" } },
+      message,
+    ),
   );
 }
 
@@ -206,6 +267,7 @@ function useInstanceSnapshot(runtime: JourneyRuntime, instanceId: InstanceId) {
 interface StepErrorBoundaryProps {
   readonly moduleId: string;
   readonly onError: (err: unknown) => void;
+  readonly errorComponent?: ComponentType<JourneyOutletErrorProps>;
   readonly children: ReactNode;
 }
 
@@ -229,33 +291,12 @@ class StepErrorBoundary extends Component<StepErrorBoundaryProps, StepErrorBound
       // Render the fallback inline. Wrapping an empty child in
       // `ModuleErrorBoundary` would not show anything: that boundary only
       // renders its fallback when *its own* child throws, and a null child
-      // never does — so the outlet used to go blank after a step error. The
-      // visual language mirrors `@modular-react/react`'s `ModuleErrorBoundary`.
-      const err = this.state.error;
-      const message = err instanceof Error ? err.message : String(err);
-      return createElement(
-        "div",
-        {
-          style: {
-            padding: "1rem",
-            border: "1px solid #e53e3e",
-            borderRadius: "0.5rem",
-            margin: "1rem",
-          },
-          role: "alert",
-          "data-journey-step-error": this.props.moduleId,
-        },
-        createElement(
-          "h3",
-          { style: { color: "#e53e3e", margin: "0 0 0.5rem 0" } },
-          `Module "${this.props.moduleId}" encountered an error`,
-        ),
-        createElement(
-          "pre",
-          { style: { fontSize: "0.875rem", color: "#718096", whiteSpace: "pre-wrap" } },
-          message,
-        ),
-      );
+      // never does — so the outlet used to go blank after a step error.
+      const ErrorFallback = this.props.errorComponent ?? DefaultError;
+      return createElement(ErrorFallback, {
+        moduleId: this.props.moduleId,
+        error: this.state.error,
+      });
     }
     return this.props.children;
   }

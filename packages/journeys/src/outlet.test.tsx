@@ -341,6 +341,74 @@ describe("JourneyOutlet", () => {
     expect(onStepError.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
+  it("renders a custom notFoundComponent when the step's module is not in the map", () => {
+    const rt = makeRuntime();
+    const id = rt.start("demo", { customerId: "C-nf" });
+    const NotFound = ({ moduleId, entry }: { moduleId: string; entry: string }) => (
+      <div data-testid="custom-not-found">{`${moduleId}/${entry}`}</div>
+    );
+    const { getByTestId } = render(
+      <JourneyOutlet
+        runtime={rt}
+        instanceId={id}
+        modules={{}}
+        notFoundComponent={NotFound}
+      />,
+    );
+    expect(getByTestId("custom-not-found").textContent).toBe("account/review");
+  });
+
+  it("renders a custom errorComponent when a step throws", () => {
+    function Throwing(_props: ModuleEntryProps<{ customerId: string }, typeof accountExits>) {
+      throw new Error("oh no");
+    }
+    const throwingModule = defineModule({
+      id: "account",
+      version: "1.0.0",
+      exitPoints: accountExits,
+      entryPoints: {
+        review: defineEntry({
+          component: Throwing,
+          input: schema<{ customerId: string }>(),
+        }),
+      },
+    });
+    const localModules = { account: throwingModule, debts: debtsModule };
+    type LocalModules = {
+      readonly account: typeof throwingModule;
+      readonly debts: typeof debtsModule;
+    };
+    const throwingJourney = defineJourney<LocalModules, { customerId: string }>()({
+      id: "custom-err",
+      version: "1.0.0",
+      initialState: (input: { customerId: string }) => ({ customerId: input.customerId }),
+      start: (s) => ({ module: "account", entry: "review", input: { customerId: s.customerId } }),
+      transitions: {},
+    });
+    const rt = createJourneyRuntime(
+      [{ definition: throwingJourney as never, options: undefined }],
+      { modules: localModules, debug: false },
+    );
+    const id = rt.start("custom-err", { customerId: "C-e" });
+    const restoreError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ErrorFallback = ({ moduleId, error }: { moduleId: string; error: unknown }) => (
+      <div data-testid="custom-error">
+        {moduleId}:{error instanceof Error ? error.message : String(error)}
+      </div>
+    );
+    const { getByTestId } = render(
+      <JourneyOutlet
+        runtime={rt}
+        instanceId={id}
+        modules={localModules}
+        onStepError={() => "ignore"}
+        errorComponent={ErrorFallback}
+      />,
+    );
+    restoreError.mockRestore();
+    expect(getByTestId("custom-error").textContent).toBe("account:oh no");
+  });
+
   it("renders the step-error fallback card when onStepError returns 'ignore'", () => {
     function Throwing(_props: ModuleEntryProps<{ customerId: string }, typeof accountExits>) {
       throw new Error("kaboom");
