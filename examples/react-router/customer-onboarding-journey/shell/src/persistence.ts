@@ -1,4 +1,4 @@
-import { defineJourneyPersistence } from "@modular-react/journeys";
+import { createWebStoragePersistence } from "@modular-react/journeys";
 import type { SerializedJourney } from "@modular-react/journeys";
 import type {
   OnboardingInput,
@@ -10,37 +10,11 @@ import type {
  * starting a journey for the same customer twice resumes instead of minting a
  * fresh instance (see `JourneyRuntime.start` idempotency semantics).
  *
- * `load` is synchronous here; the runtime transitions the instance straight
- * from `loading` to `active` on the same tick, which keeps the demo simple.
- *
- * `defineJourneyPersistence` ties the adapter's `keyFor` input to the
- * journey's `OnboardingInput` type, so the `customerId` cast below is
- * unnecessary elsewhere — the shell is typed against the journey end-to-end.
+ * `createWebStoragePersistence` handles SSR guards, JSON parse errors, and
+ * lazy `Storage` resolution — see `@modular-react/journeys`.
  */
-export const journeyPersistence = defineJourneyPersistence<OnboardingInput, OnboardingState>({
+export const journeyPersistence = createWebStoragePersistence<OnboardingInput, OnboardingState>({
   keyFor: ({ journeyId, input }) => `journey:${input.customerId}:${journeyId}`,
-
-  load: (key: string): SerializedJourney<OnboardingState> | null => {
-    if (typeof localStorage === "undefined") return null;
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as SerializedJourney<OnboardingState>;
-    } catch {
-      localStorage.removeItem(key);
-      return null;
-    }
-  },
-
-  save: (key: string, blob: SerializedJourney<OnboardingState>): void => {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(key, JSON.stringify(blob));
-  },
-
-  remove: (key: string): void => {
-    if (typeof localStorage === "undefined") return;
-    localStorage.removeItem(key);
-  },
 });
 
 /**

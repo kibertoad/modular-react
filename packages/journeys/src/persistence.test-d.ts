@@ -1,5 +1,10 @@
 import { describe, expectTypeOf, test } from "vitest";
-import { defineJourneyPersistence } from "./persistence.js";
+import {
+  createMemoryPersistence,
+  createWebStoragePersistence,
+  defineJourneyPersistence,
+} from "./persistence.js";
+import type { MemoryPersistence } from "./persistence.js";
 import type { JourneyPersistence, SerializedJourney } from "./types.js";
 
 interface CustomerInput {
@@ -64,5 +69,53 @@ describe("defineJourneyPersistence", () => {
       journeyId: string;
       input: unknown;
     }>();
+  });
+});
+
+describe("createWebStoragePersistence", () => {
+  const web = createWebStoragePersistence<CustomerInput, CustomerState>({
+    keyFor: ({ input }) => `k:${input.customerId}`,
+  });
+
+  test("returns a JourneyPersistence<TState, TInput>", () => {
+    expectTypeOf(web).toEqualTypeOf<JourneyPersistence<CustomerState, CustomerInput>>();
+  });
+
+  test("keyFor narrows `input` to the journey's TInput", () => {
+    expectTypeOf(web.keyFor).parameter(0).toEqualTypeOf<{
+      journeyId: string;
+      input: CustomerInput;
+    }>();
+  });
+
+  test("load / save carry TState through SerializedJourney", () => {
+    expectTypeOf(web.load).returns.toEqualTypeOf<
+      SerializedJourney<CustomerState> | null | Promise<SerializedJourney<CustomerState> | null>
+    >();
+    expectTypeOf(web.save).parameter(1).toEqualTypeOf<SerializedJourney<CustomerState>>();
+  });
+});
+
+describe("createMemoryPersistence", () => {
+  const mem = createMemoryPersistence<CustomerInput, CustomerState>({
+    keyFor: ({ input }) => `k:${input.customerId}`,
+  });
+
+  test("returns MemoryPersistence<TInput, TState>", () => {
+    expectTypeOf(mem).toEqualTypeOf<MemoryPersistence<CustomerInput, CustomerState>>();
+  });
+
+  test("assignable to JourneyPersistence<TState, TInput>", () => {
+    const asAdapter: JourneyPersistence<CustomerState, CustomerInput> = mem;
+    expectTypeOf(asAdapter.keyFor).parameter(0).toEqualTypeOf<{
+      journeyId: string;
+      input: CustomerInput;
+    }>();
+  });
+
+  test("entries() is typed against SerializedJourney<TState>", () => {
+    expectTypeOf(mem.entries).returns.toEqualTypeOf<
+      ReadonlyArray<readonly [string, SerializedJourney<CustomerState>]>
+    >();
   });
 });

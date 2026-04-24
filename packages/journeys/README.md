@@ -761,6 +761,69 @@ registry.registerJourney(journey, {
 
 A plain object matching `JourneyPersistence<TState>` still works if you'd rather not use the helper.
 
+### Stock adapters: `createWebStoragePersistence` and `createMemoryPersistence`
+
+Two factories ship with the package so common setups don't have to reimplement the same 20 lines of SSR guards and JSON handling. Both return values satisfying `JourneyPersistence<TState, TInput>` — pass them directly to `registerJourney({ persistence })`.
+
+**`createWebStoragePersistence` — the 80% case (localStorage / sessionStorage).** Backed by the synchronous Web Storage API, SSR-safe, cleans up corrupt entries on read. Matches the sizing profile of most journey state (a few KB of JSON, per user, read-on-mount):
+
+```ts
+import { createWebStoragePersistence } from "@modular-react/journeys";
+
+// Defaults to localStorage (or no-ops under SSR).
+export const journeyPersistence = createWebStoragePersistence<OnboardingInput, OnboardingState>({
+  keyFor: ({ journeyId, input }) => `journey:${input.customerId}:${journeyId}`,
+});
+
+registry.registerJourney(customerOnboardingJourney, { persistence: journeyPersistence });
+```
+
+Under the hood: `load` runs `JSON.parse` with a catch that calls `removeItem(key)` so a single bad write doesn't wedge future loads; `save` runs `JSON.stringify` and lets `QuotaExceededError` bubble so the app can surface it; all three methods no-op when `storage` resolves to `null`.
+
+You can swap the backing store by passing a `storage` option:
+
+```ts
+// Tab-scoped — state dies with the tab.
+createWebStoragePersistence<MyInput, MyState>({
+  keyFor: ({ journeyId, input }) => `s:${input.id}:${journeyId}`,
+  storage: typeof sessionStorage !== "undefined" ? sessionStorage : null,
+});
+
+// Lazy getter — re-evaluated per call. Useful when storage availability can
+// flip after hydration (feature-detect then flip a flag).
+createWebStoragePersistence<MyInput, MyState>({
+  keyFor: ({ journeyId, input }) => `j:${input.id}:${journeyId}`,
+  storage: () => (canUseStorage() ? localStorage : null),
+});
+```
+
+Pick this adapter unless your state is large (>~1 MB per origin), you need offline-first guarantees, or multi-tab clobbering is a correctness concern. For those cases, write a custom IndexedDB adapter against the same `JourneyPersistence` interface.
+
+**`createMemoryPersistence` — for tests and SSR.** `Map`-backed, zero IO. The primary use case is tests: a fresh store per test avoids bleed between cases, and the runtime's persistence code paths stay exercised without `localStorage` mocks.
+
+```ts
+import { createMemoryPersistence } from "@modular-react/journeys";
+
+const store = createMemoryPersistence<OnboardingInput, OnboardingState>({
+  keyFor: ({ journeyId, input }) => `${journeyId}:${input.customerId}`,
+});
+
+// Pre-seed for a resume test — the runtime finds the blob on first start():
+const seeded = createMemoryPersistence<OnboardingInput, OnboardingState>({
+  keyFor: ({ journeyId, input }) => `${journeyId}:${input.customerId}`,
+  initial: [["onboarding:C-1", existingBlob]],
+});
+
+// Test-only helpers (not on JourneyPersistence) — useful for assertions:
+expect(store.size()).toBe(1);
+expect(store.entries()).toMatchObject([...]);
+store.clear();
+```
+
+Blobs are deep-cloned on both `save` and `load` by default so mutating the stored or returned object can't corrupt the other. Pass `clone: false` only in hot test loops where you've verified nobody mutates the blob.
+
+Also valid as an SSR "persistence is configured but nothing survives the request" mode: no server state leaks into rendered HTML, and `start()` on the client re-probes from scratch.
+
 Guarantees:
 
 - **Idempotent `start`** — two `runtime.start(journeyId, input)` calls yielding the same `keyFor` return the same `instanceId`. Useful for reload recovery (same customer → same active journey). The key is namespaced internally by `journeyId`, so two journeys whose `keyFor` happens to return the same string can't alias onto the same instance.
@@ -1395,11 +1458,13 @@ Every export you're likely to call, grouped by role.
 
 ### Authoring (`@modular-react/journeys`)
 
-| Export                     | Signature                                                                                   | Purpose                                                                                                                                                    |
-| -------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `defineJourney`            | `<TModules, TState>() => <TInput>(def: JourneyDefinition<TModules, TState, TInput>) => def` | Identity helper with full inference on transitions and state. Curried so `TInput` infers from `initialState`.                                              |
-| `defineJourneyHandle`      | `<TModules, TState, TInput>(def) => JourneyHandle<string, TInput>`                          | Builds a typed token from a journey definition so modules and shells can call `runtime.start(handle, input)` without importing the journey's runtime code. |
-| `defineJourneyPersistence` | `<TInput, TState>(adapter) => JourneyPersistence<TState>`                                   | Types `keyFor`'s `input` against `TInput`, `load`/`save` against `TState`.                                                                                 |
+| Export                        | Signature                                                                                   | Purpose                                                                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defineJourney`               | `<TModules, TState>() => <TInput>(def: JourneyDefinition<TModules, TState, TInput>) => def` | Identity helper with full inference on transitions and state. Curried so `TInput` infers from `initialState`.                                              |
+| `defineJourneyHandle`         | `<TModules, TState, TInput>(def) => JourneyHandle<string, TInput>`                          | Builds a typed token from a journey definition so modules and shells can call `runtime.start(handle, input)` without importing the journey's runtime code. |
+| `defineJourneyPersistence`    | `<TInput, TState>(adapter) => JourneyPersistence<TState>`                                   | Types `keyFor`'s `input` against `TInput`, `load`/`save` against `TState`.                                                                                 |
+| `createWebStoragePersistence` | `<TInput, TState>({ keyFor, storage? }) => JourneyPersistence<TState, TInput>`              | Stock `localStorage` / `sessionStorage` adapter. SSR-safe, auto-clears corrupt JSON entries. Pass `storage` to override the backing store.                 |
+| `createMemoryPersistence`     | `<TInput, TState>({ keyFor, initial?, clone? }) => MemoryPersistence<TInput, TState>`       | `Map`-backed adapter for tests/SSR. Exposes `size()` / `entries()` / `clear()`. Deep-clones on `save` and `load` by default.                               |
 
 ### Rendering + context (`@modular-react/journeys`)
 
