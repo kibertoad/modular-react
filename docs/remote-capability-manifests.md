@@ -31,6 +31,7 @@ Remote manifests deliberately do **not** deliver React components, routes, or bu
 - You're trying to encode a component reference as a string and map it in the FE. That reinvents the module system. Ship the module as code and use [`registerLazy`](shell-patterns.md) for code-splitting.
 - You're trying to ship per-capability logic (validators, effects, route loaders) via JSON. Keep that in a local module; let the manifest only carry data.
 - Capabilities are few and stable. One line per capability in a local module array is simpler than a fetch + store + `dynamicSlots` round trip.
+- Each capability needs its own route, component, or module-level logic, and the set is known at build time. Then you want [sibling modules sharing a screen](sibling-modules-shared-screen.md) — one module per capability, each owning its route and rendering a shared component with its own typed config. Same "generic screen, per-item variance" idea, but with compile-time types and per-module lifecycle rather than runtime JSON.
 
 ## Two shapes this pattern takes
 

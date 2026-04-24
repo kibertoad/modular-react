@@ -302,11 +302,29 @@ If the command palette should include per-integration entries only while that in
 - Integrations that need to share state across each other. Then a shared store in `app-shared` (or an owning integration-manager module) is the right home; sibling modules sharing a stateless screen doesn't fit.
 - Cases where the set of integrations is not known at build time. Then you're in plugin territory — use `registerLazy` or a runtime registration layer; the config-passed-as-props pattern still applies per-plugin.
 
+## When to use this vs. Remote Capability Manifests
+
+Both patterns solve a superficially similar problem — "one screen, per-item variance driven by config" — but they live on different axes and the choice is usually obvious once you name them:
+
+|                       | Sibling modules (this guide)                         | [Remote Capability Manifests](remote-capability-manifests.md)              |
+| --------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Source of truth**   | Module source, known at build time                   | Backend JSON, fetched at runtime                                           |
+| **Per integration**   | Its own module, its own route, its own code bundle   | One row in a manifest array, surfaced as a slot item                       |
+| **Adding a new one**  | Create a module → register it → ship FE              | Backend adds a row → next fetch → no FE ship                               |
+| **Carries**           | React components, route config, lifecycle, typed handles | Data only (ids, labels, flags, capability names)                           |
+| **Typical scenario**  | ~3–20 integrations; you want per-integration routes and typed config | Long tail / open-ended catalog; uniform tile or capability-gated component |
+| **Per-integration logic** | Anywhere (component, exits, lifecycle) — it's code | None — all behavior is in the shared renderer, gated on declared capabilities |
+
+They're **orthogonal, not competing**. Real apps often run both: sibling modules for the integrations with bespoke flows, and a remote-manifest module alongside for the long-tail catalog. The runnable [`remote-capabilities`](../examples/react-router/remote-capabilities/README.md) and [`active-project-manifest`](../examples/react-router/active-project-manifest/README.md) examples show the manifest side.
+
+If the set is known today but may grow unbounded tomorrow, start here. When growth actually outstrips what code-ships comfortably, layer remote manifests on top for the new-entry tail — the shared component contract (a typed config) carries across both.
+
 ## Relationship to other patterns
 
 - **[Shell Patterns](shell-patterns.md)** — this pattern builds on `useZones` / `useRouteData` from the fundamentals guide.
 - **[Navigation](navigation.md)** — each integration module owns its own nav item. Consider typing `group` (e.g. `"integrations"`) so the sidebar groups them visually.
 - **[Workspace Patterns](workspace-patterns.md)** — if the integrations are opened as tabs rather than routes, swap `handle` / `staticData` for `useActiveZones(activeModuleId)`; the rest of the pattern is the same.
+- **[Remote Capability Manifests](remote-capability-manifests.md)** — the runtime, backend-driven counterpart. Same "one shared renderer, per-item variance" idea, but the items are JSON rows instead of modules. See the comparison table above for how to pick.
 
 ## Example
 
