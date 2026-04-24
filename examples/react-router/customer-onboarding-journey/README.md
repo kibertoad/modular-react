@@ -16,6 +16,8 @@ Modules are journey-unaware: each declares typed entry points and typed exit poi
 - `registry.registerJourney(...)` with a **localStorage persistence adapter** — reload the page mid-flow and the journey resumes where you left off.
 - `<JourneyOutlet>` rendering the current step inside a tab; `onFinished` closes the tab.
 - `WorkspaceActions.addJourneyTab(...)` for tab bookkeeping after the caller mints an instance via `useJourneyContext().runtime.start(...)`. `openTab({ kind: 'module', ... })` handles plain module tabs; `openModuleTab` is a `@deprecated` shim.
+- **Multiple cohesive journeys in one package** — `customer-onboarding`, `plan-switch`, and `quick-bill` all live under `journeys/customer-onboarding/` (each in its own file). Nothing forces one-journey-per-package; a team-owned, same-domain package keeps related journeys together.
+- **Router-mode "step 0" with `<ModuleRoute>`** — visit `/launch` to see a launcher module render standalone as a route element. Clicking a workflow option emits a typed exit; the shell's `onModuleExit` dispatcher is the single place that knows which exit maps to which journey. Same pattern works for `<ModuleTab>` in workspace-mode shells.
 
 ## Layout
 
@@ -26,8 +28,12 @@ modules/
   plan/                      entry: choose (allowBack: 'preserve-state')
   billing/                   entries: collect (allowBack: 'rollback'), startTrial
 journeys/
-  customer-onboarding/       the journey definition
+  customer-onboarding/       three cohesive growth journeys
+    customer-onboarding.ts     full intake → plan → billing
+    plan-switch.ts             plan → billing (for existing customers)
+    quick-bill.ts              billing only (one-step charge)
 shell/                       minimal tabbed shell + localStorage persistence
+  launcher-module.tsx          step-0 workflow picker (renders at /launch)
 ```
 
 ## Running

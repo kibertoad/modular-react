@@ -102,6 +102,99 @@ test("closing a journey tab returns the shell to home and clears the tab", async
   assertNoErrors(errors);
 });
 
+test("/launch renders the workflow launcher without errors", async ({ page }) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/launch");
+
+  await expect(page.getByRole("heading", { name: /Launch a workflow/i })).toBeVisible();
+  // All three workflow options render — one button per journey.
+  await expect(page.getByRole("button", { name: /^New customer onboarding$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Existing customer — plan switch$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^One-off charge \(quick bill\)$/ })).toBeVisible();
+
+  assertNoErrors(errors);
+});
+
+test("launcher dispatches startOnboarding exit into the onboarding journey and returns home", async ({
+  page,
+}) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/launch");
+
+  await page.getByRole("button", { name: /^New customer onboarding$/ }).click();
+
+  // The dispatcher starts the journey, opens a tab, and navigates back to `/`.
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("button", { name: /^Onboard · Alice Martin/ })).toBeVisible();
+  // Active tab renders the onboarding profile step.
+  await expect(page.getByRole("heading", { name: /Profile · /i })).toBeVisible();
+
+  assertNoErrors(errors);
+});
+
+test("launcher dispatches startPlanSwitch exit into the plan-switch journey", async ({
+  page,
+}) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/launch");
+
+  await page.getByRole("button", { name: /^Existing customer — plan switch$/ }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  // Plan-switch journey starts directly on the plan chooser — no profile step.
+  await expect(page.getByRole("heading", { name: /Choose a plan/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Profile · /i })).not.toBeVisible();
+  await expect(page.getByRole("button", { name: /^Plan switch · Brent Oduya/ })).toBeVisible();
+
+  assertNoErrors(errors);
+});
+
+test("launcher dispatches startQuickBill exit into the quick-bill journey", async ({
+  page,
+}) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/launch");
+
+  await page.getByRole("button", { name: /^One-off charge \(quick bill\)$/ }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  // Quick-bill lands straight on billing/collect; no profile or plan step.
+  await expect(page.getByRole("heading", { name: /Collect payment/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose a plan/i })).not.toBeVisible();
+  await expect(page.getByRole("button", { name: /^Quick bill · Casey Rivera/ })).toBeVisible();
+
+  assertNoErrors(errors);
+});
+
+test("launcher cancel navigates back home without opening a tab", async ({ page }) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/launch");
+
+  await page.getByRole("button", { name: /^Back to home$/ }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: /customer onboarding/i })).toBeVisible();
+  // No journey tab added for a plain cancel.
+  await expect(page.getByRole("button", { name: /^Onboard · /i })).toHaveCount(0);
+
+  assertNoErrors(errors);
+});
+
+test("clicking the same launcher button twice dedups to one journey tab", async ({ page }) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/launch");
+  await page.getByRole("button", { name: /^New customer onboarding$/ }).click();
+  await expect(page).toHaveURL(/\/$/);
+  // Go back to /launch and click again — the dispatcher should activate the
+  // existing tab rather than mint a second one.
+  await page.goto("/launch");
+  await page.getByRole("button", { name: /^New customer onboarding$/ }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("button", { name: /^Onboard · Alice Martin/ })).toHaveCount(1);
+
+  assertNoErrors(errors);
+});
+
 test("rehydration drops tabs whose journey is no longer registered", async ({ page }) => {
   const errors = attachErrorCollectors(page);
 

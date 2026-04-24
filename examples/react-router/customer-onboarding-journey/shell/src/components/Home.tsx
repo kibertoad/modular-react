@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { Link } from "react-router";
 import type { StoreApi } from "zustand/vanilla";
 import { useJourneyContext } from "@modular-react/journeys";
 import { customerOnboardingHandle } from "@example-onboarding/customer-onboarding-journey";
@@ -94,6 +95,12 @@ export function Home({ workspace, tabsStore }: HomeProps) {
         Tip: start customer C-1, click <strong>Pick a plan</strong>, then reload the page. The tab
         strip restores, and clicking the tab (or letting the active tab persist) lands you back
         inside the plan module.
+      </p>
+
+      <p style={{ marginTop: "1.5rem", fontSize: "0.85rem" }}>
+        Prefer to pick a workflow first? <Link to="/launch">Open the workflow launcher</Link> —
+        demonstrates the "step 0" pattern where a module renders as a route and emits exits the
+        shell dispatches to distinct journeys.
       </p>
     </div>
   );
