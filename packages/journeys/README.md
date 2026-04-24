@@ -1313,7 +1313,6 @@ Every export you're likely to call, grouped by role.
 | Export                      | Purpose                                                                                                                                                         |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `createJourneyRuntime`      | Low-level runtime factory. Normally called by the registry; exported for advanced use (test harnesses, custom hosts).                                           |
-| `getInternals`              | Internals accessor for `<JourneyOutlet>`-style hosts that need to bind step callbacks directly. Stable surface but rarely needed — the outlet uses it.          |
 | `validateJourneyContracts`  | Cross-checks a journey's transitions against registered modules. Runs automatically at `resolveManifest()` / `resolve()`; exported for custom validation flows. |
 | `validateJourneyDefinition` | Structural sanity check on a definition's own shape. Runs automatically in `registerJourney`.                                                                   |
 | `JourneyValidationError`    | Aggregated validation error. `.issues: readonly string[]`.                                                                                                      |
@@ -1363,10 +1362,12 @@ interface SerializedJourney<TState> {
 
 ### Testing (`@modular-react/journeys/testing`)
 
-| Export             | Purpose                                                                                                                                                                                       |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `simulateJourney`  | Headless simulator: fires exits / goBack, exposes `step` / `currentStep` (throws if terminal) / `state` / `history` / `status` / `transitions` / `terminalPayload` / `serialize()`, no React. |
-| `JourneySimulator` | Type for the object returned by `simulateJourney`.                                                                                                                                            |
+| Export               | Purpose                                                                                                                                                                                       |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `simulateJourney`    | Headless simulator: fires exits / goBack, exposes `step` / `currentStep` (throws if terminal) / `state` / `history` / `status` / `transitions` / `terminalPayload` / `serialize()`, no React. |
+| `JourneySimulator`   | Type for the object returned by `simulateJourney`.                                                                                                                                            |
+| `createTestHarness`  | Wraps a live `JourneyRuntime` so tests can fire exits, call `goBack`, and inspect instance internals without mounting `<JourneyOutlet>`. Replaces reaching for `getInternals` directly.       |
+| `JourneyTestHarness` | Type returned by `createTestHarness`.                                                                                                                                                         |
 
 ### From the router runtime packages
 

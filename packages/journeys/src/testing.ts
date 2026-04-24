@@ -69,7 +69,21 @@ export function createTestHarness(runtime: JourneyRuntime): JourneyTestHarness {
           `[@modular-react/journeys/testing] Journey "${record.journeyId}" is not registered with this runtime.`,
         );
       }
-      internals.__bindStepCallbacks(record, reg).goBack?.();
+      const callbacks = internals.__bindStepCallbacks(record, reg);
+      if (!callbacks.goBack) {
+        // Silently no-oping here would quietly "pass" a test that expects
+        // back navigation to work — the common `goBack walks back…` pattern
+        // asserts state *after* the call, so a no-op masks the wiring bug.
+        // Throw with context so the test fails on the offending call instead.
+        const stepLabel = record.step
+          ? `${record.step.moduleId}.${record.step.entry}`
+          : "(no step)";
+        throw new Error(
+          `[@modular-react/journeys/testing] goBack is unavailable on instance "${id}" (step=${stepLabel}). ` +
+            `The journey's transition must declare allowBack: true AND the current step must have at least one history entry.`,
+        );
+      }
+      callbacks.goBack();
     },
     inspect<TState = unknown>(id: InstanceId): InstanceSnapshot<TState> {
       const record = recordOrThrow(id);

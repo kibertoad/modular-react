@@ -639,21 +639,21 @@ export function createJourneyRuntime(
     const exit = (name: string, output?: unknown) => {
       dispatchExit(record, reg, token, name, output);
     };
-    const mode = entryAllowBackMode(record.step);
-    // Journey declares allowBack for this entry but the outlet was mounted
-    // without the module map — `goBack` would appear unreachable at runtime
-    // with no obvious cause. Warn once; the symptom otherwise shows up as
-    // "back button never renders".
+    let mode = entryAllowBackMode(record.step);
+    // Documented fallback (see `JourneyRuntimeOptions.modules`): when the
+    // runtime is built without a module descriptor for this step but the
+    // journey's transition opts in via `allowBack: true`, treat the mode as
+    // 'preserve-state' so `goBack` stays wired. Without this fallback the
+    // headless simulator (which never passes a moduleMap) and any runtime
+    // created without module descriptors would see `goBack` silently
+    // disappear, contradicting the documented behavior.
     if (
-      debug &&
       mode === false &&
       record.step &&
       journeyAllowsBack(reg.definition, record.step) &&
       !moduleMap[record.step.moduleId]
     ) {
-      console.warn(
-        `[@modular-react/journeys] Journey "${reg.definition.id}" declares allowBack for ${record.step.moduleId}.${record.step.entry}, but the runtime was created without the "${record.step.moduleId}" module in its module map — goBack will not appear. Pass { modules } to createJourneyRuntime.`,
-      );
+      mode = "preserve-state";
     }
     const canGoBack =
       mode !== false && journeyAllowsBack(reg.definition, record.step) && record.history.length > 0;
@@ -1041,7 +1041,17 @@ export function createJourneyRuntime(
       // key lifecycle. Document this on the API.
       const record = createRecord(reg, instanceId, null, migrated.blob.state);
       instances.set(instanceId, record);
-      hydrateInto(record, migrated.blob);
+      try {
+        hydrateInto(record, migrated.blob);
+      } catch (err) {
+        // Don't leak the half-built loading placeholder — otherwise
+        // subsequent getInstance(id) returns partial state, a retry hits
+        // the "already in memory" guard, and forget(id) is a no-op
+        // (status never reached terminal). Mirror the sync-start path
+        // which already cleans up in the same situation.
+        instances.delete(instanceId);
+        throw err;
+      }
       notify(record);
       return instanceId;
     },

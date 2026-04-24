@@ -198,7 +198,7 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     // 'ignore' — leave the boundary UI in place until the user navigates away
   };
 
-  const StepComponent = entry.component as React.ComponentType<any>;
+  const StepComponent = entry.component as ComponentType<any>;
   const stepKey = `${record.stepToken}:${retryKey}`;
 
   return createElement(

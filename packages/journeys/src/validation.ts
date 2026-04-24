@@ -58,8 +58,12 @@ export function validateJourneyContracts(
     }
     seenIds.add(def.id);
 
-    // Validate transitions map
-    const transitions = (def.transitions ?? {}) as Record<string, Record<string, any>>;
+    // Validate transitions map. The inner objects must be non-null — we
+    // accept `AnyJourneyDefinition`, so a caller that sidesteps the typed
+    // `defineJourney` helper can hand us `{ transitions: { foo: null } }`
+    // or `{ bar: { baz: null } }`; we want those to become an accumulated
+    // issue instead of a TypeError that short-circuits the loop.
+    const transitions = (def.transitions ?? {}) as Record<string, unknown>;
     for (const [moduleId, perModule] of Object.entries(transitions)) {
       const mod = moduleById.get(moduleId);
       if (!mod) {
@@ -68,13 +72,26 @@ export function validateJourneyContracts(
         );
         continue;
       }
-      for (const [entryName, perEntry] of Object.entries(perModule)) {
+      if (!perModule || typeof perModule !== "object") {
+        issues.push(
+          `journey "${def.id}" has malformed transitions for module "${moduleId}" (expected an object)`,
+        );
+        continue;
+      }
+      for (const [entryName, perEntry] of Object.entries(perModule as Record<string, unknown>)) {
         const entry = mod.entryPoints?.[entryName];
         if (!entry) {
           issues.push(`journey "${def.id}" references unknown entry "${moduleId}.${entryName}"`);
           continue;
         }
-        for (const exitName of Object.keys(perEntry)) {
+        if (!perEntry || typeof perEntry !== "object") {
+          issues.push(
+            `journey "${def.id}" has malformed transitions for entry "${moduleId}.${entryName}" (expected an object)`,
+          );
+          continue;
+        }
+        const perEntryObj = perEntry as Record<string, unknown>;
+        for (const exitName of Object.keys(perEntryObj)) {
           if (exitName === "allowBack") continue;
           if (!mod.exitPoints || !(exitName in mod.exitPoints)) {
             issues.push(
@@ -82,7 +99,7 @@ export function validateJourneyContracts(
             );
           }
         }
-        if (perEntry.allowBack === true) {
+        if (perEntryObj.allowBack === true) {
           const descriptorAllowBack = entry.allowBack;
           if (descriptorAllowBack !== "preserve-state" && descriptorAllowBack !== "rollback") {
             issues.push(

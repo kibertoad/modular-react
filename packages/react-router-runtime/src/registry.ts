@@ -313,14 +313,18 @@ export function createRegistry<
 
     // Plugin onResolve: collect each plugin's runtime into `extensions` keyed
     // by name, and append any providers the plugin contributes after the
-    // user-supplied providers.
+    // user-supplied providers. `debug` matches the journeys runtime's own
+    // environment-based default (NODE_ENV !== "production") so the journeys
+    // plugin — and any future plugin that respects this flag — gets verbose
+    // dev output without an explicit opt-in per plugin.
     const extensions: Record<string, unknown> = {};
     const pluginProviders: React.ComponentType<{ children: React.ReactNode }>[] = [];
+    const debug = isDevEnv();
     for (const plugin of plugins) {
       const runtime = plugin.onResolve?.({
         modules,
         moduleDescriptors,
-        debug: false,
+        debug,
       });
       extensions[plugin.name] = runtime;
       const contributed = plugin.providers?.({ runtime });
@@ -397,6 +401,11 @@ export function createRegistry<
       // Fully resolve the plugin's contribution before mutating registry
       // bookkeeping, so a throw in extend() or a method collision leaves
       // the registry clean and the caller can retry with a fixed plugin.
+      //
+      // `markDirty` is reserved by the plugin contract for future reactivity
+      // support (see `PluginResolveCtx` in @modular-react/core); plugins may
+      // call it when internal state changes, but today it is a no-op by
+      // design. Not a missed wiring.
       const extension = plugin.extend({ markDirty: () => {} });
       const entries = Object.entries(extension);
       for (const [key] of entries) {
@@ -474,11 +483,13 @@ export function createRegistry<
         modules: assembly.modules,
         moduleDescriptors: assembly.moduleDescriptors,
         extensions: assembly.extensions,
-        journeys: assembly.extensions.journeys as ApplicationManifest<
-          TSlots,
-          TNavItem,
-          Record<string, unknown>
-        >["journeys"],
+        // The public `.journeys` type comes from `PluginRuntimesOf<TPlugins>`
+        // on the outer `ModuleRegistry` surface. `createRegistry` doesn't
+        // thread `TPlugins` through — at this site the runtime value is
+        // whatever the journeys plugin (if any) wrote into `extensions`.
+        // The outer `as unknown as ModuleRegistry<...>` cast at the bottom
+        // of the function re-applies the correct public type.
+        journeys: assembly.extensions.journeys as never,
         recalculateSlots: assembly.recalculateSlots,
       };
     },
@@ -548,11 +559,9 @@ export function createRegistry<
         modules: assembly.modules,
         moduleDescriptors: assembly.moduleDescriptors,
         extensions: assembly.extensions,
-        journeys: assembly.extensions.journeys as ResolvedManifest<
-          TSlots,
-          TNavItem,
-          Record<string, unknown>
-        >["journeys"],
+        // See the matching comment in resolve() — public `.journeys` type
+        // comes from `PluginRuntimesOf<TPlugins>` via the outer cast.
+        journeys: assembly.extensions.journeys as never,
         onModuleExit: capturedOptions?.onModuleExit,
         recalculateSlots: assembly.recalculateSlots,
       };
@@ -562,6 +571,15 @@ export function createRegistry<
   };
 
   return registry as unknown as ModuleRegistry<TSharedDependencies, TSlots, TNavItem, readonly []>;
+}
+
+function isDevEnv(): boolean {
+  try {
+    const g = globalThis as unknown as { process?: { env?: { NODE_ENV?: string } } };
+    return !!g.process && g.process.env?.NODE_ENV !== "production";
+  } catch {
+    return false;
+  }
 }
 
 function buildDepsObject<TSharedDependencies extends Record<string, any>>(
