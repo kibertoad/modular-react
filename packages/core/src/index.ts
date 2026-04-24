@@ -109,4 +109,5 @@ export type {
   JourneyPersistence,
   TerminalOutcome,
   JourneyRuntime,
+  JourneyHandleRef,
 } from "./journey-contracts.js";

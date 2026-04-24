@@ -1,4 +1,4 @@
-import type { ModuleDescriptor } from "@modular-react/core";
+import type { JourneyHandleRef, ModuleDescriptor } from "@modular-react/core";
 import type {
   AnyJourneyDefinition,
   InstanceId,
@@ -832,7 +832,16 @@ export function createJourneyRuntime(
   // ---------------------------------------------------------------------------
 
   const runtime: JourneyRuntime = {
-    start<TInput>(journeyId: string, input: TInput): InstanceId {
+    start<TInput>(
+      journeyIdOrHandle: string | JourneyHandleRef<string, TInput>,
+      input: TInput,
+    ): InstanceId {
+      // Accept either a bare id or a `JourneyHandle`-shaped object. The
+      // handle form is the `start<TId, TInput>(handle, input)` overload; it
+      // only exists to type-check `input` — the runtime behaviour is
+      // identical either way.
+      const journeyId =
+        typeof journeyIdOrHandle === "string" ? journeyIdOrHandle : journeyIdOrHandle.id;
       const reg = assertKnown(journeyId);
       const persistence = reg.options?.persistence;
 

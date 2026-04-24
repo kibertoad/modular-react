@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { useJourneyContext } from "@modular-react/journeys";
+import { customerOnboardingHandle } from "@example-onboarding/customer-onboarding-journey";
 import type { WorkspaceActions } from "@example-onboarding/app-shared";
 import type { WorkspaceTabsState } from "../stores/workspace-tabs.js";
 import { hasPersistedJourney } from "../persistence.js";
@@ -37,10 +38,13 @@ export function Home({ workspace, tabsStore }: HomeProps) {
       );
     }
     const input = { customerId };
-    const instanceId = journeyCtx.runtime.start("customer-onboarding", input);
+    // Handle form — TS enforces `input` matches the journey's declared
+    // OnboardingInput. A mismatch (e.g. `{ customerId: 123 }`) fails at
+    // compile time instead of silently reaching the runtime.
+    const instanceId = journeyCtx.runtime.start(customerOnboardingHandle, input);
     workspace.addJourneyTab({
       instanceId,
-      journeyId: "customer-onboarding",
+      journeyId: customerOnboardingHandle.id,
       input,
       title: `Onboard · ${customerName}`,
     });

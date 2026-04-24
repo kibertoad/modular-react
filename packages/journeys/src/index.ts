@@ -24,6 +24,11 @@ export type { JourneyProviderProps, JourneyProviderValue } from "./provider.js";
 export { journeysPlugin } from "./plugin.js";
 export type { JourneysPluginOptions, JourneysPluginExtension } from "./plugin.js";
 
+// Handles — export a handle from each journey package so modules and shells
+// open journeys with typed `input` without importing the journey's runtime.
+export { defineJourneyHandle } from "./handle.js";
+export type { JourneyHandle } from "./handle.js";
+
 export type {
   AbandonCtx,
   AnyJourneyDefinition,

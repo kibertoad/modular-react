@@ -240,7 +240,29 @@ export interface TerminalOutcome {
   readonly journeyId: string;
 }
 
+/**
+ * Structural shape of a journey handle — a lightweight token a journey
+ * package can export so callers open journeys with typed `input` without
+ * importing the journey's runtime code. Declared in core so the overload
+ * on `JourneyRuntime.start` does not force core to depend on
+ * `@modular-react/journeys`. The `__input` field is phantom (never read).
+ *
+ * The implementation package (`@modular-react/journeys`) re-exports this
+ * under the canonical name `JourneyHandle` and ships `defineJourneyHandle`
+ * as the constructor.
+ */
+export interface JourneyHandleRef<TId extends string = string, TInput = unknown> {
+  readonly id: TId;
+  readonly __input?: TInput;
+}
+
 export interface JourneyRuntime {
+  /** Handle form — type-checks `input` against the handle's phantom `TInput`. */
+  start<TId extends string, TInput>(
+    handle: JourneyHandleRef<TId, TInput>,
+    input: TInput,
+  ): InstanceId;
+  /** String-id form — accepts any `input` (the handle form is preferred). */
   start<TInput>(journeyId: string, input: TInput): InstanceId;
   hydrate<TState>(journeyId: string, blob: SerializedJourney<TState>): InstanceId;
   getInstance(id: InstanceId): JourneyInstance | null;

@@ -1,4 +1,4 @@
-import { defineJourney } from "@modular-react/journeys";
+import { defineJourney, defineJourneyHandle } from "@modular-react/journeys";
 import type { PlanHint, SubscriptionPlan } from "@example-onboarding/app-shared";
 import type profileModule from "@example-onboarding/profile-module";
 import type planModule from "@example-onboarding/plan-module";
@@ -153,3 +153,12 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
 });
 
 export type CustomerOnboardingJourney = typeof customerOnboardingJourney;
+
+/**
+ * Typed token for opening this journey. Modules and shells import the
+ * handle (via `import type`) to call `runtime.start(handle, input)` with
+ * full input checking — without pulling the journey's runtime code into
+ * the caller's bundle.
+ */
+export const customerOnboardingHandle = defineJourneyHandle(customerOnboardingJourney);
+export type CustomerOnboardingHandle = typeof customerOnboardingHandle;
