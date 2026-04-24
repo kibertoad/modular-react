@@ -7,6 +7,7 @@
 import type {
   AbandonCtx,
   JourneyPersistence,
+  JourneyStep,
   ModuleTypeMap,
   SerializedJourney,
   StepSpec,
@@ -72,7 +73,45 @@ export type AnyJourneyDefinition = JourneyDefinition<ModuleTypeMap, any, any>;
 // -----------------------------------------------------------------------------
 
 export interface JourneyRegisterOptions<TState = unknown> {
+  /**
+   * Fires after every transition. Registration-level hook runs after the
+   * definition-level `onTransition`. Useful for shell telemetry that
+   * doesn't belong in journey authoring code.
+   */
   onTransition?: (ev: TransitionEvent) => void;
+  /**
+   * Fires when the journey reaches a `{ complete }` transition. Runs after
+   * the definition-level `onComplete` (both fire). Use for shell-level
+   * completion analytics.
+   */
+  onComplete?: (ctx: TerminalCtx<TState>, result: unknown) => void;
+  /**
+   * Fires when the journey aborts — either via a `{ abort }` transition, a
+   * thrown transition handler, or `runtime.end(id)`. Runs after the
+   * definition-level `onAbort`.
+   */
+  onAbort?: (ctx: TerminalCtx<TState>, reason: unknown) => void;
+  /**
+   * Overrides the definition's `onAbandon` when `runtime.end(id)` is called
+   * on an active instance. When set, this handler supplies the transition
+   * result (typically `{ abort }`). When absent, the definition's handler
+   * is used. Use to swap out abandon behaviour for a specific deployment
+   * (e.g. a tab-close workflow that completes instead of aborting).
+   */
+  onAbandon?: (ctx: AbandonCtx<ModuleTypeMap, TState>) => TransitionResult<ModuleTypeMap, TState>;
+  /**
+   * Layered on top of the definition-level `onHydrate` — runs **after** the
+   * definition transforms the blob. Useful for shell-level migration of
+   * fields that the journey author doesn't know about (e.g. redacting
+   * environment-specific identifiers on load).
+   */
+  onHydrate?: (blob: SerializedJourney<TState>) => SerializedJourney<TState>;
+  /**
+   * Fires when a step component throws or a transition handler throws for
+   * an instance of this journey. Observation-only — the runtime still
+   * aborts / retries according to the outlet's `onStepError` policy.
+   */
+  onError?: (err: unknown, ctx: { step: JourneyStep | null }) => void;
   /**
    * Optional. Without it, journeys live in memory only — every
    * `runtime.start()` mints a fresh instance and nothing is written to

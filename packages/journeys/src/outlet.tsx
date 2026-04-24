@@ -146,6 +146,16 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
   const { exit, goBack } = internals.__bindStepCallbacks(record, reg);
 
   const handleError = (err: unknown): void => {
+    // Registration-level onError fires on every component throw — shell
+    // telemetry observes the error even when the outlet decides to retry
+    // or ignore. Keep this before policy resolution so the hook sees the
+    // raw error regardless of how the outlet handles it.
+    try {
+      reg.options?.onError?.(err, { step });
+    } catch (hookErr) {
+      if (internals.__debug)
+        console.error("[@modular-react/journeys] onError (registration) threw", hookErr);
+    }
     let policy = onStepError?.(err, { step }) ?? "abort";
     if (policy === "retry") {
       // The retry counter lives on the runtime record (not a ref) so it

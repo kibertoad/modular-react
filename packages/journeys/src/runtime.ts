@@ -372,36 +372,55 @@ export function createJourneyRuntime(
   function fireOnComplete(reg: RegisteredJourney, record: InstanceRecord, result: unknown) {
     if (record.terminalFired) return;
     record.terminalFired = true;
+    const ctx = {
+      journeyId: record.journeyId,
+      instanceId: record.id,
+      state: record.state,
+      history: record.history,
+    };
     try {
-      reg.definition.onComplete?.(
-        {
-          journeyId: record.journeyId,
-          instanceId: record.id,
-          state: record.state,
-          history: record.history,
-        },
-        result,
-      );
+      reg.definition.onComplete?.(ctx, result);
     } catch (err) {
-      if (debug) console.error("[@modular-react/journeys] onComplete threw", err);
+      if (debug) console.error("[@modular-react/journeys] onComplete (definition) threw", err);
+    }
+    try {
+      reg.options?.onComplete?.(ctx, result);
+    } catch (err) {
+      if (debug) console.error("[@modular-react/journeys] onComplete (registration) threw", err);
     }
   }
 
   function fireOnAbort(reg: RegisteredJourney, record: InstanceRecord, reason: unknown) {
     if (record.terminalFired) return;
     record.terminalFired = true;
+    const ctx = {
+      journeyId: record.journeyId,
+      instanceId: record.id,
+      state: record.state,
+      history: record.history,
+    };
     try {
-      reg.definition.onAbort?.(
-        {
-          journeyId: record.journeyId,
-          instanceId: record.id,
-          state: record.state,
-          history: record.history,
-        },
-        reason,
-      );
+      reg.definition.onAbort?.(ctx, reason);
     } catch (err) {
-      if (debug) console.error("[@modular-react/journeys] onAbort threw", err);
+      if (debug) console.error("[@modular-react/journeys] onAbort (definition) threw", err);
+    }
+    try {
+      reg.options?.onAbort?.(ctx, reason);
+    } catch (err) {
+      if (debug) console.error("[@modular-react/journeys] onAbort (registration) threw", err);
+    }
+  }
+
+  function fireOnError(
+    reg: RegisteredJourney,
+    record: InstanceRecord,
+    err: unknown,
+    step: JourneyStep | null,
+  ) {
+    try {
+      reg.options?.onError?.(err, { step });
+    } catch (hookErr) {
+      if (debug) console.error("[@modular-react/journeys] onError (registration) threw", hookErr);
     }
   }
 
@@ -556,6 +575,7 @@ export function createJourneyRuntime(
       result = handler({ state: record.state, input: step.input, output });
     } catch (err) {
       if (debug) console.error("[@modular-react/journeys] transition handler threw", err);
+      fireOnError(reg, record, err, step);
       applyTransition(
         record,
         reg,
@@ -810,16 +830,34 @@ export function createJourneyRuntime(
     | { ok: false; reason: "on-hydrate-threw"; cause: unknown };
 
   function migrateBlob(reg: RegisteredJourney, blob: SerializedJourney<unknown>): MigrateResult {
+    let migrated: SerializedJourney<unknown> = blob;
+    let ranAny = false;
     if (reg.definition.onHydrate) {
+      ranAny = true;
       try {
-        return {
-          ok: true,
-          blob: reg.definition.onHydrate(blob) as SerializedJourney<unknown>,
-        };
+        migrated = reg.definition.onHydrate(migrated) as SerializedJourney<unknown>;
       } catch (err) {
-        if (debug) console.error("[@modular-react/journeys] onHydrate threw", err);
+        if (debug) console.error("[@modular-react/journeys] onHydrate (definition) threw", err);
         return { ok: false, reason: "on-hydrate-threw", cause: err };
       }
+    }
+    // Registration-level `onHydrate` runs after the definition's — shells can
+    // layer environment-specific post-migration tweaks (redaction, id
+    // rewriting) without touching journey authoring code.
+    const regHydrate = reg.options?.onHydrate as
+      | ((b: SerializedJourney<unknown>) => SerializedJourney<unknown>)
+      | undefined;
+    if (regHydrate) {
+      ranAny = true;
+      try {
+        migrated = regHydrate(migrated);
+      } catch (err) {
+        if (debug) console.error("[@modular-react/journeys] onHydrate (registration) threw", err);
+        return { ok: false, reason: "on-hydrate-threw", cause: err };
+      }
+    }
+    if (ranAny) {
+      return { ok: true, blob: migrated };
     }
     if (blob.version !== reg.definition.version) {
       return { ok: false, reason: "version-mismatch" };
@@ -1049,9 +1087,14 @@ export function createJourneyRuntime(
       let result: TransitionResult<ModuleTypeMap, unknown> = {
         abort: { reason: reason ?? "abandoned" },
       };
-      if (reg.definition.onAbandon) {
+      // Registration-level `onAbandon` overrides the definition's — shells
+      // can swap the abandon outcome without modifying journey authoring code
+      // (e.g. complete instead of abort on tab close). If absent, fall back
+      // to the definition's handler.
+      const abandonHandler = reg.options?.onAbandon ?? reg.definition.onAbandon;
+      if (abandonHandler) {
         try {
-          result = reg.definition.onAbandon({
+          result = abandonHandler({
             journeyId: record.journeyId,
             instanceId: record.id,
             step: record.step,
