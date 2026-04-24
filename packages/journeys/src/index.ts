@@ -13,6 +13,7 @@ export type {
   WebStoragePersistenceOptions,
   MemoryPersistenceOptions,
   MemoryPersistence,
+  SyncJourneyPersistence,
 } from "./persistence.js";
 // `getInternals` intentionally omitted from the public surface — test code
 // that used to reach through it should migrate to `createTestHarness` in

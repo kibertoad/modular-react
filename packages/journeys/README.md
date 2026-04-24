@@ -797,7 +797,7 @@ createWebStoragePersistence<MyInput, MyState>({
 });
 ```
 
-Pick this adapter unless your state is large (>~1 MB per origin), you need offline-first guarantees, or multi-tab clobbering is a correctness concern. For those cases, write a custom IndexedDB adapter against the same `JourneyPersistence` interface.
+Pick this adapter unless your state is large (>~1 MB per origin), you need offline-first guarantees, or **concurrent tabs writing the same key** is a correctness concern — the synchronous Web Storage API has no cross-tab write coordination, so the last `save` wins and can silently clobber a concurrent transition from another tab. For those cases, write a custom IndexedDB adapter against the same `JourneyPersistence` interface.
 
 **`createMemoryPersistence` — for tests and SSR.** `Map`-backed, zero IO. The primary use case is tests: a fresh store per test avoids bleed between cases, and the runtime's persistence code paths stay exercised without `localStorage` mocks.
 
@@ -822,7 +822,7 @@ store.clear();
 
 Blobs are deep-cloned on both `save` and `load` by default so mutating the stored or returned object can't corrupt the other. Pass `clone: false` only in hot test loops where you've verified nobody mutates the blob.
 
-Also valid as an SSR "persistence is configured but nothing survives the request" mode: no server state leaks into rendered HTML, and `start()` on the client re-probes from scratch.
+Also valid as an SSR "persistence is configured but nothing survives the request" mode: no server state leaks into rendered HTML, and `start()` on the client re-probes from scratch. For an SSR shell that wants real client-side persistence, pick the adapter based on where the code runs — `createMemoryPersistence` on the server, `createWebStoragePersistence` on the client — so the server render produces no cross-request state and the client picks up from `localStorage` as normal.
 
 Guarantees:
 

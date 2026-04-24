@@ -4,7 +4,7 @@ import {
   createWebStoragePersistence,
   defineJourneyPersistence,
 } from "./persistence.js";
-import type { MemoryPersistence } from "./persistence.js";
+import type { MemoryPersistence, SyncJourneyPersistence } from "./persistence.js";
 import type { JourneyPersistence, SerializedJourney } from "./types.js";
 
 interface CustomerInput {
@@ -77,8 +77,13 @@ describe("createWebStoragePersistence", () => {
     keyFor: ({ input }) => `k:${input.customerId}`,
   });
 
-  test("returns a JourneyPersistence<TState, TInput>", () => {
-    expectTypeOf(web).toEqualTypeOf<JourneyPersistence<CustomerState, CustomerInput>>();
+  test("returns a SyncJourneyPersistence<TState, TInput>", () => {
+    expectTypeOf(web).toEqualTypeOf<SyncJourneyPersistence<CustomerState, CustomerInput>>();
+  });
+
+  test("assignable to JourneyPersistence<TState, TInput> (accepted by registerJourney)", () => {
+    const asAdapter: JourneyPersistence<CustomerState, CustomerInput> = web;
+    expectTypeOf(asAdapter).toEqualTypeOf<JourneyPersistence<CustomerState, CustomerInput>>();
   });
 
   test("keyFor narrows `input` to the journey's TInput", () => {
@@ -88,10 +93,13 @@ describe("createWebStoragePersistence", () => {
     }>();
   });
 
-  test("load / save carry TState through SerializedJourney", () => {
-    expectTypeOf(web.load).returns.toEqualTypeOf<
-      SerializedJourney<CustomerState> | null | Promise<SerializedJourney<CustomerState> | null>
-    >();
+  test("load returns a sync value — callers don't have to discriminate or cast", () => {
+    // The whole point of SyncJourneyPersistence: direct `.load(key)` callers
+    // (e.g. a `hasPersistedJourney` probe outside the runtime) see the
+    // plain value, not `value | Promise<value>`.
+    expectTypeOf(web.load).returns.toEqualTypeOf<SerializedJourney<CustomerState> | null>();
+    expectTypeOf(web.save).returns.toEqualTypeOf<void>();
+    expectTypeOf(web.remove).returns.toEqualTypeOf<void>();
     expectTypeOf(web.save).parameter(1).toEqualTypeOf<SerializedJourney<CustomerState>>();
   });
 });

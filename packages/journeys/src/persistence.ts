@@ -1,6 +1,25 @@
 import type { JourneyPersistence, SerializedJourney } from "./types.js";
 
 /**
+ * Narrowed variant of {@link JourneyPersistence} whose methods are
+ * guaranteed synchronous — `load` returns `SerializedJourney<TState> | null`
+ * (not `MaybePromise<…>`), `save`/`remove` return `void` (not
+ * `MaybePromise<void>`). Stock adapters return this shape so direct
+ * `.load(key)` callers don't need to discriminate sync vs async or cast
+ * away the promise half of the union.
+ *
+ * Structurally assignable to `JourneyPersistence<TState, TInput>`, so the
+ * value can still be passed to `registerJourney({ persistence })` without
+ * widening.
+ */
+export interface SyncJourneyPersistence<TState, TInput = unknown> {
+  readonly keyFor: (ctx: { journeyId: string; input: TInput }) => string;
+  readonly load: (key: string) => SerializedJourney<TState> | null;
+  readonly save: (key: string, blob: SerializedJourney<TState>) => void;
+  readonly remove: (key: string) => void;
+}
+
+/**
  * Identity helper that ties a persistence adapter's `keyFor` input to a
  * journey's `TInput` so callers get compile-time checking on per-customer /
  * per-session keys. Zero runtime cost — the adapter is returned as-is.
@@ -56,9 +75,10 @@ export interface WebStoragePersistenceOptions<TInput> {
    * call, which keeps SSR safe (the default returns `null` when
    * `localStorage` is not defined on the global).
    *
-   * Defaults to `globalThis.localStorage` (or `null` under SSR). Pass
-   * `sessionStorage` for tab-scoped persistence, or any `Storage`-shaped
-   * stub for custom backends.
+   * Defaults to `globalThis.localStorage` (or `null` under SSR) when
+   * omitted or explicitly `undefined`. Pass `sessionStorage` for
+   * tab-scoped persistence, `null` to force the SSR no-op path, or any
+   * `Storage`-shaped stub for custom backends.
    */
   readonly storage?: Storage | null | (() => Storage | null);
 }
@@ -99,7 +119,7 @@ export interface WebStoragePersistenceOptions<TInput> {
  */
 export function createWebStoragePersistence<TInput, TState>(
   options: WebStoragePersistenceOptions<TInput>,
-): JourneyPersistence<TState, TInput> {
+): SyncJourneyPersistence<TState, TInput> {
   const { keyFor, storage } = options;
 
   const resolve = (): Storage | null => {
@@ -159,12 +179,13 @@ export interface MemoryPersistenceOptions<TInput, TState> {
 }
 
 /**
- * `JourneyPersistence` augmented with test-only inspection helpers
- * (`size`, `entries`, `clear`). The core four methods satisfy
- * `JourneyPersistence<TState, TInput>` so the value can be passed to
- * `registerJourney({ persistence })` directly.
+ * `SyncJourneyPersistence` augmented with test-only inspection helpers
+ * (`size`, `entries`, `clear`). Methods are sync (no `MaybePromise`) so
+ * tests can `expect(store.load(k)).toEqual(blob)` without awaiting, and
+ * the value is still assignable to `JourneyPersistence<TState, TInput>`
+ * for `registerJourney({ persistence })`.
  */
-export interface MemoryPersistence<TInput, TState> extends JourneyPersistence<TState, TInput> {
+export interface MemoryPersistence<TInput, TState> extends SyncJourneyPersistence<TState, TInput> {
   /** Number of entries currently stored. */
   readonly size: () => number;
   /** Snapshot of all `[key, blob]` pairs. Each blob is cloned if cloning is enabled. */
@@ -199,11 +220,16 @@ export interface MemoryPersistence<TInput, TState> extends JourneyPersistence<TS
 export function createMemoryPersistence<TInput, TState>(
   options: MemoryPersistenceOptions<TInput, TState>,
 ): MemoryPersistence<TInput, TState> {
-  const store = new Map<string, SerializedJourney<TState>>(options.initial);
   const shouldClone = options.clone !== false;
 
   const copy = (blob: SerializedJourney<TState>): SerializedJourney<TState> =>
     shouldClone ? (JSON.parse(JSON.stringify(blob)) as SerializedJourney<TState>) : blob;
+
+  // Seed entries go through the same `copy` as `save` so callers mutating the
+  // source array after construction can't corrupt the backing store.
+  const store = new Map<string, SerializedJourney<TState>>(
+    options.initial ? Array.from(options.initial, ([k, v]) => [k, copy(v)] as const) : undefined,
+  );
 
   return {
     keyFor: options.keyFor,

@@ -1,5 +1,4 @@
 import { createWebStoragePersistence } from "@modular-react/journeys";
-import type { SerializedJourney } from "@modular-react/journeys";
 import type {
   OnboardingInput,
   OnboardingState,
@@ -21,16 +20,12 @@ export const journeyPersistence = createWebStoragePersistence<OnboardingInput, O
  * Probe storage for a persisted active journey without starting one. Used by
  * the Home page to show "Resume" vs "Start" affordances before the user
  * commits to opening a tab.
+ *
+ * Routes through the adapter's `load` so this probe inherits SSR safety,
+ * lazy-`Storage` resolution, and the corrupt-JSON cleanup that the adapter
+ * applies on read.
  */
 export function hasPersistedJourney(journeyId: string, customerId: string): boolean {
-  if (typeof localStorage === "undefined") return false;
   const key = journeyPersistence.keyFor({ journeyId, input: { customerId } });
-  const raw = localStorage.getItem(key);
-  if (!raw) return false;
-  try {
-    const blob = JSON.parse(raw) as SerializedJourney;
-    return blob.status === "active";
-  } catch {
-    return false;
-  }
+  return journeyPersistence.load(key)?.status === "active";
 }
