@@ -201,7 +201,8 @@ jobs:
           package-manager-cache: false
 
       - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@latest --activate
+        # Pin pnpm via `packageManager` in package.json (see ci.common.yml).
+        run: corepack enable
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

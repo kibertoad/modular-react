@@ -22,7 +22,12 @@ jobs:
           package-manager-cache: false
 
       - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@latest --activate
+        # `corepack enable` alone (no `prepare pnpm@latest`) makes pnpm
+        # invocations honor the `packageManager` field in package.json, so
+        # CI and local devs run the same pnpm version. Mixing `pnpm@latest`
+        # in CI with a pinned local pnpm produces divergent lockfile shapes
+        # and breaks `--frozen-lockfile`.
+        run: corepack enable
 
       - name: Install
         run: pnpm install --frozen-lockfile

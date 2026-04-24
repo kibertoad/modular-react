@@ -1,5 +1,10 @@
 import { describe, expectTypeOf, test } from "vitest";
-import { defineJourneyPersistence } from "./persistence.js";
+import {
+  createMemoryPersistence,
+  createWebStoragePersistence,
+  defineJourneyPersistence,
+} from "./persistence.js";
+import type { MemoryPersistence, SyncJourneyPersistence } from "./persistence.js";
 import type { JourneyPersistence, SerializedJourney } from "./types.js";
 
 interface CustomerInput {
@@ -64,5 +69,61 @@ describe("defineJourneyPersistence", () => {
       journeyId: string;
       input: unknown;
     }>();
+  });
+});
+
+describe("createWebStoragePersistence", () => {
+  const web = createWebStoragePersistence<CustomerInput, CustomerState>({
+    keyFor: ({ input }) => `k:${input.customerId}`,
+  });
+
+  test("returns a SyncJourneyPersistence<TState, TInput>", () => {
+    expectTypeOf(web).toEqualTypeOf<SyncJourneyPersistence<CustomerState, CustomerInput>>();
+  });
+
+  test("assignable to JourneyPersistence<TState, TInput> (accepted by registerJourney)", () => {
+    const asAdapter: JourneyPersistence<CustomerState, CustomerInput> = web;
+    expectTypeOf(asAdapter).toEqualTypeOf<JourneyPersistence<CustomerState, CustomerInput>>();
+  });
+
+  test("keyFor narrows `input` to the journey's TInput", () => {
+    expectTypeOf(web.keyFor).parameter(0).toEqualTypeOf<{
+      journeyId: string;
+      input: CustomerInput;
+    }>();
+  });
+
+  test("load returns a sync value — callers don't have to discriminate or cast", () => {
+    // The whole point of SyncJourneyPersistence: direct `.load(key)` callers
+    // (e.g. a `hasPersistedJourney` probe outside the runtime) see the
+    // plain value, not `value | Promise<value>`.
+    expectTypeOf(web.load).returns.toEqualTypeOf<SerializedJourney<CustomerState> | null>();
+    expectTypeOf(web.save).returns.toEqualTypeOf<void>();
+    expectTypeOf(web.remove).returns.toEqualTypeOf<void>();
+    expectTypeOf(web.save).parameter(1).toEqualTypeOf<SerializedJourney<CustomerState>>();
+  });
+});
+
+describe("createMemoryPersistence", () => {
+  const mem = createMemoryPersistence<CustomerInput, CustomerState>({
+    keyFor: ({ input }) => `k:${input.customerId}`,
+  });
+
+  test("returns MemoryPersistence<TInput, TState>", () => {
+    expectTypeOf(mem).toEqualTypeOf<MemoryPersistence<CustomerInput, CustomerState>>();
+  });
+
+  test("assignable to JourneyPersistence<TState, TInput>", () => {
+    const asAdapter: JourneyPersistence<CustomerState, CustomerInput> = mem;
+    expectTypeOf(asAdapter.keyFor).parameter(0).toEqualTypeOf<{
+      journeyId: string;
+      input: CustomerInput;
+    }>();
+  });
+
+  test("entries() is typed against SerializedJourney<TState>", () => {
+    expectTypeOf(mem.entries).returns.toEqualTypeOf<
+      ReadonlyArray<readonly [string, SerializedJourney<CustomerState>]>
+    >();
   });
 });
