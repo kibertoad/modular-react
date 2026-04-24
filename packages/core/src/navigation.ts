@@ -1,4 +1,4 @@
-import type { AnyModuleDescriptor, NavigationItem } from "./types.js";
+import type { AnyModuleDescriptor, NavigationItem, NavigationItemBase } from "./types.js";
 import type { NavigationManifest, NavigationGroup } from "./runtime-types.js";
 
 /**
@@ -12,9 +12,14 @@ import type { NavigationManifest, NavigationGroup } from "./runtime-types.js";
  * labels, typed dynamic-href context, typed meta) are preserved end-to-end —
  * call `buildNavigationManifest<AppNavItem>([...])` or let inference pick it
  * up from the module list.
+ *
+ * Pass `extraItems` to merge additional items from non-module sources
+ * (e.g. plugin-contributed items via `RegistryPlugin.contributeNavigation`).
+ * They participate in the same sort/group logic as module items.
  */
-export function buildNavigationManifest<TNavItem extends NavigationItem = NavigationItem>(
+export function buildNavigationManifest<TNavItem extends NavigationItemBase = NavigationItem>(
   modules: readonly AnyModuleDescriptor<TNavItem>[],
+  extraItems?: readonly TNavItem[],
 ): NavigationManifest<TNavItem> {
   const allItems: TNavItem[] = [];
 
@@ -22,6 +27,10 @@ export function buildNavigationManifest<TNavItem extends NavigationItem = Naviga
     if (mod.navigation) {
       allItems.push(...mod.navigation);
     }
+  }
+
+  if (extraItems && extraItems.length > 0) {
+    allItems.push(...extraItems);
   }
 
   // Sort by order (lower first), then by label lexicographically.
@@ -35,7 +44,7 @@ export function buildNavigationManifest<TNavItem extends NavigationItem = Naviga
     const orderDiff = (a.order ?? 999) - (b.order ?? 999);
     if (orderDiff !== 0) return orderDiff;
     if (a.label === b.label) return 0;
-    return a.label < b.label ? -1 : 1;
+    return (a.label as string) < (b.label as string) ? -1 : 1;
   });
 
   // Group items

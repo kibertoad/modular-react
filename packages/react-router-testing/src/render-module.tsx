@@ -30,6 +30,19 @@ export interface RenderModuleOptions<TSharedDependencies extends Record<string, 
    * Only used for component-only modules (no createRoutes).
    */
   props?: Record<string, unknown>;
+
+  /**
+   * Render a typed entry point instead of the legacy `component`. The entry
+   * receives `{ input, exit }` (and optionally `goBack`) per the
+   * `ModuleEntryProps` contract.
+   */
+  entry?: string;
+
+  /** Input passed to the rendered entry. Required when `entry` is set. */
+  input?: unknown;
+
+  /** Exit spy — called when the rendered entry emits an exit. */
+  exit?: (name: string, output?: unknown) => void;
 }
 
 function buildModuleEntry(module: ModuleDescriptor<any>): ModuleEntry {
@@ -81,6 +94,26 @@ export async function renderModule<TSharedDependencies extends Record<string, an
         ) => Record<string, readonly unknown[]>,
       ],
       flatDeps,
+    );
+  }
+
+  if (options.entry) {
+    const entryPoint = module.entryPoints?.[options.entry];
+    if (!entryPoint) {
+      throw new Error(
+        `[@react-router-modules/testing] Module "${module.id}" has no entry "${options.entry}".`,
+      );
+    }
+    const Component = entryPoint.component as React.ComponentType<any>;
+    const exitSpy = options.exit ?? (() => {});
+    return render(
+      <SharedDependenciesContext value={{ stores, services, reactiveServices }}>
+        <SlotsContext value={slots}>
+          <ModulesContext value={[moduleEntry]}>
+            <Component input={options.input} exit={exitSpy} />
+          </ModulesContext>
+        </SlotsContext>
+      </SharedDependenciesContext>,
     );
   }
 

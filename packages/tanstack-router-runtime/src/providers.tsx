@@ -4,6 +4,7 @@ import { SharedDependenciesContext } from "@tanstack-react-modules/core";
 import type {
   DynamicSlotFactory,
   SlotFilter,
+  NavigationItemBase,
   NavigationManifest,
   ModuleEntry,
 } from "@modular-react/core";
@@ -20,7 +21,7 @@ export interface ProvidersProps {
   stores: Record<string, StoreApi<unknown>>;
   services: Record<string, unknown>;
   reactiveServices: Record<string, ReactiveService<unknown>>;
-  navigation: NavigationManifest;
+  navigation: NavigationManifest<NavigationItemBase>;
   slots: object;
   modules: readonly ModuleEntry[];
   providers?: React.ComponentType<{ children: React.ReactNode }>[];

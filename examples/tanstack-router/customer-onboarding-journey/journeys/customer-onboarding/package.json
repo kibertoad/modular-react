@@ -1,0 +1,26 @@
+{
+  "name": "@example-tsr-onboarding/customer-onboarding-journey",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@example-tsr-onboarding/app-shared": "workspace:*",
+    "@example-tsr-onboarding/billing-module": "workspace:*",
+    "@example-tsr-onboarding/plan-module": "workspace:*",
+    "@example-tsr-onboarding/profile-module": "workspace:*",
+    "@modular-react/journeys": "^0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}

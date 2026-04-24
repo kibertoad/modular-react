@@ -2,6 +2,7 @@ import type { Store } from "./store.js";
 import type {
   ModuleDescriptor,
   NavigationItem,
+  NavigationItemBase,
   ReactiveService,
   SlotMap,
   SlotMapOf,
@@ -42,12 +43,12 @@ export interface RegistryConfig<
   slots?: { [K in keyof TSlots]?: TSlots[K] };
 }
 
-export interface NavigationGroup<TNavItem extends NavigationItem = NavigationItem> {
+export interface NavigationGroup<TNavItem extends NavigationItemBase = NavigationItem> {
   readonly group: string;
   readonly items: readonly TNavItem[];
 }
 
-export interface NavigationManifest<TNavItem extends NavigationItem = NavigationItem> {
+export interface NavigationManifest<TNavItem extends NavigationItemBase = NavigationItem> {
   /** All navigation items flat */
   readonly items: readonly TNavItem[];
   /** Items grouped by their group key, sorted by order within each group */

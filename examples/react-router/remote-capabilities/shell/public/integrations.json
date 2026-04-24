@@ -1,0 +1,134 @@
+[
+  {
+    "id": "integration:salesforce",
+    "version": "1.0.0",
+    "slots": {
+      "integrations": [
+        {
+          "id": "salesforce",
+          "name": "Salesforce",
+          "category": "crm",
+          "icon": "crm",
+          "description": "Sync contacts and pipeline between Salesforce and this workspace.",
+          "authentication": { "type": "oauth" },
+          "filters": [
+            {
+              "id": "search",
+              "type": "search",
+              "query": "contains(name, '{value}')"
+            },
+            {
+              "id": "last-modified",
+              "type": "daterange",
+              "query": "lastModifiedAt ge {value.from} and lastModifiedAt le {value.to}"
+            }
+          ],
+          "capabilities": {
+            "importTracking": {
+              "version": 1,
+              "data": { "pollingIntervalMs": 5000 }
+            },
+            "contactSync": {
+              "version": 1,
+              "data": { "direction": "bidirectional" }
+            }
+          }
+        }
+      ]
+    },
+    "meta": {
+      "enabledBy": "license:crm-basic"
+    }
+  },
+  {
+    "id": "integration:hubspot",
+    "version": "1.0.0",
+    "slots": {
+      "integrations": [
+        {
+          "id": "hubspot",
+          "name": "HubSpot",
+          "category": "crm",
+          "icon": "crm",
+          "description": "Inbound marketing + CRM. Syncs lead lists and deal stages.",
+          "authentication": { "type": "oauth" },
+          "filters": [
+            {
+              "id": "search",
+              "type": "search",
+              "query": "name=like={value}"
+            }
+          ],
+          "capabilities": {
+            "contactSync": {
+              "version": 1,
+              "data": { "direction": "pull" }
+            }
+          }
+        }
+      ]
+    },
+    "meta": {
+      "enabledBy": "license:crm-basic"
+    }
+  },
+  {
+    "id": "integration:zendesk",
+    "version": "1.0.0",
+    "slots": {
+      "integrations": [
+        {
+          "id": "zendesk",
+          "name": "Zendesk",
+          "category": "ticketing",
+          "icon": "ticketing",
+          "description": "Customer support ticketing. Links tickets to workspace records.",
+          "authentication": { "type": "apikey" },
+          "filters": [
+            {
+              "id": "search",
+              "type": "search",
+              "query": "subject:{value}"
+            }
+          ],
+          "capabilities": {
+            "importTracking": {
+              "version": 1,
+              "data": { "pollingIntervalMs": 10000 }
+            }
+          }
+        }
+      ]
+    },
+    "meta": {
+      "enabledBy": "license:support"
+    }
+  },
+  {
+    "id": "integration:mixpanel",
+    "version": "1.0.0",
+    "slots": {
+      "integrations": [
+        {
+          "id": "mixpanel",
+          "name": "Mixpanel",
+          "category": "analytics",
+          "icon": "analytics",
+          "description": "Product analytics. Streams events from this workspace to Mixpanel.",
+          "authentication": { "type": "apikey" },
+          "filters": [
+            {
+              "id": "last-modified",
+              "type": "daterange",
+              "query": "time>={value.from} AND time<={value.to}"
+            }
+          ],
+          "capabilities": {}
+        }
+      ]
+    },
+    "meta": {
+      "enabledBy": "license:analytics"
+    }
+  }
+]

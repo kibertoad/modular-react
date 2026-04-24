@@ -1,8 +1,8 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
 import { buildNavigationManifest, resolveNavHref } from "./navigation.js";
-import type { AnyModuleDescriptor, NavigationItem } from "./types.js";
+import type { AnyModuleDescriptor, NavigationItem, NavigationItemBase } from "./types.js";
 
-function mod<TNavItem extends NavigationItem>(
+function mod<TNavItem extends NavigationItemBase>(
   nav: readonly TNavItem[],
 ): AnyModuleDescriptor<TNavItem> {
   return {
@@ -26,6 +26,38 @@ describe("buildNavigationManifest", () => {
       const m2 = mod([{ label: "B", to: "/b" }]);
       const result = buildNavigationManifest([m1, m2]);
       expect(result.items).toHaveLength(2);
+    });
+  });
+
+  describe("extraItems (non-module contributions)", () => {
+    it("merges extra items with module items into the same manifest", () => {
+      const m = mod([{ label: "ModuleItem", to: "/m" }]);
+      const result = buildNavigationManifest([m], [{ label: "PluginItem", to: "/p" }]);
+      expect(result.items.map((i) => i.label)).toEqual(["ModuleItem", "PluginItem"]);
+    });
+
+    it("extra items participate in sort + group logic", () => {
+      const m = mod([{ label: "Module", to: "/m", order: 5, group: "finance" }]);
+      const result = buildNavigationManifest(
+        [m],
+        [{ label: "Plugin", to: "/p", order: 1, group: "finance" }],
+      );
+      // Sorted by order asc — plugin (1) beats module (5).
+      expect(result.items.map((i) => i.label)).toEqual(["Plugin", "Module"]);
+      expect(result.groups).toHaveLength(1);
+      expect(result.groups[0].items.map((i) => i.label)).toEqual(["Plugin", "Module"]);
+    });
+
+    it("no module items + extra items still produces a manifest", () => {
+      const result = buildNavigationManifest([], [{ label: "Only", to: "/o" }]);
+      expect(result.items).toHaveLength(1);
+      expect(result.ungrouped).toHaveLength(1);
+    });
+
+    it("an empty extraItems array is a no-op", () => {
+      const m = mod([{ label: "A", to: "/a" }]);
+      const result = buildNavigationManifest([m], []);
+      expect(result.items).toHaveLength(1);
     });
   });
 

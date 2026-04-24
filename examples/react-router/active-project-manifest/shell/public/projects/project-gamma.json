@@ -1,0 +1,27 @@
+{
+  "id": "integration:mixpanel",
+  "version": "1.0.0",
+  "slots": {
+    "integration": [
+      {
+        "id": "mixpanel",
+        "name": "Mixpanel",
+        "category": "analytics",
+        "icon": "analytics",
+        "description": "Product analytics. Streams events from this workspace to Mixpanel.",
+        "authentication": { "type": "apikey" },
+        "filters": [
+          {
+            "id": "last-modified",
+            "type": "daterange",
+            "query": "time>={value.from} AND time<={value.to}"
+          }
+        ],
+        "capabilities": {}
+      }
+    ]
+  },
+  "meta": {
+    "enabledBy": "license:analytics"
+  }
+}

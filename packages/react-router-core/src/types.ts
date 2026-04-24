@@ -2,6 +2,7 @@ import type { RouteObject } from "react-router";
 import type {
   ModuleDescriptor as BaseModuleDescriptor,
   NavigationItem,
+  NavigationItemBase,
   SlotMap,
   SlotMapOf,
 } from "@modular-react/core";
@@ -14,6 +15,7 @@ export type {
   ZoneMap,
   ZoneMapOf,
   NavigationItem,
+  NavigationItemBase,
   ModuleLifecycle,
 } from "@modular-react/core";
 
@@ -29,7 +31,7 @@ export interface ModuleDescriptor<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 > extends Omit<BaseModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>, "createRoutes"> {
   /**
    * Returns the module's route subtree as React Router RouteObject(s).
@@ -52,7 +54,7 @@ export interface LazyModuleDescriptor<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
-  TNavItem extends NavigationItem = NavigationItem,
+  TNavItem extends NavigationItemBase = NavigationItem,
 > {
   /** Unique module identifier */
   readonly id: string;
@@ -83,5 +85,5 @@ export interface LazyModuleDescriptor<
 // TNavItem>` for arbitrary concrete `TDeps` / `TSlots`. With the stricter
 // constraint defaults, TS refuses the assignment at generic boundaries —
 // which defeats the whole point of the alias.
-export type AnyModuleDescriptor<TNavItem extends NavigationItem = NavigationItem> =
+export type AnyModuleDescriptor<TNavItem extends NavigationItemBase = NavigationItem> =
   ModuleDescriptor<any, any, any, TNavItem>;
