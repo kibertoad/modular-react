@@ -1,0 +1,319 @@
+/**
+ * Journey contract types — the type surfaces that describe "what a journey
+ * runtime looks like to a consumer." Hoisted to core so runtime packages
+ * (e.g. `@react-router-modules/runtime`) can describe a manifest shape that
+ * optionally carries a journey runtime without taking a hard dependency on
+ * `@modular-react/journeys`.
+ *
+ * Implementation (the runtime factory, outlet, validators, persistence
+ * helpers) stays in `@modular-react/journeys`.
+ */
+
+import type {
+  EntryPointMap,
+  ExitPointMap,
+  ExitPointSchema,
+  ModuleDescriptor,
+  ModuleEntryPoint,
+} from "./types.js";
+
+// -----------------------------------------------------------------------------
+// Structural helpers — extract entry/exit vocabulary from a ModuleDescriptor
+// -----------------------------------------------------------------------------
+
+/**
+ * A mapping of module id → module descriptor. Each journey declares its own
+ * module type map; do **not** use a single global map across all journeys
+ * (per-journey maps avoid coupling unrelated flows).
+ */
+export type ModuleTypeMap = Record<string, ModuleDescriptor<any, any, any, any>>;
+
+/** Entry names declared by a module (string keys of its `entryPoints`). */
+export type EntryNamesOf<TMod> = TMod extends { readonly entryPoints?: infer TEntries }
+  ? TEntries extends EntryPointMap
+    ? keyof TEntries & string
+    : never
+  : never;
+
+/** Exit names declared by a module (string keys of its `exitPoints`). */
+export type ExitNamesOf<TMod> = TMod extends { readonly exitPoints?: infer TExits }
+  ? TExits extends ExitPointMap
+    ? keyof TExits & string
+    : never
+  : never;
+
+/** Input type for a specific entry name on a module. */
+export type EntryInputOf<TMod, TEntry> = TMod extends { readonly entryPoints?: infer TEntries }
+  ? TEntries extends EntryPointMap
+    ? TEntry extends keyof TEntries
+      ? TEntries[TEntry] extends ModuleEntryPoint<infer TInput>
+        ? TInput
+        : never
+      : never
+    : never
+  : never;
+
+/** Output type for a specific exit name on a module. `void` when none. */
+export type ExitOutputOf<TMod, TExit> = TMod extends { readonly exitPoints?: infer TExits }
+  ? TExits extends ExitPointMap
+    ? TExit extends keyof TExits
+      ? TExits[TExit] extends ExitPointSchema<infer TOutput>
+        ? TOutput
+        : void
+      : void
+    : void
+  : void;
+
+// -----------------------------------------------------------------------------
+// Step + transition shapes
+// -----------------------------------------------------------------------------
+
+/**
+ * Discriminated union of every valid "next step" across the journey's
+ * module map. Narrowing on `module` + `entry` picks the correct `input`
+ * type; that's how `StepSpec` enforces input correctness per transition.
+ */
+export type StepSpec<TModules extends ModuleTypeMap> = {
+  [M in keyof TModules & string]: {
+    [E in EntryNamesOf<TModules[M]> & string]: {
+      readonly module: M;
+      readonly entry: E;
+      readonly input: EntryInputOf<TModules[M], E>;
+    };
+  }[EntryNamesOf<TModules[M]> & string];
+}[keyof TModules & string];
+
+/** Snapshot of a single step in a journey's history / current position. */
+export interface JourneyStep {
+  readonly moduleId: string;
+  readonly entry: string;
+  readonly input: unknown;
+}
+
+/** Context passed to a transition handler. */
+export interface ExitCtx<TState, TOutput, TEntryInput> {
+  readonly state: TState;
+  readonly input: TEntryInput;
+  readonly output: TOutput;
+}
+
+/**
+ * Result of a transition handler. Exactly one of `next` / `complete` /
+ * `abort` is present. `state` is optional — if omitted, the incoming state
+ * is preserved.
+ */
+export type TransitionResult<TModules extends ModuleTypeMap, TState> =
+  | { readonly next: StepSpec<TModules>; readonly state?: TState }
+  | { readonly complete: unknown; readonly state?: TState }
+  | { readonly abort: unknown; readonly state?: TState };
+
+/**
+ * Per-entry transitions for a single module. `allowBack` enables `goBack`
+ * into the previous step from this entry; must agree with the target
+ * entry's own `allowBack` declaration (checked at resolveManifest time).
+ */
+export type EntryTransitions<TModules extends ModuleTypeMap, TState, TMod, TEntry> = {
+  readonly [X in ExitNamesOf<TMod>]?: (
+    ctx: ExitCtx<TState, ExitOutputOf<TMod, X>, EntryInputOf<TMod, TEntry>>,
+  ) => TransitionResult<TModules, TState>;
+} & {
+  readonly allowBack?: boolean;
+};
+
+/** Map of module id → entry name → exit transitions. */
+export type TransitionMap<TModules extends ModuleTypeMap, TState> = {
+  readonly [M in keyof TModules]?: {
+    readonly [E in EntryNamesOf<TModules[M]>]?: EntryTransitions<TModules, TState, TModules[M], E>;
+  };
+};
+
+// -----------------------------------------------------------------------------
+// Observation hook payloads
+// -----------------------------------------------------------------------------
+
+export interface TransitionEvent<
+  _TModules extends ModuleTypeMap = ModuleTypeMap,
+  TState = unknown,
+> {
+  readonly journeyId: string;
+  readonly instanceId: InstanceId;
+  readonly from: JourneyStep | null;
+  readonly to: JourneyStep | null;
+  readonly exit: string | null;
+  readonly state: TState;
+  readonly history: readonly JourneyStep[];
+}
+
+export interface AbandonCtx<_TModules extends ModuleTypeMap = ModuleTypeMap, TState = unknown> {
+  readonly journeyId: string;
+  readonly instanceId: InstanceId;
+  readonly step: JourneyStep | null;
+  readonly state: TState;
+  readonly reason: unknown;
+}
+
+export interface TerminalCtx<TState = unknown> {
+  readonly journeyId: string;
+  readonly instanceId: InstanceId;
+  readonly state: TState;
+  readonly history: readonly JourneyStep[];
+}
+
+// -----------------------------------------------------------------------------
+// Runtime-facing types
+// -----------------------------------------------------------------------------
+
+export type InstanceId = string;
+
+export type JourneyStatus = "loading" | "active" | "completed" | "aborted";
+
+export interface JourneyInstance<TState = unknown> {
+  readonly id: InstanceId;
+  readonly journeyId: string;
+  readonly status: JourneyStatus;
+  readonly step: JourneyStep | null;
+  readonly history: readonly JourneyStep[];
+  readonly state: TState;
+  /** Payload from the terminal transition; undefined until the journey ends. */
+  readonly terminalPayload?: unknown;
+  readonly startedAt: string;
+  readonly updatedAt: string;
+  serialize(): SerializedJourney<TState>;
+}
+
+export interface SerializedJourney<TState = unknown> {
+  readonly definitionId: string;
+  readonly version: string;
+  readonly instanceId: string;
+  readonly status: "active" | "completed" | "aborted";
+  readonly step: JourneyStep | null;
+  readonly history: readonly JourneyStep[];
+  /**
+   * Rollback snapshots indexed alongside `history`. Slots for non-rollback
+   * entries serialize as `null` (JSON-safe placeholder) so the array stays
+   * aligned with `history` across a round trip.
+   */
+  readonly rollbackSnapshots?: readonly (TState | null)[];
+  /** Terminal payload from `complete` / `abort`. Present only when terminal. */
+  readonly terminalPayload?: unknown;
+  readonly state: TState;
+  readonly startedAt: string;
+  readonly updatedAt: string;
+}
+
+export interface JourneyDefinitionSummary {
+  readonly id: string;
+  readonly version: string;
+  readonly meta?: Readonly<Record<string, unknown>>;
+}
+
+export type MaybePromise<T> = T | Promise<T>;
+
+export interface JourneyPersistence<TState = unknown, TInput = unknown> {
+  /**
+   * Compute the persistence key from the journey id and the starting input.
+   * The key must be deterministic for identical inputs — `start()` probes
+   * this key to find an existing instance and achieve idempotency.
+   *
+   * `instanceId` is NOT part of the key contract: probing happens before
+   * an id exists, and the dominant patterns (per-customer, per-session)
+   * don't need it. If you need per-instance isolation, include a unique
+   * discriminator in `input` rather than relying on an instance id.
+   *
+   * `TInput` carries through the journey's input type so shells can call
+   * `persistence.keyFor({ input })` outside the runtime with full type
+   * checking (defaults to `unknown` for adapters that don't care).
+   */
+  keyFor: (ctx: { journeyId: string; input: TInput }) => string;
+  load: (key: string) => MaybePromise<SerializedJourney<TState> | null>;
+  save: (key: string, blob: SerializedJourney<TState>) => MaybePromise<void>;
+  remove: (key: string) => MaybePromise<void>;
+}
+
+/**
+ * Terminal outcome surfaced to `JourneyOutlet.onFinished` and available on
+ * `JourneyInstance.terminalPayload`. Matches the value returned by the
+ * last transition (`{ complete }` or `{ abort }`). `instanceId` and
+ * `journeyId` are included so analytics / tab-close hooks can correlate
+ * without re-reading the outlet's props.
+ */
+export interface TerminalOutcome {
+  readonly status: "completed" | "aborted";
+  readonly payload: unknown;
+  readonly instanceId: InstanceId;
+  readonly journeyId: string;
+}
+
+/**
+ * Structural shape of a journey handle — a lightweight token a journey
+ * package can export so callers open journeys with typed `input` without
+ * importing the journey's runtime code. Declared in core so the overload
+ * on `JourneyRuntime.start` does not force core to depend on
+ * `@modular-react/journeys`. The `__input` field is phantom (never read).
+ *
+ * The implementation package (`@modular-react/journeys`) re-exports this
+ * under the canonical name `JourneyHandle` and ships `defineJourneyHandle`
+ * as the constructor.
+ */
+export interface JourneyHandleRef<TId extends string = string, TInput = unknown> {
+  readonly id: TId;
+  readonly __input?: TInput;
+}
+
+export interface JourneyRuntime {
+  /**
+   * Handle form — type-checks `input` against the handle's phantom `TInput`.
+   * When the handle's `TInput` is `void`, callers can omit the second
+   * argument entirely.
+   */
+  start<TId extends string, TInput>(
+    handle: JourneyHandleRef<TId, TInput>,
+    ...rest: [TInput] extends [void] ? [] | [input?: TInput] : [input: TInput]
+  ): InstanceId;
+  /** String-id form — accepts any `input` (the handle form is preferred). */
+  start<TInput>(journeyId: string, input: TInput): InstanceId;
+  hydrate<TState>(journeyId: string, blob: SerializedJourney<TState>): InstanceId;
+  getInstance(id: InstanceId): JourneyInstance | null;
+  listInstances(): readonly InstanceId[];
+  listDefinitions(): readonly JourneyDefinitionSummary[];
+  /**
+   * Cheap predicate for "is this journey id known to this runtime?" —
+   * useful when a shell rehydrates tabs from persisted storage and wants
+   * to drop unknown journeys before calling `start()` (which would throw
+   * `UnknownJourneyError`). Returns `true` only for exact id matches.
+   */
+  isRegistered(journeyId: string): boolean;
+  /** Subscribe to changes for one instance. Returns unsubscribe. */
+  subscribe(id: InstanceId, listener: () => void): () => void;
+  /**
+   * Force-terminate an instance. Fires `onAbandon` if still active; no-op if
+   * the instance is already terminal or unknown.
+   */
+  end(id: InstanceId, reason?: unknown): void;
+  /**
+   * Drop a terminal instance from the runtime. No-op for active/loading
+   * instances (use `end()` first) and unknown ids. Prevents long-lived
+   * shells from leaking terminal records over time.
+   */
+  forget(id: InstanceId): void;
+  /**
+   * Drop every terminal (completed / aborted) instance in one call. Returns
+   * the number of records dropped. Useful hygiene for long-running shells
+   * that accumulate finished journeys over a session.
+   */
+  forgetTerminal(): number;
+}
+
+// -----------------------------------------------------------------------------
+// Status predicates
+// -----------------------------------------------------------------------------
+
+/**
+ * True when the instance has reached a terminal state (`completed` or
+ * `aborted`). Callers often need this disjunction; direct comparisons
+ * against `status === "active"` / `"loading"` are already type-safe against
+ * the `JourneyStatus` union and do not earn their own predicates.
+ */
+export function isTerminal(instance: JourneyInstance): boolean {
+  return instance.status === "completed" || instance.status === "aborted";
+}

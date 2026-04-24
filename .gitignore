@@ -5,3 +5,5 @@ dist/
 .idea
 .test-output
 .e2e-output
+playwright-report/
+test-results/

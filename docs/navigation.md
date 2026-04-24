@@ -1,9 +1,14 @@
-# Navigation: typed labels, dynamic hrefs, meta
+# Navigation: typed labels, dynamic hrefs, meta, action
 
-`NavigationItem` has three optional generics. They all default to permissive shapes, so existing apps keep compiling; opt in one at a time as you want stricter typing.
+`NavigationItem` has four optional generics. They all default to permissive shapes (or `never`, in the case of `TAction`), so existing apps keep compiling; opt in one at a time as you want stricter typing.
 
 ```ts
-interface NavigationItem<TLabel extends string = string, TContext = void, TMeta = unknown> {
+interface NavigationItem<
+  TLabel extends string = string,
+  TContext = void,
+  TMeta = unknown,
+  TAction = never,
+> {
   readonly label: TLabel;
   readonly to: TContext extends void ? string : string | ((ctx: TContext) => string);
   readonly icon?: string | ComponentType<{ className?: string }>;
@@ -11,8 +16,11 @@ interface NavigationItem<TLabel extends string = string, TContext = void, TMeta 
   readonly order?: number;
   readonly hidden?: boolean;
   readonly meta?: TMeta;
+  readonly action?: TAction;
 }
 ```
+
+`TAction` defaults to `never`, so the `action` field is absent from the item surface until an app opts in. `action` is how a nav item carries a dispatchable intent (start a journey, open a module as a tab, trigger a shell command) without overloading `meta`. The framework treats it as opaque — the shell's navbar renderer switches on `action.kind` and dispatches. See the `TAction` section below.
 
 ## The typical pattern: one alias, used everywhere
 
@@ -35,6 +43,18 @@ export interface NavMeta {
 }
 
 export type AppNavItem = NavigationItem<ParseKeys, NavContext, NavMeta>;
+```
+
+If the app wires nav-driven actions (start a journey, open a module as a tab, etc.), add the `TAction` generic to the alias:
+
+```ts
+// App-owned union — shell's navbar dispatcher switches on `kind`. Plugins
+// (like the journeys plugin) publish suggested shapes that apps merge in.
+export type NavAction =
+  | { kind: "open-module"; moduleId: string; entry: string; input?: unknown }
+  | { kind: "journey-start"; journeyId: string; buildInput?: (ctx?: unknown) => unknown };
+
+export type AppNavItem = NavigationItem<ParseKeys, NavContext, NavMeta, NavAction>;
 ```
 
 Thread it through `defineModule`:
@@ -97,7 +117,7 @@ Three things dropped out of the sidebar that had to live there before:
 
 ## Each generic in isolation
 
-You don't have to adopt all three. Pick the ones that pay for themselves.
+You don't have to adopt all four. Pick the ones that pay for themselves.
 
 ### `TLabel extends string` — typed i18n labels
 
@@ -170,6 +190,32 @@ const visible = nav.items.filter((item) => !item.meta?.action || canPerform(item
 
 **Badges, analytics ids, feature flags** follow the same pattern. Anything that's app-shaped rather than library-shaped belongs in `meta`.
 
+### `TAction` — dispatchable click intents
+
+When a nav entry should fire an intent at click time (start a journey, open a module as a tab, trigger a shell command) instead of navigating to a URL, use the `action` field rather than overloading `meta`. `meta` is documented as opaque app data; `action` is documented as a dispatch target. Keeping them separate means the navbar renderer can pick "link vs button" by looking at one field:
+
+```ts
+type NavAction =
+  | { kind: "open-module"; moduleId: string; entry: string; input?: unknown }
+  | { kind: "journey-start"; journeyId: string; buildInput?: (ctx?: unknown) => unknown };
+type AppNavItem = NavigationItem<string, void, NavMeta, NavAction>;
+```
+
+```tsx
+// In the shell's navbar renderer:
+nav.items.map((item) =>
+  item.action ? (
+    <button onClick={() => dispatchNavAction(item.action!)}>{t(item.label)}</button>
+  ) : (
+    <Link to={resolveNavHref(item, ctx)}>{t(item.label)}</Link>
+  ),
+);
+```
+
+The framework doesn't impose an action union — the shape is entirely app-owned (same pattern as `TMeta`). Plugins can publish suggested shapes; the [journeys plugin](../packages/journeys/README.md#journey-contributed-nav) emits `{ kind: "journey-start", journeyId, buildInput? }` for every journey registered with a `nav` block, and the app merges that shape into its own union.
+
+An item can carry both `to` and `action`, but that's almost always a bug — the navbar renderer picks one or the other to avoid double-triggering. Unless you have a specific reason, use one field per item.
+
 ## `resolveNavHref` semantics
 
 ```ts
@@ -191,11 +237,12 @@ The function takes a `Pick<..., "to" \| "label">` rather than the full item, so 
 
 ## Do I have to use generics?
 
-No. `NavigationItem` defaults to `label: string, to: string, meta: unknown` — existing modules keep compiling unchanged. The generics are opt-in, and each one pays for itself independently. Common adoption paths:
+No. `NavigationItem` defaults to `label: string, to: string, meta: unknown, action: never` — existing modules keep compiling unchanged. The generics are opt-in, and each one pays for itself independently. Common adoption paths:
 
 1. Start with `TMeta` for permissions (the highest-leverage single change — removes a stringly-typed map from shell code).
 2. Add `TContext` when the first workspace-scoped route appears.
-3. Add `TLabel` once i18n keys stabilise enough that typos become the dominant navigation bug.
+3. Add `TAction` when the navbar first grows a non-URL button (the moment you register a journey launcher or a modal-opener as a nav entry).
+4. Add `TLabel` once i18n keys stabilise enough that typos become the dominant navigation bug.
 
 ## See also
 

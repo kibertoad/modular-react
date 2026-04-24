@@ -1,3 +1,97 @@
+---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    configDependencies: {}
+    packageManagerDependencies:
+      '@pnpm/exe':
+        specifier: 10.33.2
+        version: 10.33.2
+      pnpm:
+        specifier: 10.33.2
+        version: 10.33.2
+
+packages:
+
+  '@pnpm/exe@10.33.2':
+    resolution: {integrity: sha512-jMTAKcTBptqD6xsm0oyF2q4S5zlhvVm70uwfmkfNED3S5V3vr6JRykV/xwt1qKd5ChLMONquKemNuVSrmUvx1w==}
+    hasBin: true
+
+  '@pnpm/linux-arm64@10.33.2':
+    resolution: {integrity: sha512-t7riiqXKzj3r2hy3SVkwiHnJB/9ussTLnSqA/6h9x5zuLlj9LZB3wla96hZDem2+wsLQ4xsMMVyZ1Rn1BGsH7w==}
+    cpu: [arm64]
+    os: [linux]
+    hasBin: true
+
+  '@pnpm/linux-x64@10.33.2':
+    resolution: {integrity: sha512-tWwfiXIvZwnnsNR0GJj2DWSWW5UsJCq+zd62LrGiB9IBT5e/oPDPo1uV88UGpfJGNNHexGQuczi4oYocnTkZNA==}
+    cpu: [x64]
+    os: [linux]
+    hasBin: true
+
+  '@pnpm/macos-arm64@10.33.2':
+    resolution: {integrity: sha512-4Gp5kO+sZBtmUScajoodNu8id58b6K3iNeChyKYrmiTc4EmAAcAFcwbXty0gTs5/GJaWtgT9NOuhDzx1e33eiw==}
+    cpu: [arm64]
+    os: [darwin]
+    hasBin: true
+
+  '@pnpm/macos-x64@10.33.2':
+    resolution: {integrity: sha512-en+5m6ygIik49Nbj1V+CUf7tzLWadnxpjVJiM/POd+P0JovR7sodlu93oHEOze/T2vunHhjTpnGk+qsafM5kuw==}
+    cpu: [x64]
+    os: [darwin]
+    hasBin: true
+
+  '@pnpm/win-arm64@10.33.2':
+    resolution: {integrity: sha512-ZJQaXG20k4efIFcITv53pyGk+0E13vBHbhdqcIZeF4Euw7iUNwb4F2ID4hnTW82NrvaI1woeS5cIPJSCrFpsxQ==}
+    cpu: [arm64]
+    os: [win32]
+    hasBin: true
+
+  '@pnpm/win-x64@10.33.2':
+    resolution: {integrity: sha512-A2zrjz2Ii/wdHBh83fMT6MtJ1WFSbQEDD9RCBVnC60fRcWda4+M2UoIDvwSiq+eTRRGj29ljFIE2FWzEDEQdbA==}
+    cpu: [x64]
+    os: [win32]
+    hasBin: true
+
+  pnpm@10.33.2:
+    resolution: {integrity: sha512-qQ+vb+6rca1sblf5Tg/hoS9dzCLNdU20CulZPraj4LaxLjVAIYuzeuCDQEsfLObbKkEh6XmCm0r/lLmfSdoc+A==}
+    engines: {node: '>=18.12'}
+    hasBin: true
+
+snapshots:
+
+  '@pnpm/exe@10.33.2':
+    optionalDependencies:
+      '@pnpm/linux-arm64': 10.33.2
+      '@pnpm/linux-x64': 10.33.2
+      '@pnpm/macos-arm64': 10.33.2
+      '@pnpm/macos-x64': 10.33.2
+      '@pnpm/win-arm64': 10.33.2
+      '@pnpm/win-x64': 10.33.2
+
+  '@pnpm/linux-arm64@10.33.2':
+    optional: true
+
+  '@pnpm/linux-x64@10.33.2':
+    optional: true
+
+  '@pnpm/macos-arm64@10.33.2':
+    optional: true
+
+  '@pnpm/macos-x64@10.33.2':
+    optional: true
+
+  '@pnpm/win-arm64@10.33.2':
+    optional: true
+
+  '@pnpm/win-x64@10.33.2':
+    optional: true
+
+  pnpm@10.33.2: {}
+
+---
 lockfileVersion: '9.0'
 
 settings:
@@ -126,6 +220,171 @@ importers:
         specifier: ^8.0.3
         version: 8.0.8(@types/node@25.6.0)
 
+  examples/react-router/customer-onboarding-journey/app-shared:
+    dependencies:
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../packages/core
+      '@react-router-modules/core':
+        specifier: ^2.0.0
+        version: link:../../../../packages/react-router-core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      zustand:
+        specifier: ^5.0.0
+        version: 5.0.12(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
+
+  examples/react-router/customer-onboarding-journey/journeys/customer-onboarding:
+    dependencies:
+      '@example-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@example-onboarding/billing-module':
+        specifier: workspace:*
+        version: link:../../modules/billing
+      '@example-onboarding/plan-module':
+        specifier: workspace:*
+        version: link:../../modules/plan
+      '@example-onboarding/profile-module':
+        specifier: workspace:*
+        version: link:../../modules/profile
+      '@modular-react/journeys':
+        specifier: ^0.1.0
+        version: link:../../../../../packages/journeys
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/customer-onboarding-journey/modules/billing:
+    dependencies:
+      '@example-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/customer-onboarding-journey/modules/plan:
+    dependencies:
+      '@example-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/customer-onboarding-journey/modules/profile:
+    dependencies:
+      '@example-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/customer-onboarding-journey/shell:
+    dependencies:
+      '@example-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-onboarding/billing-module':
+        specifier: workspace:*
+        version: link:../modules/billing
+      '@example-onboarding/customer-onboarding-journey':
+        specifier: workspace:*
+        version: link:../journeys/customer-onboarding
+      '@example-onboarding/plan-module':
+        specifier: workspace:*
+        version: link:../modules/plan
+      '@example-onboarding/profile-module':
+        specifier: workspace:*
+        version: link:../modules/profile
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../packages/core
+      '@modular-react/journeys':
+        specifier: ^0.1.0
+        version: link:../../../../packages/journeys
+      '@modular-react/react':
+        specifier: ^1.0.0
+        version: link:../../../../packages/react
+      '@react-router-modules/core':
+        specifier: ^2.0.0
+        version: link:../../../../packages/react-router-core
+      '@react-router-modules/runtime':
+        specifier: ^2.0.0
+        version: link:../../../../packages/react-router-runtime
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.5(react@19.2.5)
+      react-router:
+        specifier: ^7.6.0
+        version: 7.14.1(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      zustand:
+        specifier: ^5.0.0
+        version: 5.0.12(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.1(vite@8.0.8(@types/node@25.6.0))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.3
+        version: 8.0.8(@types/node@25.6.0)
+
   examples/react-router/remote-capabilities/app-shared:
     dependencies:
       '@modular-react/core':
@@ -231,6 +490,171 @@ importers:
         specifier: ^8.0.3
         version: 8.0.8(@types/node@25.6.0)
 
+  examples/tanstack-router/customer-onboarding-journey/app-shared:
+    dependencies:
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../packages/core
+      '@tanstack-react-modules/core':
+        specifier: workspace:*
+        version: link:../../../../packages/tanstack-router-core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      zustand:
+        specifier: ^5.0.0
+        version: 5.0.12(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
+
+  examples/tanstack-router/customer-onboarding-journey/journeys/customer-onboarding:
+    dependencies:
+      '@example-tsr-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@example-tsr-onboarding/billing-module':
+        specifier: workspace:*
+        version: link:../../modules/billing
+      '@example-tsr-onboarding/plan-module':
+        specifier: workspace:*
+        version: link:../../modules/plan
+      '@example-tsr-onboarding/profile-module':
+        specifier: workspace:*
+        version: link:../../modules/profile
+      '@modular-react/journeys':
+        specifier: ^0.1.0
+        version: link:../../../../../packages/journeys
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/customer-onboarding-journey/modules/billing:
+    dependencies:
+      '@example-tsr-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/customer-onboarding-journey/modules/plan:
+    dependencies:
+      '@example-tsr-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/customer-onboarding-journey/modules/profile:
+    dependencies:
+      '@example-tsr-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/customer-onboarding-journey/shell:
+    dependencies:
+      '@example-tsr-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-tsr-onboarding/billing-module':
+        specifier: workspace:*
+        version: link:../modules/billing
+      '@example-tsr-onboarding/customer-onboarding-journey':
+        specifier: workspace:*
+        version: link:../journeys/customer-onboarding
+      '@example-tsr-onboarding/plan-module':
+        specifier: workspace:*
+        version: link:../modules/plan
+      '@example-tsr-onboarding/profile-module':
+        specifier: workspace:*
+        version: link:../modules/profile
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../packages/core
+      '@modular-react/journeys':
+        specifier: ^0.1.0
+        version: link:../../../../packages/journeys
+      '@modular-react/react':
+        specifier: ^1.0.0
+        version: link:../../../../packages/react
+      '@tanstack-react-modules/core':
+        specifier: ^2.0.0
+        version: link:../../../../packages/tanstack-router-core
+      '@tanstack-react-modules/runtime':
+        specifier: ^2.0.0
+        version: link:../../../../packages/tanstack-router-runtime
+      '@tanstack/react-router':
+        specifier: ^1.168.8
+        version: 1.168.22(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.5(react@19.2.5)
+      zustand:
+        specifier: ^5.0.0
+        version: 5.0.12(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.1(vite@8.0.8(@types/node@25.6.0))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.3
+        version: 8.0.8(@types/node@25.6.0)
+
   packages/core:
     devDependencies:
       '@types/react':
@@ -242,6 +666,51 @@ importers:
       oxlint:
         specifier: ^1.58.0
         version: 1.60.0
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.3
+        version: 8.0.8(@types/node@25.6.0)
+      vite-plugin-dts:
+        specifier: ^4.5.0
+        version: 4.5.4(@types/node@25.6.0)(typescript@6.0.3)(vite@8.0.8(@types/node@25.6.0))
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.4(@types/node@25.6.0)(happy-dom@18.0.1)(vite@8.0.8(@types/node@25.6.0))
+
+  packages/journeys:
+    devDependencies:
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../core
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../react
+      '@testing-library/react':
+        specifier: ^16.0.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      happy-dom:
+        specifier: ^18.0.0
+        version: 18.0.1
+      oxfmt:
+        specifier: ^0.43.0
+        version: 0.43.0
+      oxlint:
+        specifier: ^1.58.0
+        version: 1.60.0
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.5(react@19.2.5)
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -363,6 +832,9 @@ importers:
       '@modular-react/core':
         specifier: ^1.2.0
         version: link:../core
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../journeys
       '@modular-react/react':
         specifier: ^1.2.0
         version: link:../react
@@ -411,6 +883,9 @@ importers:
       '@modular-react/core':
         specifier: ^1.2.0
         version: link:../core
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../journeys
       '@modular-react/react':
         specifier: ^1.2.0
         version: link:../react
@@ -520,6 +995,9 @@ importers:
       '@modular-react/core':
         specifier: ^1.2.0
         version: link:../core
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../journeys
       '@modular-react/react':
         specifier: ^1.2.0
         version: link:../react
@@ -568,6 +1046,9 @@ importers:
       '@modular-react/core':
         specifier: ^1.2.0
         version: link:../core
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../journeys
       '@modular-react/react':
         specifier: ^1.2.0
         version: link:../react

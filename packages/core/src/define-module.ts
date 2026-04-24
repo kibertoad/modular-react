@@ -36,14 +36,21 @@ import type {
  *   ],
  * })
  * ```
+ *
+ * The final `TDescriptor` generic is inferred from the argument and lets the
+ * return type preserve the *literal* shape of `entryPoints` / `exitPoints` /
+ * `meta` — important for downstream journey types, which derive entry/exit
+ * vocabulary from `typeof someModule`. Without this, those maps would widen
+ * to their base constraints (`EntryPointMap` / `ExitPointMap`) and journey
+ * transitions wouldn't typecheck.
  */
 export function defineModule<
   TSharedDependencies extends Record<string, any> = Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
   TNavItem extends NavigationItemBase = NavigationItem,
->(
-  descriptor: ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>,
-): ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem> {
+  TDescriptor extends ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem> =
+    ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>,
+>(descriptor: TDescriptor): TDescriptor {
   return descriptor;
 }

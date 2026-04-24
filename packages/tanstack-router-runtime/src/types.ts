@@ -1,6 +1,7 @@
 import type { StoreApi } from "zustand";
 import type { Router } from "@tanstack/react-router";
 import type {
+  ModuleDescriptor,
   NavigationItem,
   NavigationItemBase,
   ReactiveService,
@@ -18,6 +19,10 @@ export type { NavigationGroup, NavigationManifest, ModuleEntry } from "@modular-
  * - **stores** — zustand StoreApi instances (reactive, supports selectors)
  * - **services** — plain objects (non-reactive, static references)
  * - **reactiveServices** — external sources with subscribe/getSnapshot (reactive via useSyncExternalStore)
+ *
+ * Plus opt-in plugins — pass `journeysPlugin()` (or other plugins) to enable
+ * plugin-contributed features. The runtime package has no hard dependency on
+ * any specific plugin package.
  */
 export interface RegistryConfig<
   TSharedDependencies extends Record<string, any>,
@@ -49,6 +54,7 @@ export interface RegistryConfig<
 export interface ApplicationManifest<
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TNavItem extends NavigationItemBase = NavigationItem,
+  TExtensions extends Record<string, unknown> = Record<string, unknown>,
 > {
   /** The root React component with all providers wired */
   readonly App: React.ComponentType;
@@ -65,6 +71,23 @@ export interface ApplicationManifest<
   readonly slots: TSlots;
   /** Registered module summaries — use useModules() to access in components */
   readonly modules: readonly import("@modular-react/core").ModuleEntry[];
+
+  /** Full module descriptors keyed by id — used by `<JourneyOutlet>` and `<ModuleTab>`. */
+  readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
+
+  /**
+   * Plugin-contributed runtimes keyed by plugin name. Typed via the
+   * `TExtensions` generic; loading the journeys plugin lands
+   * `extensions.journeys: JourneyRuntime`.
+   */
+  readonly extensions: TExtensions;
+
+  /**
+   * Convenience alias for `manifest.extensions.journeys` when the journeys
+   * plugin is loaded. `never` otherwise — reading it is a compile error
+   * instead of a surprise `undefined` at runtime.
+   */
+  readonly journeys: TExtensions extends { journeys: infer R } ? R : never;
 
   /**
    * Trigger re-evaluation of dynamic slots.
@@ -108,6 +131,19 @@ export interface ResolveManifestOptions<
    * on every `recalculateSlots()` call.
    */
   slotFilter?: (slots: TSlots, deps: TSharedDependencies) => TSlots;
+
+  /**
+   * Called when a module emits an exit outside a journey host (the default
+   * `<ModuleTab>` path). Wire this to close the tab, navigate, or forward to
+   * analytics.
+   */
+  onModuleExit?: (event: {
+    readonly moduleId: string;
+    readonly entry: string;
+    readonly exit: string;
+    readonly output: unknown;
+    readonly tabId?: string;
+  }) => void;
 }
 
 /**
@@ -167,6 +203,7 @@ export interface ResolveManifestOptions<
 export interface ResolvedManifest<
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TNavItem extends NavigationItemBase = NavigationItem,
+  TExtensions extends Record<string, unknown> = Record<string, unknown>,
 > {
   /**
    * Context provider component — wraps children with SharedDependencies,
@@ -186,6 +223,30 @@ export interface ResolvedManifest<
 
   /** Registered module summaries — use useModules() to access in components */
   readonly modules: readonly import("@modular-react/core").ModuleEntry[];
+
+  /** Full module descriptors keyed by id — used by `<JourneyOutlet>` and `<ModuleTab>`. */
+  readonly moduleDescriptors: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
+
+  /**
+   * Plugin-contributed runtimes keyed by plugin name. Typed via the
+   * `TExtensions` generic; see {@link ApplicationManifest.extensions}.
+   */
+  readonly extensions: TExtensions;
+
+  /**
+   * Convenience alias for `manifest.extensions.journeys` when the journeys
+   * plugin is loaded. `never` otherwise.
+   */
+  readonly journeys: TExtensions extends { journeys: infer R } ? R : never;
+
+  /** Resolved `onModuleExit` callback (see {@link ResolveManifestOptions.onModuleExit}). */
+  readonly onModuleExit?: (event: {
+    readonly moduleId: string;
+    readonly entry: string;
+    readonly exit: string;
+    readonly output: unknown;
+    readonly tabId?: string;
+  }) => void;
 
   /**
    * Trigger re-evaluation of dynamic slots. See {@link ApplicationManifest.recalculateSlots}.

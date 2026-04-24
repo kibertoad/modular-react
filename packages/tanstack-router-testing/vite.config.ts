@@ -21,6 +21,8 @@ export default defineConfig({
         "@tanstack-react-modules/core",
         "@tanstack-react-modules/runtime",
         "@modular-react/core",
+        "@modular-react/journeys",
+        "@modular-react/journeys/testing",
         "@modular-react/react",
       ],
     },

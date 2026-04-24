@@ -3,3 +3,4 @@ packages:
   - "examples/*/*/app-shared"
   - "examples/*/*/shell"
   - "examples/*/*/modules/*"
+  - "examples/*/*/journeys/*"

@@ -21,6 +21,8 @@ export default defineConfig({
         "@react-router-modules/core",
         "@react-router-modules/runtime",
         "@modular-react/core",
+        "@modular-react/journeys",
+        "@modular-react/journeys/testing",
         "@modular-react/react",
       ],
     },

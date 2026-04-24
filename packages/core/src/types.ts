@@ -200,12 +200,100 @@ export interface ModuleDescriptor<
 
   /** Lifecycle hooks */
   readonly lifecycle?: ModuleLifecycle<TSharedDependencies>;
+
+  /**
+   * Typed entry points. Each entry point is a way to open the module with a
+   * specific input payload. Used by `<JourneyOutlet>`, the built-in
+   * `<ModuleTab>` host, and test harnesses. Optional — modules that do not
+   * participate in workspace hosting or journeys can omit this field.
+   */
+  readonly entryPoints?: EntryPointMap;
+
+  /**
+   * Typed exit points — the module's full outcome vocabulary. A module
+   * declares every outcome it can emit here once; transitions in a journey
+   * decide which ones map to which next step. Optional — only needed by
+   * modules that emit outcomes to a host.
+   */
+  readonly exitPoints?: ExitPointMap;
 }
+
+/**
+ * Type-only brand for declaring an input or output shape at the type level.
+ * The runtime value is an empty object — the framework does no runtime
+ * validation of inputs. Apps can wire real runtime checks via the registry's
+ * `validateInput` hook.
+ */
+export interface InputSchema<T> {
+  readonly __brand?: T;
+}
+
+/**
+ * A single typed entry point on a module — the combination of a React
+ * component, the input type it accepts, and an optional opt-in to "go back"
+ * navigation.
+ */
+export interface ModuleEntryPoint<TInput> {
+  /** Component to render when this entry is opened. Receives `ModuleEntryProps<TInput, …>`. */
+  readonly component: React.ComponentType<ModuleEntryProps<TInput, any>>;
+  /** Type-level declaration of the input shape. Pure inference aid. */
+  readonly input?: InputSchema<TInput>;
+  /**
+   * Opt in to "go back" support.
+   *   'preserve-state' — history pops; journey state is untouched.
+   *   'rollback'       — history pops AND journey state reverts to the snapshot
+   *                      taken before this step was entered.
+   *   false (default)  — no `goBack` prop is supplied to the component.
+   */
+  readonly allowBack?: "preserve-state" | "rollback" | false;
+}
+
+/**
+ * Typed declaration of a single exit point — describes the output payload
+ * type the exit can emit. Can be omitted for void exits.
+ */
+export interface ExitPointSchema<TOutput> {
+  readonly output?: InputSchema<TOutput>;
+}
+
+/** Mapping of entry name → {@link ModuleEntryPoint}. */
+export type EntryPointMap = Readonly<Record<string, ModuleEntryPoint<any>>>;
+
+/** Mapping of exit name → {@link ExitPointSchema}. */
+export type ExitPointMap = Readonly<Record<string, ExitPointSchema<any>>>;
+
+/**
+ * Props passed to a module's entry component by the host (JourneyOutlet,
+ * ModuleTab, a test harness). `exit` is typed against the module's own exit
+ * vocabulary, so passing the exits const from the module is authoritative.
+ */
+export interface ModuleEntryProps<TInput, TExits extends ExitPointMap = {}> {
+  readonly input: TInput;
+  /** Emit an exit. Name + payload are cross-checked against `TExits`. */
+  readonly exit: ExitFn<TExits>;
+  /**
+   * Host-provided "go back" callback. Present only when both the current
+   * entry declared `allowBack` and the host has a prior step in history.
+   */
+  readonly goBack?: () => void;
+}
+
+/**
+ * Typed exit callback. The payload argument is required when the schema
+ * declares a non-void output, and absent when the schema is void.
+ */
+export type ExitFn<TExits extends ExitPointMap> = <K extends keyof TExits & string>(
+  name: K,
+  ...args: ExitOutputArg<TExits[K]>
+) => void;
+
+type ExitOutputArg<S> =
+  S extends ExitPointSchema<infer T> ? ([T] extends [void] ? [] : [output: T]) : [];
 
 /**
  * A single navigation item contributed by a module.
  *
- * Three generics let the host opt into stricter typing:
+ * Four generics let the host opt into stricter typing:
  *
  * - `TLabel extends string = string` — tighten `label` to an i18n key union
  *   so typos fail at compile time. Widens to `string` by default for
@@ -223,6 +311,13 @@ export interface ModuleDescriptor<
  *   `unknown` / intersect with your own shape, or alias
  *   `NavigationItem<…, …, MyMeta>` once and use that throughout.
  *
+ * - `TAction = never` — app-owned dispatchable action shape. Nav items that
+ *   should fire a non-navigation intent (start a journey, open a module as a
+ *   tab, raise a modal) carry the intent here. The library treats `action`
+ *   as opaque, exactly like `meta` — the shell's navbar renderer switches on
+ *   `action.kind` and dispatches. Defaults to `never`, which removes the
+ *   field from the surface.
+ *
  * Typical local alias in a host app:
  *
  * ```ts
@@ -230,12 +325,20 @@ export interface ModuleDescriptor<
  * import type { ParseKeys } from "i18next"
  *
  * interface NavCtx { workspaceId: string }
- * interface NavMeta { action?: Action; badge?: "beta" | "new" }
+ * interface NavMeta { badge?: "beta" | "new" }
+ * type NavAction =
+ *   | { kind: "open-module"; moduleId: string; entry: string }
+ *   | { kind: "journey-start"; journeyId: string; buildInput?: (ctx: NavCtx) => unknown }
  *
- * export type AppNavItem = NavigationItem<ParseKeys, NavCtx, NavMeta>
+ * export type AppNavItem = NavigationItem<ParseKeys, NavCtx, NavMeta, NavAction>
  * ```
  */
-export interface NavigationItem<TLabel extends string = string, TContext = void, TMeta = unknown> {
+export interface NavigationItem<
+  TLabel extends string = string,
+  TContext = void,
+  TMeta = unknown,
+  TAction = never,
+> {
   /** Display label — narrow `TLabel` to an i18n key union for compile-time validation. */
   readonly label: TLabel;
 
@@ -271,6 +374,16 @@ export interface NavigationItem<TLabel extends string = string, TContext = void,
    * pattern).
    */
   readonly meta?: TMeta;
+
+  /**
+   * App-owned dispatchable action. Use this instead of overloading `meta`
+   * when a nav entry should fire an intent at click time (e.g. start a
+   * journey, open a module as a tab). The library treats `action` as
+   * opaque — the shell's navbar renderer switches on `action.kind` and
+   * dispatches. Defaulted to `never`, so the field is absent from the
+   * surface until an app opts in via `TAction`.
+   */
+  readonly action?: TAction;
 }
 
 /**
@@ -291,6 +404,7 @@ export interface NavigationItemBase {
   readonly order?: number;
   readonly hidden?: boolean;
   readonly meta?: unknown;
+  readonly action?: unknown;
 }
 
 export interface ModuleLifecycle<
