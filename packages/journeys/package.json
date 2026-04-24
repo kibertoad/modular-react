@@ -39,15 +39,15 @@
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "happy-dom": "^18.0.0",
-    "oxfmt": "^0.43.0",
-    "oxlint": "^1.58.0",
-    "react": "^19.0.0",
+    "happy-dom": "^20.9.0",
+    "oxfmt": "^0.46.0",
+    "oxlint": "^1.61.0",
+    "react": "^19.2.5",
     "react-dom": "^19.0.0",
     "typescript": "^6.0.2",
-    "vite": "^8.0.3",
-    "vite-plugin-dts": "^4.5.0",
-    "vitest": "^4.1.0"
+    "vite": "^8.0.10",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.1.5"
   },
   "peerDependencies": {
     "@modular-react/core": "^1.2.0",
