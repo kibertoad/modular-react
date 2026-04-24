@@ -43,7 +43,7 @@ const journey = defineJourney<Modules, { selections: string[] }>()({
 
 describe("simulateJourney", () => {
   it("drives transitions headlessly and exposes state", () => {
-    const sim = simulateJourney(journey, undefined as unknown as void);
+    const sim = simulateJourney(journey);
     expect(sim.currentStep).toEqual({ moduleId: "menu", entry: "choose", input: undefined });
 
     sim.fireExit("pick", { pick: "a" });
@@ -56,14 +56,14 @@ describe("simulateJourney", () => {
   });
 
   it("`currentStep` throws once the journey terminates, with the status in the message", () => {
-    const sim = simulateJourney(journey, undefined as unknown as void);
+    const sim = simulateJourney(journey);
     sim.fireExit("pick", { pick: "b" });
     expect(sim.status).toBe("completed");
     expect(() => sim.currentStep).toThrow(/status=completed/);
   });
 
   it("records every transition event the runtime fires on `sim.transitions`", () => {
-    const sim = simulateJourney(journey, undefined as unknown as void);
+    const sim = simulateJourney(journey);
     // Initial transition — start step — is already recorded.
     expect(sim.transitions).toHaveLength(1);
     expect(sim.transitions[0]!.from).toBeNull();
@@ -82,7 +82,7 @@ describe("simulateJourney", () => {
   });
 
   it("exposes terminalPayload and a persistence-shaped serialize()", () => {
-    const sim = simulateJourney(journey, undefined as unknown as void);
+    const sim = simulateJourney(journey);
     expect(sim.terminalPayload).toBeUndefined();
     const beforeBlob = sim.serialize();
     expect(beforeBlob.status).toBe("active");
@@ -98,7 +98,7 @@ describe("simulateJourney", () => {
   });
 
   it("snapshots TransitionEvent.history so later mutations don't leak back", () => {
-    const sim = simulateJourney(journey, undefined as unknown as void);
+    const sim = simulateJourney(journey);
     sim.fireExit("pick", { pick: "a" });
     const secondEvent = sim.transitions.at(-1)!;
     const historyLengthAtEmit = secondEvent.history.length;

@@ -111,4 +111,40 @@ describe("createTestHarness", () => {
     expect(() => harness.fireExit("ji_does_not_exist", "next")).toThrow(/No instance with id/);
     expect(() => harness.goBack("ji_does_not_exist")).toThrow(/No instance with id/);
   });
+
+  it("throws when fireExit is called on a loading instance, instead of silently no-opping", () => {
+    // Async load probe that never resolves — the instance stays in loading.
+    // Without the loading-guard in the harness this test would pass (no
+    // throw) but the exit would evaporate and later assertions would fail
+    // with an unrelated "step is undefined" error.
+    const rt = createJourneyRuntime(
+      [
+        {
+          definition: journey,
+          options: {
+            persistence: {
+              keyFor: () => "k:loading-harness",
+              load: () => new Promise(() => {}),
+              save: () => {},
+              remove: () => {},
+            } as never,
+          },
+        },
+      ],
+      { modules: { m: mod }, debug: false },
+    );
+    const harness = createTestHarness(rt);
+    const id = rt.start("t", { id: "loading" });
+    expect(() => harness.fireExit(id, "next", { amount: 1 })).toThrow(/status=loading/);
+    expect(() => harness.goBack(id)).toThrow(/status=loading/);
+  });
+
+  it("throws when fireExit is called on a terminal instance", () => {
+    const rt = makeRuntime();
+    const harness = createTestHarness(rt);
+    const id = rt.start("t", { id: "term" });
+    harness.fireExit(id, "next", { amount: 2 });
+    harness.fireExit(id, "done", { total: 2 });
+    expect(() => harness.fireExit(id, "next", { amount: 3 })).toThrow(/terminal instance/);
+  });
 });

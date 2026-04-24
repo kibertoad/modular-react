@@ -59,6 +59,22 @@ export function createTestHarness(runtime: JourneyRuntime): JourneyTestHarness {
           `[@modular-react/journeys/testing] Journey "${record.journeyId}" is not registered with this runtime.`,
         );
       }
+      // Calling fireExit on a loading instance is a silent no-op at the
+      // runtime level (the runtime has no step to resolve against yet).
+      // In tests this almost always indicates the caller forgot to await
+      // the persistence load probe. Throw early so the test fails on the
+      // offending call instead of on a later `expect(step?.entry)` read.
+      if (record.status === "loading") {
+        throw new Error(
+          `[@modular-react/journeys/testing] fireExit("${name}") called on instance "${id}" while status=loading. ` +
+            `Await the runtime's async load probe (typically \`await Promise.resolve()\` a few times, or expose a subscribe hook in your test) before dispatching exits.`,
+        );
+      }
+      if (record.status !== "active") {
+        throw new Error(
+          `[@modular-react/journeys/testing] fireExit("${name}") called on terminal instance "${id}" (status=${record.status}).`,
+        );
+      }
       internals.__bindStepCallbacks(record, reg).exit(name, output);
     },
     goBack(id) {
@@ -67,6 +83,12 @@ export function createTestHarness(runtime: JourneyRuntime): JourneyTestHarness {
       if (!reg) {
         throw new Error(
           `[@modular-react/journeys/testing] Journey "${record.journeyId}" is not registered with this runtime.`,
+        );
+      }
+      if (record.status === "loading") {
+        throw new Error(
+          `[@modular-react/journeys/testing] goBack() called on instance "${id}" while status=loading. ` +
+            `Await the runtime's async load probe before dispatching.`,
         );
       }
       const callbacks = internals.__bindStepCallbacks(record, reg);

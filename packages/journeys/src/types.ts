@@ -65,7 +65,11 @@ export interface JourneyDefinition<TModules extends ModuleTypeMap, TState, TInpu
 }
 
 /** Erased shape used by the registry — `any` on the generics lets the
- *  registry store definitions from different journeys side-by-side. */
+ *  registry store definitions from different journeys side-by-side.
+ *  Tightening to `unknown` breaks variance: `initialState: (input: TInput)
+ *  => TState` for a specific journey is not assignable to
+ *  `(input: unknown) => unknown` because function parameters are
+ *  contravariant, so the registry would reject any concrete definition. */
 export type AnyJourneyDefinition = JourneyDefinition<ModuleTypeMap, any, any>;
 
 // -----------------------------------------------------------------------------
@@ -153,8 +157,12 @@ export interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
    * `runtime.start()` mints a fresh instance and nothing is written to
    * storage. Add an adapter when you want reload recovery or idempotent
    * `start` (same input → same `instanceId`).
+   *
+   * Typed against both `TState` (for `load` / `save` payloads) and the
+   * journey's `TInput` (for `keyFor`) — pass a typed adapter built with
+   * {@link defineJourneyPersistence} to get end-to-end checking.
    */
-  persistence?: JourneyPersistence<TState>;
+  persistence?: JourneyPersistence<TState, TInput>;
   /**
    * Maximum number of entries to keep in `history` (and the matching
    * `rollbackSnapshots`). Oldest entries are dropped once the cap is

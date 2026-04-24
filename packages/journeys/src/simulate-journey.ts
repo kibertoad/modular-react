@@ -56,10 +56,22 @@ export interface JourneySimulator<_TModules extends ModuleTypeMap, TState> {
   serialize(): SerializedJourney<TState>;
 }
 
+/**
+ * Headlessly drive a journey definition — see {@link JourneySimulator}.
+ *
+ * The second argument is the journey's `TInput`. When a journey declares
+ * no input (`TInput extends void`), callers can omit it entirely:
+ *
+ * ```ts
+ * simulateJourney(noInputJourney);          // no input required
+ * simulateJourney(inputJourney, { id: 1 }); // input required and typed
+ * ```
+ */
 export function simulateJourney<TModules extends ModuleTypeMap, TState, TInput>(
   definition: JourneyDefinition<TModules, TState, TInput>,
-  input: TInput,
+  ...rest: [TInput] extends [void] ? [] | [input?: TInput] : [input: TInput]
 ): JourneySimulator<TModules, TState> {
+  const input = (rest.length > 0 ? rest[0] : undefined) as TInput;
   // Attach our own recorder on top of whatever `onTransition` the definition
   // declares — the runtime already invokes both (definition first, then
   // registration option), so this does not shadow the journey's own hook.

@@ -78,9 +78,6 @@ export interface JourneyRuntimeOptions {
   readonly modules?: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
 }
 
-const ASYNC_LOAD_PENDING = Symbol("asyncLoadPending");
-type AsyncLoadPending = typeof ASYNC_LOAD_PENDING;
-
 /**
  * Module-private store of runtime internals. Keeps `__bindStepCallbacks`,
  * `__getRecord`, `__getRegistered`, and the bound module descriptor map off
@@ -166,8 +163,7 @@ export function createJourneyRuntime(
   }
 
   function stepFromSpec(spec: StepSpec<ModuleTypeMap>): JourneyStep {
-    const s = spec as { module: string; entry: string; input: unknown };
-    return { moduleId: s.module, entry: s.entry, input: s.input };
+    return { moduleId: spec.module, entry: spec.entry, input: spec.input };
   }
 
   function entryAllowBackMode(step: JourneyStep | null): "preserve-state" | "rollback" | false {
@@ -186,11 +182,9 @@ export function createJourneyRuntime(
     return perEntry?.allowBack === true;
   }
 
-  function cloneSnapshot<TState>(state: TState): TState {
+  function cloneSnapshot(state: unknown): unknown {
     if (state === null || typeof state !== "object") return state;
-    let cloned: TState;
-    if (Array.isArray(state)) cloned = [...state] as unknown as TState;
-    else cloned = { ...(state as object) } as TState;
+    const cloned: unknown = Array.isArray(state) ? [...state] : { ...(state as object) };
     // Dev-mode probe: freeze the snapshot so a transition that mutates
     // rolled-back state in place fails loudly instead of silently corrupting
     // the history. The freeze is shallow — deep mutation still slips through
@@ -439,7 +433,7 @@ export function createJourneyRuntime(
     // `undefined` (legitimate for state types that allow it).
     const preState = record.state;
     if ("state" in result) {
-      record.state = result.state as typeof record.state;
+      record.state = result.state;
     }
 
     if ("next" in result) {
@@ -538,7 +532,16 @@ export function createJourneyRuntime(
     exitName: string,
     output: unknown,
   ) {
-    if (record.status !== "active") return;
+    if (record.status !== "active") {
+      if (debug) {
+        console.warn(
+          `[@modular-react/journeys] Exit("${exitName}") dropped on instance ${record.id} — status=${record.status}. ` +
+            `(This is the expected no-op when an exit fires before the initial async load settles; ` +
+            `await the load or subscribe for status changes before dispatching.)`,
+        );
+      }
+      return;
+    }
     if (record.stepToken !== stepToken) {
       if (debug) {
         console.warn(
@@ -618,7 +621,7 @@ export function createJourneyRuntime(
     const snapshot = record.rollbackSnapshots.pop();
     const mode = entryAllowBackMode(step);
     if (mode === "rollback" && snapshot !== undefined) {
-      record.state = snapshot as typeof record.state;
+      record.state = snapshot;
     }
     record.hasRollbackSnapshot = record.rollbackSnapshots.some((s) => s !== undefined);
     record.step = previousStep;
@@ -743,7 +746,15 @@ export function createJourneyRuntime(
     if (!existingRecord) {
       instances.set(record.id, record);
     } else {
+      // Recycling a record — typically because an async probe failed or a
+      // partial hydrate threw. Reset every field that could carry stale
+      // state from the record's previous life. Without this, a hydrate that
+      // populated `history` / `rollbackSnapshots` before throwing would
+      // leak those entries into the "fresh" instance.
       record.state = def.initialState(input);
+      record.history = [];
+      record.rollbackSnapshots = [];
+      record.hasRollbackSnapshot = false;
     }
     const startStep = stepFromSpec(def.start(record.state, input));
     record.step = startStep;
@@ -801,11 +812,7 @@ export function createJourneyRuntime(
     reg: RegisteredJourney,
     persistence: JourneyPersistence<unknown>,
     key: string,
-  ):
-    | SerializedJourney<unknown>
-    | null
-    | AsyncLoadPending
-    | Promise<SerializedJourney<unknown> | null> {
+  ): SerializedJourney<unknown> | null | Promise<SerializedJourney<unknown> | null> {
     let loaded: SerializedJourney<unknown> | null | Promise<SerializedJourney<unknown> | null>;
     try {
       loaded = persistence.load(key) as
@@ -870,8 +877,9 @@ export function createJourneyRuntime(
   const runtime: JourneyRuntime = {
     start<TInput>(
       journeyIdOrHandle: string | JourneyHandleRef<string, TInput>,
-      input: TInput,
+      ...rest: [input?: TInput]
     ): InstanceId {
+      const input = (rest.length > 0 ? rest[0] : undefined) as TInput;
       // Accept either a bare id or a `JourneyHandle`-shaped object. The
       // handle form is the `start<TId, TInput>(handle, input)` overload; it
       // only exists to type-check `input` — the runtime behaviour is
@@ -1096,9 +1104,10 @@ export function createJourneyRuntime(
         applyTransition(record, reg, { abort: { reason: reason ?? "abandoned" } }, null);
         return;
       }
-      let result: TransitionResult<ModuleTypeMap, unknown> = {
+      const defaultAbort: TransitionResult<ModuleTypeMap, unknown> = {
         abort: { reason: reason ?? "abandoned" },
       };
+      let result: TransitionResult<ModuleTypeMap, unknown> = defaultAbort;
       // Registration-level `onAbandon` overrides the definition's — shells
       // can swap the abandon outcome without modifying journey authoring code
       // (e.g. complete instead of abort on tab close). If absent, fall back
@@ -1115,11 +1124,19 @@ export function createJourneyRuntime(
           }) as TransitionResult<ModuleTypeMap, unknown>;
         } catch (err) {
           // Surface the handler crash through the registration-level onError
-          // hook before falling back to the default abort. Without this,
-          // a throw in a shell's onAbandon is indistinguishable from an
-          // intentional abort and silently loses telemetry.
+          // hook before falling back to the default abort. Preserve the
+          // caller-supplied `reason` (and surface `onAbandon`'s own error as
+          // `cause`) so a throw in a shell's onAbandon doesn't silently
+          // erase the original abort context.
           if (debug) console.error("[@modular-react/journeys] onAbandon threw", err);
           fireOnError(reg, record, err, record.step);
+          result = {
+            abort: {
+              reason: reason ?? "abandoned",
+              cause: "onAbandon-threw",
+              error: err,
+            },
+          };
         }
       }
       applyTransition(record, reg, result, null);
@@ -1150,6 +1167,14 @@ export function createJourneyRuntime(
     },
   };
 
+  function dispatchComponentError(id: InstanceId, err: unknown, step: JourneyStep): void {
+    const record = instances.get(id);
+    if (!record) return;
+    const reg = definitions.get(record.journeyId);
+    if (!reg) return;
+    fireOnError(reg, record, err, step);
+  }
+
   // Internals used by the outlet and testing helpers — kept on a WeakMap
   // rather than on the runtime object to keep the public surface clean.
   const internals: JourneyRuntimeInternals = {
@@ -1158,6 +1183,7 @@ export function createJourneyRuntime(
     __getRegistered: (id: string) => definitions.get(id),
     __moduleMap: moduleMap,
     __debug: debug,
+    __fireComponentError: dispatchComponentError,
   };
   INTERNALS.set(runtime, internals);
 
@@ -1165,12 +1191,8 @@ export function createJourneyRuntime(
 }
 
 function defaultDebug(): boolean {
-  try {
-    const g = globalThis as unknown as { process?: { env?: { NODE_ENV?: string } } };
-    return !!g.process && g.process.env?.NODE_ENV !== "production";
-  } catch {
-    return false;
-  }
+  const g = globalThis as { process?: { env?: { NODE_ENV?: string } } };
+  return !!g.process && g.process.env?.NODE_ENV !== "production";
 }
 
 export interface JourneyRuntimeInternals {
@@ -1191,6 +1213,13 @@ export interface JourneyRuntimeInternals {
   /** Runtime's resolved debug flag — useful for dev-mode probes in the
    *  outlet / module-tab. */
   __debug: boolean;
+  /**
+   * Fires the registration-level `onError` hook for a component-level throw
+   * caught by the outlet's error boundary. Routed through the runtime so
+   * the outlet never has to reach into `reg.options.onError` directly —
+   * keeps the runtime the single owner of hook firing.
+   */
+  __fireComponentError(id: InstanceId, err: unknown, step: JourneyStep): void;
 }
 
 export function getInternals(runtime: JourneyRuntime): JourneyRuntimeInternals {

@@ -1,6 +1,6 @@
 import { createElement } from "react";
-import type { ReactNode } from "react";
-import type { ModuleDescriptor, ModuleEntryProps } from "@modular-react/core";
+import type { ComponentType, ReactNode } from "react";
+import type { ExitPointMap, ModuleDescriptor, ModuleEntryProps } from "@modular-react/core";
 import { ModuleErrorBoundary, useModuleExit, type ModuleExitEvent } from "@modular-react/react";
 
 /**
@@ -83,12 +83,33 @@ export function ModuleTab<TInput = unknown>(props: ModuleTabProps<TInput>): Reac
       missingEntryNotice,
     );
   } else if (entryPoint) {
-    const Component = entryPoint.component as React.ComponentType<ModuleEntryProps<TInput, any>>;
-    content = createElement(Component, { input: input as TInput, exit });
+    // The entry's declared input schema is the source of truth for whether
+    // `input` is required. At runtime we don't reflect on the schema, but
+    // we can still refuse to render with a visibly wrong `undefined` when
+    // the caller forgot to pass it — that surfaces the misconfiguration
+    // instead of letting the component throw deep inside its render with
+    // `Cannot read properties of undefined`. Callers whose entry schema
+    // is `void` should pass `input={undefined}` explicitly.
+    if (input === undefined && !("input" in props)) {
+      content = createElement(
+        "div",
+        { style: { padding: "1rem", color: "#c53030" } },
+        `Module "${mod.id}" entry "${resolvedName ?? ""}" was rendered without an \`input\` prop. ` +
+          `Pass \`input={undefined}\` explicitly if the entry accepts no input.`,
+      );
+    } else {
+      const Component = entryPoint.component as ComponentType<
+        ModuleEntryProps<TInput, ExitPointMap>
+      >;
+      content = createElement(Component, { input: input as TInput, exit });
+    }
   } else if (mod.component) {
     // Back-compat: render the legacy workspace component when the module
     // exposes no entry points. Entry contracts are opt-in.
-    const Component = mod.component as React.ComponentType<any>;
+    const Component = mod.component as ComponentType<{
+      input?: unknown;
+      tabId?: string;
+    }>;
     content = createElement(Component, { input, tabId });
   } else {
     content = createElement(

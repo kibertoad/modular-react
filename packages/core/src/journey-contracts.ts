@@ -209,7 +209,7 @@ export interface JourneyDefinitionSummary {
 
 export type MaybePromise<T> = T | Promise<T>;
 
-export interface JourneyPersistence<TState = unknown> {
+export interface JourneyPersistence<TState = unknown, TInput = unknown> {
   /**
    * Compute the persistence key from the journey id and the starting input.
    * The key must be deterministic for identical inputs — `start()` probes
@@ -219,8 +219,12 @@ export interface JourneyPersistence<TState = unknown> {
    * an id exists, and the dominant patterns (per-customer, per-session)
    * don't need it. If you need per-instance isolation, include a unique
    * discriminator in `input` rather than relying on an instance id.
+   *
+   * `TInput` carries through the journey's input type so shells can call
+   * `persistence.keyFor({ input })` outside the runtime with full type
+   * checking (defaults to `unknown` for adapters that don't care).
    */
-  keyFor: (ctx: { journeyId: string; input: unknown }) => string;
+  keyFor: (ctx: { journeyId: string; input: TInput }) => string;
   load: (key: string) => MaybePromise<SerializedJourney<TState> | null>;
   save: (key: string, blob: SerializedJourney<TState>) => MaybePromise<void>;
   remove: (key: string) => MaybePromise<void>;
@@ -257,10 +261,14 @@ export interface JourneyHandleRef<TId extends string = string, TInput = unknown>
 }
 
 export interface JourneyRuntime {
-  /** Handle form — type-checks `input` against the handle's phantom `TInput`. */
+  /**
+   * Handle form — type-checks `input` against the handle's phantom `TInput`.
+   * When the handle's `TInput` is `void`, callers can omit the second
+   * argument entirely.
+   */
   start<TId extends string, TInput>(
     handle: JourneyHandleRef<TId, TInput>,
-    input: TInput,
+    ...rest: [TInput] extends [void] ? [] | [input?: TInput] : [input: TInput]
   ): InstanceId;
   /** String-id form — accepts any `input` (the handle form is preferred). */
   start<TInput>(journeyId: string, input: TInput): InstanceId;

@@ -129,4 +129,40 @@ describe("ModuleTab", () => {
     expect(getByText(/has no entry points/)).toBeTruthy();
     expect(queryByTestId("legacy-marker")).toBeNull();
   });
+
+  it("renders a missing-input notice when the caller forgets `input` on an entry-backed module", () => {
+    // The caller omitted `input` entirely — not the same as explicitly
+    // passing `input={undefined}`. Without this guard the review component
+    // would blow up on `input.customerId` with a confusing TypeError;
+    // the notice tells the author exactly what to fix.
+    const { getByText, queryByTestId } = render(<ModuleTab module={mod} entry="review" />);
+    expect(getByText(/was rendered without an `input` prop/)).toBeTruthy();
+    // The component never mounts, so its DOM never appears.
+    expect(queryByTestId("cid")).toBeNull();
+  });
+
+  it("still renders the entry when the caller explicitly passes `input={undefined}` (void-input entries)", () => {
+    const voidExits = { done: defineExit() } as const;
+    function VoidEntry({ exit }: ModuleEntryProps<void, typeof voidExits>) {
+      return (
+        <div>
+          <span data-testid="void-marker">ready</span>
+          <button onClick={() => exit("done")}>go</button>
+        </div>
+      );
+    }
+    const voidMod = defineModule({
+      id: "void-mod",
+      version: "1.0.0",
+      exitPoints: voidExits,
+      entryPoints: {
+        main: defineEntry({
+          component: VoidEntry,
+          input: schema<void>(),
+        }),
+      },
+    });
+    const { getByTestId } = render(<ModuleTab module={voidMod} input={undefined} />);
+    expect(getByTestId("void-marker")).toBeTruthy();
+  });
 });

@@ -1,15 +1,17 @@
-// Type-level regression tests. This file has no runtime effects — it's
-// picked up by `tsc --noEmit` (not excluded from the package's tsconfig
-// because the exclude pattern `src/**/*.test.*` doesn't match `.test-d.ts`)
-// but not by vitest (the default test glob looks for `.test.ts` / `.spec.ts`).
+// Type-level regression tests. Runs through both `tsc --noEmit` (package's
+// typecheck script) AND vitest's typecheck pass (`vitest.config.ts`
+// enables `test.typecheck` for `*.test-d.ts`), so the assertions below
+// fail the test suite when types drift.
 //
 // The point: prove that `runtime.start(handle, input)` rejects wrongly-typed
-// `input` at compile time — the Phase 4a invariant. A runtime test can't
-// cover this; only a `@ts-expect-error` directive in a typechecked file does.
+// `input` at compile time — the Phase 4a invariant. Covered by both the
+// `@ts-expect-error` directives and the explicit `expectTypeOf` checks.
 
+import { expectTypeOf, test } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
+import type { InstanceId } from "./types.js";
 import { defineJourney } from "./define-journey.js";
-import { defineJourneyHandle } from "./handle.js";
+import { defineJourneyHandle, type JourneyHandle } from "./handle.js";
 import { createJourneyRuntime } from "./runtime.js";
 
 const exits = {
@@ -78,3 +80,16 @@ rt.start(handle, wider);
 // String-id form is intentionally loose — second arg is `unknown` in the
 // overload, so this compiles. We're documenting, not enforcing.
 rt.start("demo", { anything: "goes" });
+
+// ---- expectTypeOf assertions ---------------------------------------------
+
+test("defineJourneyHandle preserves the phantom TInput slot", () => {
+  expectTypeOf(handle).toExtend<JourneyHandle<string, Input>>();
+  // The handle carries `TInput` via the phantom `__input` field; runtime
+  // identity is just `{ id }` so the phantom stays optional.
+  expectTypeOf(handle.id).toEqualTypeOf<string>();
+});
+
+test("runtime.start(handle, input) returns an InstanceId", () => {
+  expectTypeOf(rt.start(handle, { customerId: "C-T" })).toEqualTypeOf<InstanceId>();
+});

@@ -50,6 +50,19 @@ export function validateJourneyContracts(
   const moduleById = new Map<string, ModuleDescriptor<any, any, any, any>>();
   for (const mod of modules) moduleById.set(mod.id, mod);
 
+  // Guard against a module declaring an exit literally named `allowBack`.
+  // Per-entry transitions on a journey use `allowBack: boolean` as a
+  // control key and an exit of the same name would be silently skipped by
+  // the per-exit iteration below. Fail loudly at registration time instead.
+  for (const mod of modules) {
+    if (mod.exitPoints && Object.prototype.hasOwnProperty.call(mod.exitPoints, "allowBack")) {
+      issues.push(
+        `module "${mod.id}" declares an exit named "allowBack", which collides with the reserved ` +
+          `per-entry transition control key. Rename the exit (e.g. "allowBackExit").`,
+      );
+    }
+  }
+
   const seenIds = new Set<string>();
   for (const reg of journeys) {
     const def = reg.definition;

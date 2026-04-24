@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { ComponentType, ReactNode } from "react";
-import type { ModuleDescriptor } from "@modular-react/core";
+import type { ExitPointMap, ModuleDescriptor, ModuleEntryProps } from "@modular-react/core";
 
 import { getInternals } from "./runtime.js";
 import { useJourneyContext } from "./provider.js";
@@ -168,14 +168,11 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
   const handleError = (err: unknown): void => {
     // Registration-level onError fires on every component throw — shell
     // telemetry observes the error even when the outlet decides to retry
-    // or ignore. Keep this before policy resolution so the hook sees the
-    // raw error regardless of how the outlet handles it.
-    try {
-      reg.options?.onError?.(err, { step });
-    } catch (hookErr) {
-      if (internals.__debug)
-        console.error("[@modular-react/journeys] onError (registration) threw", hookErr);
-    }
+    // or ignore. Route through the runtime so `fireOnError` stays the
+    // single owner of hook firing (including its own try/catch around
+    // throwing hooks); the outlet never reads `reg.options.onError`
+    // directly.
+    internals.__fireComponentError(instanceId, err, step);
     let policy = onStepError?.(err, { step }) ?? "abort";
     if (policy === "retry") {
       // The retry counter lives on the runtime record (not a ref) so it
@@ -198,7 +195,12 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     // 'ignore' — leave the boundary UI in place until the user navigates away
   };
 
-  const StepComponent = entry.component as ComponentType<any>;
+  // The step's declared input/exit contract is erased at the module-map
+  // boundary (the outlet holds ModuleDescriptor<any, any, any, any>).
+  // Narrow to the structural shape every entry component satisfies —
+  // `ModuleEntryProps<unknown, ExitPointMap>` — instead of `any`, so the
+  // cast site at least documents the prop bag the outlet hands in.
+  const StepComponent = entry.component as ComponentType<ModuleEntryProps<unknown, ExitPointMap>>;
   const stepKey = `${record.stepToken}:${retryKey}`;
 
   return createElement(

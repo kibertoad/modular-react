@@ -170,7 +170,7 @@ describe("JourneyRegisterOptions — registration-level hooks", () => {
       expect(rt.getInstance(id)!.terminalPayload).toEqual({ reason: "def-abandoned" });
     });
 
-    it("a throw in onAbandon surfaces through onError and falls back to the default abort", () => {
+    it("a throw in onAbandon surfaces through onError and preserves the caller's reason in the terminal payload", () => {
       const regOnError = vi.fn();
       const regAbandon = vi.fn(() => {
         throw new Error("abandon-boom");
@@ -185,14 +185,43 @@ describe("JourneyRegisterOptions — registration-level hooks", () => {
         { modules: { m: mod }, debug: false },
       );
       const id = rt.start("j", { id: "e2" });
-      rt.end(id);
+      rt.end(id, "tab-closed");
       expect(regAbandon).toHaveBeenCalledTimes(1);
       expect(regOnError).toHaveBeenCalledTimes(1);
       const [err] = regOnError.mock.calls[0];
       expect(err).toBeInstanceOf(Error);
       expect((err as Error).message).toBe("abandon-boom");
       expect(rt.getInstance(id)!.status).toBe("aborted");
-      expect(rt.getInstance(id)!.terminalPayload).toEqual({ reason: "abandoned" });
+      // The caller's `reason` survives the handler crash, and the thrown
+      // error is surfaced on `error` so telemetry can distinguish a
+      // normal abort from one forced by an onAbandon bug.
+      const payload = rt.getInstance(id)!.terminalPayload as {
+        reason: unknown;
+        cause: string;
+        error: unknown;
+      };
+      expect(payload.reason).toBe("tab-closed");
+      expect(payload.cause).toBe("onAbandon-threw");
+      expect(payload.error).toBeInstanceOf(Error);
+      expect((payload.error as Error).message).toBe("abandon-boom");
+    });
+
+    it("falls back to the default `abandoned` reason when the caller passes none and onAbandon throws", () => {
+      const regAbandon = vi.fn(() => {
+        throw new Error("abandon-boom");
+      });
+      const rt = createJourneyRuntime(
+        [{ definition: makeJourney(), options: { onAbandon: regAbandon } }],
+        { modules: { m: mod }, debug: false },
+      );
+      const id = rt.start("j", { id: "e3" });
+      rt.end(id);
+      const payload = rt.getInstance(id)!.terminalPayload as {
+        reason: unknown;
+        cause: string;
+      };
+      expect(payload.reason).toBe("abandoned");
+      expect(payload.cause).toBe("onAbandon-threw");
     });
   });
 

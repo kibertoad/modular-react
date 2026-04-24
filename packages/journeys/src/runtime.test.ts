@@ -910,4 +910,74 @@ describe("createJourneyRuntime — lifecycle extras", () => {
     ).toBe(true);
     warn.mockRestore();
   });
+
+  it("fresh-starts after an async hydrate migration failure do not leak history from the blob", async () => {
+    // A persisted blob whose version no longer matches, with history the
+    // migration path can't migrate (no onHydrate defined → version-mismatch).
+    // The runtime discards the blob and falls through to startFresh against
+    // the same record — history / rollbackSnapshots must not carry over.
+    const stale = {
+      definitionId: "collect",
+      version: "0.0.0",
+      instanceId: "ji_stale",
+      status: "active" as const,
+      step: { moduleId: "debts", entry: "negotiate", input: { customerId: "C-stale" } },
+      history: [{ moduleId: "account", entry: "review", input: { customerId: "C-stale" } }],
+      rollbackSnapshots: [null],
+      state: { customerId: "C-stale", attempts: 3 },
+      startedAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    };
+    const persistence = {
+      keyFor: () => "k:stale",
+      load: () => Promise.resolve(stale),
+      save: async () => {},
+      remove: async () => {},
+    };
+    const rt = freshRuntime({ options: { persistence: persistence as any } });
+    const id = rt.start("collect", { customerId: "C-stale" });
+    // Wait for the async probe + migration-fail + startFresh to settle.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const inst = rt.getInstance(id)!;
+    expect(inst.status).toBe("active");
+    // Fresh journey — the `history` snapshot from the blob must not leak
+    // into the recycled record.
+    expect(inst.history).toHaveLength(0);
+    expect(inst.step!.entry).toBe("review");
+    // State reset via initialState(input), not lifted from the blob.
+    expect((inst.state as State).attempts).toBe(0);
+  });
+
+  it("fresh-starts after a sync hydrate throw also drop blob-era history", () => {
+    const throwingBlob = {
+      definitionId: "collect",
+      version: "1.0.0",
+      instanceId: "ji_badlen",
+      status: "active" as const,
+      step: { moduleId: "debts", entry: "negotiate", input: { customerId: "C-badlen" } },
+      history: [{ moduleId: "account", entry: "review", input: { customerId: "C-badlen" } }],
+      // Intentionally mismatched length — triggers the JourneyHydrationError
+      // inside hydrateInto during start()'s sync path.
+      rollbackSnapshots: [] as never[],
+      state: { customerId: "C-badlen", attempts: 2 },
+      startedAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    };
+    const persistence = {
+      keyFor: () => "k:sync-throw",
+      load: () => throwingBlob,
+      save: async () => {},
+      remove: async () => {},
+    };
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    const rt = freshRuntime({ options: { persistence: persistence as any } });
+    const id = rt.start("collect", { customerId: "C-badlen" });
+    warn.mockRestore();
+    const inst = rt.getInstance(id)!;
+    expect(inst.status).toBe("active");
+    expect(inst.history).toHaveLength(0);
+    expect((inst.state as State).attempts).toBe(0);
+  });
 });

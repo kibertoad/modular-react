@@ -109,6 +109,21 @@ describe("validateJourneyContracts", () => {
     ).toThrow(/unknown exit "m\.start\.ghost"/);
   });
 
+  it("reports a module that declares an exit literally named 'allowBack'", () => {
+    const clashingExits = { allowBack: defineExit() } as const;
+    const clashingMod = defineModule({
+      id: "clash",
+      version: "1.0.0",
+      exitPoints: clashingExits,
+      entryPoints: {
+        start: defineEntry({ component: (() => null) as any, input: schema<void>() }),
+      },
+    });
+    expect(() => validateJourneyContracts([], [clashingMod])).toThrow(
+      /declares an exit named "allowBack"/,
+    );
+  });
+
   it("reports allowBack mismatch between journey and module entry", () => {
     const entryNoBack = {
       ...mod,
