@@ -1,14 +1,14 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-afterEach(() => {
-  cleanup();
-});
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import type { ModuleEntryProps } from "@modular-react/core";
 import { defineJourney } from "./define-journey.js";
 import { createJourneyRuntime, getInternals } from "./runtime.js";
 import { JourneyOutlet } from "./outlet.js";
+
+afterEach(() => {
+  cleanup();
+});
 
 // --- Modules with real components --------------------------------------------
 
