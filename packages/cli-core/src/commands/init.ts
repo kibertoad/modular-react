@@ -218,10 +218,14 @@ function scaffold(args: {
   );
   writeFileSync(resolve(root, "shell", "src", "components", "Home.tsx"), shellHome({ scope }));
 
-  // First module (with two routes for testable routing)
+  // First module (with two routes for testable routing). Mirror the
+  // shape that `create module` produces — including __tests__ — so the
+  // initial module isn't structurally different from any module the user
+  // generates afterwards.
   const moduleDir = resolve(root, "modules", moduleName);
   mkdirSync(resolve(moduleDir, "src", "pages"), { recursive: true });
   mkdirSync(resolve(moduleDir, "src", "panels"), { recursive: true });
+  mkdirSync(resolve(moduleDir, "src", "__tests__"), { recursive: true });
   writeFileSync(
     resolve(moduleDir, "package.json"),
     modulePackageJson({ scope, name: moduleName, preset }),
@@ -249,6 +253,17 @@ function scaffold(args: {
   writeFileSync(
     resolve(moduleDir, "src", "panels", "DetailPanel.tsx"),
     preset.templates.moduleDetailPanel({ moduleLabel }),
+  );
+  writeFileSync(
+    resolve(moduleDir, "src", "__tests__", `${moduleName}.test.ts`),
+    preset.templates.moduleTest({
+      scope,
+      name: moduleName,
+      importName,
+      route: moduleName,
+      pageName,
+      moduleLabel,
+    }),
   );
 }
 

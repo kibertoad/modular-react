@@ -56,6 +56,10 @@ describe("react-router-modules init", { sequential: true }, () => {
     files.fileExists("my-app/modules/dashboard/src/pages/DashboardDashboard.tsx");
     files.fileExists("my-app/modules/dashboard/src/pages/DashboardList.tsx");
     files.fileExists("my-app/modules/dashboard/src/panels/DetailPanel.tsx");
+    // The first module must mirror `create module` output, which includes
+    // a `__tests__/<name>.test.ts` so the project has a test scaffold from
+    // day one rather than only from the second module onward.
+    files.fileExists("my-app/modules/dashboard/src/__tests__/dashboard.test.ts");
   });
 
   it("uses scope in generated package names", async () => {
