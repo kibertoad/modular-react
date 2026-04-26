@@ -11,16 +11,26 @@ binaries — not this package.
 
 ## What's in here
 
-- Command implementations: `init`, `create module`, `create store`,
-  `create journey`. Each is a factory that takes a `CliPreset` and
-  returns a [`citty`](https://github.com/unjs/citty) command.
-- Project detection (`resolveProject`) and scope detection
-  (`detectScope`).
-- File transforms that edit `shell/src/main.tsx`, `shell/package.json`,
-  `app-shared/src/index.ts`, and `pnpm-workspace.yaml` (`addModuleToMain`,
-  `addStoreToAppShared`, `addJourneyToMain`, `ensureJourneysInWorkspace`).
-- Router-agnostic templates: workspace files, `app-shared` package
-  metadata, store stub, journey package + definition + persistence.
+This package's public surface is intentionally tiny — `buildCli`,
+`runCli`, and the `CliPreset` types in `src/index.ts`. Everything else
+is internal machinery the commands rely on:
+
+- Command implementations under `src/commands/`: `init`, `create module`,
+  `create store`, `create journey`. Each is a factory that takes a
+  `CliPreset` and returns a [`citty`](https://github.com/unjs/citty)
+  command. Wired together by `buildCli`.
+- Project layout detection (`utils/resolve-project.ts`) and scope
+  detection (`utils/detect-scope.ts`).
+- File transforms (`utils/transform.ts`) that edit `shell/src/main.tsx`,
+  `shell/package.json`, `app-shared/src/index.ts`, and
+  `pnpm-workspace.yaml` to wire newly scaffolded pieces in. Anchored on
+  comment markers and predictable shapes that the CLI's own templates
+  emit.
+- Centralized runtime-package version pins in `runtime-versions.ts` —
+  bump in one place to refresh every generated `package.json`.
+- Router-agnostic templates under `src/templates/`: workspace files,
+  `app-shared` package metadata, store stub, journey package +
+  definition + persistence.
 
 ## Adding a router integration
 

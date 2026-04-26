@@ -6,6 +6,7 @@ import type { CliPreset } from "../preset.js";
 import { toCamelCase, toPascalCase } from "../naming.js";
 import { resolveProject } from "../utils/resolve-project.js";
 import { detectScope } from "../utils/detect-scope.js";
+import { promptText } from "../utils/prompt.js";
 import {
   addJourneyToMain,
   addJourneyToShellPackageJson,
@@ -56,7 +57,7 @@ export function createCreateJourneyCommand(_preset: CliPreset) {
 
       const name =
         args.name ||
-        ((await p.text({
+        (await promptText({
           message: "Journey name",
           placeholder: "customer-onboarding",
           validate: (v) => {
@@ -65,8 +66,7 @@ export function createCreateJourneyCommand(_preset: CliPreset) {
               return "Use lowercase letters, digits, and dashes only.";
             return undefined;
           },
-        })) as string);
-      cancelOnExit(name);
+        }));
 
       const journeyDir = resolve(project.journeysDir, name);
       if (existsSync(journeyDir)) {
@@ -99,6 +99,7 @@ export function createCreateJourneyCommand(_preset: CliPreset) {
       const journeyCamel = toCamelCase(name);
       const journeyExportName = `${journeyCamel}Journey`;
       const handleExportName = `${journeyCamel}Handle`;
+      const persistenceExportName = `${journeyCamel}Persistence`;
 
       // 1. Scaffold the journey package.
       mkdirSync(resolve(journeyDir, "src"), { recursive: true });
@@ -143,16 +144,8 @@ export function createCreateJourneyCommand(_preset: CliPreset) {
       // 3. Add a shell dependency on the journey + the journeys runtime.
       addJourneyToShellPackageJson(project.shellDir, { scope, journeyName: name });
 
-      // 4. Wire the journey into shell/src/main.tsx (plugin install +
-      //    registerJourney).
-      addJourneyToMain(project.shellDir, {
-        scope,
-        journeyName: name,
-        journeyExportName,
-        handleExportName,
-      });
-
-      // 5. Optional persistence adapter under shell/src/.
+      // 4. Optional persistence adapter under shell/src/. Written before
+      //    we wire main.tsx so the import we add is immediately valid.
       if (withPersistence) {
         const persistencePath = resolve(project.shellDir, "src", `${name}-persistence.ts`);
         writeFileSync(
@@ -168,16 +161,33 @@ export function createCreateJourneyCommand(_preset: CliPreset) {
         );
       }
 
+      // 5. Wire the journey into shell/src/main.tsx (plugin install +
+      //    registerJourney). When persistence was generated, the call
+      //    becomes `registerJourney(<journey>, { persistence })` and the
+      //    binding gets imported from the file we just wrote.
+      addJourneyToMain(project.shellDir, {
+        scope,
+        journeyName: name,
+        journeyExportName,
+        handleExportName,
+        persistenceExportName: withPersistence ? persistenceExportName : undefined,
+      });
+
       const summary = [
         `Journey:    journeys/${name}/`,
         `Package:    ${scope}/${name}-journey`,
         `Handle:     ${handleExportName}  (typed token for runtime.start(handle, input))`,
         `Modules:    ${modules.length === 0 ? "(none — add some via --modules)" : modules.map((m) => m.moduleName).join(", ")}`,
-        withPersistence ? `Persistence: shell/src/${name}-persistence.ts` : null,
+        withPersistence
+          ? `Persistence: shell/src/${name}-persistence.ts (wired into registerJourney as { persistence: ${persistenceExportName} })`
+          : null,
         "",
         "Next:",
         "  - Fill in initialState, start, and transitions in the journey definition.",
         "  - On each composed module, add entryPoints + exitPoints (defineEntry / defineExit).",
+        withPersistence
+          ? `  - Tune ${persistenceExportName}.keyFor in shell/src/${name}-persistence.ts to match your input shape.`
+          : null,
         "  - Run pnpm install to link the new package.",
       ]
         .filter((line): line is string => line !== null)
@@ -226,9 +236,3 @@ function toJourneyModule(args: {
   };
 }
 
-function cancelOnExit(value: unknown): void {
-  if (p.isCancel(value)) {
-    p.cancel("Cancelled");
-    process.exit(0);
-  }
-}

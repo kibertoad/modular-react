@@ -6,6 +6,7 @@ import type { CliPreset } from "../preset.js";
 import { toCamelCase, toPascalCase } from "../naming.js";
 import { resolveProject } from "../utils/resolve-project.js";
 import { detectScope } from "../utils/detect-scope.js";
+import { promptText } from "../utils/prompt.js";
 import { addStoreToAppShared, addStoreToMain } from "../utils/transform.js";
 import { storeFile } from "../templates/store.js";
 
@@ -34,12 +35,11 @@ export function createCreateStoreCommand(_preset: CliPreset) {
 
       const name =
         args.name ||
-        ((await p.text({
+        (await promptText({
           message: "Store name",
           placeholder: "notifications",
           validate: (v) => (!v ? "Required" : undefined),
-        })) as string);
-      cancelOnExit(name);
+        }));
 
       const storePath = resolve(project.shellDir, "src", "stores", `${name}.ts`);
       if (existsSync(storePath)) {
@@ -78,9 +78,3 @@ export function createCreateStoreCommand(_preset: CliPreset) {
   });
 }
 
-function cancelOnExit(value: unknown): void {
-  if (p.isCancel(value)) {
-    p.cancel("Cancelled");
-    process.exit(0);
-  }
-}

@@ -1,9 +1,10 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "pathe";
 import type { CliPreset } from "../preset.js";
 import { toCamelCase, toPascalCase } from "../naming.js";
+import { promptText } from "../utils/prompt.js";
 import {
   rootPackageJson,
   pnpmWorkspace,
@@ -50,7 +51,27 @@ export function createInitCommand(preset: CliPreset) {
       },
     },
     async run({ args }) {
-      const isNonInteractive = Boolean(args.scope && args.module);
+      // Treat the run as non-interactive when *any* flag is supplied so we
+      // never silently fall back to a TTY prompt in CI. Missing flags are
+      // surfaced as errors rather than as blocking reads on stdin.
+      const hasAnyFlag = Boolean(args.name || args.scope || args.module);
+      const hasAllFlags = Boolean(args.name && args.scope && args.module);
+      const isNonInteractive = hasAnyFlag && hasAllFlags;
+      const partialFlags = hasAnyFlag && !hasAllFlags;
+
+      if (partialFlags) {
+        const missing = [
+          !args.name ? "<name> (positional)" : null,
+          !args.scope ? "--scope" : null,
+          !args.module ? "--module" : null,
+        ]
+          .filter((s): s is string => s !== null)
+          .join(", ");
+        console.error(
+          `Non-interactive init requires all of name, --scope, --module. Missing: ${missing}`,
+        );
+        process.exit(1);
+      }
 
       if (!isNonInteractive) {
         p.intro("Create a new modular-react project");
@@ -58,16 +79,26 @@ export function createInitCommand(preset: CliPreset) {
 
       const projectName =
         args.name ||
-        ((await p.text({
+        (await promptText({
           message: "Project name",
           placeholder: "my-app",
           validate: (v) => (!v ? "Required" : undefined),
-        })) as string);
-      cancelOnExit(projectName);
+        }));
+
+      const root = resolve(process.cwd(), projectName);
+      if (existsSync(root)) {
+        const msg = `Directory "${projectName}" already exists at ${root}. Refusing to overwrite.`;
+        if (isNonInteractive) {
+          console.error(msg);
+          process.exit(1);
+        }
+        p.cancel(msg);
+        process.exit(1);
+      }
 
       const scope =
         args.scope ||
-        ((await p.text({
+        (await promptText({
           message: "Package scope",
           placeholder: "@myapp",
           validate: (v) => {
@@ -75,44 +106,38 @@ export function createInitCommand(preset: CliPreset) {
             if (v.length < 2) return "Scope too short";
             return undefined;
           },
-        })) as string);
-      cancelOnExit(scope);
+        }));
 
       const moduleName =
         args.module ||
-        ((await p.text({
+        (await promptText({
           message: "First module name",
           placeholder: "dashboard",
           validate: (v) => (!v ? "Required" : undefined),
-        })) as string);
-      cancelOnExit(moduleName);
+        }));
 
-      const root = resolve(process.cwd(), projectName);
       const pageName = toPascalCase(moduleName) + "Dashboard";
       const listPageName = toPascalCase(moduleName) + "List";
       const importName = toCamelCase(moduleName);
 
-      const work = () =>
-        scaffold({
-          preset,
-          root,
-          projectName,
-          scope,
-          moduleName,
-          pageName,
-          listPageName,
-          importName,
-        });
+      // Scaffolding is fully synchronous fs work — wrapping it in a
+      // `clack` spinner just blocks the event loop and never animates, so
+      // we report progress with a plain note instead.
+      scaffold({
+        preset,
+        root,
+        projectName,
+        scope,
+        moduleName,
+        pageName,
+        listPageName,
+        importName,
+      });
 
       if (!isNonInteractive) {
-        const s = p.spinner();
-        s.start("Scaffolding project...");
-        work();
-        s.stop("Project created!");
         p.note(`cd ${projectName}\npnpm install\npnpm dev`, "Next steps");
-        p.outro("Happy building!");
+        p.outro("Project created!");
       } else {
-        work();
         console.log(`Project created at ${root}`);
       }
     },
@@ -210,6 +235,7 @@ function scaffold(args: {
       route: moduleName,
       pageName,
       listPageName,
+      moduleLabel,
     }),
   );
   writeFileSync(
@@ -224,13 +250,6 @@ function scaffold(args: {
     resolve(moduleDir, "src", "panels", "DetailPanel.tsx"),
     preset.templates.moduleDetailPanel({ moduleLabel }),
   );
-}
-
-function cancelOnExit(value: unknown): void {
-  if (p.isCancel(value)) {
-    p.cancel("Cancelled");
-    process.exit(0);
-  }
 }
 
 function docsUrl(path: string): string {

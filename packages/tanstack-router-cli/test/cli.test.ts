@@ -256,7 +256,12 @@ describe("tanstack-react-modules create journey", { sequential: true }, () => {
 
     const mainTsx = readFileSync(resolve(TMP, "journey-test/shell/src/main.tsx"), "utf-8");
     expect(mainTsx).toContain("journeysPlugin()");
-    expect(mainTsx).toContain("registry.registerJourney(customerOnboardingJourney)");
+    expect(mainTsx).toContain(
+      "registry.registerJourney(customerOnboardingJourney, { persistence: customerOnboardingPersistence })",
+    );
+    expect(mainTsx).toContain(
+      "import { customerOnboardingPersistence } from './customer-onboarding-persistence.js'",
+    );
   });
 
   it("rejects modules that don't exist yet", async () => {

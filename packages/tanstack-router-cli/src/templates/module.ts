@@ -7,7 +7,7 @@ import type {
 } from "@modular-react/cli-core";
 
 export function moduleDescriptor(params: ModuleDescriptorParams): string {
-  const label = capitalize(params.name);
+  const label = params.moduleLabel;
   const navItems = params.navGroup
     ? [
         `{ label: '${label}', to: '/${params.route}', group: '${params.navGroup}', order: 10 }`,
@@ -152,7 +152,7 @@ export default function ${params.pageName}() {
 }
 
 export function moduleTest(params: ModuleTestParams): string {
-  return `import { describe, it, expect } from 'vitest'
+  return `import { describe, it } from 'vitest'
 import { renderModule, createMockStore } from '@tanstack-react-modules/testing'
 import type { AppDependencies } from '${params.scope}/app-shared'
 import ${params.importName} from '../index.js'
@@ -173,26 +173,25 @@ const mockConfig = createMockStore<AppDependencies['config']>({
 
 describe('${params.name} module', () => {
   it('renders the index page', async () => {
-    const { getByText } = await renderModule(${params.importName}, {
+    const { getByRole } = await renderModule(${params.importName}, {
       route: '/${params.route}',
       deps: { auth: mockAuth, config: mockConfig },
     })
 
-    expect(getByText('${capitalize(params.name)}')).toBeDefined()
+    // \`getByRole\` throws when no match is found, so reaching the next line
+    // is the assertion. Querying by role + name avoids the dashed-name
+    // mismatch that bit a previous version of this template.
+    getByRole('heading', { name: '${params.moduleLabel}' })
   })
 
   it('renders the list page', async () => {
-    const { getByText } = await renderModule(${params.importName}, {
+    const { getByRole } = await renderModule(${params.importName}, {
       route: '/${params.route}/list',
       deps: { auth: mockAuth, config: mockConfig },
     })
 
-    expect(getByText('${capitalize(params.name)} List')).toBeDefined()
+    getByRole('heading', { name: '${params.moduleLabel} List' })
   })
 })
 `;
-}
-
-function capitalize(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1);
 }

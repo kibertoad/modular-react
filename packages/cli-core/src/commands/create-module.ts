@@ -6,6 +6,7 @@ import type { CliPreset } from "../preset.js";
 import { toCamelCase, toPascalCase } from "../naming.js";
 import { resolveProject } from "../utils/resolve-project.js";
 import { detectScope } from "../utils/detect-scope.js";
+import { promptText } from "../utils/prompt.js";
 import { addModuleToMain, addModuleToShellPackageJson } from "../utils/transform.js";
 import { modulePackageJson, moduleTsconfig } from "../templates/module.js";
 
@@ -42,12 +43,11 @@ export function createCreateModuleCommand(preset: CliPreset) {
 
       const name =
         args.name ||
-        ((await p.text({
+        (await promptText({
           message: "Module name",
           placeholder: "billing",
           validate: (v) => (!v ? "Required" : undefined),
-        })) as string);
-      cancelOnExit(name);
+        }));
 
       const moduleDir = resolve(project.modulesDir, name);
       if (existsSync(moduleDir)) {
@@ -64,23 +64,21 @@ export function createCreateModuleCommand(preset: CliPreset) {
         args.route ||
         (isNonInteractive
           ? name
-          : ((await p.text({
+          : await promptText({
               message: "Route path",
               defaultValue: name,
               placeholder: name,
-            })) as string));
-      cancelOnExit(route);
+            }));
 
-      const navGroup =
-        args["nav-group"] ||
-        (isNonInteractive
-          ? undefined
-          : ((await p.text({
+      const navGroupRaw = args["nav-group"]
+        ? args["nav-group"]
+        : isNonInteractive
+          ? ""
+          : await promptText({
               message: "Navigation group (optional)",
               placeholder: "leave empty for none",
-            })) as string)) ||
-        undefined;
-      if (typeof navGroup !== "undefined") cancelOnExit(navGroup);
+            });
+      const navGroup = navGroupRaw || undefined;
 
       const pageName = toPascalCase(name) + "Dashboard";
       const listPageName = toPascalCase(name) + "List";
@@ -101,6 +99,7 @@ export function createCreateModuleCommand(preset: CliPreset) {
           pageName,
           listPageName,
           navGroup,
+          moduleLabel,
         }),
       );
       writeFileSync(
@@ -117,7 +116,7 @@ export function createCreateModuleCommand(preset: CliPreset) {
       );
       writeFileSync(
         resolve(moduleDir, "src", "__tests__", `${name}.test.ts`),
-        preset.templates.moduleTest({ scope, name, importName, route, pageName }),
+        preset.templates.moduleTest({ scope, name, importName, route, pageName, moduleLabel }),
       );
 
       addModuleToShellPackageJson(project.shellDir, { scope, moduleName: name });
@@ -142,9 +141,3 @@ export function createCreateModuleCommand(preset: CliPreset) {
   });
 }
 
-function cancelOnExit(value: unknown): void {
-  if (p.isCancel(value)) {
-    p.cancel("Cancelled");
-    process.exit(0);
-  }
-}

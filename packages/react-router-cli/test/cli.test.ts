@@ -211,6 +211,35 @@ describe("react-router-modules create store", { sequential: true }, () => {
       baseDir: resolve(TMP, "dup-store-test"),
     });
   });
+
+  // Regression: a previous version inserted the AppDependencies property
+  // even when the `// ---- The contract ----` marker was missing, so the
+  // file ended up with a property pointing at a never-declared interface.
+  // We now refuse rather than producing partial, type-broken edits.
+  it("refuses to wire a store when the app-shared marker is missing", async () => {
+    files.registerGlobForCleanup(`${TMP}/marker-test/**`);
+    files.registerGlobForCleanup(`${TMP}/marker-test`);
+
+    await execCommand(`node ${CLI} init marker-test --scope @test --module home`, {
+      baseDir: TMP,
+    });
+
+    // Strip the marker — simulating someone reformatting away the
+    // anchor the CLI relies on.
+    const indexPath = resolve(TMP, "marker-test/app-shared/src/index.ts");
+    const original = readFileSync(indexPath, "utf-8");
+    writeFileSync(indexPath, original.replace("// ---- The contract ----", ""));
+
+    await execCommand(`node ${CLI} create store notifications`, {
+      expectedErrorMessage: "The contract",
+      baseDir: resolve(TMP, "marker-test"),
+    });
+
+    // The index.ts must not have been partially mutated — no
+    // NotificationsStore reference should sneak into AppDependencies.
+    const after = readFileSync(indexPath, "utf-8");
+    expect(after).not.toContain("notifications: NotificationsStore");
+  });
 });
 
 describe("react-router-modules create journey", { sequential: true }, () => {
@@ -268,11 +297,18 @@ describe("react-router-modules create journey", { sequential: true }, () => {
     expect(shellPkg).toContain("@test/customer-onboarding-journey");
     expect(shellPkg).toContain("@modular-react/journeys");
 
-    // Shell main.tsx wires the plugin and registerJourney call.
+    // Shell main.tsx wires the plugin and registerJourney call. With
+    // --persistence, the call carries the persistence adapter as its
+    // second arg and the binding is imported from the generated file.
     const mainTsx = readFileSync(resolve(TMP, "journey-test/shell/src/main.tsx"), "utf-8");
     expect(mainTsx).toContain("journeysPlugin()");
-    expect(mainTsx).toContain("registry.registerJourney(customerOnboardingJourney)");
+    expect(mainTsx).toContain(
+      "registry.registerJourney(customerOnboardingJourney, { persistence: customerOnboardingPersistence })",
+    );
     expect(mainTsx).toContain("from '@test/customer-onboarding-journey'");
+    expect(mainTsx).toContain(
+      "import { customerOnboardingPersistence } from './customer-onboarding-persistence.js'",
+    );
   });
 
   it("rejects modules that don't exist yet", async () => {
@@ -291,7 +327,10 @@ describe("react-router-modules create journey", { sequential: true }, () => {
 
   // Older projects scaffolded before `journeys/*` was added to the default
   // workspace template need it injected on first journey creation.
-  it("adds journeys/* to pnpm-workspace.yaml when missing", async () => {
+  // Regression: a previous version of this transform walked the whole
+  // file looking for the last `- ` list item, which meant `journeys/*`
+  // landed under `onlyBuiltDependencies:` whenever that block was present.
+  it("adds journeys/* under packages: even when onlyBuiltDependencies is present", async () => {
     files.registerGlobForCleanup(`${TMP}/journey-retrofit/**`);
     files.registerGlobForCleanup(`${TMP}/journey-retrofit`);
 
@@ -299,9 +338,13 @@ describe("react-router-modules create journey", { sequential: true }, () => {
       baseDir: TMP,
     });
 
-    // Simulate an older scaffold by rewriting the workspace yaml without `journeys/*`.
+    // Simulate an older scaffold: no `journeys/*` glob, but
+    // `onlyBuiltDependencies` does live below `packages:`.
     const wsPath = resolve(TMP, "journey-retrofit/pnpm-workspace.yaml");
-    writeFileSync(wsPath, "packages:\n  - app-shared\n  - shell\n  - modules/*\n");
+    writeFileSync(
+      wsPath,
+      "packages:\n  - app-shared\n  - shell\n  - modules/*\n\nonlyBuiltDependencies:\n  - esbuild\n",
+    );
 
     await execCommand(`node ${CLI} create journey onboarding`, {
       baseDir: resolve(TMP, "journey-retrofit"),
@@ -309,5 +352,97 @@ describe("react-router-modules create journey", { sequential: true }, () => {
 
     const ws = readFileSync(wsPath, "utf-8");
     expect(ws).toContain("- journeys/*");
+    // Verify the glob landed inside the packages: block, not under
+    // onlyBuiltDependencies. Easiest check: journeys/* must appear before
+    // `onlyBuiltDependencies:` in the file.
+    expect(ws.indexOf("- journeys/*")).toBeLessThan(ws.indexOf("onlyBuiltDependencies:"));
+  });
+});
+
+describe("react-router-modules init guards", { sequential: true }, () => {
+  const files = new FileTestHelper({ basePath: TMP, maxRetries: 5, retryDelay: 200 });
+
+  beforeEach(() => {
+    mkdirSync(TMP, { recursive: true });
+  });
+
+  afterEach(() => {
+    files.cleanup();
+  });
+
+  // Init must not silently overwrite an existing project. A previous
+  // version blindly mkdir+writeFile'd over whatever was in place.
+  it("refuses to clobber an existing target directory", async () => {
+    files.registerGlobForCleanup(`${TMP}/clobber-test/**`);
+    files.registerGlobForCleanup(`${TMP}/clobber-test`);
+
+    await execCommand(`node ${CLI} init clobber-test --scope @test --module home`, {
+      baseDir: TMP,
+    });
+
+    await execCommand(`node ${CLI} init clobber-test --scope @test --module home`, {
+      expectedErrorMessage: "already exists",
+      baseDir: TMP,
+    });
+  });
+
+  // Init runs in CI as soon as ANY flag is passed; missing args must
+  // fail fast rather than block on stdin.
+  it("fails fast when invoked with partial flags (CI-safe)", async () => {
+    await execCommand(`node ${CLI} init --scope @test`, {
+      expectedErrorMessage: "Non-interactive init requires",
+      baseDir: TMP,
+    });
+  });
+});
+
+describe("react-router-modules dashed names", { sequential: true }, () => {
+  const files = new FileTestHelper({ basePath: TMP, maxRetries: 5, retryDelay: 200 });
+
+  beforeEach(() => {
+    mkdirSync(TMP, { recursive: true });
+  });
+
+  afterEach(() => {
+    files.cleanup();
+  });
+
+  // Regression: the descriptor `label` and the test assertions used a
+  // first-char-only `capitalize`, so a `customer-orders` module would
+  // render `<h2>CustomerOrders</h2>` while the test searched for
+  // `Customer-orders`. Both must agree on PascalCase.
+  it("PascalCases dashed module names consistently across descriptor, page, and test", async () => {
+    files.registerGlobForCleanup(`${TMP}/dashed-app/**`);
+    files.registerGlobForCleanup(`${TMP}/dashed-app`);
+
+    await execCommand(`node ${CLI} init dashed-app --scope @test --module home`, {
+      baseDir: TMP,
+    });
+    await execCommand(`node ${CLI} create module customer-orders --route customer-orders`, {
+      baseDir: resolve(TMP, "dashed-app"),
+    });
+
+    const desc = readFileSync(
+      resolve(TMP, "dashed-app/modules/customer-orders/src/index.ts"),
+      "utf-8",
+    );
+    expect(desc).toContain("CustomerOrders");
+    expect(desc).not.toContain("Customer-orders");
+
+    const page = readFileSync(
+      resolve(TMP, "dashed-app/modules/customer-orders/src/pages/CustomerOrdersDashboard.tsx"),
+      "utf-8",
+    );
+    expect(page).toContain("<h2>CustomerOrders</h2>");
+
+    const test = readFileSync(
+      resolve(TMP, "dashed-app/modules/customer-orders/src/__tests__/customer-orders.test.ts"),
+      "utf-8",
+    );
+    // The test must look for the same PascalCase label the page renders
+    // (and not the broken `Customer-orders`).
+    expect(test).toContain("'CustomerOrders'");
+    expect(test).toContain("'CustomerOrders List'");
+    expect(test).not.toContain("'Customer-orders'");
   });
 });

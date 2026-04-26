@@ -88,6 +88,8 @@ export interface ModuleDescriptorParams {
   readonly pageName: string;
   readonly listPageName: string;
   readonly navGroup?: string;
+  /** PascalCase label (e.g. `CustomerOrders` for `customer-orders`). */
+  readonly moduleLabel: string;
 }
 
 export interface ModulePageParams {
@@ -113,4 +115,10 @@ export interface ModuleTestParams {
   readonly importName: string;
   readonly route: string;
   readonly pageName: string;
+  /**
+   * PascalCase label rendered by the page templates (e.g. `CustomerOrders`
+   * for a `customer-orders` module). The test asserts on this exact text,
+   * so the label must match what `modulePage` / `moduleListPage` render.
+   */
+  readonly moduleLabel: string;
 }

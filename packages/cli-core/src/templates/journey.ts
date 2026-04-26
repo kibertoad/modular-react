@@ -1,3 +1,5 @@
+import { RUNTIME_VERSIONS } from "../runtime-versions.js";
+
 export interface JourneyTemplateModule {
   /** The module's name as scaffolded by `create module` (e.g. `billing`). */
   readonly moduleName: string;
@@ -41,7 +43,7 @@ export function journeyPackageJson(params: JourneyTemplateParams): string {
         typecheck: "tsc --noEmit",
       },
       dependencies: {
-        "@modular-react/journeys": "^0.1.0",
+        "@modular-react/journeys": RUNTIME_VERSIONS.journeys,
         [`${params.scope}/app-shared`]: "workspace:*",
         ...moduleDeps,
       },
