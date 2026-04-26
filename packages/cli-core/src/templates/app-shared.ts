@@ -9,7 +9,7 @@ export function appSharedPackageJson(params: { scope: string; preset: CliPreset 
     "@lokalise/frontend-http-client": "^7.0.0",
     wretch: "^2.11.0",
     zod: "^3.25.0",
-    ...(extra?.dependencies ?? {}),
+    ...extra?.dependencies,
   };
   const peerDependencies = {
     react: "^19.0.0",
@@ -20,7 +20,7 @@ export function appSharedPackageJson(params: { scope: string; preset: CliPreset 
     zustand: "^5.0.0",
     "@types/react": "^19.0.0",
     typescript: "^6.0.2",
-    ...(extra?.devDependencies ?? {}),
+    ...extra?.devDependencies,
   };
 
   return JSON.stringify(

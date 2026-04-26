@@ -1,11 +1,6 @@
 import type { CliPreset } from "@modular-react/cli-core";
 import { appSharedIndex } from "./templates/app-shared.js";
-import {
-  shellMain,
-  shellRootLayout,
-  shellShellLayout,
-  shellSidebar,
-} from "./templates/shell.js";
+import { shellMain, shellRootLayout, shellShellLayout, shellSidebar } from "./templates/shell.js";
 import {
   moduleDescriptor,
   moduleDetailPanel,

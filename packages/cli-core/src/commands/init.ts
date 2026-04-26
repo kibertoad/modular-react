@@ -129,8 +129,7 @@ function scaffold(args: {
   listPageName: string;
   importName: string;
 }): void {
-  const { preset, root, projectName, scope, moduleName, pageName, listPageName, importName } =
-    args;
+  const { preset, root, projectName, scope, moduleName, pageName, listPageName, importName } = args;
   const moduleLabel = toPascalCase(moduleName);
 
   // Root files

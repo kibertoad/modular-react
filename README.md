@@ -192,21 +192,21 @@ See [`examples/README.md`](examples/README.md) for how to run them and how to ad
 
 ### React Router integration
 
-| Package                                                          | Description                                                                                                              |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| [`@react-router-modules/core`](packages/react-router-core)       | Module definition with React Router `RouteObject` support, typed hooks, scoped stores.                                   |
-| [`@react-router-modules/runtime`](packages/react-router-runtime) | Registry, route tree builder, app assembly with all providers wired.                                                     |
-| [`@react-router-modules/testing`](packages/react-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation.                                                     |
-| [`@react-router-modules/cli`](packages/react-router-cli)         | Scaffolding CLI: `react-router-modules init`, `react-router-modules create module|store|journey`.                        |
+| Package                                                          | Description                                                                            |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----- | --------- |
+| [`@react-router-modules/core`](packages/react-router-core)       | Module definition with React Router `RouteObject` support, typed hooks, scoped stores. |
+| [`@react-router-modules/runtime`](packages/react-router-runtime) | Registry, route tree builder, app assembly with all providers wired.                   |
+| [`@react-router-modules/testing`](packages/react-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation.                   |
+| [`@react-router-modules/cli`](packages/react-router-cli)         | Scaffolding CLI: `react-router-modules init`, `react-router-modules create module      | store | journey`. |
 
 ### TanStack Router integration
 
-| Package                                                               | Description                                                                                                                    |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| [`@tanstack-react-modules/core`](packages/tanstack-router-core)       | Module definition with TanStack Router `createRoute` support, typed hooks, scoped stores.                                      |
-| [`@tanstack-react-modules/runtime`](packages/tanstack-router-runtime) | Registry, route tree builder, app assembly with all providers wired.                                                           |
-| [`@tanstack-react-modules/testing`](packages/tanstack-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation.                                                           |
-| [`@tanstack-react-modules/cli`](packages/tanstack-router-cli)         | Scaffolding CLI: `tanstack-react-modules init`, `tanstack-react-modules create module|store|journey`.                          |
+| Package                                                               | Description                                                                               |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ----- | --------- |
+| [`@tanstack-react-modules/core`](packages/tanstack-router-core)       | Module definition with TanStack Router `createRoute` support, typed hooks, scoped stores. |
+| [`@tanstack-react-modules/runtime`](packages/tanstack-router-runtime) | Registry, route tree builder, app assembly with all providers wired.                      |
+| [`@tanstack-react-modules/testing`](packages/tanstack-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation.                      |
+| [`@tanstack-react-modules/cli`](packages/tanstack-router-cli)         | Scaffolding CLI: `tanstack-react-modules init`, `tanstack-react-modules create module     | store | journey`. |
 
 ## Architecture
 
