@@ -1,63 +1,13 @@
-export function modulePackageJson(params: { scope: string; name: string }): string {
-  return JSON.stringify(
-    {
-      name: `${params.scope}/${params.name}-module`,
-      version: "0.1.0",
-      type: "module",
-      main: "./src/index.ts",
-      types: "./src/index.ts",
-      exports: {
-        ".": {
-          import: "./src/index.ts",
-          types: "./src/index.ts",
-        },
-      },
-      dependencies: {
-        "@modular-react/core": "^1.0.0",
-        "@react-router-modules/core": "^2.0.0",
-        [`${params.scope}/app-shared`]: "workspace:*",
-        "@lokalise/frontend-http-client": "^7.0.0",
-      },
-      peerDependencies: {
-        "@tanstack/react-query": "^5.95.0",
-        "react-router": "^7.6.0",
-        react: "^19.0.0",
-        zustand: "^5.0.0",
-      },
-      devDependencies: {
-        "@tanstack/react-query": "^5.95.0",
-        "react-router": "^7.6.0",
-        react: "^19.0.0",
-        zustand: "^5.0.0",
-        "@types/react": "^19.0.0",
-        typescript: "^6.0.2",
-      },
-    },
-    null,
-    2,
-  );
-}
+import type {
+  ModuleDescriptorParams,
+  ModuleDetailPanelParams,
+  ModuleListPageParams,
+  ModulePageParams,
+  ModuleTestParams,
+} from "@modular-react/cli-core";
 
-export function moduleTsconfig(): string {
-  return JSON.stringify(
-    {
-      extends: "../../tsconfig.base.json",
-      include: ["src"],
-    },
-    null,
-    2,
-  );
-}
-
-export function moduleDescriptor(params: {
-  scope: string;
-  name: string;
-  route: string;
-  pageName: string;
-  listPageName: string;
-  navGroup?: string;
-}): string {
-  const label = capitalize(params.name);
+export function moduleDescriptor(params: ModuleDescriptorParams): string {
+  const label = params.moduleLabel;
   const navItems = params.navGroup
     ? [
         `{ label: '${label}', to: '/${params.route}', group: '${params.navGroup}', order: 10 }`,
@@ -116,12 +66,18 @@ export default defineModule<AppDependencies, AppSlots>({
     ],
   },
 
+  // To compose this module into a multi-step flow, declare entry/exit
+  // contracts here (defineEntry / defineExit) and feed them into a journey
+  // — see packages/journeys/README.md and \`create journey\`.
+  // entryPoints: { ... },
+  // exitPoints: { ... },
+
   requires: ['auth'],
 })
 `;
 }
 
-export function moduleDetailPanel(params: { moduleLabel: string }): string {
+export function moduleDetailPanel(params: ModuleDetailPanelParams): string {
   return `// Rendered by the shell in its detail-panel zone when the list route is active.
 // See the module descriptor's \`handle: { detailPanel: ... }\` for the wiring.
 export function ${params.moduleLabel}DetailPanel() {
@@ -139,12 +95,7 @@ export function ${params.moduleLabel}DetailPanel() {
 `;
 }
 
-export function modulePage(params: {
-  scope: string;
-  pageName: string;
-  moduleLabel: string;
-  moduleName: string;
-}): string {
+export function modulePage(params: ModulePageParams): string {
   return `import { useStore } from '${params.scope}/app-shared'
 import { Link } from 'react-router'
 
@@ -170,11 +121,7 @@ export default function ${params.pageName}() {
 `;
 }
 
-export function moduleListPage(params: {
-  scope: string;
-  pageName: string;
-  moduleLabel: string;
-}): string {
+export function moduleListPage(params: ModuleListPageParams): string {
   return `import { useStore } from '${params.scope}/app-shared'
 
 export default function ${params.pageName}() {
@@ -194,14 +141,8 @@ export default function ${params.pageName}() {
 `;
 }
 
-export function moduleTest(params: {
-  scope: string;
-  name: string;
-  importName: string;
-  route: string;
-  pageName: string;
-}): string {
-  return `import { describe, it, expect } from 'vitest'
+export function moduleTest(params: ModuleTestParams): string {
+  return `import { describe, it } from 'vitest'
 import { renderModule, createMockStore } from '@react-router-modules/testing'
 import type { AppDependencies } from '${params.scope}/app-shared'
 import ${params.importName} from '../index.js'
@@ -222,26 +163,25 @@ const mockConfig = createMockStore<AppDependencies['config']>({
 
 describe('${params.name} module', () => {
   it('renders the index page', async () => {
-    const { getByText } = await renderModule(${params.importName}, {
+    const { getByRole } = await renderModule(${params.importName}, {
       route: '/${params.route}',
       deps: { auth: mockAuth, config: mockConfig },
     })
 
-    expect(getByText('${capitalize(params.name)}')).toBeDefined()
+    // \`getByRole\` throws when no match is found, so reaching the next line
+    // is the assertion. Querying by role + name avoids the dashed-name
+    // mismatch that bit a previous version of this template.
+    getByRole('heading', { name: '${params.moduleLabel}' })
   })
 
   it('renders the list page', async () => {
-    const { getByText } = await renderModule(${params.importName}, {
+    const { getByRole } = await renderModule(${params.importName}, {
       route: '/${params.route}/list',
       deps: { auth: mockAuth, config: mockConfig },
     })
 
-    expect(getByText('${capitalize(params.name)} List')).toBeDefined()
+    getByRole('heading', { name: '${params.moduleLabel} List' })
   })
 })
 `;
-}
-
-function capitalize(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1);
 }

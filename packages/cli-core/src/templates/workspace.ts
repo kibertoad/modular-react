@@ -25,6 +25,7 @@ export function pnpmWorkspace(): string {
   - app-shared
   - shell
   - modules/*
+  - journeys/*
 
 onlyBuiltDependencies:
   - esbuild
@@ -56,14 +57,7 @@ export function tsconfigBase(): string {
 }
 
 export function tsconfigRoot(): string {
-  return JSON.stringify(
-    {
-      files: [],
-      references: [],
-    },
-    null,
-    2,
-  );
+  return JSON.stringify({ files: [], references: [] }, null, 2);
 }
 
 export function gitignore(): string {

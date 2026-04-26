@@ -19,6 +19,7 @@ Routes, slots, navigation, workspaces — none of that changes. Journeys sit **o
 
 - [Installation](#installation)
 - [Mental model](#mental-model)
+- [Quickstart shortcut: scaffold the journey package](#quickstart-shortcut-scaffold-the-journey-package) — `create journey` if you bootstrapped with the modular-react CLI
 - [Quickstart](#quickstart) — the 5-step path from zero to a running journey
 - [Core concepts](#core-concepts) — entries, exits, `allowBack`, lifecycle, statuses, keys
 - [Authoring patterns](#authoring-patterns) — module entries, exits, loading flows, `goBack` opt-in
@@ -49,6 +50,8 @@ pnpm add @modular-react/journeys
 
 Peer deps: `@modular-react/core`, `@modular-react/react`, `react`, `react-dom`.
 
+If you scaffolded your project with the modular-react CLI, you can scaffold a journey package the same way — see [§ Quickstart shortcut: scaffold the journey package](#quickstart-shortcut-scaffold-the-journey-package) below.
+
 ## Mental model
 
 Three roles, strictly separated:
@@ -58,6 +61,24 @@ Three roles, strictly separated:
 | **Module**  | Its entry components, input types, exit names, exit output types.                                           | Journeys. Who opens it. What comes next.             |
 | **Journey** | The modules it composes (by type), transitions between entry/exit pairs, shared state.                      | Shell. Tabs. Routes.                                 |
 | **Shell**   | Registering modules + journeys, mounting `<JourneyOutlet>` inside its container (tab, route, modal, panel). | Any specific journey's logic, state, or transitions. |
+
+## Quickstart shortcut: scaffold the journey package
+
+If you used the modular-react CLI to bootstrap your project, you can skip writing the journey package boilerplate by hand. Run:
+
+```bash
+# React Router
+npx @react-router-modules/cli create journey customer-onboarding \
+  --modules profile,plan,billing --persistence
+
+# TanStack Router
+npx @tanstack-react-modules/cli create journey customer-onboarding \
+  --modules profile,plan,billing --persistence
+```
+
+That generates `journeys/customer-onboarding/` with a typed `defineJourney` definition, a `defineJourneyHandle` token, type-only imports for each named module, and (with `--persistence`) a `createWebStoragePersistence` adapter at `shell/src/customer-onboarding-persistence.ts`. It also installs `journeysPlugin()` on the shell's registry and adds `registry.registerJourney(...)`. The `start` step and per-module `transitions` map are left as `// TODO` comments — fill those in by working through the steps below.
+
+If you're not using the CLI (or you want to understand the moving parts before reaching for it), the manual walkthrough follows.
 
 ## Quickstart
 

@@ -56,6 +56,10 @@ describe("tanstack-react-modules init", { sequential: true }, () => {
     files.fileExists("my-app/modules/dashboard/src/pages/DashboardDashboard.tsx");
     files.fileExists("my-app/modules/dashboard/src/pages/DashboardList.tsx");
     files.fileExists("my-app/modules/dashboard/src/panels/DetailPanel.tsx");
+    // The first module must mirror `create module` output, which includes
+    // a `__tests__/<name>.test.ts` so the project has a test scaffold from
+    // day one rather than only from the second module onward.
+    files.fileExists("my-app/modules/dashboard/src/__tests__/dashboard.test.ts");
   });
 
   it("uses scope in generated package names", async () => {
@@ -209,6 +213,72 @@ describe("tanstack-react-modules create store", { sequential: true }, () => {
     await execCommand(`node ${CLI} create store auth`, {
       expectedErrorMessage: "already exists",
       baseDir: resolve(TMP, "dup-store-test"),
+    });
+  });
+});
+
+describe("tanstack-react-modules create journey", { sequential: true }, () => {
+  const files = new FileTestHelper({ basePath: TMP, maxRetries: 5, retryDelay: 200 });
+
+  beforeEach(() => {
+    mkdirSync(TMP, { recursive: true });
+  });
+
+  afterEach(() => {
+    files.cleanup();
+  });
+
+  it("scaffolds a journey package and wires it into the shell", async () => {
+    files.registerGlobForCleanup(`${TMP}/journey-test/**`);
+    files.registerGlobForCleanup(`${TMP}/journey-test`);
+
+    await execCommand(`node ${CLI} init journey-test --scope @test --module profile`, {
+      baseDir: TMP,
+    });
+    await execCommand(`node ${CLI} create module billing`, {
+      baseDir: resolve(TMP, "journey-test"),
+    });
+    await execCommand(
+      `node ${CLI} create journey customer-onboarding --modules profile,billing --persistence`,
+      {
+        expectedOutput: 'Journey "customer-onboarding" created',
+        baseDir: resolve(TMP, "journey-test"),
+      },
+    );
+
+    files.fileExists("journey-test/journeys/customer-onboarding/package.json");
+    files.fileExists("journey-test/journeys/customer-onboarding/src/customer-onboarding.ts");
+    files.fileExists("journey-test/shell/src/customer-onboarding-persistence.ts");
+
+    const journeyDef = readFileSync(
+      resolve(TMP, "journey-test/journeys/customer-onboarding/src/customer-onboarding.ts"),
+      "utf-8",
+    );
+    expect(journeyDef).toContain("defineJourney");
+    expect(journeyDef).toContain("@test/profile-module");
+    expect(journeyDef).toContain("@test/billing-module");
+
+    const mainTsx = readFileSync(resolve(TMP, "journey-test/shell/src/main.tsx"), "utf-8");
+    expect(mainTsx).toContain("journeysPlugin()");
+    expect(mainTsx).toContain(
+      "registry.registerJourney(customerOnboardingJourney, { persistence: customerOnboardingPersistence })",
+    );
+    expect(mainTsx).toContain(
+      "import { customerOnboardingPersistence } from './customer-onboarding-persistence.js'",
+    );
+  });
+
+  it("rejects modules that don't exist yet", async () => {
+    files.registerGlobForCleanup(`${TMP}/journey-missing/**`);
+    files.registerGlobForCleanup(`${TMP}/journey-missing`);
+
+    await execCommand(`node ${CLI} init journey-missing --scope @test --module home`, {
+      baseDir: TMP,
+    });
+
+    await execCommand(`node ${CLI} create journey onboarding --modules nonexistent`, {
+      expectedErrorMessage: "Module(s) not found",
+      baseDir: resolve(TMP, "journey-missing"),
     });
   });
 });

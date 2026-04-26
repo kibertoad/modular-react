@@ -1,53 +1,6 @@
-export function appSharedPackageJson(params: { scope: string }): string {
-  return JSON.stringify(
-    {
-      name: `${params.scope}/app-shared`,
-      version: "0.1.0",
-      type: "module",
-      main: "./src/index.ts",
-      types: "./src/index.ts",
-      exports: {
-        ".": {
-          import: "./src/index.ts",
-          types: "./src/index.ts",
-        },
-      },
-      dependencies: {
-        "@modular-react/core": "^1.0.0",
-        "@react-router-modules/core": "^2.0.0",
-        "@lokalise/api-contracts": "^6.0.0",
-        "@lokalise/frontend-http-client": "^7.0.0",
-        wretch: "^2.11.0",
-        zod: "^3.25.0",
-      },
-      peerDependencies: {
-        react: "^19.0.0",
-        zustand: "^5.0.0",
-      },
-      devDependencies: {
-        react: "^19.0.0",
-        zustand: "^5.0.0",
-        "@types/react": "^19.0.0",
-        typescript: "^6.0.2",
-      },
-    },
-    null,
-    2,
-  );
-}
+import type { AppSharedIndexParams } from "@modular-react/cli-core";
 
-export function appSharedTsconfig(): string {
-  return JSON.stringify(
-    {
-      extends: "../tsconfig.base.json",
-      include: ["src"],
-    },
-    null,
-    2,
-  );
-}
-
-export function appSharedIndex(_params: { scope: string }): string {
+export function appSharedIndex(_params: AppSharedIndexParams): string {
   return `import { createSharedHooks } from '@react-router-modules/core'
 import type { ComponentType } from 'react'
 import type { LoginCredentials, User } from './types.js'
@@ -106,20 +59,5 @@ export interface AppZones {
 // ---- Typed hooks (use these in all modules) ----
 
 export const { useStore, useService, useReactiveService, useOptional } = createSharedHooks<AppDependencies>()
-`;
-}
-
-export function appSharedTypes(): string {
-  return `export interface User {
-  id: string
-  name: string
-  email: string
-  role: string
-}
-
-export interface LoginCredentials {
-  email: string
-  password: string
-}
 `;
 }

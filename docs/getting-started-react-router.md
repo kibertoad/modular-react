@@ -203,7 +203,28 @@ After the CLI finishes, open the generated store file and fill in the state shap
 
 If a module `requires: ['notifications']` and you remove the store, the registry will throw at resolve time, before the app ever boots.
 
-## 6. Turn on the auth guard
+## 6. (Optional) Compose modules into a journey
+
+When a flow spans several modules with shared state — "review profile → choose plan → collect payment", "verify identity → activate trial" — extract it into a typed journey instead of glue code in the shell. Scaffold one with:
+
+```bash
+npx @react-router-modules/cli create journey customer-onboarding \
+  --modules dashboard,billing --persistence
+pnpm install
+```
+
+The CLI:
+
+1. Creates `journeys/customer-onboarding/` as a workspace package with the journey definition (`defineJourney`), a typed handle (`defineJourneyHandle`), and an `import type` of each module so the modules type-map stays bundle-free.
+2. Installs `journeysPlugin()` on the registry and calls `registry.registerJourney(...)` in `shell/src/main.tsx`.
+3. With `--persistence`, generates `shell/src/customer-onboarding-persistence.ts` using `createWebStoragePersistence` (one localStorage key per `(customerId, journeyId)` pair).
+4. Adds the journey package and `@modular-react/journeys` to `shell/package.json`.
+
+The generated definition has TODO markers for the `start` step and the per-module `transitions` map. Fill those in by declaring `entryPoints` / `exitPoints` on each composed module (`defineEntry` / `defineExit` from `@modular-react/core`) and wiring the exit branches to the next step.
+
+See [`@modular-react/journeys`](../packages/journeys/README.md) for the full mental model, the `JourneyOutlet`/`ModuleTab` rendering surfaces, and the runtime hooks. The [`examples/react-router/customer-onboarding-journey/`](../examples/react-router/customer-onboarding-journey) example shows a three-module branching flow end to end.
+
+## 7. Turn on the auth guard
 
 The scaffold ships with a no-op auth guard so the app runs immediately. Open `shell/src/main.tsx`. You'll find:
 
