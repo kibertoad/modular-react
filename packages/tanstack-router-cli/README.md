@@ -1,16 +1,33 @@
 # @tanstack-react-modules/cli
 
-Scaffolding CLI for modular-react (TanStack Router integration). Quickly creates projects, modules, and stores with full wiring.
+Scaffolding CLI for modular-react (TanStack Router integration). Creates projects, modules, stores, and journeys with full wiring.
 
 ## Commands
 
 ```bash
-tanstack-react-modules init <name> --scope @myorg --module dashboard   # New project
-tanstack-react-modules create module <name> --route billing             # New module
-tanstack-react-modules create store <name>                              # New Zustand store
+# Bootstrap a new pnpm workspace with shell + first module.
+tanstack-react-modules init <name> --scope @myorg --module dashboard
+
+# Add a routed module and wire it into the shell + package.json.
+tanstack-react-modules create module <name> [--route ROUTE] [--nav-group GROUP]
+
+# Add a Zustand store, declare it in AppDependencies, and inject it.
+tanstack-react-modules create store <name>
+
+# Scaffold a typed multi-module workflow (see @modular-react/journeys).
+tanstack-react-modules create journey <name> [--modules a,b,c] [--persistence]
 ```
 
-All commands support interactive (prompts) and non-interactive (flags) modes. See the [main README](https://github.com/kibertoad/modular-react#cli-reference) for full documentation.
+`create journey` produces a `journeys/<name>/` package with a journey
+definition, a typed handle, and (with `--persistence`) a localStorage
+adapter under `shell/src/`. It also installs `journeysPlugin()` on the
+shell's registry and registers the journey, so the only thing you need
+to write yourself is the per-step transitions and module entry/exit
+contracts (see [`@modular-react/journeys`](https://github.com/kibertoad/modular-react/blob/main/packages/journeys/README.md)).
+
+All commands support interactive (prompts) and non-interactive (flags)
+modes — pass any required positional/flag and the CLI runs without
+prompting. Run any command with `--help` for its full flag set.
 
 ## Development
 
@@ -20,6 +37,8 @@ Requires Node.js 22+.
 pnpm build          # Compile TypeScript
 pnpm dev            # Watch mode
 ```
+
+The implementation lives in [`@modular-react/cli-core`](https://github.com/kibertoad/modular-react/tree/main/packages/cli-core); this package only supplies the TanStack Router-specific preset (template fragments + binary metadata). The React Router CLI (`@react-router-modules/cli`) reuses the same core with a different preset.
 
 ## Testing
 

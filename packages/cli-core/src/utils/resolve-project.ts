@@ -2,10 +2,11 @@ import { existsSync } from "node:fs";
 import { resolve, dirname } from "pathe";
 
 export interface ProjectRoot {
-  root: string;
-  appSharedDir: string;
-  shellDir: string;
-  modulesDir: string;
+  readonly root: string;
+  readonly appSharedDir: string;
+  readonly shellDir: string;
+  readonly modulesDir: string;
+  readonly journeysDir: string;
 }
 
 export function resolveProject(from: string = process.cwd()): ProjectRoot {
@@ -18,12 +19,15 @@ export function resolveProject(from: string = process.cwd()): ProjectRoot {
         appSharedDir: resolve(current, "app-shared"),
         shellDir: resolve(current, "shell"),
         modulesDir: resolve(current, "modules"),
+        journeysDir: resolve(current, "journeys"),
       };
     }
 
     const parent = dirname(current);
     if (parent === current) {
-      throw new Error("Could not find pnpm-workspace.yaml. Are you inside a Reactive project?");
+      throw new Error(
+        "Could not find pnpm-workspace.yaml. Are you inside a modular-react project?",
+      );
     }
     current = parent;
   }

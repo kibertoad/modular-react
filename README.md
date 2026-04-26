@@ -188,6 +188,7 @@ See [`examples/README.md`](examples/README.md) for how to run them and how to ad
 | [`@modular-react/react`](packages/react)       | React bindings: context providers, hooks (`useStore`, `useSlots`, `useNavigation`, etc.), error boundary. |
 | [`@modular-react/testing`](packages/testing)   | Test utilities for resolving modules without rendering.                                                   |
 | [`@modular-react/journeys`](packages/journeys) | Typed, serializable multi-module workflows with entry/exit contracts and a pluggable persistence adapter. |
+| [`@modular-react/cli-core`](packages/cli-core) | Shared command implementations and templates for the router-specific CLI binaries.                        |
 
 ### React Router integration
 
@@ -196,7 +197,7 @@ See [`examples/README.md`](examples/README.md) for how to run them and how to ad
 | [`@react-router-modules/core`](packages/react-router-core)       | Module definition with React Router `RouteObject` support, typed hooks, scoped stores.                                   |
 | [`@react-router-modules/runtime`](packages/react-router-runtime) | Registry, route tree builder, app assembly with all providers wired.                                                     |
 | [`@react-router-modules/testing`](packages/react-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation.                                                     |
-| [`@react-router-modules/cli`](packages/react-router-cli)         | Scaffolding CLI: `react-router-modules init`, `react-router-modules create module`, `react-router-modules create store`. |
+| [`@react-router-modules/cli`](packages/react-router-cli)         | Scaffolding CLI: `react-router-modules init`, `react-router-modules create module|store|journey`.                        |
 
 ### TanStack Router integration
 
@@ -205,7 +206,7 @@ See [`examples/README.md`](examples/README.md) for how to run them and how to ad
 | [`@tanstack-react-modules/core`](packages/tanstack-router-core)       | Module definition with TanStack Router `createRoute` support, typed hooks, scoped stores.                                      |
 | [`@tanstack-react-modules/runtime`](packages/tanstack-router-runtime) | Registry, route tree builder, app assembly with all providers wired.                                                           |
 | [`@tanstack-react-modules/testing`](packages/tanstack-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation.                                                           |
-| [`@tanstack-react-modules/cli`](packages/tanstack-router-cli)         | Scaffolding CLI: `tanstack-react-modules init`, `tanstack-react-modules create module`, `tanstack-react-modules create store`. |
+| [`@tanstack-react-modules/cli`](packages/tanstack-router-cli)         | Scaffolding CLI: `tanstack-react-modules init`, `tanstack-react-modules create module|store|journey`.                          |
 
 ## Architecture
 
@@ -216,6 +217,10 @@ Shared layer (router-agnostic):
   @modular-react/react      (React hooks, contexts, error boundary)
        |
   @modular-react/testing    (resolveModule without rendering)
+       |
+  @modular-react/journeys   (typed multi-module workflows, optional)
+       |
+  @modular-react/cli-core   (shared CLI commands + templates)
 
 Router-specific layers:
   @react-router-modules/*        @tanstack-react-modules/*
@@ -224,7 +229,7 @@ Router-specific layers:
   runtime (registry, route         runtime (registry, route
            tree, app assembly)              tree, app assembly)
   testing (renderModule)           testing (renderModule)
-  cli     (scaffolding)            cli     (scaffolding)
+  cli     (cli-core preset)        cli     (cli-core preset)
 ```
 
 ## CLI command reference
@@ -245,9 +250,19 @@ react-router-modules create module billing --route billing [--nav-group finance]
 
 # Add a headless store wired into AppDependencies
 react-router-modules create store notifications
+
+# Scaffold a typed multi-module workflow under journeys/<name>/, install
+# `journeysPlugin()` on the registry, and call registerJourney(...) in
+# the shell. `--modules` adds typed module imports to the journey's
+# module map; `--persistence` also generates a localStorage adapter
+# under shell/src/<name>-persistence.ts. See @modular-react/journeys.
+react-router-modules create journey customer-onboarding \
+  --modules profile,plan,billing [--persistence]
 ```
 
 Run any command with `--help` for its full flag set. To invoke without installing the CLI, use `npx @react-router-modules/cli <command>` or `npx @tanstack-react-modules/cli <command>`.
+
+Both binaries are thin wrappers around [`@modular-react/cli-core`](packages/cli-core), which owns the command implementations, templates, and project transforms. Each router CLI supplies a preset describing its package names and router-specific template fragments.
 
 ## Development
 

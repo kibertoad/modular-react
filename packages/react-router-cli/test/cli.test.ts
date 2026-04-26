@@ -1,7 +1,7 @@
 import { describe, it, afterEach, beforeEach, expect } from "vitest";
 import { execCommand, FileTestHelper } from "cli-testlab";
 import { resolve } from "node:path";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const TMP = resolve(import.meta.dirname, "..", ".test-output");
@@ -210,5 +210,104 @@ describe("react-router-modules create store", { sequential: true }, () => {
       expectedErrorMessage: "already exists",
       baseDir: resolve(TMP, "dup-store-test"),
     });
+  });
+});
+
+describe("react-router-modules create journey", { sequential: true }, () => {
+  const files = new FileTestHelper({ basePath: TMP, maxRetries: 5, retryDelay: 200 });
+
+  beforeEach(() => {
+    mkdirSync(TMP, { recursive: true });
+  });
+
+  afterEach(() => {
+    files.cleanup();
+  });
+
+  it("scaffolds a journey package and wires it into the shell", async () => {
+    files.registerGlobForCleanup(`${TMP}/journey-test/**`);
+    files.registerGlobForCleanup(`${TMP}/journey-test`);
+
+    await execCommand(`node ${CLI} init journey-test --scope @test --module profile`, {
+      baseDir: TMP,
+    });
+    await execCommand(`node ${CLI} create module billing`, {
+      baseDir: resolve(TMP, "journey-test"),
+    });
+    await execCommand(
+      `node ${CLI} create journey customer-onboarding --modules profile,billing --persistence`,
+      {
+        expectedOutput: 'Journey "customer-onboarding" created',
+        baseDir: resolve(TMP, "journey-test"),
+      },
+    );
+
+    // Journey package files
+    files.fileExists("journey-test/journeys/customer-onboarding/package.json");
+    files.fileExists("journey-test/journeys/customer-onboarding/tsconfig.json");
+    files.fileExists("journey-test/journeys/customer-onboarding/src/index.ts");
+    files.fileExists("journey-test/journeys/customer-onboarding/src/customer-onboarding.ts");
+
+    // Persistence adapter generated under shell/
+    files.fileExists("journey-test/shell/src/customer-onboarding-persistence.ts");
+
+    // Journey definition mentions the composed modules and uses defineJourney + handle.
+    const journeyDef = readFileSync(
+      resolve(TMP, "journey-test/journeys/customer-onboarding/src/customer-onboarding.ts"),
+      "utf-8",
+    );
+    expect(journeyDef).toContain("defineJourney");
+    expect(journeyDef).toContain("defineJourneyHandle");
+    expect(journeyDef).toContain("@test/profile-module");
+    expect(journeyDef).toContain("@test/billing-module");
+    expect(journeyDef).toContain("customerOnboardingJourney");
+    expect(journeyDef).toContain("customerOnboardingHandle");
+
+    // Shell package.json picked up the journey + journeys runtime.
+    const shellPkg = readFileSync(resolve(TMP, "journey-test/shell/package.json"), "utf-8");
+    expect(shellPkg).toContain("@test/customer-onboarding-journey");
+    expect(shellPkg).toContain("@modular-react/journeys");
+
+    // Shell main.tsx wires the plugin and registerJourney call.
+    const mainTsx = readFileSync(resolve(TMP, "journey-test/shell/src/main.tsx"), "utf-8");
+    expect(mainTsx).toContain("journeysPlugin()");
+    expect(mainTsx).toContain("registry.registerJourney(customerOnboardingJourney)");
+    expect(mainTsx).toContain("from '@test/customer-onboarding-journey'");
+  });
+
+  it("rejects modules that don't exist yet", async () => {
+    files.registerGlobForCleanup(`${TMP}/journey-missing/**`);
+    files.registerGlobForCleanup(`${TMP}/journey-missing`);
+
+    await execCommand(`node ${CLI} init journey-missing --scope @test --module home`, {
+      baseDir: TMP,
+    });
+
+    await execCommand(`node ${CLI} create journey onboarding --modules nonexistent`, {
+      expectedErrorMessage: "Module(s) not found",
+      baseDir: resolve(TMP, "journey-missing"),
+    });
+  });
+
+  // Older projects scaffolded before `journeys/*` was added to the default
+  // workspace template need it injected on first journey creation.
+  it("adds journeys/* to pnpm-workspace.yaml when missing", async () => {
+    files.registerGlobForCleanup(`${TMP}/journey-retrofit/**`);
+    files.registerGlobForCleanup(`${TMP}/journey-retrofit`);
+
+    await execCommand(`node ${CLI} init journey-retrofit --scope @test --module home`, {
+      baseDir: TMP,
+    });
+
+    // Simulate an older scaffold by rewriting the workspace yaml without `journeys/*`.
+    const wsPath = resolve(TMP, "journey-retrofit/pnpm-workspace.yaml");
+    writeFileSync(wsPath, "packages:\n  - app-shared\n  - shell\n  - modules/*\n");
+
+    await execCommand(`node ${CLI} create journey onboarding`, {
+      baseDir: resolve(TMP, "journey-retrofit"),
+    });
+
+    const ws = readFileSync(wsPath, "utf-8");
+    expect(ws).toContain("- journeys/*");
   });
 });

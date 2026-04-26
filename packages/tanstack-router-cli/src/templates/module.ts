@@ -1,62 +1,12 @@
-export function modulePackageJson(params: { scope: string; name: string }): string {
-  return JSON.stringify(
-    {
-      name: `${params.scope}/${params.name}-module`,
-      version: "0.1.0",
-      type: "module",
-      main: "./src/index.ts",
-      types: "./src/index.ts",
-      exports: {
-        ".": {
-          import: "./src/index.ts",
-          types: "./src/index.ts",
-        },
-      },
-      dependencies: {
-        "@modular-react/core": "^1.0.0",
-        "@tanstack-react-modules/core": "^2.0.0",
-        [`${params.scope}/app-shared`]: "workspace:*",
-        "@lokalise/frontend-http-client": "^7.0.0",
-      },
-      peerDependencies: {
-        "@tanstack/react-query": "^5.95.0",
-        "@tanstack/react-router": "^1.120.0",
-        react: "^19.0.0",
-        zustand: "^5.0.0",
-      },
-      devDependencies: {
-        "@tanstack/react-query": "^5.95.0",
-        "@tanstack/react-router": "^1.120.0",
-        react: "^19.0.0",
-        zustand: "^5.0.0",
-        "@types/react": "^19.0.0",
-        typescript: "^6.0.2",
-      },
-    },
-    null,
-    2,
-  );
-}
+import type {
+  ModuleDescriptorParams,
+  ModuleDetailPanelParams,
+  ModuleListPageParams,
+  ModulePageParams,
+  ModuleTestParams,
+} from "@modular-react/cli-core";
 
-export function moduleTsconfig(): string {
-  return JSON.stringify(
-    {
-      extends: "../../tsconfig.base.json",
-      include: ["src"],
-    },
-    null,
-    2,
-  );
-}
-
-export function moduleDescriptor(params: {
-  scope: string;
-  name: string;
-  route: string;
-  pageName: string;
-  listPageName: string;
-  navGroup?: string;
-}): string {
+export function moduleDescriptor(params: ModuleDescriptorParams): string {
   const label = capitalize(params.name);
   const navItems = params.navGroup
     ? [
@@ -126,12 +76,18 @@ export default defineModule<AppDependencies, AppSlots>({
     ],
   },
 
+  // To compose this module into a multi-step flow, declare entry/exit
+  // contracts here (defineEntry / defineExit) and feed them into a journey
+  // — see packages/journeys/README.md and \`create journey\`.
+  // entryPoints: { ... },
+  // exitPoints: { ... },
+
   requires: ['auth'],
 })
 `;
 }
 
-export function moduleDetailPanel(params: { moduleLabel: string }): string {
+export function moduleDetailPanel(params: ModuleDetailPanelParams): string {
   return `// Rendered by the shell in its detail-panel zone when the list route is active.
 // See the module descriptor's \`staticData: { detailPanel: ... }\` for the wiring.
 export function ${params.moduleLabel}DetailPanel() {
@@ -149,12 +105,7 @@ export function ${params.moduleLabel}DetailPanel() {
 `;
 }
 
-export function modulePage(params: {
-  scope: string;
-  pageName: string;
-  moduleLabel: string;
-  moduleName: string;
-}): string {
+export function modulePage(params: ModulePageParams): string {
   return `import { useStore } from '${params.scope}/app-shared'
 import { Link } from '@tanstack/react-router'
 
@@ -180,11 +131,7 @@ export default function ${params.pageName}() {
 `;
 }
 
-export function moduleListPage(params: {
-  scope: string;
-  pageName: string;
-  moduleLabel: string;
-}): string {
+export function moduleListPage(params: ModuleListPageParams): string {
   return `import { useStore } from '${params.scope}/app-shared'
 
 export default function ${params.pageName}() {
@@ -204,13 +151,7 @@ export default function ${params.pageName}() {
 `;
 }
 
-export function moduleTest(params: {
-  scope: string;
-  name: string;
-  importName: string;
-  route: string;
-  pageName: string;
-}): string {
+export function moduleTest(params: ModuleTestParams): string {
   return `import { describe, it, expect } from 'vitest'
 import { renderModule, createMockStore } from '@tanstack-react-modules/testing'
 import type { AppDependencies } from '${params.scope}/app-shared'
