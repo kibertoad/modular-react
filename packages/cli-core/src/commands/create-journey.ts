@@ -235,4 +235,3 @@ function toJourneyModule(args: {
     exists: existsSync(moduleDir),
   };
 }
-

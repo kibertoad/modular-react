@@ -96,9 +96,7 @@ export function addStoreToAppShared(
   }
   const closingBrace = content.indexOf("}", appDepsIndex);
   if (closingBrace === -1) {
-    throw new Error(
-      `Could not find the closing brace of AppDependencies in ${indexPath}.`,
-    );
+    throw new Error(`Could not find the closing brace of AppDependencies in ${indexPath}.`);
   }
 
   const storeInterface = `export interface ${params.interfaceName} {\n  // TODO: Add store state and actions\n}\n\n`;
@@ -225,10 +223,7 @@ export function addJourneyToMain(
 
   // 2b. Import the persistence binding (when --persistence was passed).
   const persistencePath = `./${params.journeyName}-persistence.js`;
-  if (
-    params.persistenceExportName &&
-    !content.includes(`from '${persistencePath}'`)
-  ) {
+  if (params.persistenceExportName && !content.includes(`from '${persistencePath}'`)) {
     const lines = content.split("\n");
     const lastImportIndex = findLastImportIndex(lines);
     lines.splice(

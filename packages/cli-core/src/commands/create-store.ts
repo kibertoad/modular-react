@@ -77,4 +77,3 @@ export function createCreateStoreCommand(_preset: CliPreset) {
     },
   });
 }
-
