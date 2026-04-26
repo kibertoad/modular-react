@@ -921,17 +921,17 @@ importers:
   packages/cli-core:
     dependencies:
       '@clack/prompts':
-        specifier: ^1.1.0
+        specifier: ^1.2.0
         version: 1.2.0
       citty:
-        specifier: ^0.2.1
+        specifier: ^0.2.2
         version: 0.2.2
       pathe:
         specifier: ^2.0.3
         version: 2.0.3
     devDependencies:
       '@types/node':
-        specifier: ^25.5.0
+        specifier: ^25.6.0
         version: 25.6.0
       typescript:
         specifier: ^6.0.2
@@ -1058,7 +1058,7 @@ importers:
         specifier: ^1.58.2
         version: 1.59.1
       '@types/node':
-        specifier: ^25.5.0
+        specifier: ^25.6.0
         version: 25.6.0
       cli-testlab:
         specifier: ^6.0.1
@@ -1212,7 +1212,7 @@ importers:
         specifier: ^1.58.2
         version: 1.59.1
       '@types/node':
-        specifier: ^25.5.0
+        specifier: ^25.6.0
         version: 25.6.0
       cli-testlab:
         specifier: ^6.0.1
