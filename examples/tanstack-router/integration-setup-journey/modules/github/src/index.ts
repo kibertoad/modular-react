@@ -19,7 +19,7 @@ const integrationContribution = [
   },
 ] as const satisfies readonly IntegrationOption[];
 
-// `defineModule` without generics: see chooser/src/index.ts for the rationale.
+// `defineModule` without generics: see integration-picker/src/index.ts for the rationale.
 export default defineModule({
   id: "github",
   version: "1.0.0",

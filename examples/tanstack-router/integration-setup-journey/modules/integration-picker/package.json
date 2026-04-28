@@ -1,5 +1,5 @@
 {
-  "name": "@example-tsr-integration-setup/integration-setup-journey",
+  "name": "@example-tsr-integration-setup/integration-picker",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -16,13 +16,15 @@
   },
   "dependencies": {
     "@example-tsr-integration-setup/app-shared": "workspace:*",
-    "@example-tsr-integration-setup/integration-picker": "workspace:*",
-    "@example-tsr-integration-setup/generic-integration": "workspace:*",
-    "@example-tsr-integration-setup/github-module": "workspace:*",
-    "@example-tsr-integration-setup/strapi-module": "workspace:*",
-    "@modular-react/journeys": "workspace:*"
+    "@modular-react/core": "workspace:*",
+    "@modular-react/react": "workspace:*"
   },
   "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
     "typescript": "^6.0.2"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
   }
 }

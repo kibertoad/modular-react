@@ -3,12 +3,12 @@ import { Outlet } from "@tanstack/react-router";
 import { createRegistry } from "@tanstack-react-modules/runtime";
 import { journeysPlugin } from "@modular-react/journeys";
 import type { AppDependencies, AppSlots } from "@example-tsr-integration-setup/app-shared";
-import chooserModule from "@example-tsr-integration-setup/chooser-module";
+import integrationPickerModule from "@example-tsr-integration-setup/integration-picker";
 import githubModule from "@example-tsr-integration-setup/github-module";
 import strapiModule from "@example-tsr-integration-setup/strapi-module";
-import genericModule from "@example-tsr-integration-setup/generic-module";
-import contentfulMeta from "@example-tsr-integration-setup/contentful-meta";
-import notionMeta from "@example-tsr-integration-setup/notion-meta";
+import genericIntegrationModule from "@example-tsr-integration-setup/generic-integration";
+import contentfulModule from "@example-tsr-integration-setup/contentful";
+import notionModule from "@example-tsr-integration-setup/notion";
 import { integrationSetupJourney } from "@example-tsr-integration-setup/integration-setup-journey";
 import { Home } from "./Home.js";
 
@@ -28,16 +28,16 @@ const registry = createRegistry<AppDependencies, AppSlots>({
 }).use(journeysPlugin());
 
 // Specific modules: these own UI for their integration's auth/data shape.
-registry.register(chooserModule);
+registry.register(integrationPickerModule);
 registry.register(githubModule);
 registry.register(strapiModule);
-registry.register(genericModule);
+registry.register(genericIntegrationModule);
 
 // Headless slot-only modules: surface Contentful + Notion to the chooser
 // without an associated component. The journey's selectModuleOrDefault
 // fallback routes both through the generic configure form.
-registry.register(contentfulMeta);
-registry.register(notionMeta);
+registry.register(contentfulModule);
+registry.register(notionModule);
 
 // Single journey — all the branching behaviour we want to demo lives in
 // the journey's `chosen` transition handler.

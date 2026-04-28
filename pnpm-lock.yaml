@@ -530,15 +530,15 @@ importers:
       '@example-rr-integration-setup/app-shared':
         specifier: workspace:*
         version: link:../../app-shared
-      '@example-rr-integration-setup/chooser-module':
+      '@example-rr-integration-setup/generic-integration':
         specifier: workspace:*
-        version: link:../../modules/chooser
-      '@example-rr-integration-setup/generic-module':
-        specifier: workspace:*
-        version: link:../../modules/generic
+        version: link:../../modules/generic-integration
       '@example-rr-integration-setup/github-module':
         specifier: workspace:*
         version: link:../../modules/github
+      '@example-rr-integration-setup/integration-picker':
+        specifier: workspace:*
+        version: link:../../modules/integration-picker
       '@example-rr-integration-setup/strapi-module':
         specifier: workspace:*
         version: link:../../modules/strapi
@@ -550,29 +550,7 @@ importers:
         specifier: ^6.0.2
         version: 6.0.3
 
-  examples/react-router/integration-setup-journey/modules/chooser:
-    dependencies:
-      '@example-rr-integration-setup/app-shared':
-        specifier: workspace:*
-        version: link:../../app-shared
-      '@modular-react/core':
-        specifier: workspace:*
-        version: link:../../../../../packages/core
-      '@modular-react/react':
-        specifier: workspace:*
-        version: link:../../../../../packages/react
-    devDependencies:
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.14
-      react:
-        specifier: ^19.0.0
-        version: 19.2.5
-      typescript:
-        specifier: ^6.0.2
-        version: 6.0.3
-
-  examples/react-router/integration-setup-journey/modules/contentful-meta:
+  examples/react-router/integration-setup-journey/modules/contentful:
     dependencies:
       '@example-rr-integration-setup/app-shared':
         specifier: workspace:*
@@ -585,7 +563,7 @@ importers:
         specifier: ^6.0.2
         version: 6.0.3
 
-  examples/react-router/integration-setup-journey/modules/generic:
+  examples/react-router/integration-setup-journey/modules/generic-integration:
     dependencies:
       '@example-rr-integration-setup/app-shared':
         specifier: workspace:*
@@ -623,7 +601,29 @@ importers:
         specifier: ^6.0.2
         version: 6.0.3
 
-  examples/react-router/integration-setup-journey/modules/notion-meta:
+  examples/react-router/integration-setup-journey/modules/integration-picker:
+    dependencies:
+      '@example-rr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../../packages/react
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/integration-setup-journey/modules/notion:
     dependencies:
       '@example-rr-integration-setup/app-shared':
         specifier: workspace:*
@@ -660,24 +660,24 @@ importers:
       '@example-rr-integration-setup/app-shared':
         specifier: workspace:*
         version: link:../app-shared
-      '@example-rr-integration-setup/chooser-module':
+      '@example-rr-integration-setup/contentful':
         specifier: workspace:*
-        version: link:../modules/chooser
-      '@example-rr-integration-setup/contentful-meta':
+        version: link:../modules/contentful
+      '@example-rr-integration-setup/generic-integration':
         specifier: workspace:*
-        version: link:../modules/contentful-meta
-      '@example-rr-integration-setup/generic-module':
-        specifier: workspace:*
-        version: link:../modules/generic
+        version: link:../modules/generic-integration
       '@example-rr-integration-setup/github-module':
         specifier: workspace:*
         version: link:../modules/github
+      '@example-rr-integration-setup/integration-picker':
+        specifier: workspace:*
+        version: link:../modules/integration-picker
       '@example-rr-integration-setup/integration-setup-journey':
         specifier: workspace:*
         version: link:../journeys/integration-setup
-      '@example-rr-integration-setup/notion-meta':
+      '@example-rr-integration-setup/notion':
         specifier: workspace:*
-        version: link:../modules/notion-meta
+        version: link:../modules/notion
       '@example-rr-integration-setup/strapi-module':
         specifier: workspace:*
         version: link:../modules/strapi
@@ -1143,15 +1143,15 @@ importers:
       '@example-tsr-integration-setup/app-shared':
         specifier: workspace:*
         version: link:../../app-shared
-      '@example-tsr-integration-setup/chooser-module':
+      '@example-tsr-integration-setup/generic-integration':
         specifier: workspace:*
-        version: link:../../modules/chooser
-      '@example-tsr-integration-setup/generic-module':
-        specifier: workspace:*
-        version: link:../../modules/generic
+        version: link:../../modules/generic-integration
       '@example-tsr-integration-setup/github-module':
         specifier: workspace:*
         version: link:../../modules/github
+      '@example-tsr-integration-setup/integration-picker':
+        specifier: workspace:*
+        version: link:../../modules/integration-picker
       '@example-tsr-integration-setup/strapi-module':
         specifier: workspace:*
         version: link:../../modules/strapi
@@ -1163,29 +1163,7 @@ importers:
         specifier: ^6.0.2
         version: 6.0.3
 
-  examples/tanstack-router/integration-setup-journey/modules/chooser:
-    dependencies:
-      '@example-tsr-integration-setup/app-shared':
-        specifier: workspace:*
-        version: link:../../app-shared
-      '@modular-react/core':
-        specifier: workspace:*
-        version: link:../../../../../packages/core
-      '@modular-react/react':
-        specifier: workspace:*
-        version: link:../../../../../packages/react
-    devDependencies:
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.14
-      react:
-        specifier: ^19.0.0
-        version: 19.2.5
-      typescript:
-        specifier: ^6.0.2
-        version: 6.0.3
-
-  examples/tanstack-router/integration-setup-journey/modules/contentful-meta:
+  examples/tanstack-router/integration-setup-journey/modules/contentful:
     dependencies:
       '@example-tsr-integration-setup/app-shared':
         specifier: workspace:*
@@ -1198,7 +1176,7 @@ importers:
         specifier: ^6.0.2
         version: 6.0.3
 
-  examples/tanstack-router/integration-setup-journey/modules/generic:
+  examples/tanstack-router/integration-setup-journey/modules/generic-integration:
     dependencies:
       '@example-tsr-integration-setup/app-shared':
         specifier: workspace:*
@@ -1236,7 +1214,29 @@ importers:
         specifier: ^6.0.2
         version: 6.0.3
 
-  examples/tanstack-router/integration-setup-journey/modules/notion-meta:
+  examples/tanstack-router/integration-setup-journey/modules/integration-picker:
+    dependencies:
+      '@example-tsr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../../packages/react
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/integration-setup-journey/modules/notion:
     dependencies:
       '@example-tsr-integration-setup/app-shared':
         specifier: workspace:*
@@ -1273,24 +1273,24 @@ importers:
       '@example-tsr-integration-setup/app-shared':
         specifier: workspace:*
         version: link:../app-shared
-      '@example-tsr-integration-setup/chooser-module':
+      '@example-tsr-integration-setup/contentful':
         specifier: workspace:*
-        version: link:../modules/chooser
-      '@example-tsr-integration-setup/contentful-meta':
+        version: link:../modules/contentful
+      '@example-tsr-integration-setup/generic-integration':
         specifier: workspace:*
-        version: link:../modules/contentful-meta
-      '@example-tsr-integration-setup/generic-module':
-        specifier: workspace:*
-        version: link:../modules/generic
+        version: link:../modules/generic-integration
       '@example-tsr-integration-setup/github-module':
         specifier: workspace:*
         version: link:../modules/github
+      '@example-tsr-integration-setup/integration-picker':
+        specifier: workspace:*
+        version: link:../modules/integration-picker
       '@example-tsr-integration-setup/integration-setup-journey':
         specifier: workspace:*
         version: link:../journeys/integration-setup
-      '@example-tsr-integration-setup/notion-meta':
+      '@example-tsr-integration-setup/notion':
         specifier: workspace:*
-        version: link:../modules/notion-meta
+        version: link:../modules/notion
       '@example-tsr-integration-setup/strapi-module':
         specifier: workspace:*
         version: link:../modules/strapi

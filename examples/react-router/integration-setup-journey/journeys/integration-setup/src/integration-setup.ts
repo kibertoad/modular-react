@@ -1,7 +1,7 @@
 import { defineJourney, defineJourneyHandle, selectModuleOrDefault } from "@modular-react/journeys";
 import type { IntegrationKind } from "@example-rr-integration-setup/app-shared";
-import type chooserModule from "@example-rr-integration-setup/chooser-module";
-import type genericModule from "@example-rr-integration-setup/generic-module";
+import type integrationPickerModule from "@example-rr-integration-setup/integration-picker";
+import type genericIntegrationModule from "@example-rr-integration-setup/generic-integration";
 import type githubModule from "@example-rr-integration-setup/github-module";
 import type strapiModule from "@example-rr-integration-setup/strapi-module";
 
@@ -9,10 +9,10 @@ import type strapiModule from "@example-rr-integration-setup/strapi-module";
 // package's bundle. The runtime resolves step components by id against
 // the registered descriptors at outlet-render time.
 type IntegrationModules = {
-  readonly chooser: typeof chooserModule;
+  readonly "integration-picker": typeof integrationPickerModule;
   readonly github: typeof githubModule;
   readonly strapi: typeof strapiModule;
-  readonly generic: typeof genericModule;
+  readonly "generic-integration": typeof genericIntegrationModule;
 };
 
 export interface IntegrationSetupInput {
@@ -49,13 +49,13 @@ export const integrationSetupJourney = defineJourney<IntegrationModules, Integra
   }),
 
   start: (state) => ({
-    module: "chooser",
+    module: "integration-picker",
     entry: "pick",
     input: { tenantId: state.tenantId },
   }),
 
   transitions: {
-    chooser: {
+    "integration-picker": {
       pick: {
         // The dispatch is the whole point of this example. Two integrations
         // (github, strapi) earn dedicated configure steps because their
@@ -95,7 +95,7 @@ export const integrationSetupJourney = defineJourney<IntegrationModules, Integra
             // future additions) lands here. The generic module reads
             // `kind` from input so it can title itself correctly.
             {
-              module: "generic",
+              module: "generic-integration",
               entry: "configure",
               input: { tenantId: state.tenantId, kind: output.kind },
             },
@@ -128,7 +128,7 @@ export const integrationSetupJourney = defineJourney<IntegrationModules, Integra
         cancelled: () => ({ abort: { reason: "user-cancelled" } }),
       },
     },
-    generic: {
+    "generic-integration": {
       configure: {
         saved: ({ output, state }) => ({
           state: {

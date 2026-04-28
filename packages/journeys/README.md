@@ -1747,7 +1747,7 @@ The `integration-setup-journey` examples demonstrate the [`selectModule` / `sele
 
 What they show:
 
-- A generic `chooser` module that reads `useSlots<AppSlots>().integrations` and renders a row per contributing module — the chooser stays agnostic of which integrations exist.
-- Modules contribute themselves to the `integrations` slot at registration time. Two of them (`github`, `strapi`) own dedicated configure components; two (`contentful-meta`, `notion-meta`) are headless `defineSlots` modules with no UI.
-- The journey's `chosen` transition uses `selectModuleOrDefault` to route github + strapi to their dedicated steps and funnel everything else through a generic configure module.
+- A generic `integration-picker` module that reads `useSlots<AppSlots>().integrations` and renders a row per contributing module — the picker stays agnostic of which integrations exist.
+- Modules contribute themselves to the `integrations` slot at registration time. Two of them (`github`, `strapi`) own dedicated configure components; two (`contentful`, `notion`) are headless `defineSlots` modules with no UI.
+- The journey's `chosen` transition uses `selectModuleOrDefault` to route github + strapi to their dedicated steps and funnel everything else through `generic-integration`.
 - An inline note on when to swap to `selectModule` (exhaustive) instead — useful if every kind earns its own dedicated module.
