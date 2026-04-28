@@ -569,7 +569,7 @@ for (const tab of tabsStore.getState().tabs) {
 }
 ```
 
-See the [journeys package README](../packages/journeys/README.md) for the full contract, a worked customer-onboarding example, testing utilities, and the error / edge-case guarantees. The [`examples/react-router/customer-onboarding-journey/`](../examples/react-router/customer-onboarding-journey/) example project demonstrates the pattern end-to-end with a localStorage persistence adapter and reload-recovery.
+See the [journeys package README](../packages/journeys/README.md) for the full contract, a worked customer-onboarding example, testing utilities, and the error / edge-case guarantees. The [`examples/react-router/customer-onboarding-journey/`](../examples/react-router/customer-onboarding-journey/) example project demonstrates the pattern end-to-end with a localStorage persistence adapter and reload-recovery; [`examples/react-router/integration-setup-journey/`](../examples/react-router/integration-setup-journey/) (and its TanStack mirror) covers the **state-driven dispatch** variant — a chooser module fed by slots picks a value, and the journey routes the next step via `selectModule` / `selectModuleOrDefault` for exhaustive or fallback dispatch.
 
 ## Zone initial state and tab navigation
 

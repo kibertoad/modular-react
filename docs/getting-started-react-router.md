@@ -222,7 +222,10 @@ The CLI:
 
 The generated definition has TODO markers for the `start` step and the per-module `transitions` map. Fill those in by declaring `entryPoints` / `exitPoints` on each composed module (`defineEntry` / `defineExit` from `@modular-react/core`) and wiring the exit branches to the next step.
 
-See [`@modular-react/journeys`](../packages/journeys/README.md) for the full mental model, the `JourneyOutlet`/`ModuleTab` rendering surfaces, and the runtime hooks. The [`examples/react-router/customer-onboarding-journey/`](../examples/react-router/customer-onboarding-journey) example shows a three-module branching flow end to end.
+See [`@modular-react/journeys`](../packages/journeys/README.md) for the full mental model, the `JourneyOutlet`/`ModuleTab` rendering surfaces, and the runtime hooks. Two end-to-end examples:
+
+- [`examples/react-router/customer-onboarding-journey/`](../examples/react-router/customer-onboarding-journey) — three-module branching flow with reload-safe persistence.
+- [`examples/react-router/integration-setup-journey/`](../examples/react-router/integration-setup-journey) — slot-driven chooser feeding `selectModuleOrDefault` dispatch (some kinds get dedicated modules, the rest funnel through a generic fallback). Useful when the next module depends on a value chosen earlier in the flow.
 
 ## 7. Turn on the auth guard
 
