@@ -1,0 +1,39 @@
+{
+  "name": "@example-rr-integration-setup/shell",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@example-rr-integration-setup/app-shared": "workspace:*",
+    "@example-rr-integration-setup/chooser-module": "workspace:*",
+    "@example-rr-integration-setup/contentful-meta": "workspace:*",
+    "@example-rr-integration-setup/generic-module": "workspace:*",
+    "@example-rr-integration-setup/github-module": "workspace:*",
+    "@example-rr-integration-setup/integration-setup-journey": "workspace:*",
+    "@example-rr-integration-setup/notion-meta": "workspace:*",
+    "@example-rr-integration-setup/strapi-module": "workspace:*",
+    "@modular-react/core": "workspace:*",
+    "@modular-react/journeys": "workspace:*",
+    "@modular-react/react": "workspace:*",
+    "@react-router-modules/core": "workspace:*",
+    "@react-router-modules/runtime": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router": "^7.6.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.3"
+  }
+}

@@ -23,7 +23,7 @@ Routes, slots, navigation, workspaces — none of that changes. Journeys sit **o
 - [Quickstart](#quickstart) — the 5-step path from zero to a running journey
 - [Core concepts](#core-concepts) — entries, exits, `allowBack`, lifecycle, statuses, keys
 - [Authoring patterns](#authoring-patterns) — module entries, exits, loading flows, `goBack` opt-in
-- [Journey definition patterns](#journey-definition-patterns) — branching, terminals, state rewrites, bounded history
+- [Journey definition patterns](#journey-definition-patterns) — branching, `selectModule` dispatch, terminals, state rewrites, bounded history
 - [Runtime surface](#runtime-surface) — the `JourneyRuntime` you get back from `manifest.journeys`
 - [Journey handles](#journey-handles) — typed tokens for `runtime.start(handle, input)`
 - [`JourneyProvider` + context](#journeyprovider--context)
@@ -590,6 +590,76 @@ review: {
       : { complete: { reason: "ok" } },
 }
 ```
+
+### Pattern — exhaustive state-driven module dispatch (`selectModule`)
+
+When a transition needs to dispatch to one of N modules based on a discriminator (a value picked earlier in the flow, a kind from the previous module's output, etc.), a hand-written `switch` works but loses two things: exhaustiveness when the discriminator's union grows, and per-branch input narrowing without per-branch ceremony. `selectModule<TModules>()` collapses both into one declarative call:
+
+```ts
+import { selectModule } from "@modular-react/journeys";
+
+const select = selectModule<IntegrationModules>();
+
+chooser: {
+  pick: {
+    chosen: ({ output, state }) => ({
+      state: { ...state, selected: output.kind },
+      next: select(output.kind, {
+        github:     { entry: "configure", input: { workspaceId: state.workspaceId, repo: output.repo } },
+        strapi:     { entry: "configure", input: { workspaceId: state.workspaceId, url: output.url } },
+        contentful: { entry: "configure", input: { workspaceId: state.workspaceId, spaceId: output.spaceId } },
+      }),
+    }),
+  },
+},
+```
+
+The cases object is `Record<TKey, …>`, so adding a new value to the discriminator's union without a matching branch is a compile error. Each case's `entry` is type-narrowed against that module's `entryPoints`; `input` is checked against that entry — pasting a `strapi`-shaped input under the `github` key fails at the call site.
+
+**Limit.** The discriminator key must equal the target module id. When they differ (e.g. `tier: "free" | "paid"` dispatching to module ids `trial-onboarding` / `billing-onboarding`), fall back to a `switch` returning `next` per branch — the helper's value is the exhaustiveness + per-branch typing, not the lookup itself.
+
+### Pattern — fallback dispatch (`selectModuleOrDefault`)
+
+When most discriminator values funnel into a generic module and only a few warrant their own dedicated step, use the sibling `selectModuleOrDefault` — it accepts a partial cases map plus an explicit fallback `StepSpec`:
+
+```ts
+import { selectModuleOrDefault } from "@modular-react/journeys";
+
+const select = selectModuleOrDefault<IntegrationModules>();
+
+chooser: {
+  pick: {
+    chosen: ({ output, state }) => ({
+      state: { ...state, selected: output.kind },
+      next: select(
+        output.kind,
+        {
+          // Only github + strapi earn dedicated configure steps.
+          github: { entry: "configure", input: { workspaceId: state.workspaceId, repo: "..." } },
+          strapi: { entry: "configure", input: { workspaceId: state.workspaceId } },
+        },
+        // contentful, notion, future kinds — all flow through the
+        // generic configure step.
+        { module: "generic", entry: "configure", input: { workspaceId: state.workspaceId, kind: output.kind } },
+      ),
+    }),
+  },
+},
+```
+
+It's a separate function, not a third argument on `selectModule`, so the *exhaustive* call site is visually distinct from the *fallback-allowed* one — adding a third argument later can't silently disable the missing-branch compile error.
+
+**When to prefer which.** Pick `selectModule` (exhaustive) if every discriminator value gets its own dedicated module — the missing-case error is the whole point. Pick `selectModuleOrDefault` (fallback) when you have a real catch-all module: most kinds funnel through generic shape, only a handful warrant tailored UI. A third-party plugin system that lets new integration kinds appear at runtime always wants the fallback form, since the journey can't know every kind ahead of time.
+
+#### Pairing with slot-driven discovery
+
+`selectModule` / `selectModuleOrDefault` plays well with the slots system for the common "chooser → specific" shape:
+
+- Each module contributes itself to a shared slot (e.g. `slots: { integrations: [{ id: "github", label: "GitHub", … }] }`).
+- The chooser module reads `useSlots<AppSlots>().integrations` and renders one row per contribution — staying agnostic of which integrations exist.
+- The journey's `chosen` transition uses `selectModule(Or)` to dispatch on the picked id.
+
+Slots drive presentation (dynamic, discoverable); the journey owns dispatch (typed, statically declared). See [`examples/react-router/integration-setup-journey/`](../../examples/react-router/integration-setup-journey/) for an end-to-end example with both forms exercised by Playwright.
 
 ### Pattern — terminal with structured payload
 
@@ -1483,6 +1553,8 @@ Every export you're likely to call, grouped by role.
 | ----------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `defineJourney`               | `<TModules, TState>() => <TInput>(def: JourneyDefinition<TModules, TState, TInput>) => def` | Identity helper with full inference on transitions and state. Curried so `TInput` infers from `initialState`.                                              |
 | `defineJourneyHandle`         | `<TModules, TState, TInput>(def) => JourneyHandle<string, TInput>`                          | Builds a typed token from a journey definition so modules and shells can call `runtime.start(handle, input)` without importing the journey's runtime code. |
+| `selectModule`                | `<TModules>() => <TKey>(key, cases) => StepSpec<TModules>`                                  | Exhaustive state-driven dispatch helper for transition handlers — see [the pattern](#pattern--exhaustive-state-driven-module-dispatch-selectmodule). Missing branches are a compile error.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `selectModuleOrDefault`       | `<TModules>() => <TKey>(key, cases, fallback) => StepSpec<TModules>`                        | Sibling of `selectModule` accepting a partial cases map plus an explicit fallback `StepSpec` — see [the pattern](#pattern--fallback-dispatch-selectmoduleordefault). Use when most discriminator values funnel through a generic module.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `defineJourneyPersistence`    | `<TInput, TState>(adapter) => JourneyPersistence<TState, TInput>`                           | Types `keyFor`'s `input` against `TInput`, `load`/`save` against `TState`.                                                                                 |
 | `createWebStoragePersistence` | `<TInput, TState>({ keyFor, storage? }) => JourneyPersistence<TState, TInput>`              | Stock `localStorage` / `sessionStorage` adapter. SSR-safe, auto-clears corrupt JSON entries. Pass `storage` to override the backing store.                 |
 | `createMemoryPersistence`     | `<TInput, TState>({ keyFor, initial?, clone? }) => MemoryPersistence<TInput, TState>`       | `Map`-backed adapter for tests/SSR. Exposes `size()` / `entries()` / `clear()`. Deep-clones on `save` and `load` by default.                               |
@@ -1660,10 +1732,22 @@ Complete, runnable walk-throughs live under `examples/`:
 - [`examples/react-router/customer-onboarding-journey/`](../../examples/react-router/customer-onboarding-journey/) — React Router integration.
 - [`examples/tanstack-router/customer-onboarding-journey/`](../../examples/tanstack-router/customer-onboarding-journey/) — TanStack Router integration with the same modules and journey.
 
-Each example demonstrates:
+Each `customer-onboarding-journey` example demonstrates:
 
 - `defineEntry` / `defineExit` across three modules (profile, plan, billing).
 - `defineJourney` composing them with typed transitions and a shared state.
 - `registry.registerJourney(...)` with a localStorage persistence adapter — reload the page mid-flow and the tab resumes at the last step.
 - A minimal tabbed shell mounting `<JourneyOutlet>` and `<ModuleTab>` side-by-side.
 - `WorkspaceActions.openTab({ kind: 'journey', … })` as the shell-facing API, with `openModuleTab` kept as a `@deprecated` shim.
+
+The `integration-setup-journey` examples demonstrate the [`selectModule` / `selectModuleOrDefault`](#pattern--exhaustive-state-driven-module-dispatch-selectmodule) dispatch helpers paired with slot-driven discovery:
+
+- [`examples/react-router/integration-setup-journey/`](../../examples/react-router/integration-setup-journey/) — React Router integration with Playwright coverage of every dispatch branch.
+- [`examples/tanstack-router/integration-setup-journey/`](../../examples/tanstack-router/integration-setup-journey/) — TanStack Router mirror.
+
+What they show:
+
+- A generic `chooser` module that reads `useSlots<AppSlots>().integrations` and renders a row per contributing module — the chooser stays agnostic of which integrations exist.
+- Modules contribute themselves to the `integrations` slot at registration time. Two of them (`github`, `strapi`) own dedicated configure components; two (`contentful-meta`, `notion-meta`) are headless `defineSlots` modules with no UI.
+- The journey's `chosen` transition uses `selectModuleOrDefault` to route github + strapi to their dedicated steps and funnel everything else through a generic configure module.
+- An inline note on when to swap to `selectModule` (exhaustive) instead — useful if every kind earns its own dedicated module.

@@ -54,6 +54,10 @@ export type {
 export { defineJourneyHandle } from "./handle.js";
 export type { JourneyHandle } from "./handle.js";
 
+// Authoring helpers — exhaustive (and fallback) state-driven dispatch.
+export { selectModule, selectModuleOrDefault } from "./select-module.js";
+export type { SelectModuleCases, SelectModuleCasesPartial } from "./select-module.js";
+
 export type {
   AbandonCtx,
   AnyJourneyDefinition,

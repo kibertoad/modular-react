@@ -1,0 +1,28 @@
+{
+  "name": "@example-rr-integration-setup/integration-setup-journey",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@example-rr-integration-setup/app-shared": "workspace:*",
+    "@example-rr-integration-setup/chooser-module": "workspace:*",
+    "@example-rr-integration-setup/generic-module": "workspace:*",
+    "@example-rr-integration-setup/github-module": "workspace:*",
+    "@example-rr-integration-setup/strapi-module": "workspace:*",
+    "@modular-react/journeys": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}
