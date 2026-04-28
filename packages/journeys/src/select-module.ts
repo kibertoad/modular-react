@@ -1,9 +1,4 @@
-import type {
-  EntryInputOf,
-  EntryNamesOf,
-  ModuleTypeMap,
-  StepSpec,
-} from "@modular-react/core";
+import type { EntryInputOf, EntryNamesOf, ModuleTypeMap, StepSpec } from "@modular-react/core";
 
 /**
  * One case in a `selectModule` map: an entry name on module `M` plus the
@@ -44,10 +39,7 @@ export type SelectModuleCases<
  * module id still errors — the looseness is only on TKey itself, not on
  * which module ids the cases object accepts.
  */
-export type SelectModuleCasesPartial<
-  TModules extends ModuleTypeMap,
-  TKey extends string,
-> = {
+export type SelectModuleCasesPartial<TModules extends ModuleTypeMap, TKey extends string> = {
   readonly [M in Extract<TKey, keyof TModules & string>]?: StepCaseFor<TModules, M>;
 };
 
@@ -107,8 +99,12 @@ export const selectModule =
     key: TKey,
     cases: SelectModuleCases<TModules, TKey>,
   ): StepSpec<TModules> => {
-    const branch = cases[key];
-    if (!branch) {
+    // `hasOwn`-gate the lookup so prototype-chain keys (`__proto__`,
+    // `toString`, …) can't masquerade as a valid branch when types are
+    // bypassed at runtime — `cases["__proto__"]` would otherwise return
+    // Object.prototype and produce a malformed StepSpec. With the gate,
+    // the no-match path falls into the throw below.
+    if (!hasOwnCase(cases, key)) {
       // Reachable only when types are bypassed (a runtime value escaped the
       // discriminator's union, e.g. via a serialized blob). Throw with the
       // offending key in the message — silently producing an invalid
@@ -119,7 +115,7 @@ export const selectModule =
           `Use selectModuleOrDefault if a fallback is intentional.`,
       );
     }
-    return moduleStep(key, branch);
+    return moduleStep(key, cases[key]);
   };
 
 /**
@@ -163,9 +159,11 @@ export const selectModuleOrDefault =
     cases: SelectModuleCasesPartial<TModules, TKey>,
     fallback: StepSpec<TModules>,
   ): StepSpec<TModules> => {
-    const branch = (cases as Record<string, StepCaseFor<TModules, never> | undefined>)[key];
-    if (branch) return moduleStep(key, branch);
-    return fallback;
+    // `hasOwn`-gate (see selectModule) so prototype-chain keys can't slip
+    // a malformed branch past the fallback path.
+    if (!hasOwnCase(cases, key)) return fallback;
+    const branch = (cases as Record<string, StepCaseFor<TModules, never>>)[key];
+    return moduleStep(key, branch);
   };
 
 /**
@@ -187,4 +185,15 @@ function moduleStep<TModules extends ModuleTypeMap>(
     entry: branch.entry,
     input: branch.input,
   } as StepSpec<TModules>;
+}
+
+/**
+ * Own-property check used by both helpers before indexing into `cases`.
+ * Without this gate, a runtime key like `"__proto__"` or `"toString"`
+ * (reachable when the discriminator's typing has been bypassed) would
+ * resolve to `Object.prototype` and produce a malformed StepSpec instead
+ * of falling into the throw / fallback path.
+ */
+function hasOwnCase(cases: object, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(cases, key);
 }

@@ -8,6 +8,13 @@ export interface ConfigureGithubInput {
   readonly suggestedRepo?: string;
 }
 
+// Owner/name shape — alphanumerics, dot, underscore, hyphen on each side
+// of a single slash. Loose on purpose: a real GitHub-validation pass would
+// also enforce length + character whitelist, but this is enough to reject
+// the common typos (`org`, `org/`, `/repo`, `org/sub/repo`) the prior
+// `includes("/")` gate let through.
+const REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+
 /**
  * GitHub-specific configure step. The shape of `input` is defined by THIS
  * module — the journey hands it whatever the `selectModuleOrDefault`
@@ -19,6 +26,8 @@ export function ConfigureGithub({
   exit,
 }: ModuleEntryProps<ConfigureGithubInput, GithubExits>) {
   const [repo, setRepo] = useState(input.suggestedRepo ?? "");
+  const trimmedRepo = repo.trim();
+  const isValidRepo = REPO_PATTERN.test(trimmedRepo);
 
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -45,10 +54,10 @@ export function ConfigureGithub({
         <button
           type="button"
           data-testid="github-save"
-          disabled={!repo.includes("/")}
+          disabled={!isValidRepo}
           onClick={() =>
             exit("saved", {
-              repo,
+              repo: trimmedRepo,
               webhookId: `wh_gh_${Math.random().toString(36).slice(2, 10)}`,
             })
           }

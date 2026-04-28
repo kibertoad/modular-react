@@ -16,9 +16,9 @@
   },
   "dependencies": {
     "@example-rr-integration-setup/app-shared": "workspace:*",
-    "@example-rr-integration-setup/integration-picker": "workspace:*",
     "@example-rr-integration-setup/generic-integration": "workspace:*",
     "@example-rr-integration-setup/github-module": "workspace:*",
+    "@example-rr-integration-setup/integration-picker": "workspace:*",
     "@example-rr-integration-setup/strapi-module": "workspace:*",
     "@modular-react/journeys": "workspace:*"
   },

@@ -12,10 +12,10 @@
   },
   "dependencies": {
     "@example-rr-integration-setup/app-shared": "workspace:*",
-    "@example-rr-integration-setup/integration-picker": "workspace:*",
     "@example-rr-integration-setup/contentful": "workspace:*",
     "@example-rr-integration-setup/generic-integration": "workspace:*",
     "@example-rr-integration-setup/github-module": "workspace:*",
+    "@example-rr-integration-setup/integration-picker": "workspace:*",
     "@example-rr-integration-setup/integration-setup-journey": "workspace:*",
     "@example-rr-integration-setup/notion": "workspace:*",
     "@example-rr-integration-setup/strapi-module": "workspace:*",

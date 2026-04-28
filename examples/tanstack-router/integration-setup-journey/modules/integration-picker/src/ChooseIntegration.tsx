@@ -16,9 +16,7 @@ export interface ChooseIntegrationInput {
  * The journey owns the dispatch table (`selectModuleOrDefault`); the
  * chooser only reports which kind the user picked.
  */
-export function ChooseIntegration({
-  exit,
-}: ModuleEntryProps<ChooseIntegrationInput, PickerExits>) {
+export function ChooseIntegration({ exit }: ModuleEntryProps<ChooseIntegrationInput, PickerExits>) {
   const { integrations } = useSlots<AppSlots>();
 
   return (

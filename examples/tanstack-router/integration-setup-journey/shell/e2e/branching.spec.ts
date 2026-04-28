@@ -68,7 +68,9 @@ test("github branch dispatches to the dedicated github configure step", async ({
   expect(payload).toBeTruthy();
   const parsed = JSON.parse(payload!);
   expect(parsed).toMatchObject({ kind: "github", repo: "modular-react/example" });
-  expect(typeof parsed.webhookId).toBe("string");
+  // `webhookId` is in the redaction set — Home masks it before render so
+  // the demo doesn't teach the bad habit of printing credentials.
+  expect(parsed.webhookId).toBe("[redacted]");
 
   assertNoErrors(errors);
 });
@@ -89,10 +91,12 @@ test("strapi branch dispatches to the dedicated strapi configure step", async ({
 
   const payload = await page.getByTestId("result-payload").textContent();
   const parsed = JSON.parse(payload!);
+  // Non-secret fields render verbatim; `apiToken` is masked by Home's
+  // redaction pass.
   expect(parsed).toMatchObject({
     kind: "strapi",
     baseUrl: "https://strapi.example.com",
-    apiToken: "strapi-secret-token",
+    apiToken: "[redacted]",
   });
 
   assertNoErrors(errors);
@@ -114,7 +118,9 @@ test("contentful branch falls through to the generic module", async ({ page }) =
   await page.getByTestId("generic-save").click();
 
   const parsed = JSON.parse((await page.getByTestId("result-payload").textContent())!);
-  expect(parsed).toMatchObject({ kind: "contentful", apiKey: "contentful-key" });
+  // `kind` confirms the fallback dispatch chose `contentful`; `apiKey` is
+  // masked because the redaction pass treats it as a secret.
+  expect(parsed).toMatchObject({ kind: "contentful", apiKey: "[redacted]" });
 
   assertNoErrors(errors);
 });
@@ -130,7 +136,7 @@ test("notion branch also falls through to the generic module", async ({ page }) 
   await page.getByTestId("generic-save").click();
 
   const parsed = JSON.parse((await page.getByTestId("result-payload").textContent())!);
-  expect(parsed).toMatchObject({ kind: "notion", apiKey: "notion-key" });
+  expect(parsed).toMatchObject({ kind: "notion", apiKey: "[redacted]" });
 
   assertNoErrors(errors);
 });

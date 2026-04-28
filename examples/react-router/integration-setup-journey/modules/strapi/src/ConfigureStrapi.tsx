@@ -17,6 +17,9 @@ export function ConfigureStrapi({
 }: ModuleEntryProps<ConfigureStrapiInput, StrapiExits>) {
   const [baseUrl, setBaseUrl] = useState("https://strapi.example.com");
   const [apiToken, setApiToken] = useState("");
+  const trimmedBaseUrl = baseUrl.trim();
+  const trimmedToken = apiToken.trim();
+  const canSave = trimmedBaseUrl !== "" && trimmedToken !== "";
 
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -40,8 +43,13 @@ export function ConfigureStrapi({
 
       <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
         <span>API token</span>
+        {/* `type="password"` masks the field on screen and disables most
+            password managers from prompting to save it. `autoComplete` set
+            to "new-password" prevents browsers from autofilling a stored
+            credential into this demo form. */}
         <input
-          type="text"
+          type="password"
+          autoComplete="new-password"
           value={apiToken}
           onChange={(e) => setApiToken(e.target.value)}
           placeholder="strapi-api-token"
@@ -54,8 +62,8 @@ export function ConfigureStrapi({
         <button
           type="button"
           data-testid="strapi-save"
-          disabled={!apiToken}
-          onClick={() => exit("saved", { baseUrl, apiToken })}
+          disabled={!canSave}
+          onClick={() => exit("saved", { baseUrl: trimmedBaseUrl, apiToken: trimmedToken })}
         >
           Save Strapi integration
         </button>

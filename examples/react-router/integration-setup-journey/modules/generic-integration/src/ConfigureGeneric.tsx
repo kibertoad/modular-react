@@ -30,6 +30,7 @@ export function ConfigureGeneric({
   exit,
 }: ModuleEntryProps<ConfigureGenericInput, GenericExits>) {
   const [apiKey, setApiKey] = useState("");
+  const trimmedApiKey = apiKey.trim();
 
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -45,8 +46,13 @@ export function ConfigureGeneric({
 
       <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
         <span>API key</span>
+        {/* Mask the field on screen and opt out of browser autofill — same
+            rationale as the Strapi token. The example is meant to be a
+            template; rendering an API key in plain text would teach the
+            wrong default. */}
         <input
-          type="text"
+          type="password"
+          autoComplete="new-password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
           placeholder={`${input.kind}-api-key`}
@@ -59,8 +65,8 @@ export function ConfigureGeneric({
         <button
           type="button"
           data-testid="generic-save"
-          disabled={!apiKey}
-          onClick={() => exit("saved", { kind: input.kind, apiKey })}
+          disabled={trimmedApiKey === ""}
+          onClick={() => exit("saved", { kind: input.kind, apiKey: trimmedApiKey })}
         >
           Save {input.kind} integration
         </button>

@@ -162,6 +162,20 @@ describe("selectModule (exhaustive)", () => {
       }),
     ).toThrow(/no case for key "nope".*selectModuleOrDefault/);
   });
+
+  it("rejects prototype-chain keys instead of resolving them to Object.prototype", () => {
+    // Without the `hasOwn` gate, `cases["__proto__"]` returns
+    // Object.prototype — truthy but with no `entry`/`input` — and the
+    // helper would emit a malformed StepSpec. Verify both classic
+    // prototype-pollution vectors fall into the same throw path as any
+    // other unknown key.
+    const cases = {
+      github: { entry: "configure" as const, input: { workspaceId: "w", repo: "r" } },
+      strapi: { entry: "configure" as const, input: { workspaceId: "w", url: "u" } },
+    };
+    expect(() => select("__proto__" as never, cases)).toThrow(/no case for key "__proto__"/);
+    expect(() => select("toString" as never, cases)).toThrow(/no case for key "toString"/);
+  });
 });
 
 // -----------------------------------------------------------------------------
@@ -291,5 +305,19 @@ describe("selectModuleOrDefault (fallback)", () => {
     };
     const result = select("unknown" as never, {}, fallback);
     expect(result).toBe(fallback);
+  });
+
+  it("routes prototype-chain keys to the fallback instead of Object.prototype", () => {
+    // Mirrors the equivalent guard tested on `selectModule`. Without the
+    // `hasOwn` gate, `cases["__proto__"]` would return Object.prototype
+    // and the helper would emit a malformed StepSpec instead of falling
+    // through to the supplied fallback.
+    const fallback = {
+      module: "generic" as const,
+      entry: "configure" as const,
+      input: { workspaceId: "w", kind: "fallback" },
+    };
+    expect(select("__proto__" as never, {}, fallback)).toBe(fallback);
+    expect(select("toString" as never, {}, fallback)).toBe(fallback);
   });
 });
