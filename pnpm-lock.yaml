@@ -515,6 +515,216 @@ importers:
         specifier: ^6.0.0
         version: 6.4.2(@types/node@25.6.0)(lightningcss@1.32.0)
 
+  examples/react-router/integration-setup-journey/app-shared:
+    dependencies:
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/integration-setup-journey/journeys/integration-setup:
+    dependencies:
+      '@example-rr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@example-rr-integration-setup/generic-integration':
+        specifier: workspace:*
+        version: link:../../modules/generic-integration
+      '@example-rr-integration-setup/github-module':
+        specifier: workspace:*
+        version: link:../../modules/github
+      '@example-rr-integration-setup/integration-picker':
+        specifier: workspace:*
+        version: link:../../modules/integration-picker
+      '@example-rr-integration-setup/strapi-module':
+        specifier: workspace:*
+        version: link:../../modules/strapi
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../../../../../packages/journeys
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/integration-setup-journey/modules/contentful:
+    dependencies:
+      '@example-rr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/integration-setup-journey/modules/generic-integration:
+    dependencies:
+      '@example-rr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/integration-setup-journey/modules/github:
+    dependencies:
+      '@example-rr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/integration-setup-journey/modules/integration-picker:
+    dependencies:
+      '@example-rr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../../packages/react
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/integration-setup-journey/modules/notion:
+    dependencies:
+      '@example-rr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/integration-setup-journey/modules/strapi:
+    dependencies:
+      '@example-rr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/integration-setup-journey/shell:
+    dependencies:
+      '@example-rr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-rr-integration-setup/contentful':
+        specifier: workspace:*
+        version: link:../modules/contentful
+      '@example-rr-integration-setup/generic-integration':
+        specifier: workspace:*
+        version: link:../modules/generic-integration
+      '@example-rr-integration-setup/github-module':
+        specifier: workspace:*
+        version: link:../modules/github
+      '@example-rr-integration-setup/integration-picker':
+        specifier: workspace:*
+        version: link:../modules/integration-picker
+      '@example-rr-integration-setup/integration-setup-journey':
+        specifier: workspace:*
+        version: link:../journeys/integration-setup
+      '@example-rr-integration-setup/notion':
+        specifier: workspace:*
+        version: link:../modules/notion
+      '@example-rr-integration-setup/strapi-module':
+        specifier: workspace:*
+        version: link:../modules/strapi
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../../../../packages/journeys
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../packages/react
+      '@react-router-modules/core':
+        specifier: workspace:*
+        version: link:../../../../packages/react-router-core
+      '@react-router-modules/runtime':
+        specifier: workspace:*
+        version: link:../../../../packages/react-router-runtime
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.5(react@19.2.5)
+      react-router:
+        specifier: ^7.6.0
+        version: 7.14.1(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.1(vite@8.0.10(@types/node@25.6.0))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.3
+        version: 8.0.10(@types/node@25.6.0)
+
   examples/react-router/remote-capabilities/app-shared:
     dependencies:
       '@modular-react/core':
@@ -917,6 +1127,216 @@ importers:
       vite:
         specifier: ^6.0.0
         version: 6.4.2(@types/node@25.6.0)(lightningcss@1.32.0)
+
+  examples/tanstack-router/integration-setup-journey/app-shared:
+    dependencies:
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/integration-setup-journey/journeys/integration-setup:
+    dependencies:
+      '@example-tsr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@example-tsr-integration-setup/generic-integration':
+        specifier: workspace:*
+        version: link:../../modules/generic-integration
+      '@example-tsr-integration-setup/github-module':
+        specifier: workspace:*
+        version: link:../../modules/github
+      '@example-tsr-integration-setup/integration-picker':
+        specifier: workspace:*
+        version: link:../../modules/integration-picker
+      '@example-tsr-integration-setup/strapi-module':
+        specifier: workspace:*
+        version: link:../../modules/strapi
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../../../../../packages/journeys
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/integration-setup-journey/modules/contentful:
+    dependencies:
+      '@example-tsr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/integration-setup-journey/modules/generic-integration:
+    dependencies:
+      '@example-tsr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/integration-setup-journey/modules/github:
+    dependencies:
+      '@example-tsr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/integration-setup-journey/modules/integration-picker:
+    dependencies:
+      '@example-tsr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../../packages/react
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/integration-setup-journey/modules/notion:
+    dependencies:
+      '@example-tsr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/integration-setup-journey/modules/strapi:
+    dependencies:
+      '@example-tsr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/integration-setup-journey/shell:
+    dependencies:
+      '@example-tsr-integration-setup/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-tsr-integration-setup/contentful':
+        specifier: workspace:*
+        version: link:../modules/contentful
+      '@example-tsr-integration-setup/generic-integration':
+        specifier: workspace:*
+        version: link:../modules/generic-integration
+      '@example-tsr-integration-setup/github-module':
+        specifier: workspace:*
+        version: link:../modules/github
+      '@example-tsr-integration-setup/integration-picker':
+        specifier: workspace:*
+        version: link:../modules/integration-picker
+      '@example-tsr-integration-setup/integration-setup-journey':
+        specifier: workspace:*
+        version: link:../journeys/integration-setup
+      '@example-tsr-integration-setup/notion':
+        specifier: workspace:*
+        version: link:../modules/notion
+      '@example-tsr-integration-setup/strapi-module':
+        specifier: workspace:*
+        version: link:../modules/strapi
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../../../../packages/journeys
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../packages/react
+      '@tanstack-react-modules/core':
+        specifier: workspace:*
+        version: link:../../../../packages/tanstack-router-core
+      '@tanstack-react-modules/runtime':
+        specifier: workspace:*
+        version: link:../../../../packages/tanstack-router-runtime
+      '@tanstack/react-router':
+        specifier: ^1.168.8
+        version: 1.168.22(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.5(react@19.2.5)
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.1(vite@8.0.10(@types/node@25.6.0))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.3
+        version: 8.0.10(@types/node@25.6.0)
 
   packages/cli-core:
     dependencies:
@@ -4624,6 +5044,11 @@ snapshots:
       vite: 6.4.2(@types/node@25.6.0)(lightningcss@1.32.0)
     transitivePeerDependencies:
       - supports-color
+
+  '@vitejs/plugin-react@6.0.1(vite@8.0.10(@types/node@25.6.0))':
+    dependencies:
+      '@rolldown/pluginutils': 1.0.0-rc.7
+      vite: 8.0.10(@types/node@25.6.0)
 
   '@vitejs/plugin-react@6.0.1(vite@8.0.8(@types/node@25.6.0))':
     dependencies:
