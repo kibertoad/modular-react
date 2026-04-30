@@ -23,7 +23,7 @@ Routes, slots, navigation, workspaces - none of that changes. Journeys sit **on 
 - [Quickstart](#quickstart) - the 5-step path from zero to a running journey
 - [Core concepts](#core-concepts) - entries, exits, `allowBack`, lifecycle, statuses, keys
 - [Authoring patterns](#authoring-patterns) - module entries, exits, loading flows, `goBack` opt-in
-- [Journey definition patterns](#journey-definition-patterns) - branching, `selectModule` dispatch, terminals, state rewrites, bounded history
+- [Journey definition patterns](#journey-definition-patterns) - branching, `selectModule` dispatch, terminals, state rewrites, bounded history, module compatibility
 - [Composing journeys (invoke / resume)](#composing-journeys-invoke--resume) - call out to a child journey mid-flow and resume on its outcome
   - [Cycle and recursion safety](#cycle-and-recursion-safety) - cycle / depth / undeclared-child / bounce-limit guards and how to tune them
 - [Runtime surface](#runtime-surface) - the `JourneyRuntime` you get back from `manifest.journeys`
@@ -716,6 +716,58 @@ registry.registerJourney(journey, { maxHistory: 50 });
 Caveat: a cap smaller than the deepest reachable back-chain silently breaks `goBack` past the trim point (the rollback snapshot `goBack` would restore is among the dropped entries). Size it to at least the longest user-reachable back chain, or treat it as a hard "no-one will navigate back this far" window.
 
 Omitting `maxHistory`, or passing `0` or a negative number, leaves history unbounded.
+
+### Pattern - module compatibility (`moduleCompat`)
+
+A journey is implicitly coupled to the **exit names**, **input shapes**, and **`allowBack` semantics** of every module it references in `transitions`. When those modules ship from other teams, a backwards-incompatible bump on the other side ("we renamed `success` to `done`") would otherwise only surface at runtime — when the user actually navigated to the now-broken step.
+
+`moduleCompat` is a registration-time guard: declare the npm-style version range your journey was authored against, and the journeys plugin checks it against each module's `version` field at `resolveManifest()` time. An incompatible deployment refuses to come up at all instead of silently breaking one user mid-flow.
+
+```ts
+defineJourney<OnboardingModules, OnboardingState>()({
+  id: "customer-onboarding",
+  version: "1.0.0",
+  moduleCompat: {
+    profile: "^1.0.0",
+    plan: ">=1.5.0 <2.0.0",
+    // multiple major lines accepted explicitly
+    billing: "^2.0.0 || ^3.0.0",
+  },
+  initialState: () => ({
+    /* ... */
+  }),
+  start: () => ({
+    module: "profile",
+    entry: "review",
+    input: {
+      /* ... */
+    },
+  }),
+  transitions: {
+    /* ... */
+  },
+});
+```
+
+What the validator does at `resolveManifest()` time:
+
+| Situation                                      | Result                                                               |
+| ---------------------------------------------- | -------------------------------------------------------------------- |
+| Range admits the registered module's `version` | OK.                                                                  |
+| Range does not admit it                        | `JourneyValidationError` listing journey id, module, range, version. |
+| Range names a module that isn't registered     | `JourneyValidationError` ("not registered").                         |
+| Range string is malformed                      | `JourneyValidationError` echoing the offending input.                |
+| Module's own `version` is malformed            | `JourneyValidationError` ("unparseable version").                    |
+
+All issues are accumulated and reported in one error so a deployment with several mismatched teams sees the full list in one CI run, not one bug at a time.
+
+**Range syntax.** A subset of npm semver: caret (`^1.2.3`), tilde (`~1.2.3`), x-range (`1.x`, `1.2.x`, `*`), comparators (`>=1.2.3`, `<2.0.0`, `=1.2.3`), AND (whitespace-separated), OR (`||`-separated), and hyphen ranges (`1.2.3 - 2.0.0`). Pre-release tags and build metadata are not supported — module versions in this framework are stable releases by contract.
+
+**Why a custom semver implementation?** The full `semver` package handles a much wider grammar than this use-case needs and parses regex-heavy on every call. The journeys-internal subset was originally cross-checked against `semver@7.7.4` and ran ~5× faster on the cached path and ~1.7× faster on one-shot parses on a representative grid; see [`bench/semver.bench.ts`](bench/semver.bench.ts) for the historic numbers and a self-contained benchmark of the local implementation. The cross-checked outcomes are frozen as a fixture grid in [`src/semver.test.ts`](src/semver.test.ts) so any regression in our implementation is caught without keeping `semver` as a devDependency. If a range or version is outside the supported subset the parser throws synchronously, so an untested edge case fails loudly at registration rather than as a silent "no match."
+
+**When to omit it.** Modules that you and the journey ship together (same team, same release cadence, same monorepo) gain nothing from a compat declaration — the structural validators (`transitions` referencing real modules / entries / exits) already catch shape drift. The compat check earns its keep when the journey and a module are versioned independently.
+
+**Coverage is opt-in, not exhaustive.** `moduleCompat` is a one-way declaration: any module you list there is checked against the registered version, and a stale entry naming a module that isn't registered fails loudly. But a module the journey actually transitions through and _doesn't_ list in `moduleCompat` is silently fine — the validator does not require coverage for every module referenced by `transitions`. List the modules whose compatibility you care about; omit the rest. Module ids are also typed against the journey's `TModules` map, so a typo on a known module id is a compile error.
 
 ## Composing journeys (invoke / resume)
 
@@ -1807,6 +1859,7 @@ For a fully-headless trace, drive a scenario through `simulateJourney` and inspe
 - **Circular invocations across journeys** - guarded. The four-layer safety net (static cycle check + runtime same-id, depth-cap, and resume-bounce-cap) aborts the offending parent with `invoke-cycle`, `invoke-stack-overflow`, `invoke-undeclared-child`, or `resume-bounce-limit` — see [Cycle and recursion safety](#cycle-and-recursion-safety) for tuning the caps and declaring the call set up-front.
 - **Deep mutation of journey state corrupts rollback snapshots** - snapshots are **shallow clones**, so a mutation that reaches into nested objects updates the snapshot too. Treat state as immutable; produce new objects rather than mutating in place. In development the runtime shallow-freezes each captured snapshot, so a top-level mutation throws immediately - deep mutations still slip through.
 - **Runtime input validation is not built in** - `schema<T>()` is type-only and gives you compile-time checking on entry inputs. The runtime does not validate at the boundary. If `start()` / `hydrate()` inputs come from untrusted sources (URL params, server payloads), wire `zod` / `valibot` / your validator of choice in front of them.
+- **A module bumped past the journey's `moduleCompat` range** - `resolveManifest()` throws `JourneyValidationError` listing every mismatched (journey, module, range, registered version) tuple at once. The deployment refuses to come up; bump the journey's `moduleCompat`, downgrade the module, or fix the journey's transitions to match the module's new contract. See [Pattern - module compatibility (`moduleCompat`)](#pattern---module-compatibility-modulecompat).
 
 ## Limitations
 
@@ -1927,14 +1980,17 @@ Every export you're likely to call, grouped by role.
 
 ### Runtime + validation (`@modular-react/journeys`)
 
-| Export                      | Purpose                                                                                                                                                                                                                                                                      |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createJourneyRuntime`      | Low-level runtime factory. Normally called by the registry; exported for advanced use (test harnesses, custom hosts).                                                                                                                                                        |
-| `validateJourneyContracts`  | Cross-checks a journey's transitions against registered modules. Runs automatically at `resolveManifest()` / `resolve()`; exported for custom validation flows.                                                                                                              |
-| `validateJourneyDefinition` | Structural sanity check on a definition's own shape. Runs automatically in `registerJourney`.                                                                                                                                                                                |
-| `JourneyValidationError`    | Aggregated validation error. `.issues: readonly string[]`.                                                                                                                                                                                                                   |
-| `JourneyHydrationError`     | Thrown from `hydrate` / async-load when the blob is unusable.                                                                                                                                                                                                                |
-| `UnknownJourneyError`       | Thrown from `runtime.start(journeyId, input)` when `journeyId` is not registered. Catch this specifically in shell-state rehydration loops (see [Rehydrating shell-level work](#rehydrating-shell-level-work-tabs-task-queues-drafts)); surface anything else as a real bug. |
+| Export                      | Purpose                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createJourneyRuntime`      | Low-level runtime factory. Normally called by the registry; exported for advanced use (test harnesses, custom hosts).                                                                                                                                                                                                                                                                                          |
+| `validateJourneyContracts`  | Cross-checks a journey's transitions and `moduleCompat` against registered modules. Runs automatically at `resolveManifest()` / `resolve()`; exported for custom validation flows.                                                                                                                                                                                                                             |
+| `validateJourneyDefinition` | Structural sanity check on a definition's own shape. Runs automatically in `registerJourney`.                                                                                                                                                                                                                                                                                                                  |
+| `satisfies(version, range)` | Test a `MAJOR.MINOR.PATCH` version against the npm-semver subset used by `moduleCompat`. Exported for apps that want to run the same compatibility math outside the journeys validator (e.g. checking a saved blob's recorded version against a current journey's compat range). See [Pattern - module compatibility (`moduleCompat`)](#pattern---module-compatibility-modulecompat) for the supported syntax. |
+| `compareVersions(a, b)`     | Order two version strings lexicographically by `(major, minor, patch)`. Returns `-1` / `0` / `1`. Useful for "is this saved blob older than the cutoff?" comparisons; for matching against a range use `satisfies`.                                                                                                                                                                                            |
+| `SemverParseError`          | Thrown by `satisfies` / `compareVersions` on malformed input.                                                                                                                                                                                                                                                                                                                                                  |
+| `JourneyValidationError`    | Aggregated validation error. `.issues: readonly string[]`.                                                                                                                                                                                                                                                                                                                                                     |
+| `JourneyHydrationError`     | Thrown from `hydrate` / async-load when the blob is unusable.                                                                                                                                                                                                                                                                                                                                                  |
+| `UnknownJourneyError`       | Thrown from `runtime.start(journeyId, input)` when `journeyId` is not registered. Catch this specifically in shell-state rehydration loops (see [Rehydrating shell-level work](#rehydrating-shell-level-work-tabs-task-queues-drafts)); surface anything else as a real bug.                                                                                                                                   |
 
 ### Runtime methods (the `JourneyRuntime` returned as `manifest.journeys`)
 

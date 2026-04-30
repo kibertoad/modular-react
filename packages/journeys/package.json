@@ -30,6 +30,7 @@
     "build": "vite build",
     "dev": "vite build --watch",
     "test": "vitest run",
+    "bench": "vitest bench --run bench",
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },

@@ -148,3 +148,105 @@ describe("validateJourneyDefinition", () => {
     expect(issues.length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("validateJourneyContracts — moduleCompat", () => {
+  function withCompat(compat: Record<string, string>) {
+    return { ...base, moduleCompat: compat } as typeof base & {
+      readonly moduleCompat: Readonly<Record<string, string>>;
+    };
+  }
+
+  it("passes when every declared range admits the registered module version", () => {
+    expect(() =>
+      validateJourneyContracts(
+        [{ definition: withCompat({ m: "^1.0.0" }), options: undefined }],
+        [mod],
+      ),
+    ).not.toThrow();
+  });
+
+  it("reports when the registered module version is outside the declared range", () => {
+    expect(() =>
+      validateJourneyContracts(
+        [{ definition: withCompat({ m: "^2.0.0" }), options: undefined }],
+        [mod],
+      ),
+    ).toThrow(/requires module "m" "\^2\.0\.0" but registered version is "1\.0\.0"/);
+  });
+
+  it("reports when a declared module is not registered", () => {
+    expect(() =>
+      validateJourneyContracts(
+        [{ definition: withCompat({ ghost: "^1.0.0" }), options: undefined }],
+        [mod],
+      ),
+    ).toThrow(/requires module "ghost" \(range "\^1\.0\.0"\)[\s\S]*not registered/);
+  });
+
+  it("reports an unparseable range with the original input echoed back", () => {
+    expect(() =>
+      validateJourneyContracts(
+        [{ definition: withCompat({ m: "^abc" }), options: undefined }],
+        [mod],
+      ),
+    ).toThrow(/unparseable moduleCompat range for "m"[\s\S]*\^abc/);
+  });
+
+  it("reports an unparseable module version", () => {
+    const badVersionMod = { ...mod, version: "not.a.version" };
+    expect(() =>
+      validateJourneyContracts(
+        [{ definition: withCompat({ m: "^1.0.0" }), options: undefined }],
+        [badVersionMod],
+      ),
+    ).toThrow(/unparseable version "not\.a\.version"/);
+  });
+
+  it("rejects a non-string range value", () => {
+    const def = { ...base, moduleCompat: { m: 1 as unknown as string } };
+    expect(() =>
+      validateJourneyContracts([{ definition: def as any, options: undefined }], [mod]),
+    ).toThrow(/non-string version range for module "m"/);
+  });
+
+  it("rejects a whitespace-only range (does not silently match the wildcard)", () => {
+    expect(() =>
+      validateJourneyContracts(
+        [{ definition: withCompat({ m: "   " }), options: undefined }],
+        [mod],
+      ),
+    ).toThrow(/empty version range for module "m"/);
+  });
+
+  it("aggregates issues across multiple journeys and modules", () => {
+    const j1 = { ...base, id: "j1", moduleCompat: { m: "^2.0.0" } };
+    const j2 = { ...base, id: "j2", moduleCompat: { m: "^3.0.0" } };
+    let captured: Error | null = null;
+    try {
+      validateJourneyContracts(
+        [
+          { definition: j1 as any, options: undefined },
+          { definition: j2 as any, options: undefined },
+        ],
+        [mod],
+      );
+    } catch (e) {
+      captured = e as Error;
+    }
+    expect(captured).toBeInstanceOf(JourneyValidationError);
+    const issues = (captured as JourneyValidationError).issues;
+    expect(issues).toHaveLength(2);
+    expect(issues[0]).toMatch(/journey "j1"/);
+    expect(issues[1]).toMatch(/journey "j2"/);
+  });
+
+  it("supports OR ranges", () => {
+    const v2Mod = { ...mod, version: "2.5.0" };
+    expect(() =>
+      validateJourneyContracts(
+        [{ definition: withCompat({ m: "^1.0.0 || ^2.0.0" }), options: undefined }],
+        [v2Mod],
+      ),
+    ).not.toThrow();
+  });
+});

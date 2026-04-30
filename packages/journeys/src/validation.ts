@@ -1,5 +1,6 @@
 import type { ModuleDescriptor } from "@modular-react/core";
 import type { AnyJourneyDefinition, RegisteredJourney } from "./types.js";
+import { parseRange, parseVersion, satisfiesParsed, SemverParseError } from "./semver.js";
 
 /**
  * Aggregated error thrown when one or more registered journeys reference
@@ -128,6 +129,66 @@ export function validateJourneyContracts(
       }
     }
 
+    // Validate `moduleCompat`: each declared range must parse, the named
+    // module must be registered, and the registered module's `version`
+    // must satisfy the range. We accumulate every issue (rather than
+    // throwing on the first) so a deployment with several mismatched
+    // teams sees the full list in one CI run.
+    if (def.moduleCompat) {
+      for (const [moduleId, rangeRaw] of Object.entries(def.moduleCompat)) {
+        if (typeof rangeRaw !== "string") {
+          issues.push(
+            `journey "${def.id}" declares a non-string version range for module "${moduleId}" in moduleCompat`,
+          );
+          continue;
+        }
+        // Trim and check separately from the typeof guard so a whitespace-only
+        // value (e.g. `"   "`) gets a message that matches the actual problem,
+        // and so it can't slip past length===0 and then be treated as the
+        // wildcard range by `parseRange` (which would silently disable compat
+        // enforcement for that module).
+        const rangeNormalized = rangeRaw.trim();
+        if (rangeNormalized.length === 0) {
+          issues.push(
+            `journey "${def.id}" declares an empty version range for module "${moduleId}" in moduleCompat`,
+          );
+          continue;
+        }
+        const mod = moduleById.get(moduleId);
+        if (!mod) {
+          issues.push(
+            `journey "${def.id}" requires module "${moduleId}" (range "${rangeNormalized}") in moduleCompat but it is not registered`,
+          );
+          continue;
+        }
+        let parsedRange;
+        try {
+          parsedRange = parseRange(rangeNormalized);
+        } catch (err) {
+          const message = err instanceof SemverParseError ? err.message : String(err);
+          issues.push(
+            `journey "${def.id}" has an unparseable moduleCompat range for "${moduleId}": ${message}`,
+          );
+          continue;
+        }
+        let modVersion;
+        try {
+          modVersion = parseVersion(mod.version);
+        } catch (err) {
+          const message = err instanceof SemverParseError ? err.message : String(err);
+          issues.push(
+            `module "${moduleId}" declares an unparseable version "${mod.version}" (referenced by journey "${def.id}"): ${message}`,
+          );
+          continue;
+        }
+        if (!satisfiesParsed(modVersion, parsedRange)) {
+          issues.push(
+            `journey "${def.id}" requires module "${moduleId}" "${rangeNormalized}" but registered version is "${mod.version}"`,
+          );
+        }
+      }
+    }
+
     // Validate the sibling `resumes` map. Like `transitions`, the runtime
     // tolerates a malformed value (handlers are looked up by name at child
     // terminal time), but spelling errors at authoring time are easier to
@@ -251,40 +312,66 @@ function detectInvokeGraphIssues(journeys: readonly RegisteredJourney[]): string
 
   const issues: string[] = [];
   const reportedCycles = new Set<string>();
-  // `visited` short-circuits nodes whose subtree we've already fully
-  // explored. Each DFS root explores anew, but once a node's subtree
-  // is known cycle-free for this starting node, we don't revisit on
-  // subsequent recursions — except across DFS roots, where a node's
-  // path-membership state doesn't carry over.
+  // `fullyExplored` short-circuits nodes whose subtree we've already fully
+  // explored. Once a node's subtree is known cycle-free (in either of two
+  // senses: no cycles found, or all cycles through it already reported),
+  // we skip it on subsequent DFS roots. The path-membership state
+  // (`onPath`) is recomputed from each root.
   const fullyExplored = new Set<string>();
   const onPath = new Set<string>();
   const path: string[] = [];
 
-  function dfs(id: string): void {
-    if (onPath.has(id)) {
-      // Closed a cycle — extract the path from `id`'s first occurrence
-      // through to the duplicate. e.g. for path [A, B, C] re-entering
-      // A, the cycle is A → B → C → A.
-      const startIdx = path.indexOf(id);
-      const cycleNodes = path.slice(startIdx);
-      const canonical = canonicalizeCycle(cycleNodes);
-      if (!reportedCycles.has(canonical)) {
-        reportedCycles.add(canonical);
-        const display = [...cycleNodes, id].map(quote).join(" → ");
-        issues.push(`journey invoke cycle detected: ${display}`);
-      }
-      return;
-    }
-    if (fullyExplored.has(id)) return;
-    onPath.add(id);
-    path.push(id);
-    for (const next of graph.get(id) ?? []) dfs(next);
-    path.pop();
-    onPath.delete(id);
-    fullyExplored.add(id);
-  }
+  // Iterative DFS — a recursive version is more obvious to read but
+  // overflows V8's stack on pathologically deep invoke chains (~10k
+  // nodes deep). The iterative form preserves the same observable
+  // behaviour: a frame is `{ id, nextIndex }` (a cursor over the node's
+  // outgoing edges), which is exactly the state the recursive version
+  // kept implicitly between recursive calls.
+  type Frame = { readonly id: string; nextIndex: number };
+  const stack: Frame[] = [];
 
-  for (const reg of journeys) dfs(reg.definition.id);
+  for (const reg of journeys) {
+    const rootId = reg.definition.id;
+    if (fullyExplored.has(rootId)) continue;
+
+    stack.push({ id: rootId, nextIndex: 0 });
+    onPath.add(rootId);
+    path.push(rootId);
+
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1]!;
+      const neighbors = graph.get(frame.id);
+      if (!neighbors || frame.nextIndex >= neighbors.length) {
+        stack.pop();
+        path.pop();
+        onPath.delete(frame.id);
+        fullyExplored.add(frame.id);
+        continue;
+      }
+      const next = neighbors[frame.nextIndex]!;
+      frame.nextIndex++;
+
+      if (onPath.has(next)) {
+        // Closed a cycle — extract the path from `next`'s first
+        // occurrence through to the duplicate. e.g. for path [A, B, C]
+        // re-entering A, the cycle is A → B → C → A.
+        const startIdx = path.indexOf(next);
+        const cycleNodes = path.slice(startIdx);
+        const canonical = canonicalizeCycle(cycleNodes);
+        if (!reportedCycles.has(canonical)) {
+          reportedCycles.add(canonical);
+          const display = [...cycleNodes, next].map(quote).join(" → ");
+          issues.push(`journey invoke cycle detected: ${display}`);
+        }
+        continue;
+      }
+      if (fullyExplored.has(next)) continue;
+
+      stack.push({ id: next, nextIndex: 0 });
+      onPath.add(next);
+      path.push(next);
+    }
+  }
   return issues;
 }
 
