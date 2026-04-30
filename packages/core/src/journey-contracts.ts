@@ -686,24 +686,25 @@ export type JourneySystemAbortReason =
     }
   | { readonly reason: "transition-returned-promise"; readonly exit: string | null };
 
-const JOURNEY_SYSTEM_ABORT_REASON_CODES: ReadonlySet<string> = new Set<JourneySystemAbortReasonCode>([
-  "invoke-cycle",
-  "invoke-stack-overflow",
-  "invoke-undeclared-child",
-  "invoke-unknown-journey",
-  "invoke-unknown-resume",
-  "invoke-missing-resume",
-  "invoke-missing-spec",
-  "invoke-without-step",
-  "invoke-start-threw",
-  "invoke-start-no-record",
-  "resume-missing",
-  "resume-threw",
-  "resume-returned-promise",
-  "resume-bounce-limit",
-  "transition-error",
-  "transition-returned-promise",
-]);
+const JOURNEY_SYSTEM_ABORT_REASON_CODES: ReadonlySet<string> =
+  new Set<JourneySystemAbortReasonCode>([
+    "invoke-cycle",
+    "invoke-stack-overflow",
+    "invoke-undeclared-child",
+    "invoke-unknown-journey",
+    "invoke-unknown-resume",
+    "invoke-missing-resume",
+    "invoke-missing-spec",
+    "invoke-without-step",
+    "invoke-start-threw",
+    "invoke-start-no-record",
+    "resume-missing",
+    "resume-threw",
+    "resume-returned-promise",
+    "resume-bounce-limit",
+    "transition-error",
+    "transition-returned-promise",
+  ]);
 
 /**
  * Narrows an `unknown` abort payload (from `instance.terminalPayload`,

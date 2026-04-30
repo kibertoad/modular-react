@@ -59,9 +59,7 @@ describe("validateJourneyGraph — static cycle detection", () => {
       start: () => ({ module: "m", entry: "step", input: undefined }),
       transitions: { m: { step: { go: () => ({ complete: null }) } } },
     });
-    expect(() =>
-      validateJourneyGraph([{ definition: j, options: undefined }]),
-    ).not.toThrow();
+    expect(() => validateJourneyGraph([{ definition: j, options: undefined }])).not.toThrow();
   });
 
   it("accepts an acyclic graph", () => {
@@ -207,8 +205,7 @@ describe("validateJourneyGraph — static cycle detection", () => {
       transitions: {
         "a-mod": {
           s: {
-            go: () =>
-              invoke({ handle: missingHandle, input: undefined, resume: "after" }) as never,
+            go: () => invoke({ handle: missingHandle, input: undefined, resume: "after" }) as never,
           },
         },
       },
@@ -220,26 +217,22 @@ describe("validateJourneyGraph — static cycle detection", () => {
     });
 
     // Static check passes — `missing` is outside the closed graph.
-    expect(() =>
-      validateJourneyGraph([{ definition: a, options: undefined }]),
-    ).not.toThrow();
+    expect(() => validateJourneyGraph([{ definition: a, options: undefined }])).not.toThrow();
 
     // Runtime check: dispatching that handle fires `invoke-unknown-journey`
     // (the existing missing-id path) — NOT `invoke-undeclared-child`. The
     // declared-set guard is downstream of the unknown-journey check, so a
     // declared-but-unregistered handle still surfaces the more useful error.
-    const rt = createJourneyRuntime(
-      [{ definition: a, options: undefined }],
-      { modules: { "a-mod": aMod }, debug: false },
-    );
+    const rt = createJourneyRuntime([{ definition: a, options: undefined }], {
+      modules: { "a-mod": aMod },
+      debug: false,
+    });
     const harness = createTestHarness(rt);
     const id = rt.start("a", undefined);
     harness.fireExit(id, "go");
     const inst = rt.getInstance(id)!;
     expect(inst.status).toBe("aborted");
-    expect((inst.terminalPayload as { reason: string }).reason).toBe(
-      "invoke-unknown-journey",
-    );
+    expect((inst.terminalPayload as { reason: string }).reason).toBe("invoke-unknown-journey");
   });
 
   it("validateJourneyContracts surfaces cycle errors alongside structural ones", () => {
@@ -506,8 +499,7 @@ describe("runtime guard — invoke-stack-overflow", () => {
       transitions: {
         "b-mod": {
           s: {
-            go: () =>
-              invoke({ handle: cHandle, input: undefined, resume: "afterC" }) as never,
+            go: () => invoke({ handle: cHandle, input: undefined, resume: "afterC" }) as never,
           },
         },
       },
@@ -530,8 +522,7 @@ describe("runtime guard — invoke-stack-overflow", () => {
       transitions: {
         "a-mod": {
           s: {
-            go: () =>
-              invoke({ handle: bHandle, input: undefined, resume: "afterB" }) as never,
+            go: () => invoke({ handle: bHandle, input: undefined, resume: "afterB" }) as never,
           },
         },
       },
@@ -818,8 +809,7 @@ describe("runtime guard — invoke-undeclared-child", () => {
       transitions: {
         p: {
           s: {
-            go: () =>
-              invoke({ handle: childHandle, input: undefined, resume: "after" }) as never,
+            go: () => invoke({ handle: childHandle, input: undefined, resume: "after" }) as never,
           },
         },
       },
@@ -851,9 +841,7 @@ describe("runtime guard — invoke-undeclared-child", () => {
 // ---------------------------------------------------------------------------
 
 describe("runtime guard — resume-bounce-limit", () => {
-  function buildBouncingPair(opts: {
-    readonly bounceCap: number;
-  }) {
+  function buildBouncingPair(opts: { readonly bounceCap: number }) {
     const childExits = { done: defineExit() } as const;
     const childMod = defineModule({
       id: "child-mod",
@@ -999,12 +987,10 @@ describe("runtime guard — resume-bounce-limit", () => {
       transitions: {
         p: {
           s1: {
-            go: () =>
-              invoke({ handle: childHandle, input: undefined, resume: "after1" }) as never,
+            go: () => invoke({ handle: childHandle, input: undefined, resume: "after1" }) as never,
           },
           s2: {
-            go: () =>
-              invoke({ handle: childHandle, input: undefined, resume: "after2" }) as never,
+            go: () => invoke({ handle: childHandle, input: undefined, resume: "after2" }) as never,
           },
         },
       },
@@ -1063,9 +1049,7 @@ describe("runtime guard — resume-bounce-limit", () => {
 
     const parentRecord = rt.getInstance(parentId)!;
     expect(parentRecord.status).toBe("aborted");
-    expect((parentRecord.terminalPayload as { reason: string }).reason).toBe(
-      "resume-bounce-limit",
-    );
+    expect((parentRecord.terminalPayload as { reason: string }).reason).toBe("resume-bounce-limit");
   });
 
   it("persists the bounce counter across serialize/hydrate so reload cannot reset the budget", () => {
@@ -1111,9 +1095,9 @@ describe("runtime guard — resume-bounce-limit", () => {
     harness2.fireExit(newChildId, "done"); // bounce 3 — over cap
 
     expect(rt2.getInstance(newParentId)!.status).toBe("aborted");
-    expect(
-      (rt2.getInstance(newParentId)!.terminalPayload as { reason: string }).reason,
-    ).toBe("resume-bounce-limit");
+    expect((rt2.getInstance(newParentId)!.terminalPayload as { reason: string }).reason).toBe(
+      "resume-bounce-limit",
+    );
   });
 });
 
@@ -1170,8 +1154,7 @@ describe("runtime guard — invokes:[] (empty set)", () => {
       transitions: {
         p: {
           s: {
-            go: () =>
-              invoke({ handle: childHandle, input: undefined, resume: "after" }) as never,
+            go: () => invoke({ handle: childHandle, input: undefined, resume: "after" }) as never,
           },
         },
       },
@@ -1269,8 +1252,7 @@ describe("runtime guard — invoke-cycle (3+ level chain)", () => {
       transitions: {
         "b-mod": {
           s: {
-            go: () =>
-              invoke({ handle: cHandle, input: undefined, resume: "afterC" }) as never,
+            go: () => invoke({ handle: cHandle, input: undefined, resume: "afterC" }) as never,
           },
         },
       },
@@ -1289,8 +1271,7 @@ describe("runtime guard — invoke-cycle (3+ level chain)", () => {
       transitions: {
         "a-mod": {
           s: {
-            go: () =>
-              invoke({ handle: bHandle, input: undefined, resume: "afterB" }) as never,
+            go: () => invoke({ handle: bHandle, input: undefined, resume: "afterB" }) as never,
           },
         },
       },
@@ -1381,8 +1362,7 @@ describe("runtime guard — invoke-cycle (3+ level chain)", () => {
       transitions: {
         "c-mod": {
           s: {
-            go: () =>
-              invoke({ handle: dHandle, input: undefined, resume: "afterD" }) as never,
+            go: () => invoke({ handle: dHandle, input: undefined, resume: "afterD" }) as never,
           },
         },
       },
@@ -1401,8 +1381,7 @@ describe("runtime guard — invoke-cycle (3+ level chain)", () => {
       transitions: {
         "b-mod": {
           s: {
-            go: () =>
-              invoke({ handle: cHandle, input: undefined, resume: "afterC" }) as never,
+            go: () => invoke({ handle: cHandle, input: undefined, resume: "afterC" }) as never,
           },
         },
       },
@@ -1421,8 +1400,7 @@ describe("runtime guard — invoke-cycle (3+ level chain)", () => {
       transitions: {
         "a-mod": {
           s: {
-            go: () =>
-              invoke({ handle: bHandle, input: undefined, resume: "afterB" }) as never,
+            go: () => invoke({ handle: bHandle, input: undefined, resume: "afterB" }) as never,
           },
         },
       },
@@ -1566,7 +1544,7 @@ describe("runtime guard — bounce-limit propagation through a multi-level chain
             afterLeaf: ({ outcome }) =>
               outcome.status === "aborted"
                 ? { abort: { reason: "leaf-aborted", cause: outcome.reason } }
-                : ({ complete: undefined as never }),
+                : { complete: undefined as never },
           },
         },
       },
@@ -1605,7 +1583,7 @@ describe("runtime guard — bounce-limit propagation through a multi-level chain
             afterMiddle: ({ outcome }) =>
               outcome.status === "aborted"
                 ? { abort: { reason: "middle-aborted", cause: outcome.reason } }
-                : ({ complete: undefined as never }),
+                : { complete: undefined as never },
           },
         },
       },
@@ -1654,31 +1632,25 @@ describe("runtime guard — bounce-limit propagation through a multi-level chain
 
     const leafInst = rt.getInstance(leafId)!;
     expect(leafInst.status).toBe("aborted");
-    expect((leafInst.terminalPayload as { reason: string }).reason).toBe(
-      "resume-bounce-limit",
-    );
+    expect((leafInst.terminalPayload as { reason: string }).reason).toBe("resume-bounce-limit");
 
     // Middle's resume saw the aborted outcome and propagated.
     const middleInst = rt.getInstance(middleId)!;
     expect(middleInst.status).toBe("aborted");
-    expect((middleInst.terminalPayload as { reason: string }).reason).toBe(
-      "leaf-aborted",
-    );
+    expect((middleInst.terminalPayload as { reason: string }).reason).toBe("leaf-aborted");
 
     // Outer's resume saw middle's abort and propagated again.
     const outerInst = rt.getInstance(outerId)!;
     expect(outerInst.status).toBe("aborted");
-    expect((outerInst.terminalPayload as { reason: string }).reason).toBe(
-      "middle-aborted",
-    );
+    expect((outerInst.terminalPayload as { reason: string }).reason).toBe("middle-aborted");
 
     // The leaf's terminal payload (a system abort) is reachable from the
     // outer's abort cause via the cascade — verifying typed narrowing
     // through the new isJourneySystemAbort predicate would require also
     // exercising the predicate, but the structural assertion is enough
     // for the propagation path.
-    const outerCause = (outerInst.terminalPayload as { cause: { cause: { reason: string } } })
-      .cause.cause;
+    const outerCause = (outerInst.terminalPayload as { cause: { cause: { reason: string } } }).cause
+      .cause;
     expect(outerCause.reason).toBe("resume-bounce-limit");
   });
 });
@@ -1734,8 +1706,7 @@ describe("runtime guard — depth cap resolved across multiple overrides", () =>
       transitions: {
         "b-mod": {
           s: {
-            go: () =>
-              invoke({ handle: cHandle, input: undefined, resume: "afterC" }) as never,
+            go: () => invoke({ handle: cHandle, input: undefined, resume: "afterC" }) as never,
           },
         },
       },
@@ -1755,8 +1726,7 @@ describe("runtime guard — depth cap resolved across multiple overrides", () =>
       transitions: {
         "a-mod": {
           s: {
-            go: () =>
-              invoke({ handle: bHandle, input: undefined, resume: "afterB" }) as never,
+            go: () => invoke({ handle: bHandle, input: undefined, resume: "afterB" }) as never,
           },
         },
       },
@@ -1838,8 +1808,7 @@ describe("runtime guard — depth cap resolved across multiple overrides", () =>
       transitions: {
         p: {
           s: {
-            go: () =>
-              invoke({ handle: childHandle, input: undefined, resume: "after" }) as never,
+            go: () => invoke({ handle: childHandle, input: undefined, resume: "after" }) as never,
           },
         },
       },
@@ -1901,8 +1870,7 @@ describe("isJourneySystemAbort predicate", () => {
       transitions: {
         p: {
           s: {
-            go: () =>
-              invoke({ handle: childHandle, input: undefined, resume: "after" }) as never,
+            go: () => invoke({ handle: childHandle, input: undefined, resume: "after" }) as never,
           },
         },
       },

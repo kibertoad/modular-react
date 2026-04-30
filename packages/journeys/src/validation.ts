@@ -296,10 +296,7 @@ function canonicalizeCycle(nodes: readonly string[]): string {
   for (let i = 1; i < nodes.length; i++) {
     if (nodes[i] < nodes[pivot]) pivot = i;
   }
-  return nodes
-    .slice(pivot)
-    .concat(nodes.slice(0, pivot))
-    .join("→");
+  return nodes.slice(pivot).concat(nodes.slice(0, pivot)).join("→");
 }
 
 function quote(id: string): string {

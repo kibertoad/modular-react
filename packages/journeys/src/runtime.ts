@@ -753,9 +753,7 @@ export function createJourneyRuntime(
         fireOnError(
           parentReg,
           parent,
-          new Error(
-            `Child journey "${childJourneyId}" is not in "${parent.journeyId}".invokes[]`,
-          ),
+          new Error(`Child journey "${childJourneyId}" is not in "${parent.journeyId}".invokes[]`),
           parentStep,
           "invoke",
         );
@@ -1166,8 +1164,7 @@ export function createJourneyRuntime(
       if (eventExtras?.kind === "resume") {
         const bounceCap = resolveBounceCap(reg);
         const prior = record.resumeBouncesAtStep;
-        const nextCount =
-          prior && prior.stepToken === record.stepToken ? prior.count + 1 : 1;
+        const nextCount = prior && prior.stepToken === record.stepToken ? prior.count + 1 : 1;
         if (nextCount > bounceCap) {
           if (debug) {
             console.error(
