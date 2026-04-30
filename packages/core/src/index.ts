@@ -111,5 +111,14 @@ export type {
   TerminalOutcome,
   JourneyRuntime,
   JourneyHandleRef,
+  ChildOutcome,
+  InvokeSpec,
+  ResumeHandler,
+  ResumeMap,
+  PendingInvoke,
+  ParentLink,
+  ResumeBounceCounter,
+  JourneySystemAbortReason,
+  JourneySystemAbortReasonCode,
 } from "./journey-contracts.js";
-export { isTerminal } from "./journey-contracts.js";
+export { isTerminal, isJourneySystemAbort } from "./journey-contracts.js";

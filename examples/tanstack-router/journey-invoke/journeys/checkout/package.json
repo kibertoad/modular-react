@@ -1,0 +1,26 @@
+{
+  "name": "@example-tsr-invoke/checkout-journey",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@example-tsr-invoke/app-shared": "workspace:*",
+    "@example-tsr-invoke/checkout-confirm-module": "workspace:*",
+    "@example-tsr-invoke/checkout-review-module": "workspace:*",
+    "@example-tsr-invoke/verify-identity-journey": "workspace:*",
+    "@modular-react/journeys": "^0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}

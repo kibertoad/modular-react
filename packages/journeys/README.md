@@ -24,6 +24,8 @@ Routes, slots, navigation, workspaces - none of that changes. Journeys sit **on 
 - [Core concepts](#core-concepts) - entries, exits, `allowBack`, lifecycle, statuses, keys
 - [Authoring patterns](#authoring-patterns) - module entries, exits, loading flows, `goBack` opt-in
 - [Journey definition patterns](#journey-definition-patterns) - branching, `selectModule` dispatch, terminals, state rewrites, bounded history
+- [Composing journeys (invoke / resume)](#composing-journeys-invoke--resume) - call out to a child journey mid-flow and resume on its outcome
+  - [Cycle and recursion safety](#cycle-and-recursion-safety) - cycle / depth / undeclared-child / bounce-limit guards and how to tune them
 - [Runtime surface](#runtime-surface) - the `JourneyRuntime` you get back from `manifest.journeys`
 - [Journey handles](#journey-handles) - typed tokens for `runtime.start(handle, input)`
 - [`JourneyProvider` + context](#journeyprovider--context)
@@ -98,7 +100,7 @@ export const profileExits = {
   profileComplete: defineExit<{ customerId: string; hint: PlanHint }>(),
   readyToBuy: defineExit<{ customerId: string; amount: number }>(),
   needsMoreDetails: defineExit<{ customerId: string; missing: string }>(),
-  cancelled: defineExit(),         // no output payload
+  cancelled: defineExit(), // no output payload
 } as const;
 export type ProfileExits = typeof profileExits;
 ```
@@ -160,15 +162,15 @@ import { profileExits } from "./exits.js";
 import { ReviewProfile } from "./ReviewProfile.js";
 
 export default defineModule({
-  id: "profile",                    // module id - referenced by journeys as `module: "profile"`
+  id: "profile", // module id - referenced by journeys as `module: "profile"`
   version: "1.0.0",
-  exitPoints: profileExits,         // the full exit vocabulary shared by every entry on this module
+  exitPoints: profileExits, // the full exit vocabulary shared by every entry on this module
   entryPoints: {
     // Each key here is an *entry name* - a typed way to open this module.
     // Journeys reference it as `entry: "review"`.
     review: defineEntry({
       component: ReviewProfile,
-      input: schema<{ customerId: string }>(),   // `input` shape passed when the entry is opened
+      input: schema<{ customerId: string }>(), // `input` shape passed when the entry is opened
     }),
   },
 });
@@ -213,8 +215,10 @@ export const customerOnboardingJourney = defineJourney<Modules, OnboardingState>
   // Each leaf is a pure function returning the next step, a state rewrite,
   // a `complete`, or an `abort`.
   transitions: {
-    profile: {           // module id - matches the `profile` key in `Modules` above
-      review: {          // entry name on the `profile` module - see `entryPoints.review` in modules/profile/src/index.ts
+    profile: {
+      // module id - matches the `profile` key in `Modules` above
+      review: {
+        // entry name on the `profile` module - see `entryPoints.review` in modules/profile/src/index.ts
         // Exit names below are the keys of `profileExits` declared in modules/profile/src/exits.ts.
         profileComplete: ({ output, state }) => ({
           state: { ...state, hint: output.hint },
@@ -712,6 +716,331 @@ registry.registerJourney(journey, { maxHistory: 50 });
 Caveat: a cap smaller than the deepest reachable back-chain silently breaks `goBack` past the trim point (the rollback snapshot `goBack` would restore is among the dropped entries). Size it to at least the longest user-reachable back chain, or treat it as a hard "no-one will navigate back this far" window.
 
 Omitting `maxHistory`, or passing `0` or a negative number, leaves history unbounded.
+
+## Composing journeys (invoke / resume)
+
+Sometimes mid-flow you need to detour into a _different_ journey — e.g. inside checkout the customer needs to verify identity, or inside an integration setup the user needs to add a new credential. The parent journey suspends, the child runs to a terminal, the parent picks up where it left off with the child's terminal payload in hand, and continues. Modular-react models this as a **subroutine**: one new transition primitive (`invoke`) plus a **named resume** handler that fires when the child terminates.
+
+The model is deliberately narrow: a parent can have at most one in-flight child per step, the parent's step doesn't change while the child runs, the parent advances only via the resume, and end-ing the parent cascades to the child. If you genuinely need parallel sub-flows (rare), call `runtime.start()` directly and own the bookkeeping — that path remains available.
+
+### The shape
+
+A transition handler returns an `{ invoke: { handle, input, resume } }` arm instead of `{ next | complete | abort }`. Build it with the typed `invoke()` helper — a bare object literal **does not** cross-check `input` against the handle's `TInput` (the discriminated-union arm declares `InvokeSpec<unknown, unknown>` so the runtime can dispatch on any handle). The parent's journey definition declares a sibling `resumes` map mirroring `transitions`:
+
+```ts
+import { defineJourney, defineJourneyHandle, invoke } from "@modular-react/journeys";
+import { verifyIdentityHandle } from "verify-identity-journey";
+//        ^ exported from the child's package via defineJourneyHandle.
+
+defineJourney<CheckoutModules, CheckoutState, { token: string }>()({
+  id: "checkout",
+  version: "1.0.0",
+  initialState: (input: { orderId: string }) => ({ orderId: input.orderId, token: null }),
+  start: (s) => ({ module: "checkout", entry: "review", input: { orderId: s.orderId } }),
+  transitions: {
+    checkout: {
+      review: {
+        // Exit handler dispatches an invoke instead of next. `invoke()`
+        // threads the handle's TInput / TOutput through to `input` and
+        // the resume so a wrong-shaped `input` is a compile error.
+        requestPayment: ({ state }) =>
+          invoke({
+            handle: verifyIdentityHandle, // typed handle, see "Journey handles"
+            input: { customerId: state.customerId },
+            resume: "afterIdentity", // names the resume below
+          }),
+      },
+    },
+  },
+  resumes: {
+    checkout: {
+      review: {
+        // outcome is ChildOutcome<TVerifyOutput> — completed has a typed
+        // payload; aborted carries reason. Both are surfaced; you decide.
+        afterIdentity: ({ state, outcome }) =>
+          outcome.status === "completed"
+            ? {
+                state: { ...state, token: outcome.payload.token },
+                next: {
+                  module: "billing",
+                  entry: "collect",
+                  input: { orderId: state.orderId, token: outcome.payload.token },
+                },
+              }
+            : { abort: { reason: "identity-failed", cause: outcome.reason } },
+      },
+    },
+  },
+});
+```
+
+The child journey is a totally normal `defineJourney` — it doesn't know it's being invoked. It declares its `TInput` (input from the parent) and its `TOutput` (the third generic on `defineJourney<TModules, TState, TOutput>()`, narrowing the type of `complete` payloads). Its handle, exported via `defineJourneyHandle(childJourney)`, carries both as phantom types so `invoke()` checks `input` and the parent's resume sees `outcome.payload` typed end-to-end.
+
+### Why named resumes (and not closures)
+
+You might expect `invoke` to take a `resume: (ctx) => ...` closure. We deliberately don't — closures don't survive a persistence reload. Naming the resume keeps everything serializable: the parent's blob records `pendingInvoke.resumeName`, the runtime looks up `def.resumes[mod][entry][name]` on hydrate, and the call chain restores exactly. See the persistence section below for the round-trip details.
+
+Resume names live in their own keyspace from exit names — the lookup tables are siblings, not the same map. **One authoring rule, enforced at registration time:** a resume name must not collide with any exit name on the **same module** (not the same entry — the broader scope catches the typical "I meant a transition handler, not a resume" mistake). `validateJourneyContracts` rejects the registration with an explicit message naming the offender, so a typo at authoring time fails loudly instead of becoming a silent `invoke-unknown-resume` later.
+
+### Lifecycle and edge cases
+
+| Situation                                                                             | Behavior                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Child completes                                                                       | Parent's named resume fires with `{ status: "completed", payload }` (typed).                                                                                                                                                                                                          |
+| Child aborts (its own `{ abort }` or `runtime.end`)                                   | Parent's named resume fires with `{ status: "aborted", reason }`. Author decides whether to recover or propagate.                                                                                                                                                                     |
+| Parent ended while child active                                                       | Cascade — link is severed first, then the child is ended with terminal payload `{ reason: "parent-ended", parentId, cause: <end-reason> }`, then the parent runs its own `onAbandon` and aborts independently. The resume does **not** fire (the link was nulled before the cascade). |
+| Child invokes a grandchild                                                            | Same machinery; the resume bubbles up the chain. The runtime maintains parent links and a reverse map; nothing special.                                                                                                                                                               |
+| Parent fires an exit while child is in flight                                         | Dropped with a debug warn — the parent advances only via resume.                                                                                                                                                                                                                      |
+| Invoke names an unknown journey id                                                    | Parent aborts immediately with reason `invoke-unknown-journey`. `onError` fires with `phase: "invoke"`.                                                                                                                                                                               |
+| Invoke names a resume that isn't declared on the current step                         | Parent aborts with reason `invoke-unknown-resume`. `onError` fires with `phase: "invoke"`.                                                                                                                                                                                            |
+| Resume name vanished between invoke and child terminal (definition upgraded mid-flow) | Parent aborts with reason `resume-missing` (carrying `resume` and `childJourneyId`). `onError` fires with `phase: "resume"`.                                                                                                                                                          |
+| Resume handler throws                                                                 | Parent aborts with reason `resume-threw`, `error` carries the throw. `onError` fires with `phase: "resume"`.                                                                                                                                                                          |
+| Resume handler returns a Promise                                                      | Parent aborts with reason `resume-returned-promise`. Resumes must be sync and pure, like exit handlers.                                                                                                                                                                               |
+| Hydrate: child blob missing on reload                                                 | Parent stays `active` with `activeChildId` set; exits remain blocked. The shell decides whether to load the child later or `runtime.end` the parent to give up.                                                                                                                       |
+
+### Outlet behavior
+
+`<JourneyOutlet>` walks the active call chain by default and renders the _leaf_. If the parent has invoked a child, the parent's component disappears and the child's component takes over the same outlet — matching the subroutine intuition. The chain re-renders when any link changes.
+
+For a layered presentation (parent visible underneath, child in a modal), pass `leafOnly={false}` on the outer outlet to keep it on the parent's step, and mount a sibling outlet against `instance.activeChildId` (or use `useJourneyCallStack`) for the child:
+
+```tsx
+import { JourneyOutlet, useJourneyCallStack } from "@modular-react/journeys";
+
+function CheckoutPanel({ instanceId }: { instanceId: InstanceId }) {
+  const chain = useJourneyCallStack(runtime, instanceId);
+  // `chain[length - 1]` is the active *leaf*. For shallow nesting that's
+  // the immediate child; for parent → child → grandchild the modal will
+  // surface the grandchild instead. Use `instance.activeChildId` directly
+  // if you specifically want the immediate child.
+  const leafId = chain.length > 1 ? chain[chain.length - 1] : null;
+  return (
+    <>
+      <JourneyOutlet runtime={runtime} instanceId={instanceId} leafOnly={false} />
+      {leafId ? (
+        <Modal>
+          <JourneyOutlet runtime={runtime} instanceId={leafId} />
+        </Modal>
+      ) : null}
+    </>
+  );
+}
+```
+
+`onFinished` on a `<JourneyOutlet>` fires for the **root** instance only — it's the journey the caller mounted. Child terminations are observed via the parent's resume handler, not the outer outlet.
+
+### Persistence (round-tripping invoke state)
+
+When a parent has an in-flight child, `serialize()` emits `pendingInvoke` on the parent and `parentLink` on the child:
+
+```jsonc
+// parent blob
+{
+  // ...standard fields
+  "pendingInvoke": {
+    "childJourneyId": "verify-identity",
+    "childInstanceId": "ji_abc",
+    "childPersistenceKey": "verify-identity:cust-42",
+    "resumeName": "afterIdentity"
+  }
+}
+
+// child blob
+{
+  // ...standard fields
+  "parentLink": { "parentInstanceId": "ji_xyz", "resumeName": "afterIdentity" }
+}
+```
+
+`childPersistenceKey` is `string | null` — it's `null` when the child journey has no persistence adapter configured. The parent still tracks `childInstanceId` in memory, but on a process restart the child can't be reloaded from storage and the parent will land in the "child blob missing" state described in the lifecycle table.
+
+**Auto-rehydrate.** Calling `runtime.start(parentHandle, input)` on a fresh runtime against the same persistence backing will pull the parent blob, see the `pendingInvoke.childPersistenceKey`, and load the child blob automatically — recursing into grandchildren if the child blob carries its own `pendingInvoke`. Shells only need to `start()` the root; the leaf comes back along with its parents.
+
+After every hydrate path (sync start, async start, explicit `runtime.hydrate`), the runtime relinks every in-memory pair via the `parent` / `activeChildId` fields. Order doesn't matter — hydrate the parent first, then the child, or vice versa; the link reconciles either way. A parent whose `activeChildId` references a not-yet-loaded child stays `active` (exits blocked) until the child arrives.
+
+If the child's blob is gone for good (TTL expired, manual remove, or no persistence configured on the child), the shell decides recovery: keep the parent suspended, or `runtime.end(parent)` to give up. The runtime does not auto-abort, because that would race with multi-step hydrates that legitimately load the parent first.
+
+### Telemetry: `TransitionEvent.kind`
+
+Every event a registered `onTransition` hook receives now carries a `kind` discriminator:
+
+```ts
+onTransition: (ev) => {
+  if (ev.kind === "step") metrics.record("journey.hop", { id: ev.journeyId });
+  if (ev.kind === "invoke")
+    metrics.record("journey.invoke", { id: ev.journeyId, child: ev.child?.journeyId });
+  if (ev.kind === "resume")
+    metrics.record("journey.resume", { id: ev.journeyId, resume: ev.resume });
+};
+```
+
+A consumer that only cares about top-level steps filters `kind === "step"`. Otherwise read `ev.child` on invokes and `ev.outcome` / `ev.resume` on resumes.
+
+### Testing
+
+The simulator drives both modes:
+
+```ts
+import { simulateJourney } from "@modular-react/journeys";
+
+// Drive a real child sub-simulator end-to-end:
+const sim = simulateJourney(
+  parentJourney,
+  { orderId: "O-1" },
+  {
+    children: [verifyIdentityJourney],
+  },
+);
+sim.fireExit("requestPayment");
+sim.activeChild!.fireExit("verified", { token: "T" }); // child runs to terminal
+expect(sim.currentStep.entry).toBe("collect"); // parent has resumed
+
+// Or mock the child's outcome to unit-test the parent's resume in isolation:
+const sim2 = simulateJourney(
+  parentJourney,
+  { orderId: "O-2" },
+  {
+    children: [verifyIdentityJourney],
+  },
+);
+sim2.fireExit("requestPayment");
+sim2.completeChild({ token: "T-MOCK" }); // synthesize completed
+expect(sim2.state.token).toBe("T-MOCK");
+
+sim2.abortChild({ code: "denied" }); // synthesize aborted — reason reaches the resume as-is, no wrap
+```
+
+`completeChild` uses the runtime's standard transition machinery — `onComplete`, `onTransition`, persistence, and the parent's resume hook all fire as they would for a real `{ complete }`.
+
+### What this is _not_
+
+- **Not shared state.** Each journey owns its `TState`; communication is exclusively via `input` (down) and `outcome.payload` (up). Preserves the mental-model boundary.
+- **Not concurrent spawn.** A parent has at most one active invocation. If you need parallel children, call `runtime.start()` directly and store ids in state — but you give up the typed resume linking, the persisted `pendingInvoke` / `parentLink` round-trip, the `activeChildId` chain that `<JourneyOutlet>` walks, and the cascade-end semantics. Everything becomes shell-managed.
+- **Not back-navigation across the boundary.** `goBack` stays scoped to a journey's own history. To return from a child without completing, fire an exit that maps to `{ abort }`; the parent's resume handler decides what to do.
+
+### Cycle and recursion safety
+
+Composing journeys creates a _call graph_ — A invokes B, which invokes C, possibly back into A. Without guards, a cycle becomes either an infinite chain that exhausts memory or a same-step bouncing resume that pegs the CPU. Modular-react ships **four layered guards**, three at runtime (always on) plus an opt-in static check at registration time. Every guard surfaces through the existing `onError` channel with `phase: "invoke"` (or `"resume"`) and aborts the offending parent with a discoverable reason — same vocabulary as the other validation aborts.
+
+| Guard                       | When it fires                                                                                                                                                                                                                            | Abort reason              | Default                              |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | ------------------------------------ |
+| **Static cycle detection**  | Registration time, when every journey on the cycle path declares its `invokes` set. Throws `JourneyValidationError` listing the cycle path (e.g. `cycle detected: "A" → "B" → "A"`).                                                     | (registration error)      | always on when `invokes` is declared |
+| **invoke-undeclared-child** | Runtime invoke time, when the parent journey declared an `invokes` array but the dispatched handle id is not in it. Catches dynamic-dispatch typos.                                                                                      | `invoke-undeclared-child` | always on when `invokes` is declared |
+| **invoke-cycle**            | Runtime invoke time, when the target journey id already appears on the active parent chain. Catches cycles that the static check missed (because some journey on the cycle omitted `invokes`).                                           | `invoke-cycle`            | always on                            |
+| **invoke-stack-overflow**   | Runtime invoke time, when admitting the new child would push the chain depth past the resolved cap. The cap is the **minimum** of every non-undefined `maxCallStackDepth` across the active chain (ancestors + parent + would-be child). | `invoke-stack-overflow`   | `maxCallStackDepth: 16`              |
+| **resume-bounce-limit**     | Runtime resume time, when a resume returns `{ invoke }` for the Nth consecutive time at the _same parent step_ (the counter resets when the parent's step actually advances).                                                            | `resume-bounce-limit`     | `maxResumeBouncesPerStep: 8`         |
+
+#### Declaring the call set (`invokes`)
+
+The strongest line of defense is opt-in: list every child handle the journey can dispatch to.
+
+```ts
+import { defineJourney, defineJourneyHandle, invoke } from "@modular-react/journeys";
+import { verifyIdentityHandle } from "verify-identity-journey";
+import { addPaymentMethodHandle } from "add-payment-method-journey";
+
+defineJourney<CheckoutModules, CheckoutState>()({
+  id: "checkout",
+  version: "1.0.0",
+  // Closed set — the runtime rejects any other handle at invoke time, and
+  // the registry runs cycle detection across the declared graph at boot.
+  invokes: [verifyIdentityHandle, addPaymentMethodHandle],
+  // ...transitions / resumes that may dispatch invoke() to either handle.
+});
+```
+
+When **every** journey in a registration declares `invokes`, the registry's `validateJourneyContracts` (which calls `validateJourneyGraph` internally before its own structural checks) builds the full directed graph and rejects the whole registration on a cycle:
+
+```
+JourneyValidationError: Invalid journey registration:
+  - journey invoke cycle detected: "checkout" → "verify-identity" → "checkout"
+```
+
+The cycle check is **already part of the standard registry validation pipeline** — you do not need to opt in. Authors who want to run the graph check by hand (e.g. while composing registrations across plugin boundaries before handing them to the registry) can call `validateJourneyGraph(journeys)` directly; both functions throw `JourneyValidationError` with the same per-cycle message format.
+
+When some journeys omit `invokes`, the static check is incomplete (their out-edges are unknown), so the runtime guards remain the safety net. There is no penalty for omitting `invokes`; it's purely a confidence dial.
+
+#### Tuning `maxCallStackDepth`
+
+Set on the journey's registration options. Any journey in the chain can lower the cap; none can raise it. Setting it to `1` blocks `invoke` from this journey outright (useful for "leaf" journeys that should never spawn children).
+
+```ts
+registry.registerJourney(checkoutJourney, {
+  maxCallStackDepth: 4, // checkout is happy to host up to 3 nested children
+  persistence: ...,
+});
+```
+
+The resolved cap on each `invoke` is `min(non-undefined options across [ancestors..., parent, child])`, falling back to `16`. The strictest journey in the chain wins, which means a cautious utility journey can lower the cap for any composition that includes it without coordinating with the other journeys.
+
+`0`, negative, or non-finite values are treated as "no opinion" (consistent with `maxHistory`) so a misconfigured `0` cannot silently disable the guard.
+
+#### Tuning `maxResumeBouncesPerStep`
+
+A "bounce" is a resume that returns `{ invoke }` instead of advancing the parent's step. Counted per-parent, scoped to the parent's current step (not the parent's instance) — so a flow that legitimately retries a sub-flow several times in a row is fine, as long as the parent eventually advances. The counter resets whenever the parent's step actually changes (`{ next | complete | abort }` from any source).
+
+```ts
+registry.registerJourney(checkoutJourney, {
+  maxResumeBouncesPerStep: 3, // verify, fail, retry, fail, retry → abort
+});
+```
+
+The bounce cap is per-parent — only the parent's own option governs (children don't see the parent's resumes and have no business voting). The counter is **persisted on the parent's blob** as `resumeBouncesAtStep`, so a hostile or accidental reload-bounce-reload-bounce sequence cannot reset the budget through storage. `0`, negative, or non-finite values fall through to the library default of `8`.
+
+#### Failure surface
+
+All four guards abort the offending parent with a structured `terminalPayload` that's safe to log. The shapes:
+
+```ts
+// invoke-undeclared-child
+{ reason: "invoke-undeclared-child", parentJourneyId: "...", childJourneyId: "...", exit: "..." }
+
+// invoke-cycle (chain mirrors the printed warning — cycle portion only,
+// pre-cycle prefix dropped, duplicate target id appears at both ends)
+{ reason: "invoke-cycle", childJourneyId: "B", chain: ["B", "C", "D", "B"], exit: "..." }
+
+// invoke-stack-overflow (chain is the full ancestors → parent → child)
+{ reason: "invoke-stack-overflow", depth: 17, cap: 16, chain: ["a", "b", ..., "p"], exit: "..." }
+
+// resume-bounce-limit
+{ reason: "resume-bounce-limit", cap: 8, count: 9, resume: "afterChild" }
+```
+
+Each one fires the registration's `onError` first (with `phase: "invoke"` for the first three, `phase: "resume"` for the last), so telemetry still observes the underlying control-plane failure even when the abort itself is what reaches the user.
+
+**Typed narrowing.** The four guards above plus every other runtime-emitted abort (`invoke-unknown-journey`, `invoke-unknown-resume`, `resume-missing`, `resume-threw`, `transition-error`, …) share a single discriminated union, `JourneySystemAbortReason`. Pair it with the `isJourneySystemAbort` predicate to narrow against author-supplied aborts (`{ abort: "user-cancelled" }`, `{ abort: { reason: "user-thing" } }`, etc.), which the predicate excludes by checking the `reason` against the closed set of system codes:
+
+```ts
+import { isJourneySystemAbort } from "@modular-react/journeys";
+
+resumes: {
+  checkout: {
+    review: {
+      afterIdentity: ({ outcome }) => {
+        if (outcome.status !== "aborted") return /* ... */;
+        if (isJourneySystemAbort(outcome.reason)) {
+          // outcome.reason is now the discriminated union — switch on `reason`
+          // for typed access to per-arm fields:
+          switch (outcome.reason.reason) {
+            case "invoke-cycle":
+              metrics.record("invoke_cycle", { chain: outcome.reason.chain });
+              break;
+            case "resume-bounce-limit":
+              metrics.record("bounce_limit", { cap: outcome.reason.cap });
+              break;
+          }
+        } else {
+          // author-supplied abort (e.g. `{ abort: { code: "denied" } }`) —
+          // narrow as you would any other unknown payload.
+        }
+        return { abort: outcome.reason };
+      },
+    },
+  },
+},
+```
+
+The `JourneySystemAbortReasonCode` literal-string union is also exported if you only need the code list (e.g. for a `Set` membership check or a switch over an external classification).
 
 ## Runtime surface
 
@@ -1223,6 +1552,8 @@ defineJourney<…>()({
 
 Registration options can supply an extra `onTransition` that fires after the definition's - handy when the shell wants host-level analytics without coupling it into the journey module.
 
+Every `TransitionEvent` carries a `kind: "step" | "invoke" | "resume"` discriminator plus optional `child` / `outcome` / `resume` fields. Hooks that only care about top-level steps should filter on `kind === "step"`; consumers that want the full picture read the extra fields. See [Telemetry: `TransitionEvent.kind`](#telemetry-transitioneventkind) for the full breakdown. The registration-level `onError` carries a `phase: "step" | "invoke" | "resume" | "abandon"` discriminator on its `ctx` so a control-plane failure (a thrown resume, an unknown invoke handle) is distinguishable from a step-component throw.
+
 ## Testing
 
 ### Module-level - `renderModule({ entry, exit })`
@@ -1473,6 +1804,7 @@ For a fully-headless trace, drive a scenario through `simulateJourney` and inspe
 - **Hydrate blob whose `rollbackSnapshots` length disagrees with `history`** - rejected with `JourneyHydrationError`. Use `onHydrate` to migrate or pad the blob.
 - **Duplicate `instanceId` on hydrate** - `runtime.hydrate()` throws if an instance with that id is already live. Call `forget(id)` first if the replace-in-place is intentional.
 - **Circular transitions** - allowed; `history` grows. Long-running journeys should use `maxHistory` or be designed to terminate.
+- **Circular invocations across journeys** - guarded. The four-layer safety net (static cycle check + runtime same-id, depth-cap, and resume-bounce-cap) aborts the offending parent with `invoke-cycle`, `invoke-stack-overflow`, `invoke-undeclared-child`, or `resume-bounce-limit` — see [Cycle and recursion safety](#cycle-and-recursion-safety) for tuning the caps and declaring the call set up-front.
 - **Deep mutation of journey state corrupts rollback snapshots** - snapshots are **shallow clones**, so a mutation that reaches into nested objects updates the snapshot too. Treat state as immutable; produce new objects rather than mutating in place. In development the runtime shallow-freezes each captured snapshot, so a top-level mutation throws immediately - deep mutations still slip through.
 - **Runtime input validation is not built in** - `schema<T>()` is type-only and gives you compile-time checking on entry inputs. The runtime does not validate at the boundary. If `start()` / `hydrate()` inputs come from untrusted sources (URL params, server payloads), wire `zod` / `valibot` / your validator of choice in front of them.
 
@@ -1481,7 +1813,6 @@ For a fully-headless trace, drive a scenario through `simulateJourney` and inspe
 Things that aren't implemented today but may land later - these are gaps, not architectural choices.
 
 - **No URL reflection of journey state.** Journeys are route-agnostic by design. Deep-linking into a mid-journey step is currently an app-level concern (read URL → `runtime.hydrate` → mount outlet).
-- **No sub-journeys.** Branches only - a transition can choose between two next steps, but it can't compose another whole journey as a subroutine.
 
 Cross-references for things that are sometimes mistaken for limitations:
 
@@ -1504,9 +1835,16 @@ export const journey = defineJourney<MyModules, MyState>()({
   }),
   // ^^^^^ TInput is inferred from `initialState`'s parameter
 });
+
+// Add TOutput as the third generic to narrow `complete` payloads (and the
+// type a parent's resume sees on `outcome.payload` when this journey is
+// invoked):
+export const childJourney = defineJourney<ChildModules, ChildState, { token: string }>()({
+  /* …complete: { token: ... } is type-checked against { token: string } */
+});
 ```
 
-`TModules` and `TState` are supplied explicitly; `TInput` is inferred from `initialState` so you don't repeat the shape. If you ever need to constrain `TInput` explicitly (e.g. for a shared starter-input type), annotate the `initialState` parameter.
+`TModules` and `TState` are supplied explicitly; the optional third generic `TOutput` narrows the journey's terminal payload (defaults to `unknown`); `TInput` is inferred from `initialState` so you don't repeat the shape. If you ever need to constrain `TInput` explicitly (e.g. for a shared starter-input type), annotate the `initialState` parameter.
 
 ### The module type map is per-journey, not global
 
@@ -1564,24 +1902,28 @@ Every export you're likely to call, grouped by role.
 
 ### Authoring (`@modular-react/journeys`)
 
-| Export                        | Signature                                                                                   | Purpose                                                                                                                                                                                                                                  |
-| ----------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `defineJourney`               | `<TModules, TState>() => <TInput>(def: JourneyDefinition<TModules, TState, TInput>) => def` | Identity helper with full inference on transitions and state. Curried so `TInput` infers from `initialState`.                                                                                                                            |
-| `defineJourneyHandle`         | `<TModules, TState, TInput>(def) => JourneyHandle<string, TInput>`                          | Builds a typed token from a journey definition so modules and shells can call `runtime.start(handle, input)` without importing the journey's runtime code.                                                                               |
-| `selectModule`                | `<TModules>() => <TKey>(key, cases) => StepSpec<TModules>`                                  | Exhaustive state-driven dispatch helper for transition handlers - see [the pattern](#pattern--exhaustive-state-driven-module-dispatch-selectmodule). Missing branches are a compile error.                                               |
-| `selectModuleOrDefault`       | `<TModules>() => <TKey>(key, cases, fallback) => StepSpec<TModules>`                        | Sibling of `selectModule` accepting a partial cases map plus an explicit fallback `StepSpec` - see [the pattern](#pattern--fallback-dispatch-selectmoduleordefault). Use when most discriminator values funnel through a generic module. |
-| `defineJourneyPersistence`    | `<TInput, TState>(adapter) => JourneyPersistence<TState, TInput>`                           | Types `keyFor`'s `input` against `TInput`, `load`/`save` against `TState`.                                                                                                                                                               |
-| `createWebStoragePersistence` | `<TInput, TState>({ keyFor, storage? }) => JourneyPersistence<TState, TInput>`              | Stock `localStorage` / `sessionStorage` adapter. SSR-safe, auto-clears corrupt JSON entries. Pass `storage` to override the backing store.                                                                                               |
-| `createMemoryPersistence`     | `<TInput, TState>({ keyFor, initial?, clone? }) => MemoryPersistence<TInput, TState>`       | `Map`-backed adapter for tests/SSR. Exposes `size()` / `entries()` / `clear()`. Deep-clones on `save` and `load` by default.                                                                                                             |
+| Export                        | Signature                                                                                                      | Purpose                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defineJourney`               | `<TModules, TState, TOutput?>() => <TInput>(def: JourneyDefinition<TModules, TState, TInput, TOutput>) => def` | Identity helper with full inference on transitions and state. Curried so `TInput` infers from `initialState`. The optional third generic `TOutput` narrows `complete` payloads (and a parent's resume `outcome.payload` when invoked).                                                                                                 |
+| `defineJourneyHandle`         | `<TModules, TState, TInput, TOutput>(def) => JourneyHandle<string, TInput, TOutput>`                           | Builds a typed token from a journey definition so modules and shells can call `runtime.start(handle, input)` without importing the journey's runtime code. Carries `TOutput` so a parent's resume sees `outcome.payload` typed end-to-end.                                                                                             |
+| `invoke`                      | `<TInput, TOutput>({ handle, input, resume }) => { invoke: InvokeSpec<TInput, TOutput> }`                      | Typed builder for the `{ invoke }` arm of `TransitionResult`. Cross-checks `input` against the handle's `TInput` — a bare object literal won't. See [Composing journeys](#composing-journeys-invoke--resume).                                                                                                                          |
+| `validateJourneyGraph`        | `(journeys: readonly RegisteredJourney[]) => void`                                                             | Static cycle check over the directed graph derived from each journey's `invokes` field. Run automatically by `validateJourneyContracts`; exported separately for shells that compose registrations across plugin boundaries. See [Cycle and recursion safety](#cycle-and-recursion-safety).                                            |
+| `isJourneySystemAbort`        | `(payload: unknown) => payload is JourneySystemAbortReason`                                                    | Type guard that narrows an `unknown` abort payload to the runtime's discriminated `JourneySystemAbortReason` union. Returns `false` for author-supplied aborts so a `{ abort: { reason: "user-cancelled" } }` does not collide with the system codes. See [Cycle and recursion safety - Failure surface](#cycle-and-recursion-safety). |
+| `selectModule`                | `<TModules>() => <TKey>(key, cases) => StepSpec<TModules>`                                                     | Exhaustive state-driven dispatch helper for transition handlers - see [the pattern](#pattern---exhaustive-state-driven-module-dispatch-selectmodule). Missing branches are a compile error.                                                                                                                                            |
+| `selectModuleOrDefault`       | `<TModules>() => <TKey>(key, cases, fallback) => StepSpec<TModules>`                                           | Sibling of `selectModule` accepting a partial cases map plus an explicit fallback `StepSpec` - see [the pattern](#pattern---fallback-dispatch-selectmoduleordefault). Use when most discriminator values funnel through a generic module.                                                                                              |
+| `defineJourneyPersistence`    | `<TInput, TState>(adapter) => JourneyPersistence<TState, TInput>`                                              | Types `keyFor`'s `input` against `TInput`, `load`/`save` against `TState`.                                                                                                                                                                                                                                                             |
+| `createWebStoragePersistence` | `<TInput, TState>({ keyFor, storage? }) => JourneyPersistence<TState, TInput>`                                 | Stock `localStorage` / `sessionStorage` adapter. SSR-safe, auto-clears corrupt JSON entries. Pass `storage` to override the backing store.                                                                                                                                                                                             |
+| `createMemoryPersistence`     | `<TInput, TState>({ keyFor, initial?, clone? }) => MemoryPersistence<TInput, TState>`                          | `Map`-backed adapter for tests/SSR. Exposes `size()` / `entries()` / `clear()`. Deep-clones on `save` and `load` by default.                                                                                                                                                                                                           |
 
 ### Rendering + context (`@modular-react/journeys`)
 
-| Export              | Purpose                                                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `JourneyProvider`   | Context provider for the runtime and optional `onModuleExit`. Mount once at the shell root.                        |
-| `useJourneyContext` | Reads the current provider value, or `null`.                                                                       |
-| `JourneyOutlet`     | Renders the current step of a journey instance. Handles loading, error boundary, terminal, and abandon-on-unmount. |
-| `ModuleTab`         | Renders a single module entry outside a route. Non-journey counterpart to `JourneyOutlet`.                         |
+| Export                | Purpose                                                                                                                                                                                                                             |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JourneyProvider`     | Context provider for the runtime and optional `onModuleExit`. Mount once at the shell root.                                                                                                                                         |
+| `useJourneyContext`   | Reads the current provider value, or `null`.                                                                                                                                                                                        |
+| `JourneyOutlet`       | Renders the current step of a journey instance. Handles loading, error boundary, terminal, and abandon-on-unmount. By default walks the active call chain and renders the leaf — pass `leafOnly={false}` for layered presentations. |
+| `useJourneyCallStack` | `(runtime, rootId) => readonly InstanceId[]` — returns the live root → … → leaf chain. Subscribes to every link so the array re-resolves when the chain shifts.                                                                     |
+| `ModuleTab`           | Renders a single module entry outside a route. Non-journey counterpart to `JourneyOutlet`.                                                                                                                                          |
 
 ### Runtime + validation (`@modular-react/journeys`)
 
@@ -1644,12 +1986,26 @@ interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
    */
   onHydrate?: (blob: SerializedJourney<TState>) => SerializedJourney<TState>;
   /**
-   * Observation-only error hook. Fires whenever a step component throws
-   * or a transition handler throws for an instance of this journey. The
-   * runtime still aborts / retries according to the outlet's
-   * `onStepError` policy - use this for telemetry, not control flow.
+   * Observation-only error hook. Fires whenever a step component throws,
+   * a transition handler throws, an invoke fails validation (unknown
+   * journey id, unknown resume name, `runtime.start` itself threw), a
+   * resume handler throws, or a custom `onAbandon` crashes. The runtime
+   * still aborts / retries according to the outlet's `onStepError`
+   * policy - use this for telemetry, not control flow.
+   *
+   * The `phase` discriminator lets telemetry distinguish a step-render
+   * throw from a control-plane failure: `"step"` for component throws,
+   * `"invoke"` for invoke validation / start failures, `"resume"` for
+   * resume-handler throws and resume-name lookup failures at child
+   * terminal time, `"abandon"` for a custom `onAbandon` crash.
    */
-  onError?: (err: unknown, ctx: { step: JourneyStep | null }) => void;
+  onError?: (
+    err: unknown,
+    ctx: {
+      step: JourneyStep | null;
+      phase: "step" | "invoke" | "resume" | "abandon";
+    },
+  ) => void;
   /**
    * Optional. Without it, journeys live in memory only - every
    * `runtime.start()` mints a fresh instance and nothing is written to
@@ -1669,6 +2025,19 @@ interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
    * shell's navbar dispatcher starts the journey on click.
    */
   nav?: JourneyNavContribution<TInput>;
+  /**
+   * Cap on the depth of an in-flight invoke chain that includes this
+   * journey. Resolved as the **minimum** non-undefined `maxCallStackDepth`
+   * across the active chain (ancestors + parent + child). Default: `16`.
+   * See [Cycle and recursion safety](#cycle-and-recursion-safety).
+   */
+  maxCallStackDepth?: number;
+  /**
+   * Cap on consecutive resume bounces at the same parent step (a "bounce"
+   * is a resume returning `{ invoke }` instead of advancing). Default:
+   * `8`. Per-parent only — children don't influence their parent's budget.
+   */
+  maxResumeBouncesPerStep?: number;
 }
 
 interface JourneyNavContribution<TInput = unknown> {
@@ -1715,6 +2084,26 @@ interface SerializedJourney<TState> {
   state: TState;
   startedAt: string;
   updatedAt: string;
+  /**
+   * Set when this instance has invoked a child journey that hasn't yet
+   * resumed. `childPersistenceKey` is `null` when the child journey has
+   * no persistence configured. Cleared on resume / cascade-end.
+   */
+  pendingInvoke?: {
+    childJourneyId: string;
+    childInstanceId: string;
+    childPersistenceKey: string | null;
+    resumeName: string;
+  };
+  /**
+   * Set on a child instance whose parent invoked it. Mirrors the
+   * parent's `pendingInvoke` so a child blob loaded out-of-order on
+   * reload still knows which parent to resume.
+   */
+  parentLink?: {
+    parentInstanceId: string;
+    resumeName: string;
+  };
 }
 ```
 
@@ -1735,10 +2124,6 @@ interface SerializedJourney<TState> {
 | `manifest.journeys`                       | The `JourneyRuntime` bound to the resolved registry. Always non-null (no-op when no journey is registered). |
 | `manifest.moduleDescriptors`              | Map of module id → descriptor. Consumed by `<ModuleTab>` and by any code rendering a module entry directly. |
 | `ResolveManifestOptions.onModuleExit`     | Shell-level fallback for module exits fired through `<ModuleTab>`. Wire to analytics or global tab-close.   |
-
-### Exported types (for annotations and adapters)
-
-`JourneyDefinition`, `TransitionMap`, `EntryTransitions`, `StepSpec`, `TransitionResult`, `ExitCtx`, `JourneyInstance`, `JourneyStatus`, `JourneyStep`, `JourneyDefinitionSummary`, `SerializedJourney`, `JourneyRuntime`, `JourneyRuntimeOptions`, `JourneyRegisterOptions`, `JourneyNavContribution`, `JourneyPersistence`, `JourneyHandle`, `ModuleTypeMap`, `EntryInputOf`, `EntryNamesOf`, `ExitNamesOf`, `ExitOutputOf`, `TransitionEvent`, `AbandonCtx`, `TerminalCtx`, `TerminalOutcome`, `InstanceId`, `AnyJourneyDefinition`, `RegisteredJourney`, `MaybePromise`, `JourneyProviderProps`, `JourneyProviderValue`, `JourneyOutletProps`, `JourneyOutletNotFoundProps`, `JourneyOutletErrorProps`, `JourneyStepErrorPolicy`, `ModuleTabProps`, `ModuleTabExitEvent`, `JourneyDefaultNavItem`, `JourneyNavItemBuilder`, `JourneysPluginOptions`, `JourneysPluginExtension`.
 
 ## Example projects
 
@@ -1766,3 +2151,16 @@ What they show:
 - Modules contribute themselves to the `integrations` slot at registration time. Two of them (`github`, `strapi`) own dedicated configure components; two (`contentful`, `notion`) are headless `defineSlots` modules with no UI.
 - The journey's `chosen` transition uses `selectModuleOrDefault` to route github + strapi to their dedicated steps and funnel everything else through `generic-integration`.
 - An inline note on when to swap to `selectModule` (exhaustive) instead - useful if every kind earns its own dedicated module.
+
+The `journey-invoke` examples demonstrate [Composing journeys (invoke / resume)](#composing-journeys-invoke--resume) — a parent (`checkout`) suspends mid-flow to run a child (`verify-identity`), picks up the child's typed terminal payload, and continues:
+
+- [`examples/react-router/journey-invoke/`](../../examples/react-router/journey-invoke/) - React Router integration.
+- [`examples/tanstack-router/journey-invoke/`](../../examples/tanstack-router/journey-invoke/) - TanStack Router mirror.
+
+What they show:
+
+- The `invoke()` helper threading the child handle's `TInput` / `TOutput` through to the parent's transition — wrong-shaped `input` is a compile error.
+- The sibling `resumes` map keyed identically to `transitions`, with a `ChildOutcome<TOutput>` discriminated union narrowing `outcome.payload` for the completed branch.
+- Both parent and child registered with persistence adapters — reload mid-verification and the runtime auto-rehydrates the call chain via `pendingInvoke.childPersistenceKey` and relinks parent ↔ child.
+- A `<JourneyOutlet>` rendering the leaf of the active call chain (the default), plus `useJourneyCallStack` driving a small "call stack" banner.
+- An `onTransition` hook that filters on `kind` to log invoke / resume hops distinctly from ordinary step transitions.

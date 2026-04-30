@@ -98,32 +98,159 @@ export interface ExitCtx<TState, TOutput, TEntryInput> {
 }
 
 /**
- * Result of a transition handler. Exactly one of `next` / `complete` /
- * `abort` is present. `state` is optional — if omitted, the incoming state
- * is preserved.
+ * Outcome surfaced to a parent journey's named resume handler when a child
+ * journey terminates. Mirrors the closed shape the parent could have observed
+ * by subscribing to the child directly — `completed` carries the child's
+ * `TerminalPayload` (typed end-to-end via the child handle's `TOutput`),
+ * `aborted` carries the child's abort reason. `TOutput` defaults to
+ * `unknown` so resume handlers that don't know (or care) about a typed
+ * payload still compile.
  */
-export type TransitionResult<TModules extends ModuleTypeMap, TState> =
+export type ChildOutcome<TOutput = unknown> =
+  | { readonly status: "completed"; readonly payload: TOutput }
+  | { readonly status: "aborted"; readonly reason: unknown };
+
+/**
+ * Names a child journey to invoke and the resume handler that fires when it
+ * terminates. The resume name is a string — closures don't round-trip
+ * through persistence, so resume identity is reified by name and looked up
+ * on the parent's current step (`transitions[mod][entry].resumes[name]`).
+ *
+ * Generic over the child handle's `TOutput` so a typed handle threads the
+ * child's terminal payload type into the parent's resume handler signature
+ * without any cast at the call site.
+ */
+export interface InvokeSpec<TInput = unknown, TOutput = unknown> {
+  readonly handle: JourneyHandleRef<string, TInput, TOutput>;
+  readonly input: TInput;
+  /**
+   * Names a resume handler declared on the parent's *current* step's
+   * transitions (i.e. `transitions[currentMod][currentEntry].resumes[name]`).
+   * Looked up at child terminal time. The phantom `TOutput` flows from the
+   * handle into that resume handler's `outcome` parameter.
+   */
+  readonly resume: string;
+}
+
+/**
+ * Result of a transition handler. Exactly one of `next` / `complete` /
+ * `abort` / `invoke` is present. `state` is optional — if omitted, the
+ * incoming state is preserved.
+ *
+ * `TOutput` is the journey's *own* terminal payload type (narrows the
+ * `complete` arm). `invoke.handle` carries the *child* journey's TInput /
+ * TOutput independently — a parent's resume handler is type-checked against
+ * the child handle's TOutput, not the parent's.
+ *
+ * **Type-checking `invoke.input`.** The union arm declares
+ * `InvokeSpec<unknown, unknown>` so the discriminator works for any handle,
+ * but a bare `{ invoke: { handle, input, resume } }` literal won't link
+ * `input` to the handle's `TInput`. Use the `invoke()` builder from
+ * `@modular-react/journeys` (re-exported via `defineJourney`'s helpers) to
+ * get end-to-end type-checking on `input`. The runtime accepts both forms.
+ */
+export type TransitionResult<TModules extends ModuleTypeMap, TState, TOutput = unknown> =
   | { readonly next: StepSpec<TModules>; readonly state?: TState }
-  | { readonly complete: unknown; readonly state?: TState }
-  | { readonly abort: unknown; readonly state?: TState };
+  | { readonly complete: TOutput; readonly state?: TState }
+  | { readonly abort: unknown; readonly state?: TState }
+  | {
+      readonly invoke: InvokeSpec<unknown, unknown>;
+      readonly state?: TState;
+    };
+
+/**
+ * Resume handler — fired when a child journey `invoke`d from a parent step
+ * terminates. Pure synchronous functions returning a `TransitionResult`,
+ * exactly like exit handlers. They receive the parent's current `state`,
+ * the original `input` of the parent's step, and the child's `outcome`
+ * (a `ChildOutcome<TChildOutput>` discriminated union — the parent always
+ * sees abort outcomes and decides how to react).
+ *
+ * `TOutput` is the *parent* journey's terminal payload (so a resume can
+ * `return { complete: ... }` typed correctly); `TChildOutput` is the
+ * *child* journey's terminal payload (the type behind `outcome.payload`).
+ */
+export type ResumeHandler<
+  TModules extends ModuleTypeMap,
+  TState,
+  TEntryInput,
+  TOutput = unknown,
+  TChildOutput = unknown,
+> = (ctx: {
+  readonly state: TState;
+  readonly input: TEntryInput;
+  readonly outcome: ChildOutcome<TChildOutput>;
+}) => TransitionResult<TModules, TState, TOutput>;
 
 /**
  * Per-entry transitions for a single module. `allowBack` enables `goBack`
  * into the previous step from this entry; must agree with the target
  * entry's own `allowBack` declaration (checked at resolveManifest time).
+ *
+ * Authors should not pass `TOutput` explicitly — `TransitionMap` and
+ * `JourneyDefinition` thread it through so a handler's `complete` return
+ * narrows to the journey's declared terminal payload.
+ *
+ * Resume handlers (continuation points fired when a child journey
+ * `invoke`d from this step terminates) live in a sibling map at the
+ * `JourneyDefinition` level (`resumes[mod][entry][name]`), not inline on
+ * this intersection. Nesting an index-signature value here causes
+ * TypeScript to collapse the intersection's variance and break
+ * assignability to the registry's wide `AnyJourneyDefinition` form —
+ * keeping the resume map separate avoids that footgun and reads cleanly.
  */
-export type EntryTransitions<TModules extends ModuleTypeMap, TState, TMod, TEntry> = {
+export type EntryTransitions<
+  TModules extends ModuleTypeMap,
+  TState,
+  TMod,
+  TEntry,
+  TOutput = unknown,
+> = {
   readonly [X in ExitNamesOf<TMod>]?: (
     ctx: ExitCtx<TState, ExitOutputOf<TMod, X>, EntryInputOf<TMod, TEntry>>,
-  ) => TransitionResult<TModules, TState>;
+  ) => TransitionResult<TModules, TState, TOutput>;
 } & {
   readonly allowBack?: boolean;
 };
 
 /** Map of module id → entry name → exit transitions. */
-export type TransitionMap<TModules extends ModuleTypeMap, TState> = {
+export type TransitionMap<TModules extends ModuleTypeMap, TState, TOutput = unknown> = {
   readonly [M in keyof TModules]?: {
-    readonly [E in EntryNamesOf<TModules[M]>]?: EntryTransitions<TModules, TState, TModules[M], E>;
+    readonly [E in EntryNamesOf<TModules[M]>]?: EntryTransitions<
+      TModules,
+      TState,
+      TModules[M],
+      E,
+      TOutput
+    >;
+  };
+};
+
+/**
+ * Resume map — sibling of `TransitionMap` keyed identically by
+ * `[moduleId][entryName]`, with each leaf an object of named resume
+ * handlers. A transition handler's `{ invoke: { ..., resume: "<name>" } }`
+ * resolves to a key under this map at the parent's *current* step's
+ * `[moduleId][entryName]` slot.
+ *
+ * Kept separate from `TransitionMap` because nesting an index-signature
+ * value inside `EntryTransitions`' intersection collapses TypeScript's
+ * mapped-type variance — see the doc on `EntryTransitions`. The structural
+ * cost is duplicating the `[moduleId][entryName]` path; the conceptual
+ * benefit is that resume names live in their own keyspace and never
+ * collide with exit names.
+ */
+export type ResumeMap<TModules extends ModuleTypeMap, TState, TOutput = unknown> = {
+  readonly [M in keyof TModules]?: {
+    readonly [E in EntryNamesOf<TModules[M]>]?: {
+      readonly [resumeName: string]: ResumeHandler<
+        TModules,
+        TState,
+        EntryInputOf<TModules[M], E>,
+        TOutput,
+        any
+      >;
+    };
   };
 };
 
@@ -142,6 +269,37 @@ export interface TransitionEvent<
   readonly exit: string | null;
   readonly state: TState;
   readonly history: readonly JourneyStep[];
+  /**
+   * Discriminator on the *kind* of hop this event represents. Lets
+   * telemetry consumers filter to top-level step transitions and skip
+   * the (often noisy) invoke / resume bookkeeping events.
+   *
+   * - `"step"` — ordinary `{ next | complete | abort }` transition. The
+   *   default for events fired today.
+   * - `"invoke"` — the parent has just started a child journey. `from`
+   *   and `to` are equal (the parent's step doesn't change). `child` is
+   *   populated.
+   * - `"resume"` — the parent's named resume handler has just been
+   *   applied with the child's outcome. The actual transition the
+   *   handler returned is reflected in `from` / `to` / `exit`. `outcome`
+   *   is populated.
+   */
+  readonly kind: "step" | "invoke" | "resume";
+  /**
+   * Set on `kind === "invoke"` events — identifies the child journey that
+   * was just started.
+   */
+  readonly child?: { readonly instanceId: InstanceId; readonly journeyId: string };
+  /**
+   * Set on `kind === "resume"` events — the child outcome that fed into
+   * the parent's resume handler.
+   */
+  readonly outcome?: ChildOutcome<unknown>;
+  /**
+   * Set on `kind === "resume"` events — the resume handler name that was
+   * fired.
+   */
+  readonly resume?: string;
 }
 
 export interface AbandonCtx<_TModules extends ModuleTypeMap = ModuleTypeMap, TState = unknown> {
@@ -178,7 +336,47 @@ export interface JourneyInstance<TState = unknown> {
   readonly terminalPayload?: unknown;
   readonly startedAt: string;
   readonly updatedAt: string;
+  /**
+   * Instance id of the child journey currently in flight from this
+   * instance's invoking step, or `null` when no invoke is pending. The
+   * `<JourneyOutlet>` follows this chain by default to render the active
+   * leaf; shells that want layered presentations can read it directly.
+   */
+  readonly activeChildId: InstanceId | null;
+  /**
+   * Parent link — set on a child instance to identify the parent that
+   * invoked it and the named resume the runtime will fire on the parent
+   * when this instance terminates. `null` for root instances and for
+   * instances started via `runtime.start()` outside a parent transition.
+   */
+  readonly parent: { readonly instanceId: InstanceId; readonly resumeName: string } | null;
   serialize(): SerializedJourney<TState>;
+}
+
+/**
+ * Persisted parent-side link to a child journey that is in flight from
+ * this instance's current step. Survives a reload — on hydrate, the
+ * runtime relinks the parent to the child via `childInstanceId` (in
+ * memory) or `childPersistenceKey` (loaded from storage). `resumeName`
+ * names the entry in `JourneyDefinition.resumes[mod][entry]` that fires
+ * when the child terminates.
+ */
+export interface PendingInvoke {
+  readonly childJourneyId: string;
+  readonly childInstanceId: InstanceId;
+  readonly childPersistenceKey: string | null;
+  readonly resumeName: string;
+}
+
+/**
+ * Persisted child-side back-pointer. Mirrors the parent's `pendingInvoke`
+ * so a child blob loaded out-of-order on reload still knows which parent
+ * to resume. The runtime tolerates either side being missing — see the
+ * hydrate link-up pass for the recovery semantics.
+ */
+export interface ParentLink {
+  readonly parentInstanceId: InstanceId;
+  readonly resumeName: string;
 }
 
 export interface SerializedJourney<TState = unknown> {
@@ -199,6 +397,43 @@ export interface SerializedJourney<TState = unknown> {
   readonly state: TState;
   readonly startedAt: string;
   readonly updatedAt: string;
+  /**
+   * Set when a child journey is in flight from this instance's current
+   * step. Persisted so the runtime can relink parent → child after a
+   * reload. Cleared when the child resumes the parent.
+   */
+  readonly pendingInvoke?: PendingInvoke;
+  /**
+   * Set on a child instance whose parent invoked it. Mirrors the parent's
+   * `pendingInvoke` so a child blob loaded out-of-order still knows
+   * which parent to resume.
+   */
+  readonly parentLink?: ParentLink;
+  /**
+   * Persisted bounce counter used by the resume-bounce-limit guard. A
+   * "bounce" is a resume that returns `{ invoke }` instead of advancing
+   * the parent's step (`{ next | complete | abort }`); the runtime caps
+   * how many can fire consecutively at the same step so a malformed
+   * resume → invoke → resume → invoke loop cannot spin indefinitely.
+   * Reset to `undefined` whenever the step actually advances. Persisted
+   * so a reload-bounce-reload-bounce sequence cannot reset the counter
+   * by round-tripping through storage.
+   */
+  readonly resumeBouncesAtStep?: ResumeBounceCounter;
+}
+
+/**
+ * Per-step bounce counter persisted on a parent's serialized blob. The
+ * runtime increments `count` each time a resume on this step returns
+ * `{ invoke }` again without advancing; once it would exceed the configured
+ * `maxResumeBouncesPerStep`, the parent aborts with reason
+ * `resume-bounce-limit`. The counter is scoped to a `stepToken` so that a
+ * legitimate forward step naturally clears stale counts even if a stale
+ * blob were ever rehydrated.
+ */
+export interface ResumeBounceCounter {
+  readonly stepToken: number;
+  readonly count: number;
 }
 
 export interface JourneyDefinitionSummary {
@@ -236,10 +471,15 @@ export interface JourneyPersistence<TState = unknown, TInput = unknown> {
  * last transition (`{ complete }` or `{ abort }`). `instanceId` and
  * `journeyId` are included so analytics / tab-close hooks can correlate
  * without re-reading the outlet's props.
+ *
+ * Generic over `TOutput` — when a journey declares its terminal payload
+ * type via the fourth generic on `defineJourney`, callers that thread the
+ * journey's handle through `onFinished` see a typed `payload`. Defaults to
+ * `unknown` for shells that don't bind to a specific journey.
  */
-export interface TerminalOutcome {
+export interface TerminalOutcome<TOutput = unknown> {
   readonly status: "completed" | "aborted";
-  readonly payload: unknown;
+  readonly payload: TOutput;
   readonly instanceId: InstanceId;
   readonly journeyId: string;
 }
@@ -249,15 +489,25 @@ export interface TerminalOutcome {
  * package can export so callers open journeys with typed `input` without
  * importing the journey's runtime code. Declared in core so the overload
  * on `JourneyRuntime.start` does not force core to depend on
- * `@modular-react/journeys`. The `__input` field is phantom (never read).
+ * `@modular-react/journeys`. The `__input` and `__output` fields are
+ * phantom (never read at runtime).
+ *
+ * `TOutput` carries the journey's terminal payload type so a parent
+ * journey's `invoke` resume handler receives a typed `outcome.payload`
+ * without any cast at the call site.
  *
  * The implementation package (`@modular-react/journeys`) re-exports this
  * under the canonical name `JourneyHandle` and ships `defineJourneyHandle`
  * as the constructor.
  */
-export interface JourneyHandleRef<TId extends string = string, TInput = unknown> {
+export interface JourneyHandleRef<
+  TId extends string = string,
+  TInput = unknown,
+  TOutput = unknown,
+> {
   readonly id: TId;
   readonly __input?: TInput;
+  readonly __output?: TOutput;
 }
 
 export interface JourneyRuntime {
@@ -266,8 +516,8 @@ export interface JourneyRuntime {
    * When the handle's `TInput` is `void`, callers can omit the second
    * argument entirely.
    */
-  start<TId extends string, TInput>(
-    handle: JourneyHandleRef<TId, TInput>,
+  start<TId extends string, TInput, TOutput>(
+    handle: JourneyHandleRef<TId, TInput, TOutput>,
     ...rest: [TInput] extends [void] ? [] | [input?: TInput] : [input: TInput]
   ): InstanceId;
   /** String-id form — accepts any `input` (the handle form is preferred). */
@@ -316,4 +566,173 @@ export interface JourneyRuntime {
  */
 export function isTerminal(instance: JourneyInstance): boolean {
   return instance.status === "completed" || instance.status === "aborted";
+}
+
+// -----------------------------------------------------------------------------
+// System-emitted abort reasons
+// -----------------------------------------------------------------------------
+
+/**
+ * String code identifying every abort reason the runtime itself emits
+ * (as opposed to author-supplied `{ abort: ... }` payloads). Authors and
+ * shells can narrow against this union when interpreting an abort
+ * outcome — see {@link JourneySystemAbortReason} for the per-code
+ * payload shape and {@link isJourneySystemAbort} for the type guard.
+ */
+export type JourneySystemAbortReasonCode =
+  | "invoke-cycle"
+  | "invoke-stack-overflow"
+  | "invoke-undeclared-child"
+  | "invoke-unknown-journey"
+  | "invoke-unknown-resume"
+  | "invoke-missing-resume"
+  | "invoke-missing-spec"
+  | "invoke-without-step"
+  | "invoke-start-threw"
+  | "invoke-start-no-record"
+  | "invoke-child-already-linked"
+  | "resume-missing"
+  | "resume-threw"
+  | "resume-returned-promise"
+  | "resume-bounce-limit"
+  | "transition-error"
+  | "transition-returned-promise";
+
+/**
+ * Discriminated union of every abort payload the runtime emits. Each arm
+ * is keyed on `reason` and carries the metadata authored on the runtime
+ * side — telemetry consumers and parent resume handlers can switch on
+ * `reason` for typed access:
+ *
+ * ```ts
+ * if (outcome.status === "aborted" && isJourneySystemAbort(outcome.reason)) {
+ *   if (outcome.reason.reason === "resume-bounce-limit") {
+ *     metrics.record("bounce_limit", { cap: outcome.reason.cap });
+ *   }
+ * }
+ * ```
+ *
+ * **Distinct from author-supplied aborts.** A transition handler is free
+ * to return `{ abort: anything }` — the runtime preserves the payload
+ * verbatim. {@link isJourneySystemAbort} narrows specifically to runtime-
+ * emitted reasons (matching one of the codes in
+ * {@link JourneySystemAbortReasonCode}); author payloads carrying a
+ * collidingly-named `reason` field are correctly excluded.
+ *
+ * Author-supplied abort payloads remain `unknown` on the wire — this
+ * union is purely a help for narrowing the system slice.
+ */
+export type JourneySystemAbortReason =
+  | {
+      readonly reason: "invoke-cycle";
+      readonly childJourneyId: string;
+      /**
+       * Closing-cycle path including the duplicate target id at both
+       * ends, e.g. `["B", "C", "D", "B"]`. Pre-cycle prefix is dropped
+       * — the path mirrors the printed runtime warning.
+       */
+      readonly chain: readonly string[];
+      readonly exit: string | null;
+    }
+  | {
+      readonly reason: "invoke-stack-overflow";
+      readonly depth: number;
+      readonly cap: number;
+      /** Full chain ancestors → parent → would-be child, in that order. */
+      readonly chain: readonly string[];
+      readonly exit: string | null;
+    }
+  | {
+      readonly reason: "invoke-undeclared-child";
+      readonly parentJourneyId: string;
+      readonly childJourneyId: string;
+      readonly exit: string | null;
+    }
+  | {
+      readonly reason: "invoke-unknown-journey";
+      readonly journeyId: string;
+      readonly exit: string | null;
+    }
+  | {
+      readonly reason: "invoke-unknown-resume";
+      readonly resume: string;
+      readonly exit: string | null;
+    }
+  | { readonly reason: "invoke-missing-resume"; readonly exit: string | null }
+  | { readonly reason: "invoke-missing-spec"; readonly exit: string | null }
+  | { readonly reason: "invoke-without-step"; readonly exit: string | null }
+  | {
+      readonly reason: "invoke-start-threw";
+      readonly error: unknown;
+      readonly exit: string | null;
+    }
+  | { readonly reason: "invoke-start-no-record"; readonly exit: string | null }
+  | {
+      /**
+       * `runtime.start` is idempotent: when the same persistence key is
+       * already in flight it returns the live child id. If that child is
+       * already linked to a *different* parent (a second parent invokes
+       * the same child journey with a colliding key), the second invoke
+       * is rejected — taking it would steal the child from the original
+       * parent and leave that parent stranded behind a stale
+       * `activeChildId`.
+       */
+      readonly reason: "invoke-child-already-linked";
+      readonly childInstanceId: string;
+      readonly existingParentId: string;
+      readonly exit: string | null;
+    }
+  | {
+      readonly reason: "resume-missing";
+      readonly resume: string;
+      readonly childJourneyId: string;
+    }
+  | { readonly reason: "resume-threw"; readonly resume: string; readonly error: unknown }
+  | { readonly reason: "resume-returned-promise"; readonly resume: string }
+  | {
+      readonly reason: "resume-bounce-limit";
+      readonly cap: number;
+      readonly count: number;
+      readonly resume: string | undefined;
+    }
+  | {
+      readonly reason: "transition-error";
+      readonly exit: string | null;
+      readonly error: unknown;
+    }
+  | { readonly reason: "transition-returned-promise"; readonly exit: string | null };
+
+const JOURNEY_SYSTEM_ABORT_REASON_CODES: ReadonlySet<string> =
+  new Set<JourneySystemAbortReasonCode>([
+    "invoke-cycle",
+    "invoke-stack-overflow",
+    "invoke-undeclared-child",
+    "invoke-unknown-journey",
+    "invoke-unknown-resume",
+    "invoke-missing-resume",
+    "invoke-missing-spec",
+    "invoke-without-step",
+    "invoke-start-threw",
+    "invoke-start-no-record",
+    "invoke-child-already-linked",
+    "resume-missing",
+    "resume-threw",
+    "resume-returned-promise",
+    "resume-bounce-limit",
+    "transition-error",
+    "transition-returned-promise",
+  ]);
+
+/**
+ * Narrows an `unknown` abort payload (from `instance.terminalPayload`,
+ * `outcome.reason` on a parent's resume, or a serialized blob) to one of
+ * the runtime's system-emitted shapes. Returns `false` for author-
+ * supplied payloads — including ones whose `reason` field happens to be
+ * a string but is not a known system code, so an author who picks
+ * `reason: "user-cancelled"` does not collide with this guard.
+ */
+export function isJourneySystemAbort(payload: unknown): payload is JourneySystemAbortReason {
+  if (typeof payload !== "object" || payload === null) return false;
+  const reason = (payload as { readonly reason?: unknown }).reason;
+  return typeof reason === "string" && JOURNEY_SYSTEM_ABORT_REASON_CODES.has(reason);
 }

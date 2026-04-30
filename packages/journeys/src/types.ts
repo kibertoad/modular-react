@@ -6,9 +6,11 @@
 
 import type {
   AbandonCtx,
+  JourneyHandleRef,
   JourneyPersistence,
   JourneyStep,
   ModuleTypeMap,
+  ResumeMap,
   SerializedJourney,
   StepSpec,
   TerminalCtx,
@@ -19,6 +21,7 @@ import type {
 
 export type {
   AbandonCtx,
+  ChildOutcome,
   EntryInputOf,
   EntryNamesOf,
   EntryTransitions,
@@ -26,14 +29,22 @@ export type {
   ExitNamesOf,
   ExitOutputOf,
   InstanceId,
+  InvokeSpec,
   JourneyDefinitionSummary,
   JourneyInstance,
   JourneyPersistence,
   JourneyRuntime,
   JourneyStatus,
   JourneyStep,
+  JourneySystemAbortReason,
+  JourneySystemAbortReasonCode,
   MaybePromise,
   ModuleTypeMap,
+  ParentLink,
+  PendingInvoke,
+  ResumeBounceCounter,
+  ResumeHandler,
+  ResumeMap,
   SerializedJourney,
   StepSpec,
   TerminalCtx,
@@ -47,7 +58,12 @@ export type {
 // Journey definition — stays in this package (authoring shape)
 // -----------------------------------------------------------------------------
 
-export interface JourneyDefinition<TModules extends ModuleTypeMap, TState, TInput = void> {
+export interface JourneyDefinition<
+  TModules extends ModuleTypeMap,
+  TState,
+  TInput = void,
+  TOutput = unknown,
+> {
   readonly id: string;
   readonly version: string;
   readonly meta?: Readonly<Record<string, unknown>>;
@@ -55,22 +71,65 @@ export interface JourneyDefinition<TModules extends ModuleTypeMap, TState, TInpu
   readonly initialState: (input: TInput) => TState;
   readonly start: (state: TState, input: TInput) => StepSpec<TModules>;
 
-  readonly transitions: TransitionMap<TModules, TState>;
+  readonly transitions: TransitionMap<TModules, TState, TOutput>;
+
+  /**
+   * Resume handlers fired when a child journey `invoke`d from a parent
+   * step terminates. Keyed by `[moduleId][entryName][resumeName]` — the
+   * runtime looks up `resumes[currentMod][currentEntry][invokeSpec.resume]`
+   * at child terminal time and applies the result as the parent's next
+   * transition. Optional — journeys that never invoke can omit it.
+   */
+  readonly resumes?: ResumeMap<TModules, TState, TOutput>;
+
+  /**
+   * Closed set of journey handles this journey may invoke from any of its
+   * transitions (or from a resume that returns `{ invoke }`). Strongly
+   * recommended for any journey that uses `invoke`:
+   *
+   * 1. **Static cycle detection.** When every journey in a registration
+   *    declares `invokes`, the registry runs a graph-level cycle check
+   *    at validation time and rejects the registration with a path like
+   *    `cycle detected: A → B → A` — far easier to diagnose than the
+   *    runtime `invoke-cycle` abort.
+   * 2. **Runtime arrival check.** At invoke time the runtime verifies
+   *    that the dispatched handle id appears in `invokes`; an unexpected
+   *    handle aborts the parent with reason `invoke-undeclared-child`,
+   *    catching dynamic dispatch bugs (a transition that branches on
+   *    `output` and lands on a handle the author never intended).
+   *
+   * Omit only when the call set is genuinely dynamic (e.g. a host that
+   * receives child handles from a slot contribution at runtime). The
+   * runtime cycle / depth / bounce guards still apply in that case;
+   * they just no longer have a static graph to cross-check against.
+   *
+   * Self-loops (a journey listing its own handle) are reported as a
+   * cycle — by construction they would also blow the call-stack guard
+   * at runtime.
+   */
+  readonly invokes?: ReadonlyArray<JourneyHandleRef<string, any, any>>;
 
   readonly onTransition?: (ev: TransitionEvent<TModules, TState>) => void;
-  readonly onAbandon?: (ctx: AbandonCtx<TModules, TState>) => TransitionResult<TModules, TState>;
-  readonly onComplete?: (ctx: TerminalCtx<TState>, result: unknown) => void;
+  readonly onAbandon?: (
+    ctx: AbandonCtx<TModules, TState>,
+  ) => TransitionResult<TModules, TState, TOutput>;
+  readonly onComplete?: (ctx: TerminalCtx<TState>, result: TOutput) => void;
   readonly onAbort?: (ctx: TerminalCtx<TState>, reason: unknown) => void;
   readonly onHydrate?: (blob: SerializedJourney<TState>) => SerializedJourney<TState>;
 }
 
-/** Erased shape used by the registry — `any` on the generics lets the
+/** Erased shape used by the registry — `any` on every generic lets the
  *  registry store definitions from different journeys side-by-side.
  *  Tightening to `unknown` breaks variance: `initialState: (input: TInput)
  *  => TState` for a specific journey is not assignable to
  *  `(input: unknown) => unknown` because function parameters are
- *  contravariant, so the registry would reject any concrete definition. */
-export type AnyJourneyDefinition = JourneyDefinition<ModuleTypeMap, any, any>;
+ *  contravariant, so the registry would reject any concrete definition.
+ *
+ *  TModules is also `any` (rather than `ModuleTypeMap`) so the structural
+ *  variance check on `ResumeMap`/`TransitionMap` does not strictly require
+ *  the wide form to carry every specific module key — `any` short-circuits
+ *  the property-by-property check and admits any concrete TModules. */
+export type AnyJourneyDefinition = JourneyDefinition<any, any, any, any>;
 
 // -----------------------------------------------------------------------------
 // Registration options + internal record — stay in this package
@@ -147,11 +206,17 @@ export interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
    */
   onHydrate?: (blob: SerializedJourney<TState>) => SerializedJourney<TState>;
   /**
-   * Fires when a step component throws or a transition handler throws for
-   * an instance of this journey. Observation-only — the runtime still
-   * aborts / retries according to the outlet's `onStepError` policy.
+   * Fires when a step component throws, a transition handler throws,
+   * or an invoke / resume / abandon hook throws. Observation-only — the
+   * runtime still aborts / retries according to the outlet's
+   * `onStepError` policy. The `phase` discriminator lets telemetry
+   * distinguish a component throw (`"step"`) from an invoke/resume
+   * control-plane failure or a custom `onAbandon` crash.
    */
-  onError?: (err: unknown, ctx: { step: JourneyStep | null }) => void;
+  onError?: (
+    err: unknown,
+    ctx: { step: JourneyStep | null; phase: "step" | "invoke" | "resume" | "abandon" },
+  ) => void;
   /**
    * Optional. Without it, journeys live in memory only — every
    * `runtime.start()` mints a fresh instance and nothing is written to
@@ -191,6 +256,58 @@ export interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
    * default item into the app's narrowed type.
    */
   nav?: JourneyNavContribution<TInput>;
+  /**
+   * Cap on the depth of an in-flight invoke chain that includes this
+   * journey. The depth is the number of *active* journey instances in
+   * the chain — a root parent on its own is depth 1, a parent with one
+   * in-flight child is depth 2, etc. When an invoke would push depth
+   * beyond `maxCallStackDepth`, the parent aborts with reason
+   * `invoke-stack-overflow` (the child is never started) and the
+   * registration's `onError` fires with `phase: "invoke"`.
+   *
+   * The runtime resolves the effective limit as the **minimum** of every
+   * non-undefined `maxCallStackDepth` across the active chain (ancestors
+   * + the new parent + the would-be child's own setting). The most
+   * restrictive journey wins, so a cautious utility journey can lower
+   * the cap for any flow that includes it without coordinating with the
+   * other journeys.
+   *
+   * Default: `16`. Set lower for journeys whose call graphs are known
+   * to be shallow; raise it (carefully) only for genuinely deep
+   * compositions. Setting it to `1` blocks `invoke` from this journey
+   * outright.
+   *
+   * `0`, negative, or non-finite values are treated as "no opinion" and
+   * fall through to the next journey's setting (or the library default
+   * if no journey in the chain expresses an opinion). This matches the
+   * `maxHistory` convention so a misconfigured `0` cannot accidentally
+   * disable the guard.
+   */
+  maxCallStackDepth?: number;
+  /**
+   * Cap on consecutive resume "bounces" at the *same* parent step. A
+   * bounce is a resume that returns `{ invoke }` (re-invoking a child
+   * instead of advancing the parent's step). The counter increments on
+   * every resume that returns `{ invoke }` and resets to zero whenever
+   * the parent's step actually advances (`{ next | complete | abort }`
+   * from any source). When the counter would exceed
+   * `maxResumeBouncesPerStep`, the parent aborts with reason
+   * `resume-bounce-limit`; the child whose terminal triggered the
+   * over-the-limit bounce is *not* re-invoked.
+   *
+   * The counter is persisted on the parent's blob (see
+   * `SerializedJourney.resumeBouncesAtStep`) so a reload-bounce sequence
+   * cannot reset the budget by round-tripping through storage.
+   *
+   * Default: `8`. Raise it for flows that legitimately retry a sub-flow
+   * many times in a row; lower it for paranoia. The check uses the
+   * parent's setting only — children do not influence their parent's
+   * bounce budget.
+   *
+   * `0`, negative, or non-finite values fall through to the library
+   * default (matches `maxCallStackDepth` and `maxHistory`).
+   */
+  maxResumeBouncesPerStep?: number;
 }
 
 /** Internal registration record — definition + options kept together. */

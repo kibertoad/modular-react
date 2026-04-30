@@ -1,0 +1,24 @@
+{
+  "name": "@example-tsr-invoke/verify-identity-journey",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@example-tsr-invoke/age-verify-module": "workspace:*",
+    "@example-tsr-invoke/app-shared": "workspace:*",
+    "@modular-react/journeys": "^0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}

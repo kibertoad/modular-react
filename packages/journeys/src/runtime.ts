@@ -1,7 +1,9 @@
 import type { JourneyHandleRef, ModuleDescriptor } from "@modular-react/core";
 import type {
   AnyJourneyDefinition,
+  ChildOutcome,
   InstanceId,
+  InvokeSpec,
   JourneyDefinition,
   JourneyDefinitionSummary,
   JourneyInstance,
@@ -10,13 +12,40 @@ import type {
   JourneyStatus,
   JourneyStep,
   ModuleTypeMap,
+  PendingInvoke,
   RegisteredJourney,
+  ResumeBounceCounter,
+  ResumeHandler,
+  ResumeMap,
   SerializedJourney,
   StepSpec,
   TransitionEvent,
   TransitionResult,
 } from "./types.js";
 import { JourneyHydrationError, UnknownJourneyError } from "./validation.js";
+
+/**
+ * Default cap on the depth of an in-flight invoke chain (root parent +
+ * descendants). A journey's registration can override this via
+ * `JourneyRegisterOptions.maxCallStackDepth`; the runtime takes the
+ * minimum of all non-undefined settings across the chain so the most
+ * cautious journey wins.
+ *
+ * The default of 16 is chosen to be larger than any reasonable
+ * invocation chain we've seen (deepest real-world: 3) while still
+ * catching unbounded recursion long before it becomes a memory or
+ * call-stack hazard.
+ */
+const DEFAULT_MAX_CALL_STACK_DEPTH = 16;
+
+/**
+ * Default cap on consecutive resume bounces at the same parent step.
+ * A "bounce" is a resume that returns `{ invoke }` instead of advancing
+ * the parent's step; the counter resets when the parent's step changes
+ * for any reason. Override via
+ * `JourneyRegisterOptions.maxResumeBouncesPerStep`.
+ */
+const DEFAULT_MAX_RESUME_BOUNCES_PER_STEP = 8;
 
 export interface InstanceRecord<TState = unknown> {
   id: InstanceId;
@@ -43,6 +72,22 @@ export interface InstanceRecord<TState = unknown> {
   pendingSave: SerializedJourney<TState> | null;
   saveInFlight: boolean;
   /**
+   * Set when this instance is a child invoked from a parent's transition.
+   * On terminal, the runtime looks up the parent record and applies the
+   * named resume handler with this instance's terminal outcome. Cleared
+   * after the resume fires (or never set for root instances). Mirrored to
+   * the persisted blob as `parentLink` so a child loaded out-of-order on
+   * reload still knows its parent.
+   */
+  parent: { instanceId: InstanceId; resumeName: string } | null;
+  /**
+   * Set on a parent record when a child journey is in flight from this
+   * record's current step. Cleared on resume (the named handler fires)
+   * or when either side is force-terminated. Mirrored to the persisted
+   * blob as `pendingInvoke` so reload can relink across processes.
+   */
+  activeChildId: InstanceId | null;
+  /**
    * True when `removePersisted` fires while `saveInFlight` is still set:
    * the remove is deferred until the save settles so adapters that don't
    * serialize their own ops can't see remove→save reordering and leave
@@ -65,6 +110,16 @@ export interface InstanceRecord<TState = unknown> {
     exit: (name: string, output?: unknown) => void;
     goBack: (() => void) | undefined;
   } | null;
+  /**
+   * Per-step bounce counter for the resume-bounce-limit guard. Set when
+   * a resume on this record's current step returns `{ invoke }`;
+   * incremented on each subsequent same-step resume that does the same;
+   * cleared whenever the step actually advances. Mirrored to the
+   * persisted blob as `resumeBouncesAtStep` so a hostile or accidental
+   * reload-bounce-reload-bounce cannot reset the counter through
+   * storage.
+   */
+  resumeBouncesAtStep: ResumeBounceCounter | null;
 }
 
 export interface JourneyRuntimeOptions {
@@ -110,9 +165,18 @@ export function createJourneyRuntime(
   // instance. The adapter sees only the user-defined portion; the prefix is
   // applied inside the runtime.
   const keyIndex = new Map<string, InstanceId>();
+  /**
+   * Reverse lookup from child instance id → parent instance id. Maintained
+   * alongside `record.parent` so the child-terminal hook is O(1) and does
+   * not have to scan all records to find an awaiting parent. Symmetric:
+   * present iff `parent.activeChildId === childId`.
+   */
+  const childToParent = new Map<InstanceId, InstanceId>();
 
   function indexKey(journeyId: string, userKey: string): string {
-    return `${journeyId}::${userKey}`;
+    // Use a non-printable separator so a journey id containing the
+    // separator can never collide with a user-defined key.
+    return `${journeyId}${userKey}`;
   }
 
   // ---------------------------------------------------------------------------
@@ -185,16 +249,16 @@ export function createJourneyRuntime(
   function cloneSnapshot(state: unknown): unknown {
     if (state === null || typeof state !== "object") return state;
     const cloned: unknown = Array.isArray(state) ? [...state] : { ...(state as object) };
-    // Dev-mode probe: freeze the snapshot so a transition that mutates
-    // rolled-back state in place fails loudly instead of silently corrupting
-    // the history. The freeze is shallow — deep mutation still slips through
+    // Freeze the snapshot so a transition that mutates rolled-back state
+    // in place fails loudly instead of silently corrupting the history.
+    // Done in dev *and* prod so the dev/prod behavior diff is just
+    // "console.error vs strict-mode throw," not "silently corrupts vs
+    // throws." The freeze is shallow — deep mutation still slips through
     // (documented limitation L8), but catches the most common footgun.
-    if (debug) {
-      try {
-        Object.freeze(cloned);
-      } catch {
-        // Some engines reject freezing exotic objects; swallow.
-      }
+    try {
+      Object.freeze(cloned);
+    } catch {
+      // Some engines reject freezing exotic objects; swallow.
     }
     return cloned;
   }
@@ -302,6 +366,28 @@ export function createJourneyRuntime(
   }
 
   function serialize<TState>(record: InstanceRecord<TState>): SerializedJourney<TState> {
+    let pendingInvoke: PendingInvoke | undefined;
+    if (record.activeChildId) {
+      const child = instances.get(record.activeChildId);
+      // Best-effort: only emit pendingInvoke when the child is still in
+      // memory and we can resolve it. If the child has been forgotten or
+      // never linked, we skip serialization rather than emitting a dangling
+      // link the hydrate path can't satisfy.
+      if (child) {
+        const link = child.parent;
+        if (link && link.instanceId === record.id) {
+          pendingInvoke = {
+            childJourneyId: child.journeyId,
+            childInstanceId: child.id,
+            childPersistenceKey: child.persistenceKey,
+            resumeName: link.resumeName,
+          };
+        }
+      }
+    }
+    const parentLink = record.parent
+      ? { parentInstanceId: record.parent.instanceId, resumeName: record.parent.resumeName }
+      : undefined;
     return {
       definitionId: record.journeyId,
       version: definitions.get(record.journeyId)!.definition.version,
@@ -322,6 +408,9 @@ export function createJourneyRuntime(
       state: record.state,
       startedAt: record.startedAt,
       updatedAt: record.updatedAt,
+      pendingInvoke,
+      parentLink,
+      resumeBouncesAtStep: record.resumeBouncesAtStep ?? undefined,
     };
   }
 
@@ -335,6 +424,12 @@ export function createJourneyRuntime(
     from: JourneyStep | null,
     to: JourneyStep | null,
     exit: string | null,
+    extras?: {
+      readonly kind?: TransitionEvent["kind"];
+      readonly child?: TransitionEvent["child"];
+      readonly outcome?: TransitionEvent["outcome"];
+      readonly resume?: TransitionEvent["resume"];
+    },
   ) {
     const ev: TransitionEvent = {
       journeyId: record.journeyId,
@@ -348,6 +443,10 @@ export function createJourneyRuntime(
       // telemetry) would otherwise observe later mutations when they
       // finally inspect the event.
       history: [...record.history],
+      kind: extras?.kind ?? "step",
+      child: extras?.child,
+      outcome: extras?.outcome,
+      resume: extras?.resume,
     };
     try {
       reg.definition.onTransition?.(ev);
@@ -408,12 +507,591 @@ export function createJourneyRuntime(
     record: InstanceRecord,
     err: unknown,
     step: JourneyStep | null,
+    phase: "step" | "invoke" | "resume" | "abandon" = "step",
   ) {
     try {
-      reg.options?.onError?.(err, { step });
+      reg.options?.onError?.(err, { step, phase });
     } catch (hookErr) {
       if (debug) console.error("[@modular-react/journeys] onError (registration) threw", hookErr);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Invoke / resume helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Look up a resume handler on a record's current step. Resumes live in a
+   * sibling map at the journey-definition level (`def.resumes[mod][entry]`)
+   * so the `EntryTransitions` intersection stays clean — see the doc on
+   * `EntryTransitions` in `journey-contracts.ts` for why.
+   */
+  function lookupResume(
+    reg: RegisteredJourney,
+    step: JourneyStep,
+    resumeName: string,
+  ): ResumeHandler<ModuleTypeMap, unknown, unknown, unknown, unknown> | undefined {
+    const resumesMap = reg.definition.resumes as ResumeMap<ModuleTypeMap, unknown> | undefined;
+    if (!resumesMap) return undefined;
+    const perModule = resumesMap[step.moduleId];
+    if (!perModule) return undefined;
+    const perEntry = perModule[step.entry];
+    if (!perEntry) return undefined;
+    return perEntry[resumeName] as
+      | ResumeHandler<ModuleTypeMap, unknown, unknown, unknown, unknown>
+      | undefined;
+  }
+
+  /**
+   * Walk a record's ancestor chain via `parent` links, returning every
+   * ancestor in root → immediate-parent order (excluding `record`
+   * itself). Used by the cycle and depth guards in {@link beginInvoke}.
+   * Stops at the first dangling pointer (an ancestor that has been
+   * `forget()`-ed mid-flight) — the chain we have is what we work with;
+   * we do not synthesize phantom links.
+   */
+  function ancestorChain(record: InstanceRecord): InstanceRecord[] {
+    const chain: InstanceRecord[] = [];
+    let cur = record.parent;
+    // Cap the walk at MAX_ANCESTOR_WALK so a corrupted in-memory cycle
+    // (parent pointer landing back on a descendant after a forget +
+    // re-hydrate race) cannot lock the runtime in an infinite loop.
+    // The cap is far above any realistic chain depth and any finite
+    // guard limit.
+    const seen = new Set<InstanceId>([record.id]);
+    while (cur) {
+      if (seen.has(cur.instanceId)) break;
+      const ancestor = instances.get(cur.instanceId);
+      if (!ancestor) break;
+      seen.add(ancestor.id);
+      chain.unshift(ancestor);
+      cur = ancestor.parent;
+    }
+    return chain;
+  }
+
+  /**
+   * Resolve the effective `maxResumeBouncesPerStep` for a record. Unlike
+   * `maxCallStackDepth`, the bounce counter is per-record (per-step,
+   * actually) and can only be sensibly governed by the journey that
+   * owns the resume returning the bounce — i.e. the parent's own
+   * registration. Other journeys in the call chain don't see the
+   * resumes; they would have no business voting on the cap.
+   */
+  function resolveBounceCap(reg: RegisteredJourney): number {
+    const opt = reg.options?.maxResumeBouncesPerStep;
+    if (typeof opt === "number" && Number.isFinite(opt) && opt > 0) return opt;
+    return DEFAULT_MAX_RESUME_BOUNCES_PER_STEP;
+  }
+
+  /**
+   * Resolve the effective `maxCallStackDepth` for an invoke about to
+   * happen. Walks the chain (ancestors + parent + would-be child) and
+   * picks the **minimum** non-undefined option, falling back to the
+   * library default. Any journey in the chain can lower the cap; none
+   * can quietly raise it.
+   *
+   * `0` and negative values are treated as "no opinion" (consistent with
+   * `maxHistory` semantics) so a misconfigured `0` cannot silently
+   * disable invoke from this journey.
+   */
+  function resolveMaxCallStackDepth(
+    chain: readonly InstanceRecord[],
+    parentReg: RegisteredJourney,
+    childReg: RegisteredJourney | undefined,
+  ): number {
+    let cap = DEFAULT_MAX_CALL_STACK_DEPTH;
+    let sawOverride = false;
+    const visit = (reg: RegisteredJourney | undefined) => {
+      const opt = reg?.options?.maxCallStackDepth;
+      if (typeof opt === "number" && Number.isFinite(opt) && opt > 0) {
+        cap = sawOverride ? Math.min(cap, opt) : opt;
+        sawOverride = true;
+      }
+    };
+    for (const ancestor of chain) visit(definitions.get(ancestor.journeyId));
+    visit(parentReg);
+    visit(childReg);
+    return cap;
+  }
+
+  /**
+   * Open a child journey from a parent's transition. Validates the handle
+   * up-front; on any failure (unknown journey id, missing resume on the
+   * parent step), fires `onError` and drives the parent into `abort` so
+   * the failure mode is surfaced uniformly with other transition errors.
+   * Returns the live child `InstanceRecord` when the invoke was committed,
+   * or `false` when it fell through to abort (and the caller must skip
+   * the post-transition persistence/notify pass).
+   *
+   * The cycle / depth / undeclared-child guards run *before* the handle
+   * is dispatched to `runtime.start`, so a guard rejection never
+   * materialises a child record. This keeps the failure path symmetric
+   * with the existing unknown-journey / missing-resume validations.
+   */
+  function beginInvoke(
+    parent: InstanceRecord,
+    parentReg: RegisteredJourney,
+    spec: InvokeSpec<unknown, unknown>,
+    exitName: string | null,
+  ): InstanceRecord | false {
+    const parentStep = parent.step;
+    if (!parentStep) {
+      // Should not happen (we only reach the invoke arm with an active step),
+      // but guard so a corrupted call site can't crash the runtime.
+      applyTransitionLocal(
+        parent,
+        parentReg,
+        { abort: { reason: "invoke-without-step", exit: exitName } },
+        { kind: "invoke" },
+      );
+      return false;
+    }
+    if (!spec || typeof spec !== "object") {
+      applyTransitionLocal(
+        parent,
+        parentReg,
+        { abort: { reason: "invoke-missing-spec", exit: exitName } },
+        { kind: "invoke" },
+      );
+      return false;
+    }
+    const childJourneyId = spec.handle?.id;
+    if (!childJourneyId || !definitions.has(childJourneyId)) {
+      if (debug) {
+        console.error(
+          `[@modular-react/journeys] Invoke from "${parent.journeyId}.${parentStep.moduleId}.${parentStep.entry}" references unknown child journey id "${childJourneyId}".`,
+        );
+      }
+      fireOnError(
+        parentReg,
+        parent,
+        new Error(`Unknown child journey "${childJourneyId}"`),
+        parentStep,
+        "invoke",
+      );
+      applyTransitionLocal(
+        parent,
+        parentReg,
+        {
+          abort: { reason: "invoke-unknown-journey", journeyId: childJourneyId, exit: exitName },
+        },
+        { kind: "invoke" },
+      );
+      return false;
+    }
+    if (typeof spec.resume !== "string" || spec.resume.length === 0) {
+      if (debug) {
+        console.error(
+          `[@modular-react/journeys] Invoke from "${parent.journeyId}.${parentStep.moduleId}.${parentStep.entry}" is missing a resume name.`,
+        );
+      }
+      fireOnError(parentReg, parent, new Error("Invoke missing resume name"), parentStep, "invoke");
+      applyTransitionLocal(
+        parent,
+        parentReg,
+        { abort: { reason: "invoke-missing-resume", exit: exitName } },
+        { kind: "invoke" },
+      );
+      return false;
+    }
+    if (!lookupResume(parentReg, parentStep, spec.resume)) {
+      if (debug) {
+        console.error(
+          `[@modular-react/journeys] Invoke from "${parent.journeyId}.${parentStep.moduleId}.${parentStep.entry}" names resume "${spec.resume}" but no such handler is declared on def.resumes[${parentStep.moduleId}][${parentStep.entry}].`,
+        );
+      }
+      fireOnError(
+        parentReg,
+        parent,
+        new Error(
+          `Resume "${spec.resume}" not declared on ${parentStep.moduleId}.${parentStep.entry}`,
+        ),
+        parentStep,
+        "invoke",
+      );
+      applyTransitionLocal(
+        parent,
+        parentReg,
+        { abort: { reason: "invoke-unknown-resume", resume: spec.resume, exit: exitName } },
+        { kind: "invoke" },
+      );
+      return false;
+    }
+
+    // ---------------------------------------------------------------------
+    // Cycle / depth / declared-set guards (cycle-safety net).
+    //
+    // All three run before we dispatch to `runtime.start` so a guard
+    // rejection never materialises a child record nor touches the child's
+    // persistence. The order is deliberate:
+    //   1. undeclared-child: cheapest, catches dynamic-dispatch typos
+    //      whose blast radius is the parent's own definition.
+    //   2. cycle: catches "this exact id is already on the active chain"
+    //      with the most actionable error message (a printed chain).
+    //   3. depth: backstop for graphs that cycle through ids the
+    //      runtime has not seen yet (e.g. ABCABC where each link is a
+    //      different journey).
+    // ---------------------------------------------------------------------
+
+    const childReg = definitions.get(childJourneyId);
+    const declaredInvokes = parentReg.definition.invokes;
+    if (Array.isArray(declaredInvokes)) {
+      let allowed = false;
+      for (const handle of declaredInvokes) {
+        if (handle?.id === childJourneyId) {
+          allowed = true;
+          break;
+        }
+      }
+      if (!allowed) {
+        if (debug) {
+          console.error(
+            `[@modular-react/journeys] Invoke from "${parent.journeyId}.${parentStep.moduleId}.${parentStep.entry}" dispatched handle "${childJourneyId}" which is not in the parent's declared invokes[]. Add the handle to the parent journey's \`invokes\` array, or remove the declaration to opt out of static checking.`,
+          );
+        }
+        fireOnError(
+          parentReg,
+          parent,
+          new Error(`Child journey "${childJourneyId}" is not in "${parent.journeyId}".invokes[]`),
+          parentStep,
+          "invoke",
+        );
+        applyTransitionLocal(
+          parent,
+          parentReg,
+          {
+            abort: {
+              reason: "invoke-undeclared-child",
+              parentJourneyId: parent.journeyId,
+              childJourneyId,
+              exit: exitName,
+            },
+          },
+          { kind: "invoke" },
+        );
+        return false;
+      }
+    }
+
+    const chain = ancestorChain(parent);
+    // Same-id guard. Walks every ancestor + the parent itself; if the
+    // target id is anywhere on the active chain we abort with the
+    // closing-cycle path so the author can see exactly where recursion
+    // closed. The `chain` payload mirrors the printed display (cycle
+    // portion only — pre-cycle prefix is dropped) so telemetry consumers
+    // and the human-readable warning agree.
+    {
+      const fullIds = chain.map((r) => r.journeyId).concat(parent.journeyId);
+      const collisionIdx = fullIds.indexOf(childJourneyId);
+      if (collisionIdx >= 0) {
+        const cyclePath = [...fullIds.slice(collisionIdx), childJourneyId];
+        const display = cyclePath.map((id) => `"${id}"`).join(" → ");
+        if (debug) {
+          console.error(
+            `[@modular-react/journeys] Invoke would re-enter journey "${childJourneyId}" already on the active chain: ${display}. Aborting parent "${parent.id}".`,
+          );
+        }
+        fireOnError(
+          parentReg,
+          parent,
+          new Error(`Invoke cycle on chain: ${display}`),
+          parentStep,
+          "invoke",
+        );
+        applyTransitionLocal(
+          parent,
+          parentReg,
+          {
+            abort: {
+              reason: "invoke-cycle",
+              childJourneyId,
+              chain: cyclePath,
+              exit: exitName,
+            },
+          },
+          { kind: "invoke" },
+        );
+        return false;
+      }
+    }
+
+    // Depth guard. The chain reaching `parent` is `chain.length + 1`
+    // (ancestors + parent); the new child would push it to
+    // `chain.length + 2`. Compare against the resolved cap.
+    const cap = resolveMaxCallStackDepth(chain, parentReg, childReg);
+    const depthAfterInvoke = chain.length + 2;
+    if (depthAfterInvoke > cap) {
+      const chainIds = chain.map((r) => r.journeyId).concat(parent.journeyId, childJourneyId);
+      const display = chainIds.map((id) => `"${id}"`).join(" → ");
+      if (debug) {
+        console.error(
+          `[@modular-react/journeys] Invoke would exceed maxCallStackDepth (${cap}) — chain: ${display}. Aborting parent "${parent.id}".`,
+        );
+      }
+      fireOnError(
+        parentReg,
+        parent,
+        new Error(`Invoke would exceed depth cap ${cap} on chain ${display}`),
+        parentStep,
+        "invoke",
+      );
+      applyTransitionLocal(
+        parent,
+        parentReg,
+        {
+          abort: {
+            reason: "invoke-stack-overflow",
+            depth: depthAfterInvoke,
+            cap,
+            chain: chainIds,
+            exit: exitName,
+          },
+        },
+        { kind: "invoke" },
+      );
+      return false;
+    }
+
+    // Mint or load the child via the standard `start` path so persistence
+    // and idempotency work uniformly. `start` returns an existing instance
+    // id when the child's keyFor matches an in-flight one (rare here, but
+    // fully supported).
+    let childId: InstanceId;
+    try {
+      childId = runtime.start(spec.handle, spec.input as never);
+    } catch (err) {
+      if (debug) console.error("[@modular-react/journeys] runtime.start during invoke threw", err);
+      fireOnError(parentReg, parent, err, parentStep, "invoke");
+      applyTransitionLocal(
+        parent,
+        parentReg,
+        { abort: { reason: "invoke-start-threw", error: err, exit: exitName } },
+        { kind: "invoke" },
+      );
+      return false;
+    }
+    const child = instances.get(childId);
+    if (!child) {
+      // Defensive: start should have populated `instances`. If not, abort.
+      applyTransitionLocal(
+        parent,
+        parentReg,
+        { abort: { reason: "invoke-start-no-record", exit: exitName } },
+        { kind: "invoke" },
+      );
+      return false;
+    }
+    // `runtime.start` is idempotent on the persistence key, so it can hand
+    // back a child that is already wired to a *different* parent — for
+    // example, two parents invoke the same child journey with a `keyFor`
+    // that resolves to the same string. Overwriting the link would steal
+    // the child and leave the original parent stranded with a dangling
+    // `activeChildId`. Reject the second invoke instead.
+    if (child.parent && child.parent.instanceId !== parent.id) {
+      if (debug) {
+        console.error(
+          `[@modular-react/journeys] Invoke target "${child.id}" is already linked to parent "${child.parent.instanceId}". Aborting parent "${parent.id}".`,
+        );
+      }
+      fireOnError(
+        parentReg,
+        parent,
+        new Error(
+          `Child instance "${child.id}" is already linked to parent "${child.parent.instanceId}"`,
+        ),
+        parentStep,
+        "invoke",
+      );
+      applyTransitionLocal(
+        parent,
+        parentReg,
+        {
+          abort: {
+            reason: "invoke-child-already-linked",
+            childInstanceId: child.id,
+            existingParentId: child.parent.instanceId,
+            exit: exitName,
+          },
+        },
+        { kind: "invoke" },
+      );
+      return false;
+    }
+
+    // Wire the link in both directions.
+    parent.activeChildId = childId;
+    child.parent = { instanceId: parent.id, resumeName: spec.resume };
+    childToParent.set(childId, parent.id);
+    // Persist the child *now* that its parentLink is set — otherwise the
+    // blob written during `runtime.start(...)` above has parentLink=undefined,
+    // and a reload would resurrect the child with no back-pointer to the
+    // parent's resume. Reuses the `childReg` looked up by the cycle/depth
+    // guards above; that lookup is by `childJourneyId === child.journeyId`,
+    // so it is the same registration record.
+    const childPersistence = childReg?.options?.persistence;
+    if (childPersistence) schedulePersist(child, childPersistence);
+    // Bump the child's revision so subscribers picking up `instance.parent`
+    // see the link on the very first read after the invoke.
+    notify(child);
+    return child;
+  }
+
+  /**
+   * Local short-cut for the abort branch used by `beginInvoke`'s validation
+   * failures — calls into the same shared transition machinery without
+   * re-entering the invoke arm. The "Local" suffix marks it as the inner
+   * sibling of the public `applyTransition`; both eventually fall into the
+   * same persistence/notify tail.
+   */
+  function applyTransitionLocal(
+    record: InstanceRecord,
+    reg: RegisteredJourney,
+    result: TransitionResult<ModuleTypeMap, unknown>,
+    eventExtras?: {
+      readonly kind?: TransitionEvent["kind"];
+      readonly outcome?: TransitionEvent["outcome"];
+      readonly resume?: TransitionEvent["resume"];
+    },
+  ) {
+    applyTransition(record, reg, result, null, eventExtras);
+  }
+
+  /**
+   * If `record` has a `parent` link AND has just reached a terminal status,
+   * fire the parent's named resume handler with the child's outcome and
+   * apply the result as the parent's next transition. Idempotent: clears
+   * the parent's `activeChildId` and the `childToParent` entry so a second
+   * call is a no-op.
+   *
+   * Edge: the parent may itself be terminal already (cascade-end raced
+   * with a child completing) — in that case the resume is dropped, the
+   * link is cleared, and the child's terminal stands on its own.
+   */
+  function applyResumeIfChild(child: InstanceRecord) {
+    if (child.status !== "completed" && child.status !== "aborted") return;
+    const parentLink = child.parent;
+    if (!parentLink) return;
+    const parentId = parentLink.instanceId;
+    const parent = instances.get(parentId);
+    // Always clear the bookkeeping, even if the parent is gone — leftover
+    // entries would otherwise pin the child in `childToParent` forever.
+    childToParent.delete(child.id);
+    child.parent = null;
+    // The terminal `notify(child)` in `applyTransition` already fired
+    // before us with `child.parent` still set; subscribers cached that
+    // snapshot. Re-notify so the cleared linkage lands in the public
+    // snapshot — otherwise `getInstance(child.id).parent` keeps returning
+    // the stale link until the next unrelated revision bump.
+    notify(child);
+    if (!parent) return;
+    // Only fire the resume when this child is still the parent's *active*
+    // child. A racey end()/forget on the parent could have set
+    // `activeChildId` to null already; treat that as "parent moved on".
+    if (parent.activeChildId !== child.id) return;
+    parent.activeChildId = null;
+    // Same staleness story for the parent: paths that fall through to
+    // `applyTransition(parent, …)` get a notify there, but the early-
+    // return arms below (terminal parent, missing reg/step) do not — so
+    // notify here when we are about to bail. Paths that continue rely on
+    // `applyTransition`'s tail notify, which clears `cachedSnapshot` and
+    // emits a single combined snapshot for the link clear + transition.
+    if (parent.status !== "active") {
+      notify(parent);
+      return;
+    }
+    const parentReg = definitions.get(parent.journeyId);
+    const parentStep = parent.step;
+    if (!parentReg || !parentStep) {
+      notify(parent);
+      return;
+    }
+
+    const handler = lookupResume(parentReg, parentStep, parentLink.resumeName);
+    if (!handler) {
+      // The parent's journey definition was upgraded between invoke and
+      // resume so the resume name is gone. Surface as an abort with a
+      // discoverable reason — the parent's onAbort/onError see it and the
+      // shell can decide whether to restart or surrender.
+      if (debug) {
+        console.warn(
+          `[@modular-react/journeys] Resume "${parentLink.resumeName}" no longer declared on ${parentStep.moduleId}.${parentStep.entry} — aborting parent ${parent.id}.`,
+        );
+      }
+      fireOnError(
+        parentReg,
+        parent,
+        new Error(`Resume "${parentLink.resumeName}" missing`),
+        parentStep,
+        "resume",
+      );
+      applyTransition(
+        parent,
+        parentReg,
+        {
+          abort: {
+            reason: "resume-missing",
+            resume: parentLink.resumeName,
+            childJourneyId: child.journeyId,
+          },
+        },
+        null,
+      );
+      return;
+    }
+
+    const outcome: ChildOutcome<unknown> =
+      child.status === "completed"
+        ? { status: "completed", payload: child.terminalPayload }
+        : { status: "aborted", reason: child.terminalPayload };
+
+    let result: TransitionResult<ModuleTypeMap, unknown>;
+    try {
+      result = handler({
+        state: parent.state,
+        input: parentStep.input,
+        outcome,
+      }) as TransitionResult<ModuleTypeMap, unknown>;
+    } catch (err) {
+      if (debug) console.error("[@modular-react/journeys] resume handler threw", err);
+      fireOnError(parentReg, parent, err, parentStep, "resume");
+      applyTransition(
+        parent,
+        parentReg,
+        {
+          abort: {
+            reason: "resume-threw",
+            resume: parentLink.resumeName,
+            error: err,
+          },
+        },
+        null,
+      );
+      return;
+    }
+    if (result && typeof (result as { then?: unknown }).then === "function") {
+      if (debug) {
+        console.error(
+          `[@modular-react/journeys] Resume handler "${parentLink.resumeName}" on ${parentStep.moduleId}.${parentStep.entry} returned a Promise. Resumes must be synchronous and pure.`,
+        );
+      }
+      applyTransition(
+        parent,
+        parentReg,
+        { abort: { reason: "resume-returned-promise", resume: parentLink.resumeName } },
+        null,
+        { kind: "resume", outcome, resume: parentLink.resumeName },
+      );
+      return;
+    }
+    // Tag the parent's transition as "resume" — same flow through
+    // applyTransition, but `onTransition` consumers can filter by
+    // `kind === "resume"` and read `outcome` / `resume` to correlate.
+    applyTransition(parent, parentReg, result, null, {
+      kind: "resume",
+      outcome,
+      resume: parentLink.resumeName,
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -425,6 +1103,11 @@ export function createJourneyRuntime(
     reg: RegisteredJourney,
     result: TransitionResult<ModuleTypeMap, unknown>,
     exitName: string | null,
+    eventExtras?: {
+      readonly kind?: TransitionEvent["kind"];
+      readonly outcome?: TransitionEvent["outcome"];
+      readonly resume?: TransitionEvent["resume"];
+    },
   ) {
     const previousStep = record.step;
     // Snapshot the *pre-transition* state (before any state update) — this
@@ -434,6 +1117,15 @@ export function createJourneyRuntime(
     const preState = record.state;
     if ("state" in result) {
       record.state = result.state;
+    }
+
+    // Any step change clears the per-step bounce counter — the counter is
+    // scoped to the step that fired the bouncing resumes; once we move
+    // off that step, we're in a fresh per-step budget. Cleared up front
+    // so all three step-advancing arms (next / complete / abort) inherit
+    // the reset uniformly.
+    if ("next" in result || "complete" in result || "abort" in result) {
+      record.resumeBouncesAtStep = null;
     }
 
     if ("next" in result) {
@@ -479,7 +1171,7 @@ export function createJourneyRuntime(
       record.updatedAt = nowIso();
       record.cachedCallbacks = null;
       trimHistory(record, reg);
-      fireOnTransition(reg, record, previousStep, nextStep, exitName);
+      fireOnTransition(reg, record, previousStep, nextStep, exitName, eventExtras);
     } else if ("complete" in result) {
       if (previousStep) {
         record.history.push(previousStep);
@@ -492,7 +1184,7 @@ export function createJourneyRuntime(
       record.updatedAt = nowIso();
       record.cachedCallbacks = null;
       trimHistory(record, reg);
-      fireOnTransition(reg, record, previousStep, null, exitName);
+      fireOnTransition(reg, record, previousStep, null, exitName, eventExtras);
       fireOnComplete(reg, record, result.complete);
     } else if ("abort" in result) {
       if (previousStep) {
@@ -506,8 +1198,78 @@ export function createJourneyRuntime(
       record.updatedAt = nowIso();
       record.cachedCallbacks = null;
       trimHistory(record, reg);
-      fireOnTransition(reg, record, previousStep, null, exitName);
+      fireOnTransition(reg, record, previousStep, null, exitName, eventExtras);
       fireOnAbort(reg, record, result.abort);
+    } else if ("invoke" in result) {
+      // Invoke a child journey from this step. The parent's step does NOT
+      // change — the parent stays "active, with a child in flight." When
+      // the child terminates, the runtime fires the parent's named resume
+      // handler (declared on `def.resumes[mod][entry][name]`) with the
+      // child's outcome and applies the result as the parent's next
+      // transition.
+      //
+      // Bounce-limit guard: when this `{ invoke }` arm is the result of
+      // a *resume* on the same step (kind === "resume"), the parent has
+      // not advanced since the previous invoke at this step — that is a
+      // "bounce." Cap the consecutive bounces so a malformed
+      // resume → invoke → resume → invoke loop cannot spin indefinitely.
+      // The check runs before `beginInvoke` so a rejected bounce never
+      // mints a child instance.
+      if (eventExtras?.kind === "resume") {
+        const bounceCap = resolveBounceCap(reg);
+        const prior = record.resumeBouncesAtStep;
+        const nextCount = prior && prior.stepToken === record.stepToken ? prior.count + 1 : 1;
+        if (nextCount > bounceCap) {
+          if (debug) {
+            console.error(
+              `[@modular-react/journeys] Resume on "${record.journeyId}.${previousStep?.moduleId}.${previousStep?.entry}" would bounce ${nextCount} times in a row at the same step (cap ${bounceCap}). Aborting "${record.id}" to break the loop.`,
+            );
+          }
+          fireOnError(
+            reg,
+            record,
+            new Error(
+              `Resume bounce limit exceeded (${bounceCap}) at ${previousStep?.moduleId}.${previousStep?.entry}`,
+            ),
+            previousStep,
+            "resume",
+          );
+          // Re-enter the abort branch via the standard machinery — that
+          // gives us the persist + notify + onAbort tail for free, and
+          // fires `kind: "resume"` so telemetry filters work.
+          applyTransition(
+            record,
+            reg,
+            {
+              abort: {
+                reason: "resume-bounce-limit",
+                cap: bounceCap,
+                count: nextCount,
+                resume: eventExtras.resume,
+              },
+            },
+            null,
+            { kind: "resume", outcome: eventExtras.outcome, resume: eventExtras.resume },
+          );
+          return;
+        }
+        record.resumeBouncesAtStep = { stepToken: record.stepToken, count: nextCount };
+      }
+      const childRecord = beginInvoke(record, reg, result.invoke, exitName);
+      if (!childRecord) {
+        // beginInvoke already applied the abort path on validation failure.
+        // notify+persistence have run there too; bail without a second pass.
+        return;
+      }
+      record.updatedAt = nowIso();
+      // No step change → no stepToken bump → exit/goBack callbacks for the
+      // parent step would still resolve, but `dispatchExit` short-circuits
+      // on `record.activeChildId` (see the guard added there) so a stray
+      // exit fires from the now-paused parent are dropped with a warning.
+      fireOnTransition(reg, record, previousStep, previousStep, exitName, {
+        kind: "invoke",
+        child: { instanceId: childRecord.id, journeyId: childRecord.journeyId },
+      });
     }
 
     const persistence = reg.options?.persistence;
@@ -517,6 +1279,15 @@ export function createJourneyRuntime(
     }
 
     notify(record);
+
+    // After the parent's transition has settled (and any persistence has
+    // been scheduled), check whether *this* record was a child whose
+    // terminal we just applied — in which case the parent's named resume
+    // fires now. Doing it after `notify(record)` keeps subscribers'
+    // observed order intact: child's terminal first, parent's resume
+    // second. `applyResumeIfChild` is a no-op for non-child or non-terminal
+    // records.
+    applyResumeIfChild(record);
   }
 
   function entryAllowBackModeForStep(
@@ -538,6 +1309,17 @@ export function createJourneyRuntime(
           `[@modular-react/journeys] Exit("${exitName}") dropped on instance ${record.id} — status=${record.status}. ` +
             `(This is the expected no-op when an exit fires before the initial async load settles; ` +
             `await the load or subscribe for status changes before dispatching.)`,
+        );
+      }
+      return;
+    }
+    if (record.activeChildId) {
+      // Parent step is paused awaiting a child's resume. Exits from the
+      // parent step are dropped — same semantics as a stale stepToken or
+      // a terminal record. The parent advances only via the resume.
+      if (debug) {
+        console.warn(
+          `[@modular-react/journeys] Exit("${exitName}") dropped on instance ${record.id} — a child journey is in flight (activeChildId=${record.activeChildId}). The parent advances when the child resumes.`,
         );
       }
       return;
@@ -609,6 +1391,10 @@ export function createJourneyRuntime(
 
   function dispatchGoBack(record: InstanceRecord, reg: RegisteredJourney, stepToken: number) {
     if (record.status !== "active") return;
+    // Mirror dispatchExit: while a child journey is in flight the parent
+    // step is paused, so a stale `goBack` closure must not rewind the
+    // parent out from under it.
+    if (record.activeChildId) return;
     if (record.stepToken !== stepToken) return;
     if (record.history.length === 0) return;
 
@@ -625,6 +1411,11 @@ export function createJourneyRuntime(
     }
     record.hasRollbackSnapshot = record.rollbackSnapshots.some((s) => s !== undefined);
     record.step = previousStep;
+    // Same per-step reset that applyTransition performs for next/complete/abort:
+    // moving to a different step starts a fresh per-step bounce budget, and
+    // leaving an old counter in place would let a serialize/hydrate cycle
+    // restamp it onto the new step and abort incorrectly.
+    record.resumeBouncesAtStep = null;
     record.stepToken += 1;
     record.updatedAt = nowIso();
     record.cachedCallbacks = null;
@@ -696,6 +1487,11 @@ export function createJourneyRuntime(
           : undefined,
       startedAt: record.startedAt,
       updatedAt: record.updatedAt,
+      activeChildId: record.activeChildId,
+      // Defensive copy — `record.parent` is mutated when invoke/resume cycles
+      // clear the link, and consumers diffing against a previously-read
+      // `instance.parent` reference would otherwise see the mutation.
+      parent: record.parent ? { ...record.parent } : null,
       serialize: () => serialize(record),
     };
     record.cachedSnapshot = { revision: record.revision, instance };
@@ -732,6 +1528,9 @@ export function createJourneyRuntime(
       revision: 0,
       cachedSnapshot: null,
       cachedCallbacks: null,
+      parent: null,
+      activeChildId: null,
+      resumeBouncesAtStep: null,
     };
   }
 
@@ -806,6 +1605,152 @@ export function createJourneyRuntime(
     record.stepToken += 1;
     record.terminalFired = blob.status !== "active";
     record.cachedCallbacks = null;
+
+    // Restore the parent ↔ child link state. The matching record on the
+    // other side may not exist yet (cross-instance hydrate ordering varies),
+    // but we lay down the local half so a subsequent hydrate of the other
+    // half can finish the link via `relinkInvocations()`.
+    if (blob.parentLink) {
+      record.parent = {
+        instanceId: blob.parentLink.parentInstanceId,
+        resumeName: blob.parentLink.resumeName,
+      };
+    } else {
+      record.parent = null;
+    }
+    if (blob.pendingInvoke) {
+      // Adopt the recorded child id even if no live child record exists
+      // yet — `relinkInvocations` will validate or rebuild on demand.
+      record.activeChildId = blob.pendingInvoke.childInstanceId;
+    } else {
+      record.activeChildId = null;
+    }
+    // Restore the bounce counter. The persisted `stepToken` is from the
+    // pre-hydrate runtime, so it cannot be compared against the new
+    // `record.stepToken` (which we just bumped). We retain the count
+    // and re-stamp the token to the *current* step so the counter
+    // continues to police the same step. If the parent advances after
+    // hydrate, the next applyTransition's reset-on-step-change clears
+    // it — exactly matching pre-hydrate semantics.
+    if (blob.resumeBouncesAtStep && Number.isFinite(blob.resumeBouncesAtStep.count)) {
+      record.resumeBouncesAtStep = {
+        stepToken: record.stepToken,
+        count: Math.max(0, Math.floor(blob.resumeBouncesAtStep.count)),
+      };
+    } else {
+      record.resumeBouncesAtStep = null;
+    }
+  }
+
+  /**
+   * Rebuild `childToParent` from records' in-memory `parent` /
+   * `activeChildId` fields. Called after each hydrate path so a hydrate
+   * that lands a child after its parent (or vice-versa) ends with a
+   * consistent reverse map.
+   *
+   * Does NOT abort parents whose `activeChildId` points at a not-yet-loaded
+   * child — the shell may be hydrating in stages, and a transient missing
+   * child would otherwise eat the parent. Parents with a missing child
+   * stay in `active` with the link set; their step exits are blocked
+   * (see `dispatchExit`'s `activeChildId` guard), and the shell decides
+   * whether to `runtime.end(parent)` or load the missing child later.
+   * Idempotent — safe to call multiple times.
+   */
+  function relinkInvocations() {
+    childToParent.clear();
+    for (const child of instances.values()) {
+      if (!child.parent) continue;
+      const parent = instances.get(child.parent.instanceId);
+      if (!parent) continue;
+      if (parent.activeChildId !== child.id) continue;
+      childToParent.set(child.id, parent.id);
+    }
+  }
+
+  /**
+   * Auto-rehydrate a child journey when a parent's blob carries a
+   * `pendingInvoke.childPersistenceKey`. The runtime walks the persisted
+   * link chain transparently so callers only need to `start()` the root —
+   * the leaf comes back along with its parents. Recurses into the loaded
+   * child's own `pendingInvoke` so deep chains (parent → child → grandchild)
+   * restore in one sweep.
+   *
+   * Tolerant of missing pieces: a child blob that's gone from storage,
+   * a child journey that's no longer registered, or a child journey
+   * without persistence configured all leave the parent in the documented
+   * "active with activeChildId set, exits blocked" state. The shell can
+   * then `runtime.end(parentId)` to give up.
+   *
+   * Async loads return without resolving; the link is reconciled when the
+   * persistence promise settles.
+   */
+  function tryRehydrateChild(parentRecord: InstanceRecord, parentBlob: SerializedJourney<unknown>) {
+    const pi = parentBlob.pendingInvoke;
+    if (!pi) return;
+    if (instances.has(pi.childInstanceId)) return;
+    if (!pi.childPersistenceKey) return;
+    const childReg = definitions.get(pi.childJourneyId);
+    if (!childReg) return;
+    const childPersistence = childReg.options?.persistence as
+      | JourneyPersistence<unknown>
+      | undefined;
+    if (!childPersistence) return;
+
+    const childIndexed = indexKey(pi.childJourneyId, pi.childPersistenceKey);
+    // If a different in-memory instance already owns this child key, leave
+    // it alone — we don't want to clobber a user-driven `start()` of the
+    // same child journey that happened to land first.
+    if (keyIndex.has(childIndexed)) return;
+
+    const loaded = probeLoad(childReg, childPersistence, pi.childPersistenceKey);
+
+    const finishHydrate = (childBlob: SerializedJourney<unknown> | null) => {
+      if (!childBlob) return;
+      if (childBlob.status !== "active") return;
+      // Race guards (matters for the async path): a parallel `start()` may
+      // have populated the slot or the parent may have moved on.
+      if (instances.has(pi.childInstanceId)) return;
+      if (keyIndex.has(childIndexed)) return;
+      if (parentRecord.activeChildId !== pi.childInstanceId) return;
+      const childMigrated = migrateBlob(childReg, childBlob);
+      if (!childMigrated.ok) return;
+      const childRecord = createRecord(
+        childReg,
+        pi.childInstanceId,
+        pi.childPersistenceKey,
+        childMigrated.blob.state,
+      );
+      instances.set(pi.childInstanceId, childRecord);
+      keyIndex.set(childIndexed, pi.childInstanceId);
+      try {
+        hydrateInto(childRecord, childMigrated.blob);
+      } catch (err) {
+        if (debug) console.error("[@modular-react/journeys] auto-rehydrate child failed", err);
+        instances.delete(pi.childInstanceId);
+        keyIndex.delete(childIndexed);
+        return;
+      }
+      // Recurse: the child may itself have a pendingInvoke (grandchild).
+      tryRehydrateChild(childRecord, childMigrated.blob);
+      relinkInvocations();
+      notify(childRecord);
+      notify(parentRecord);
+    };
+
+    if (loaded && typeof (loaded as Promise<unknown>).then === "function") {
+      void (loaded as Promise<SerializedJourney<unknown> | null>).then(
+        (childBlob) => finishHydrate(childBlob),
+        (err) => {
+          if (debug)
+            console.error(
+              "[@modular-react/journeys] auto-rehydrate child persistence.load rejected",
+              err,
+            );
+        },
+      );
+      return;
+    }
+    finishHydrate(loaded as SerializedJourney<unknown> | null);
   }
 
   function probeLoad(
@@ -875,8 +1820,8 @@ export function createJourneyRuntime(
   // ---------------------------------------------------------------------------
 
   const runtime: JourneyRuntime = {
-    start<TInput>(
-      journeyIdOrHandle: string | JourneyHandleRef<string, TInput>,
+    start<TInput, TOutput>(
+      journeyIdOrHandle: string | JourneyHandleRef<string, TInput, TOutput>,
       ...rest: [input?: TInput]
     ): InstanceId {
       const input = (rest.length > 0 ? rest[0] : undefined) as TInput;
@@ -949,6 +1894,8 @@ export function createJourneyRuntime(
                 startFresh(reg, input, record);
                 return;
               }
+              tryRehydrateChild(record, migrated.blob);
+              relinkInvocations();
               notify(record);
             },
             (err) => {
@@ -992,6 +1939,8 @@ export function createJourneyRuntime(
               keyIndex.set(indexed, freshId);
               return startFresh(reg, input, freshRecord);
             }
+            tryRehydrateChild(record, migrated.blob);
+            relinkInvocations();
             notify(record);
             return instanceId;
           }
@@ -1060,6 +2009,8 @@ export function createJourneyRuntime(
         instances.delete(instanceId);
         throw err;
       }
+      tryRehydrateChild(record, migrated.blob);
+      relinkInvocations();
       notify(record);
       return instanceId;
     },
@@ -1096,16 +2047,37 @@ export function createJourneyRuntime(
       if (record.status === "completed" || record.status === "aborted") return;
       const reg = definitions.get(record.journeyId);
       if (!reg) return;
+      // Cascade-end: a parent that gets force-terminated must take its
+      // active child with it. Sever the parent ↔ child link first so the
+      // child's terminal does NOT trigger the parent's resume (the parent
+      // is already on its way out). Then end the child with a propagated
+      // reason. Recurses naturally — a grandchild will be ended by the
+      // child's `end()`.
+      if (record.activeChildId) {
+        const childId = record.activeChildId;
+        record.activeChildId = null;
+        const child = instances.get(childId);
+        if (child && child.parent && child.parent.instanceId === record.id) {
+          child.parent = null;
+        }
+        childToParent.delete(childId);
+        // Use a distinct cascade reason so child telemetry can distinguish
+        // "user closed parent" from "child aborted on its own."
+        runtime.end(childId, { reason: "parent-ended", parentId: record.id, cause: reason });
+      }
       // An outlet that unmounts mid-load should still be able to tear the
       // placeholder instance down. The journey never "started" as far as the
       // author is concerned, so skip `onAbandon` (it would see a null step)
       // and transition straight to `aborted` with the supplied reason.
+      // The reason is passed through directly (no `{ reason }` wrap) so
+      // `terminalPayload` matches what callers handed in — important when
+      // a parent's resume handler reads `outcome.reason` after a cascade.
       if (record.status === "loading") {
-        applyTransition(record, reg, { abort: { reason: reason ?? "abandoned" } }, null);
+        applyTransition(record, reg, { abort: reason ?? "abandoned" }, null);
         return;
       }
       const defaultAbort: TransitionResult<ModuleTypeMap, unknown> = {
-        abort: { reason: reason ?? "abandoned" },
+        abort: reason ?? "abandoned",
       };
       let result: TransitionResult<ModuleTypeMap, unknown> = defaultAbort;
       // Registration-level `onAbandon` overrides the definition's — shells
@@ -1129,7 +2101,7 @@ export function createJourneyRuntime(
           // `cause`) so a throw in a shell's onAbandon doesn't silently
           // erase the original abort context.
           if (debug) console.error("[@modular-react/journeys] onAbandon threw", err);
-          fireOnError(reg, record, err, record.step);
+          fireOnError(reg, record, err, record.step, "abandon");
           result = {
             abort: {
               reason: reason ?? "abandoned",
@@ -1147,6 +2119,23 @@ export function createJourneyRuntime(
       if (!record) return;
       if (record.status !== "completed" && record.status !== "aborted") return;
       if (record.persistenceKey) keyIndex.delete(indexKey(record.journeyId, record.persistenceKey));
+      // A terminal child whose parent never picked up the resume (parent
+      // already terminal, or detached) leaves the childToParent entry
+      // dangling. Drop it on forget so the map cannot leak indefinitely.
+      childToParent.delete(id);
+      // If this terminal record still references a child (parent forgotten
+      // before the child resumed back), null the orphan child's `parent`
+      // pointer so a future child-terminal doesn't try to fire a resume
+      // on a dropped instance.
+      if (record.activeChildId) {
+        const orphan = instances.get(record.activeChildId);
+        if (orphan && orphan.parent && orphan.parent.instanceId === record.id) {
+          orphan.parent = null;
+          notify(orphan);
+        }
+        childToParent.delete(record.activeChildId);
+        record.activeChildId = null;
+      }
       record.listeners.clear();
       instances.delete(id);
     },
@@ -1157,6 +2146,15 @@ export function createJourneyRuntime(
         if (record.status === "completed" || record.status === "aborted") {
           if (record.persistenceKey) {
             keyIndex.delete(indexKey(record.journeyId, record.persistenceKey));
+          }
+          childToParent.delete(id);
+          if (record.activeChildId) {
+            const orphan = instances.get(record.activeChildId);
+            if (orphan && orphan.parent && orphan.parent.instanceId === record.id) {
+              orphan.parent = null;
+              notify(orphan);
+            }
+            childToParent.delete(record.activeChildId);
           }
           record.listeners.clear();
           instances.delete(id);
@@ -1172,7 +2170,9 @@ export function createJourneyRuntime(
     if (!record) return;
     const reg = definitions.get(record.journeyId);
     if (!reg) return;
-    fireOnError(reg, record, err, step);
+    // Component-level throws are step-phase errors — they happen during
+    // a step component's render, not in the invoke / resume control plane.
+    fireOnError(reg, record, err, step, "step");
   }
 
   // Internals used by the outlet and testing helpers — kept on a WeakMap
@@ -1184,6 +2184,41 @@ export function createJourneyRuntime(
     __moduleMap: moduleMap,
     __debug: debug,
     __fireComponentError: dispatchComponentError,
+    __synthesizeCompletion: (childId: InstanceId, payload: unknown) => {
+      const child = instances.get(childId);
+      if (!child) return;
+      const reg = definitions.get(child.journeyId);
+      if (!reg) return;
+      // Drive the child through the standard transition machinery so
+      // onComplete, onTransition, persistence, AND the parent's resume
+      // hook all fire exactly as they would for a real `{ complete }`
+      // transition. The shape we hand `applyTransition` is the same one
+      // a transition handler would have returned.
+      applyTransition(child, reg, { complete: payload }, null);
+    },
+    __synthesizeAbort: (childId: InstanceId, reason: unknown) => {
+      const child = instances.get(childId);
+      if (!child) return;
+      const reg = definitions.get(child.journeyId);
+      if (!reg) return;
+      // Mirror of `__synthesizeCompletion` but for the abort arm. Lets the
+      // simulator's `abortChild()` deliver a clean reason to the parent's
+      // resume handler — equivalent to what the child's own
+      // `{ abort: reason }` transition would produce, without going through
+      // `runtime.end()`'s onAbandon path.
+      applyTransition(child, reg, { abort: reason }, null);
+    },
+    __consumeRetry: (id: InstanceId, retryLimit: number) => {
+      // Centralized retry-budget check: the outlet calls in here so the
+      // counter increments under the runtime's ownership, and a future
+      // shell that wants to track retries via telemetry hooks has a
+      // single place to do so.
+      const record = instances.get(id);
+      if (!record) return false;
+      if (record.retryCount >= retryLimit) return false;
+      record.retryCount += 1;
+      return true;
+    },
   };
   INTERNALS.set(runtime, internals);
 
@@ -1220,6 +2255,32 @@ export interface JourneyRuntimeInternals {
    * keeps the runtime the single owner of hook firing.
    */
   __fireComponentError(id: InstanceId, err: unknown, step: JourneyStep): void;
+  /**
+   * Drive a child instance to a `completed` terminal with a synthesized
+   * payload. Test-only — the simulator's `completeChild()` uses this to
+   * exercise a parent's resume handler in isolation without enumerating
+   * the child's transition graph. Routes through the standard
+   * `applyTransition` so onComplete / onTransition / persistence / the
+   * parent's resume all fire as they would for a real `{ complete }`.
+   * No-op for unknown ids.
+   */
+  __synthesizeCompletion(childId: InstanceId, payload: unknown): void;
+  /**
+   * Sibling of `__synthesizeCompletion` for the abort arm — the
+   * simulator's `abortChild()` uses this so the parent's resume handler
+   * receives the reason directly, without the `{ reason }` wrap that
+   * `runtime.end()` previously applied.
+   */
+  __synthesizeAbort(childId: InstanceId, reason: unknown): void;
+  /**
+   * Atomically attempt to consume one retry slot for `id`. Returns
+   * `true` if the budget allowed the retry (counter incremented), or
+   * `false` if `retryLimit` was already hit. Centralizing this in the
+   * runtime keeps the budget in one place — the outlet only decides
+   * whether the policy was `"retry"` and trusts the runtime for the
+   * cap check.
+   */
+  __consumeRetry(id: InstanceId, retryLimit: number): boolean;
 }
 
 export function getInternals(runtime: JourneyRuntime): JourneyRuntimeInternals {

@@ -48,6 +48,19 @@ export interface JourneyOutletProps {
   readonly onFinished?: (outcome: TerminalOutcome) => void;
   readonly onStepError?: (err: unknown, ctx: { step: JourneyStep }) => JourneyStepErrorPolicy;
   /**
+   * When `false`, the outlet renders the instance you handed it directly,
+   * even if it has a child journey in flight. Set this when you compose
+   * two outlets to render parent and child side-by-side or in a modal —
+   * the parent outlet stays on the parent's step, and a sibling outlet
+   * keyed off `instance.activeChildId` renders the child.
+   *
+   * When `true` (the default), the outlet walks the active call chain
+   * from the supplied `instanceId` down to the leaf and renders the leaf,
+   * matching the subroutine intuition: a child takes over the same
+   * outlet for the duration of its run.
+   */
+  readonly leafOnly?: boolean;
+  /**
    * Cap on `retry` responses before the outlet falls back to `abort`. The
    * counter increments on every retry from `onStepError` and is never reset,
    * so a step that causes a downstream step to also throw cannot bypass the
@@ -86,6 +99,7 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     retryLimit = DEFAULT_RETRY_CAP,
     notFoundComponent,
     errorComponent,
+    leafOnly = true,
   } = props;
 
   const runtime = runtimeProp ?? context?.runtime;
@@ -95,7 +109,18 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     );
   }
 
-  const instance = useInstanceSnapshot(runtime, instanceId);
+  // Subscribe to the originally-supplied (root) instance so onFinished and
+  // abandon-on-unmount resolve against THAT instance — even when leaf-walk
+  // is rendering a different (child/grandchild) record. The leaf is also
+  // subscribed-to via `useLeafId` so this component re-renders when the
+  // call chain shifts (parent invokes a child, child terminates, etc.).
+  const rootInstance = useInstanceSnapshot(runtime, instanceId);
+  const leafId = useLeafId(runtime, instanceId, leafOnly);
+  // Subscribe to the leaf separately so leaf-internal transitions trigger
+  // re-renders. When the leaf id equals the root, useInstanceSnapshot
+  // dedupes naturally (same subscribe call to the same record).
+  const leafInstance = useInstanceSnapshot(runtime, leafId);
+  const instance = leafId === instanceId ? rootInstance : leafInstance;
   const internals = getInternals(runtime);
   const modules = modulesProp ?? internals.__moduleMap;
   const [retryKey, setRetryKey] = useState(0);
@@ -112,6 +137,9 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
   //    outlet B's instance alive we also consult `record.listeners.size` —
   //    if any subscriber is still attached, another outlet has taken over
   //    and we skip the `end()`.
+  //
+  // Targets the ROOT — `runtime.end` cascades to any active child, so a
+  // single call cleans the whole chain.
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -128,20 +156,23 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     };
   }, [runtime, instanceId, internals]);
 
-  // Fire onFinished exactly once on terminal.
+  // Fire onFinished exactly once on terminal — bound to the ROOT, since
+  // the caller asked to be notified when the journey they mounted finishes.
+  // Child terminations are observed via the parent's resume handler and
+  // are not reported through this hook.
   const finishedFiredRef = useRef(false);
   useEffect(() => {
-    if (!instance) return;
-    if (instance.status !== "completed" && instance.status !== "aborted") return;
+    if (!rootInstance) return;
+    if (rootInstance.status !== "completed" && rootInstance.status !== "aborted") return;
     if (finishedFiredRef.current) return;
     finishedFiredRef.current = true;
     onFinished?.({
-      status: instance.status,
-      payload: instance.terminalPayload,
-      instanceId: instance.id,
-      journeyId: instance.journeyId,
+      status: rootInstance.status,
+      payload: rootInstance.terminalPayload,
+      instanceId: rootInstance.id,
+      journeyId: rootInstance.journeyId,
     });
-  }, [instance, onFinished]);
+  }, [rootInstance, onFinished]);
 
   if (!instance) return null;
   if (instance.status === "loading") return loadingFallback ?? null;
@@ -157,10 +188,11 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     return createElement(NotFound, { moduleId: step.moduleId, entry: step.entry });
   }
 
-  // Degrade gracefully if the record/registration was forgotten mid-render
-  // (e.g. a sibling effect calling `runtime.forget`) — matches the existing
-  // `if (!instance) return null` path above instead of throwing.
-  const record = internals.__getRecord(instanceId);
+  // Resolve the *leaf's* record and registration so the step callbacks
+  // (`exit`, `goBack`) drive the leaf's transitions. Using the root's
+  // record here would cross wires — exits dispatched by the leaf module
+  // would land on the parent's step.
+  const record = internals.__getRecord(instance.id);
   const reg = internals.__getRegistered(instance.journeyId);
   if (!record || !reg) return null;
   const { exit, goBack } = internals.__bindStepCallbacks(record, reg);
@@ -171,22 +203,24 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     // or ignore. Route through the runtime so `fireOnError` stays the
     // single owner of hook firing (including its own try/catch around
     // throwing hooks); the outlet never reads `reg.options.onError`
-    // directly.
-    internals.__fireComponentError(instanceId, err, step);
+    // directly. Bound to the LEAF's instance id since the throw came from
+    // the leaf step's component.
+    internals.__fireComponentError(instance.id, err, step);
     let policy = onStepError?.(err, { step }) ?? "abort";
     if (policy === "retry") {
-      // The retry counter lives on the runtime record (not a ref) so it
-      // survives a transition side-effect that advances stepToken mid-retry:
-      // a step that throws during render and calls `exit()` in cleanup would
-      // otherwise reset the budget on every hop.
-      if (record.retryCount >= retryLimit) {
+      // Defer the budget check to the runtime so the counter is owned in
+      // one place and survives transition side-effects that advance
+      // stepToken mid-retry.
+      if (!internals.__consumeRetry(instance.id, retryLimit)) {
         policy = "abort";
-      } else {
-        record.retryCount += 1;
       }
     }
     if (policy === "abort") {
-      runtime.end(instanceId, { reason: "component-error", error: err });
+      // End the LEAF — its abort cascades via the parent's resume handler
+      // (which sees `outcome.status === "aborted"` and decides what to do),
+      // matching the runtime's normal "child aborted" path. Calling end on
+      // the root would skip the parent's chance to recover.
+      runtime.end(instance.id, { reason: "component-error", error: err });
       return;
     }
     if (policy === "retry") {
@@ -264,6 +298,147 @@ function useInstanceSnapshot(runtime: JourneyRuntime, instanceId: InstanceId) {
   const getServerSnapshot = getSnapshot;
   const instance = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   return instance;
+}
+
+/**
+ * Walk the active call chain from a root instance down to the leaf. The
+ * leaf is the first instance in the chain that does not itself have an
+ * `activeChildId`. Walks `activeChildId` greedily; bounded by a sanity
+ * cap so a corrupted cycle (which the runtime should prevent) cannot
+ * loop forever.
+ *
+ * Subscribes to every instance along the chain — when any link changes
+ * (parent invokes a child, child resumes the parent, grandchild starts),
+ * the consumer re-renders with a fresh leaf id.
+ */
+function useLeafId(runtime: JourneyRuntime, rootId: InstanceId, enabled: boolean): InstanceId {
+  // Chain of instance ids root → … → leaf. Recomputed on every render so
+  // changes to any link mid-chain take effect on the next snapshot read.
+  const chain = useCallChain(runtime, rootId, enabled);
+  return chain[chain.length - 1] ?? rootId;
+}
+
+/**
+ * Returns the call stack for an outlet's instance — root at index 0, the
+ * active leaf at the end, intermediate parents in between. Useful for
+ * shells that render layered presentations (e.g. parent visible
+ * underneath, child in a modal): mount the parent outlet with
+ * `leafOnly={false}` and the child outlet against `chain[chain.length - 1]`.
+ *
+ * Subscribes to every instance in the chain so the array re-resolves
+ * when the chain shifts. Length is at least 1 (the root) for any
+ * registered instance.
+ */
+export function useJourneyCallStack(
+  runtime: JourneyRuntime,
+  rootId: InstanceId,
+): readonly InstanceId[] {
+  return useCallChain(runtime, rootId, true);
+}
+
+/**
+ * Shared chain-walker used by both `useLeafId` (which takes the last
+ * element) and `useJourneyCallStack` (which takes the whole array).
+ * Subscribes to every instance along the way and re-subscribes
+ * whenever the chain shifts so deep transitions still trigger snapshot
+ * reads.
+ */
+// Sanity bound to break a corrupted cycle in the activeChild graph; legitimate
+// invoke nesting is not expected to approach this depth. If a real product
+// stacks deeper, surface this through `JourneyRuntimeOptions` rather than
+// raising the constant blindly.
+const MAX_CHAIN_DEPTH = 64;
+
+function useCallChain(
+  runtime: JourneyRuntime,
+  rootId: InstanceId,
+  enabled: boolean,
+): readonly InstanceId[] {
+  // useSyncExternalStore over a virtual "chain" store: subscribe to each
+  // instance the chain currently traverses, return a frozen-per-render
+  // array on snapshot read. The chain can shift while we're subscribed
+  // (a leaf invokes a grandchild, mid-chain instance terminates) — when
+  // that happens, `fire` re-walks the chain and tops up subscriptions
+  // for any newly-reachable instance, so deep transitions still surface.
+  const subscribe = useMemo(
+    () => (listener: () => void) => {
+      const unsubs = new Map<InstanceId, () => void>();
+      let stopped = false;
+      const fire = () => {
+        if (stopped) return;
+        // The chain may have grown — top up subscriptions before notifying.
+        // This keeps `useJourneyCallStack` correct for chains beyond depth
+        // 1 without paying for unnecessary work: only newly-reachable ids
+        // call into `runtime.subscribe`.
+        rewire();
+        listener();
+      };
+      const rewire = () => {
+        const seen = new Set<InstanceId>();
+        let id: InstanceId | null = rootId;
+        let depth = 0;
+        while (id && depth < MAX_CHAIN_DEPTH) {
+          if (seen.has(id)) break;
+          seen.add(id);
+          if (!unsubs.has(id)) {
+            unsubs.set(id, runtime.subscribe(id, fire));
+          }
+          const inst = runtime.getInstance(id);
+          id = enabled && inst ? inst.activeChildId : null;
+          depth += 1;
+        }
+        // Drop subscriptions for ids no longer in the chain.
+        for (const [subscribedId, unsub] of unsubs) {
+          if (!seen.has(subscribedId)) {
+            unsub();
+            unsubs.delete(subscribedId);
+          }
+        }
+      };
+      rewire();
+      return () => {
+        stopped = true;
+        for (const unsub of unsubs.values()) unsub();
+        unsubs.clear();
+      };
+    },
+    [runtime, rootId, enabled],
+  );
+  const getSnapshot = () => resolveChain(runtime, rootId, enabled);
+  // External-store snapshots must be referentially stable across reads
+  // when nothing has changed. `resolveChain` returns a fresh array every
+  // call, so we cache by rootId+enabled and re-issue when the joined-id
+  // signature changes — the same trick the runtime uses for instance
+  // snapshots via `revision`.
+  const cacheRef = useRef<{ key: string; chain: readonly InstanceId[] } | null>(null);
+  const getStableSnapshot = () => {
+    const fresh = getSnapshot();
+    const key = fresh.join(">");
+    if (cacheRef.current && cacheRef.current.key === key) return cacheRef.current.chain;
+    cacheRef.current = { key, chain: fresh };
+    return fresh;
+  };
+  return useSyncExternalStore(subscribe, getStableSnapshot, getStableSnapshot);
+}
+
+function resolveChain(
+  runtime: JourneyRuntime,
+  rootId: InstanceId,
+  enabled: boolean,
+): readonly InstanceId[] {
+  const chain: InstanceId[] = [];
+  let id: InstanceId | null = rootId;
+  let depth = 0;
+  const visited = new Set<InstanceId>();
+  while (id && depth < MAX_CHAIN_DEPTH) {
+    if (visited.has(id)) break; // Defensive: bail on cycle.
+    visited.add(id);
+    chain.push(id);
+    const inst = runtime.getInstance(id);
+    id = enabled && inst ? inst.activeChildId : null;
+    depth += 1;
+  }
+  return chain;
 }
 
 interface StepErrorBoundaryProps {
