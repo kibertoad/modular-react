@@ -45,14 +45,7 @@
 import { bench, describe } from "vitest";
 import { parseRange, parseVersion, satisfies, satisfiesParsed } from "../src/semver.js";
 
-const RANGES = [
-  "^1.2.3",
-  "~1.2.3",
-  ">=1.0.0 <2.0.0",
-  "1.x",
-  "^1.0.0 || ^2.0.0",
-  "1.2.3 - 2.0.0",
-];
+const RANGES = ["^1.2.3", "~1.2.3", ">=1.0.0 <2.0.0", "1.x", "^1.0.0 || ^2.0.0", "1.2.3 - 2.0.0"];
 
 const VERSIONS = ["0.5.0", "1.0.0", "1.2.3", "1.5.7", "1.99.99", "2.0.0", "2.5.0", "3.0.0"];
 

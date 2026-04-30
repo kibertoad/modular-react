@@ -733,21 +733,31 @@ defineJourney<OnboardingModules, OnboardingState>()({
     // multiple major lines accepted explicitly
     billing: "^2.0.0 || ^3.0.0",
   },
-  initialState: () => ({ /* ... */ }),
-  start: () => ({ module: "profile", entry: "review", input: { /* ... */ } }),
-  transitions: { /* ... */ },
+  initialState: () => ({
+    /* ... */
+  }),
+  start: () => ({
+    module: "profile",
+    entry: "review",
+    input: {
+      /* ... */
+    },
+  }),
+  transitions: {
+    /* ... */
+  },
 });
 ```
 
 What the validator does at `resolveManifest()` time:
 
-| Situation                                                          | Result                                                            |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Range admits the registered module's `version`                     | OK.                                                               |
-| Range does not admit it                                            | `JourneyValidationError` listing journey id, module, range, version. |
-| Range names a module that isn't registered                         | `JourneyValidationError` ("not registered").                      |
-| Range string is malformed                                          | `JourneyValidationError` echoing the offending input.             |
-| Module's own `version` is malformed                                | `JourneyValidationError` ("unparseable version").                 |
+| Situation                                      | Result                                                               |
+| ---------------------------------------------- | -------------------------------------------------------------------- |
+| Range admits the registered module's `version` | OK.                                                                  |
+| Range does not admit it                        | `JourneyValidationError` listing journey id, module, range, version. |
+| Range names a module that isn't registered     | `JourneyValidationError` ("not registered").                         |
+| Range string is malformed                      | `JourneyValidationError` echoing the offending input.                |
+| Module's own `version` is malformed            | `JourneyValidationError` ("unparseable version").                    |
 
 All issues are accumulated and reported in one error so a deployment with several mismatched teams sees the full list in one CI run, not one bug at a time.
 
@@ -1968,16 +1978,16 @@ Every export you're likely to call, grouped by role.
 
 ### Runtime + validation (`@modular-react/journeys`)
 
-| Export                      | Purpose                                                                                                                                                                                                                                                                      |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createJourneyRuntime`      | Low-level runtime factory. Normally called by the registry; exported for advanced use (test harnesses, custom hosts).                                                                                                                                                        |
-| `validateJourneyContracts`  | Cross-checks a journey's transitions and `moduleCompat` against registered modules. Runs automatically at `resolveManifest()` / `resolve()`; exported for custom validation flows.                                                                                            |
-| `validateJourneyDefinition` | Structural sanity check on a definition's own shape. Runs automatically in `registerJourney`.                                                                                                                                                                                |
-| `parseRange` / `parseVersion` / `satisfies` / `satisfiesParsed` | Subset of `npm` semver used by the `moduleCompat` validator. Useful when an app wants to run the same compatibility math against a custom registry (e.g. plugin-host scenarios). See [Pattern - module compatibility (`moduleCompat`)](#pattern--module-compatibility-modulecompat).         |
-| `SemverParseError`          | Thrown by `parseRange` / `parseVersion` on malformed input.                                                                                                                                                                                                                  |
-| `JourneyValidationError`    | Aggregated validation error. `.issues: readonly string[]`.                                                                                                                                                                                                                   |
-| `JourneyHydrationError`     | Thrown from `hydrate` / async-load when the blob is unusable.                                                                                                                                                                                                                |
-| `UnknownJourneyError`       | Thrown from `runtime.start(journeyId, input)` when `journeyId` is not registered. Catch this specifically in shell-state rehydration loops (see [Rehydrating shell-level work](#rehydrating-shell-level-work-tabs-task-queues-drafts)); surface anything else as a real bug. |
+| Export                                                          | Purpose                                                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `createJourneyRuntime`                                          | Low-level runtime factory. Normally called by the registry; exported for advanced use (test harnesses, custom hosts).                                                                                                                                                                |
+| `validateJourneyContracts`                                      | Cross-checks a journey's transitions and `moduleCompat` against registered modules. Runs automatically at `resolveManifest()` / `resolve()`; exported for custom validation flows.                                                                                                   |
+| `validateJourneyDefinition`                                     | Structural sanity check on a definition's own shape. Runs automatically in `registerJourney`.                                                                                                                                                                                        |
+| `parseRange` / `parseVersion` / `satisfies` / `satisfiesParsed` | Subset of `npm` semver used by the `moduleCompat` validator. Useful when an app wants to run the same compatibility math against a custom registry (e.g. plugin-host scenarios). See [Pattern - module compatibility (`moduleCompat`)](#pattern--module-compatibility-modulecompat). |
+| `SemverParseError`                                              | Thrown by `parseRange` / `parseVersion` on malformed input.                                                                                                                                                                                                                          |
+| `JourneyValidationError`                                        | Aggregated validation error. `.issues: readonly string[]`.                                                                                                                                                                                                                           |
+| `JourneyHydrationError`                                         | Thrown from `hydrate` / async-load when the blob is unusable.                                                                                                                                                                                                                        |
+| `UnknownJourneyError`                                           | Thrown from `runtime.start(journeyId, input)` when `journeyId` is not registered. Catch this specifically in shell-state rehydration loops (see [Rehydrating shell-level work](#rehydrating-shell-level-work-tabs-task-queues-drafts)); surface anything else as a real bug.         |
 
 ### Runtime methods (the `JourneyRuntime` returned as `manifest.journeys`)
 

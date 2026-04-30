@@ -35,6 +35,18 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
     category: "growth",
   },
 
+  // OPTIONAL — declare the module version ranges this journey was authored
+  // against. The journeys plugin checks each one against the registered
+  // module's `version` at `resolveManifest()` time and refuses to come up
+  // if any module shipped a backwards-incompatible bump. Omit this block
+  // when journey + modules ship from the same team in the same release;
+  // it earns its keep when modules are versioned independently.
+  moduleCompat: {
+    profile: "^1.0.0",
+    plan: "^1.0.0",
+    billing: "^1.0.0",
+  },
+
   initialState: ({ customerId }: OnboardingInput) => ({
     customerId,
     hint: null,
