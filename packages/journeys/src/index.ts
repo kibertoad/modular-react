@@ -27,7 +27,7 @@ export {
   validateJourneyContracts,
   validateJourneyDefinition,
 } from "./validation.js";
-export { JourneyOutlet } from "./outlet.js";
+export { JourneyOutlet, useJourneyCallStack } from "./outlet.js";
 export type {
   JourneyOutletProps,
   JourneyStepErrorPolicy,
