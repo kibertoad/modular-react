@@ -8,7 +8,13 @@
 // (unknown journey, missing resume, throw, returned promise).
 
 import { describe, expect, it, vi } from "vitest";
-import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
+import {
+  defineEntry,
+  defineExit,
+  defineModule,
+  isJourneySystemAbort,
+  schema,
+} from "@modular-react/core";
 import { defineJourney } from "./define-journey.js";
 import { defineJourneyHandle, invoke } from "./handle.js";
 import { createJourneyRuntime } from "./runtime.js";
@@ -701,5 +707,73 @@ describe("invoke / resume — persistence", () => {
     expect(resumed.activeChildId).toBeNull();
     expect(resumed.state.token).toBe("T-AFTER-RELOAD");
     expect(resumed.step?.entry).toBe("confirm");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Guard: a child already linked to another parent must not be stolen
+// ---------------------------------------------------------------------------
+
+describe("invoke / resume — child already linked", () => {
+  it("aborts the second invoker with `invoke-child-already-linked` when two parents resolve to the same child key", () => {
+    // The child journey's persistence keyFor returns a constant, so two
+    // parents (with different orderIds) both resolve to the same child
+    // instance. The first invoke wires the child to parent1; the second
+    // hits `runtime.start`'s idempotency, gets back the in-flight child,
+    // and would otherwise overwrite `child.parent` and steal the child
+    // from parent1. The runtime must reject that path.
+    const childStore = new Map<string, SerializedJourney<unknown>>();
+    const childPersistence = {
+      keyFor: () => "verify:shared",
+      load: (k: string) => childStore.get(k) ?? null,
+      save: (k: string, b: SerializedJourney<{ subject: string }>) =>
+        void childStore.set(k, b as SerializedJourney<unknown>),
+      remove: (k: string) => void childStore.delete(k),
+    };
+
+    const rt = createJourneyRuntime(
+      [
+        { definition: parentJourney, options: undefined },
+        { definition: childJourney, options: { persistence: childPersistence as never } },
+      ],
+      { modules: { checkout: parentMod, verifier: childMod }, debug: false },
+    );
+    const harness = createTestHarness(rt);
+
+    const parent1Id = rt.start(parentHandle, { orderId: "O-LINK-1" });
+    harness.fireExit(parent1Id, "pickPlan", { plan: "paid" });
+    const childId = rt.getInstance(parent1Id)!.activeChildId!;
+    expect(childId).toBeTruthy();
+    expect(rt.getInstance(childId)!.parent).toEqual({
+      instanceId: parent1Id,
+      resumeName: "afterVerify",
+    });
+
+    const parent2Id = rt.start(parentHandle, { orderId: "O-LINK-2" });
+    expect(parent2Id).not.toBe(parent1Id);
+    harness.fireExit(parent2Id, "pickPlan", { plan: "paid" });
+
+    // Parent1 keeps the child; parent2 was aborted at the invoke point.
+    const parent1After = rt.getInstance(parent1Id)!;
+    expect(parent1After.status).toBe("active");
+    expect(parent1After.activeChildId).toBe(childId);
+
+    const parent2After = rt.getInstance(parent2Id)!;
+    expect(parent2After.status).toBe("aborted");
+    expect(isJourneySystemAbort(parent2After.terminalPayload)).toBe(true);
+    const reason = parent2After.terminalPayload as {
+      reason: string;
+      childInstanceId: string;
+      existingParentId: string;
+    };
+    expect(reason.reason).toBe("invoke-child-already-linked");
+    expect(reason.childInstanceId).toBe(childId);
+    expect(reason.existingParentId).toBe(parent1Id);
+
+    // The child is still attached to parent1 (no theft).
+    expect(rt.getInstance(childId)!.parent).toEqual({
+      instanceId: parent1Id,
+      resumeName: "afterVerify",
+    });
   });
 });

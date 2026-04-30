@@ -590,6 +590,7 @@ export type JourneySystemAbortReasonCode =
   | "invoke-without-step"
   | "invoke-start-threw"
   | "invoke-start-no-record"
+  | "invoke-child-already-linked"
   | "resume-missing"
   | "resume-threw"
   | "resume-returned-promise"
@@ -667,6 +668,21 @@ export type JourneySystemAbortReason =
     }
   | { readonly reason: "invoke-start-no-record"; readonly exit: string | null }
   | {
+      /**
+       * `runtime.start` is idempotent: when the same persistence key is
+       * already in flight it returns the live child id. If that child is
+       * already linked to a *different* parent (a second parent invokes
+       * the same child journey with a colliding key), the second invoke
+       * is rejected — taking it would steal the child from the original
+       * parent and leave that parent stranded behind a stale
+       * `activeChildId`.
+       */
+      readonly reason: "invoke-child-already-linked";
+      readonly childInstanceId: string;
+      readonly existingParentId: string;
+      readonly exit: string | null;
+    }
+  | {
       readonly reason: "resume-missing";
       readonly resume: string;
       readonly childJourneyId: string;
@@ -698,6 +714,7 @@ const JOURNEY_SYSTEM_ABORT_REASON_CODES: ReadonlySet<string> =
     "invoke-without-step",
     "invoke-start-threw",
     "invoke-start-no-record",
+    "invoke-child-already-linked",
     "resume-missing",
     "resume-threw",
     "resume-returned-promise",

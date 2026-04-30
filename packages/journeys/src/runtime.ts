@@ -882,6 +882,42 @@ export function createJourneyRuntime(
       );
       return false;
     }
+    // `runtime.start` is idempotent on the persistence key, so it can hand
+    // back a child that is already wired to a *different* parent — for
+    // example, two parents invoke the same child journey with a `keyFor`
+    // that resolves to the same string. Overwriting the link would steal
+    // the child and leave the original parent stranded with a dangling
+    // `activeChildId`. Reject the second invoke instead.
+    if (child.parent && child.parent.instanceId !== parent.id) {
+      if (debug) {
+        console.error(
+          `[@modular-react/journeys] Invoke target "${child.id}" is already linked to parent "${child.parent.instanceId}". Aborting parent "${parent.id}".`,
+        );
+      }
+      fireOnError(
+        parentReg,
+        parent,
+        new Error(
+          `Child instance "${child.id}" is already linked to parent "${child.parent.instanceId}"`,
+        ),
+        parentStep,
+        "invoke",
+      );
+      applyTransitionLocal(
+        parent,
+        parentReg,
+        {
+          abort: {
+            reason: "invoke-child-already-linked",
+            childInstanceId: child.id,
+            existingParentId: child.parent.instanceId,
+            exit: exitName,
+          },
+        },
+        { kind: "invoke" },
+      );
+      return false;
+    }
 
     // Wire the link in both directions.
     parent.activeChildId = childId;
@@ -942,16 +978,34 @@ export function createJourneyRuntime(
     // entries would otherwise pin the child in `childToParent` forever.
     childToParent.delete(child.id);
     child.parent = null;
+    // The terminal `notify(child)` in `applyTransition` already fired
+    // before us with `child.parent` still set; subscribers cached that
+    // snapshot. Re-notify so the cleared linkage lands in the public
+    // snapshot — otherwise `getInstance(child.id).parent` keeps returning
+    // the stale link until the next unrelated revision bump.
+    notify(child);
     if (!parent) return;
     // Only fire the resume when this child is still the parent's *active*
     // child. A racey end()/forget on the parent could have set
     // `activeChildId` to null already; treat that as "parent moved on".
     if (parent.activeChildId !== child.id) return;
     parent.activeChildId = null;
-    if (parent.status !== "active") return;
+    // Same staleness story for the parent: paths that fall through to
+    // `applyTransition(parent, …)` get a notify there, but the early-
+    // return arms below (terminal parent, missing reg/step) do not — so
+    // notify here when we are about to bail. Paths that continue rely on
+    // `applyTransition`'s tail notify, which clears `cachedSnapshot` and
+    // emits a single combined snapshot for the link clear + transition.
+    if (parent.status !== "active") {
+      notify(parent);
+      return;
+    }
     const parentReg = definitions.get(parent.journeyId);
     const parentStep = parent.step;
-    if (!parentReg || !parentStep) return;
+    if (!parentReg || !parentStep) {
+      notify(parent);
+      return;
+    }
 
     const handler = lookupResume(parentReg, parentStep, parentLink.resumeName);
     if (!handler) {
