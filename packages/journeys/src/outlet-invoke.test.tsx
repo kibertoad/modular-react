@@ -305,7 +305,7 @@ describe("useJourneyCallStack", () => {
 
 describe("JourneyOutlet — abandon-on-unmount cascades to the active child", () => {
   it("ends both the parent and the child when the outlet unmounts mid-invoke", () =>
-    new Promise<void>((resolve) => {
+    new Promise<void>((resolve, reject) => {
       const rt = buildRuntime();
       const id = rt.start(parentHandle, { orderId: "O-UM" });
       const ui = render(createElement(JourneyOutlet, { runtime: rt, instanceId: id }));
@@ -314,11 +314,21 @@ describe("JourneyOutlet — abandon-on-unmount cascades to the active child", ()
       });
       const childId = rt.getInstance(id)!.activeChildId!;
       ui.unmount();
+      // Fail loudly instead of hanging if the deferred abandon never fires.
+      const failTimer = setTimeout(
+        () => reject(new Error("abandon microtask did not fire within 1s")),
+        1000,
+      );
       // Abandon is deferred by a microtask to survive StrictMode mount/unmount.
       queueMicrotask(() => {
-        expect(rt.getInstance(id)!.status).toBe("aborted");
-        expect(rt.getInstance(childId)!.status).toBe("aborted");
-        resolve();
+        clearTimeout(failTimer);
+        try {
+          expect(rt.getInstance(id)!.status).toBe("aborted");
+          expect(rt.getInstance(childId)!.status).toBe("aborted");
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
       });
     }));
 });

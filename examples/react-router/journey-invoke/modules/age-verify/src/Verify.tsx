@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ModuleEntryProps } from "@modular-react/core";
 import type { AgeVerifyExits } from "./exits.js";
 
@@ -8,6 +8,13 @@ export interface VerifyInput {
 
 export function Verify({ input, exit }: ModuleEntryProps<VerifyInput, AgeVerifyExits>) {
   const [confirming, setConfirming] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timeoutRef.current !== null) clearTimeout(timeoutRef.current);
+    },
+    [],
+  );
   return (
     <section
       style={{
@@ -37,7 +44,8 @@ export function Verify({ input, exit }: ModuleEntryProps<VerifyInput, AgeVerifyE
             setConfirming(true);
             // Simulate a tiny verification delay so the loading-fallback path
             // is visible if the journey were persisted asynchronously.
-            window.setTimeout(() => {
+            timeoutRef.current = window.setTimeout(() => {
+              timeoutRef.current = null;
               exit("verified", {
                 token: `age-${Math.random().toString(36).slice(2, 10)}`,
                 verifiedAt: new Date().toISOString(),

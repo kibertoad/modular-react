@@ -1391,6 +1391,10 @@ export function createJourneyRuntime(
 
   function dispatchGoBack(record: InstanceRecord, reg: RegisteredJourney, stepToken: number) {
     if (record.status !== "active") return;
+    // Mirror dispatchExit: while a child journey is in flight the parent
+    // step is paused, so a stale `goBack` closure must not rewind the
+    // parent out from under it.
+    if (record.activeChildId) return;
     if (record.stepToken !== stepToken) return;
     if (record.history.length === 0) return;
 
@@ -1407,6 +1411,11 @@ export function createJourneyRuntime(
     }
     record.hasRollbackSnapshot = record.rollbackSnapshots.some((s) => s !== undefined);
     record.step = previousStep;
+    // Same per-step reset that applyTransition performs for next/complete/abort:
+    // moving to a different step starts a fresh per-step bounce budget, and
+    // leaving an old counter in place would let a serialize/hydrate cycle
+    // restamp it onto the new step and abort incorrectly.
+    record.resumeBouncesAtStep = null;
     record.stepToken += 1;
     record.updatedAt = nowIso();
     record.cachedCallbacks = null;

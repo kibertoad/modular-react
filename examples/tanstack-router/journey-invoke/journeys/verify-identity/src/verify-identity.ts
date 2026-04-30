@@ -12,7 +12,6 @@ export interface VerifyIdentityInput {
 
 export interface VerifyIdentityState {
   readonly customerId: string;
-  readonly attempts: number;
 }
 
 export const verifyIdentityJourney = defineJourney<
@@ -24,7 +23,7 @@ export const verifyIdentityJourney = defineJourney<
   version: "1.0.0",
   meta: { name: "Age verification" },
 
-  initialState: ({ customerId }: VerifyIdentityInput) => ({ customerId, attempts: 0 }),
+  initialState: ({ customerId }: VerifyIdentityInput) => ({ customerId }),
 
   start: (state) => ({
     module: "age-verify",
