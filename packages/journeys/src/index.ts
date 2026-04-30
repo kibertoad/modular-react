@@ -26,6 +26,7 @@ export {
   UnknownJourneyError,
   validateJourneyContracts,
   validateJourneyDefinition,
+  validateJourneyGraph,
 } from "./validation.js";
 export { JourneyOutlet, useJourneyCallStack } from "./outlet.js";
 export type {

@@ -6,6 +6,7 @@
 
 import type {
   AbandonCtx,
+  JourneyHandleRef,
   JourneyPersistence,
   JourneyStep,
   ModuleTypeMap,
@@ -39,6 +40,7 @@ export type {
   ModuleTypeMap,
   ParentLink,
   PendingInvoke,
+  ResumeBounceCounter,
   ResumeHandler,
   ResumeMap,
   SerializedJourney,
@@ -77,6 +79,33 @@ export interface JourneyDefinition<
    * transition. Optional — journeys that never invoke can omit it.
    */
   readonly resumes?: ResumeMap<TModules, TState, TOutput>;
+
+  /**
+   * Closed set of journey handles this journey may invoke from any of its
+   * transitions (or from a resume that returns `{ invoke }`). Strongly
+   * recommended for any journey that uses `invoke`:
+   *
+   * 1. **Static cycle detection.** When every journey in a registration
+   *    declares `invokes`, the registry runs a graph-level cycle check
+   *    at validation time and rejects the registration with a path like
+   *    `cycle detected: A → B → A` — far easier to diagnose than the
+   *    runtime `invoke-cycle` abort.
+   * 2. **Runtime arrival check.** At invoke time the runtime verifies
+   *    that the dispatched handle id appears in `invokes`; an unexpected
+   *    handle aborts the parent with reason `invoke-undeclared-child`,
+   *    catching dynamic dispatch bugs (a transition that branches on
+   *    `output` and lands on a handle the author never intended).
+   *
+   * Omit only when the call set is genuinely dynamic (e.g. a host that
+   * receives child handles from a slot contribution at runtime). The
+   * runtime cycle / depth / bounce guards still apply in that case;
+   * they just no longer have a static graph to cross-check against.
+   *
+   * Self-loops (a journey listing its own handle) are reported as a
+   * cycle — by construction they would also blow the call-stack guard
+   * at runtime.
+   */
+  readonly invokes?: ReadonlyArray<JourneyHandleRef<string, any, any>>;
 
   readonly onTransition?: (ev: TransitionEvent<TModules, TState>) => void;
   readonly onAbandon?: (
@@ -225,6 +254,49 @@ export interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
    * default item into the app's narrowed type.
    */
   nav?: JourneyNavContribution<TInput>;
+  /**
+   * Cap on the depth of an in-flight invoke chain that includes this
+   * journey. The depth is the number of *active* journey instances in
+   * the chain — a root parent on its own is depth 1, a parent with one
+   * in-flight child is depth 2, etc. When an invoke would push depth
+   * beyond `maxCallStackDepth`, the parent aborts with reason
+   * `invoke-stack-overflow` (the child is never started) and the
+   * registration's `onError` fires with `phase: "invoke"`.
+   *
+   * The runtime resolves the effective limit as the **minimum** of every
+   * non-undefined `maxCallStackDepth` across the active chain (ancestors
+   * + the new parent + the would-be child's own setting). The most
+   * restrictive journey wins, so a cautious utility journey can lower
+   * the cap for any flow that includes it without coordinating with the
+   * other journeys.
+   *
+   * Default: `16`. Set lower for journeys whose call graphs are known
+   * to be shallow; raise it (carefully) only for genuinely deep
+   * compositions. Setting it to `1` blocks `invoke` from this journey
+   * outright.
+   */
+  maxCallStackDepth?: number;
+  /**
+   * Cap on consecutive resume "bounces" at the *same* parent step. A
+   * bounce is a resume that returns `{ invoke }` (re-invoking a child
+   * instead of advancing the parent's step). The counter increments on
+   * every resume that returns `{ invoke }` and resets to zero whenever
+   * the parent's step actually advances (`{ next | complete | abort }`
+   * from any source). When the counter would exceed
+   * `maxResumeBouncesPerStep`, the parent aborts with reason
+   * `resume-bounce-limit`; the child whose terminal triggered the
+   * over-the-limit bounce is *not* re-invoked.
+   *
+   * The counter is persisted on the parent's blob (see
+   * `SerializedJourney.resumeBouncesAtStep`) so a reload-bounce sequence
+   * cannot reset the budget by round-tripping through storage.
+   *
+   * Default: `8`. Raise it for flows that legitimately retry a sub-flow
+   * many times in a row; lower it for paranoia. The check uses the
+   * parent's setting only — children do not influence their parent's
+   * bounce budget.
+   */
+  maxResumeBouncesPerStep?: number;
 }
 
 /** Internal registration record — definition + options kept together. */

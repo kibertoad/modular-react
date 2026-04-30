@@ -409,6 +409,31 @@ export interface SerializedJourney<TState = unknown> {
    * which parent to resume.
    */
   readonly parentLink?: ParentLink;
+  /**
+   * Persisted bounce counter used by the resume-bounce-limit guard. A
+   * "bounce" is a resume that returns `{ invoke }` instead of advancing
+   * the parent's step (`{ next | complete | abort }`); the runtime caps
+   * how many can fire consecutively at the same step so a malformed
+   * resume → invoke → resume → invoke loop cannot spin indefinitely.
+   * Reset to `undefined` whenever the step actually advances. Persisted
+   * so a reload-bounce-reload-bounce sequence cannot reset the counter
+   * by round-tripping through storage.
+   */
+  readonly resumeBouncesAtStep?: ResumeBounceCounter;
+}
+
+/**
+ * Per-step bounce counter persisted on a parent's serialized blob. The
+ * runtime increments `count` each time a resume on this step returns
+ * `{ invoke }` again without advancing; once it would exceed the configured
+ * `maxResumeBouncesPerStep`, the parent aborts with reason
+ * `resume-bounce-limit`. The counter is scoped to a `stepToken` so that a
+ * legitimate forward step naturally clears stale counts even if a stale
+ * blob were ever rehydrated.
+ */
+export interface ResumeBounceCounter {
+  readonly stepToken: number;
+  readonly count: number;
 }
 
 export interface JourneyDefinitionSummary {

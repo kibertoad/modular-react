@@ -25,6 +25,7 @@ Routes, slots, navigation, workspaces - none of that changes. Journeys sit **on 
 - [Authoring patterns](#authoring-patterns) - module entries, exits, loading flows, `goBack` opt-in
 - [Journey definition patterns](#journey-definition-patterns) - branching, `selectModule` dispatch, terminals, state rewrites, bounded history
 - [Composing journeys (invoke / resume)](#composing-journeys-invoke--resume) - call out to a child journey mid-flow and resume on its outcome
+  - [Cycle and recursion safety](#cycle-and-recursion-safety) - cycle / depth / undeclared-child / bounce-limit guards and how to tune them
 - [Runtime surface](#runtime-surface) - the `JourneyRuntime` you get back from `manifest.journeys`
 - [Journey handles](#journey-handles) - typed tokens for `runtime.start(handle, input)`
 - [`JourneyProvider` + context](#journeyprovider--context)
@@ -917,6 +918,93 @@ sim2.abortChild({ code: "denied" }); // synthesize aborted — reason reaches th
 - **Not concurrent spawn.** A parent has at most one active invocation. If you need parallel children, call `runtime.start()` directly and store ids in state — but you give up the typed resume linking, the persisted `pendingInvoke` / `parentLink` round-trip, the `activeChildId` chain that `<JourneyOutlet>` walks, and the cascade-end semantics. Everything becomes shell-managed.
 - **Not back-navigation across the boundary.** `goBack` stays scoped to a journey's own history. To return from a child without completing, fire an exit that maps to `{ abort }`; the parent's resume handler decides what to do.
 
+### Cycle and recursion safety
+
+Composing journeys creates a *call graph* — A invokes B, which invokes C, possibly back into A. Without guards, a cycle becomes either an infinite chain that exhausts memory or a same-step bouncing resume that pegs the CPU. Modular-react ships **four layered guards**, three at runtime (always on) plus an opt-in static check at registration time. Every guard surfaces through the existing `onError` channel with `phase: "invoke"` (or `"resume"`) and aborts the offending parent with a discoverable reason — same vocabulary as the other validation aborts.
+
+| Guard                      | When it fires                                                                                                                  | Abort reason                | Default |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------- | ------- |
+| **Static cycle detection** | Registration time, when every journey on the cycle path declares its `invokes` set. Throws `JourneyValidationError` listing the cycle path (e.g. `cycle detected: "A" → "B" → "A"`). | (registration error)        | always on when `invokes` is declared |
+| **invoke-undeclared-child** | Runtime invoke time, when the parent journey declared an `invokes` array but the dispatched handle id is not in it. Catches dynamic-dispatch typos. | `invoke-undeclared-child`   | always on when `invokes` is declared |
+| **invoke-cycle**           | Runtime invoke time, when the target journey id already appears on the active parent chain. Catches cycles that the static check missed (because some journey on the cycle omitted `invokes`). | `invoke-cycle`              | always on |
+| **invoke-stack-overflow**  | Runtime invoke time, when admitting the new child would push the chain depth past the resolved cap. The cap is the **minimum** of every non-undefined `maxCallStackDepth` across the active chain (ancestors + parent + would-be child). | `invoke-stack-overflow`     | `maxCallStackDepth: 16` |
+| **resume-bounce-limit**    | Runtime resume time, when a resume returns `{ invoke }` for the Nth consecutive time at the *same parent step* (the counter resets when the parent's step actually advances). | `resume-bounce-limit`       | `maxResumeBouncesPerStep: 8` |
+
+#### Declaring the call set (`invokes`)
+
+The strongest line of defense is opt-in: list every child handle the journey can dispatch to.
+
+```ts
+import { defineJourney, defineJourneyHandle, invoke } from "@modular-react/journeys";
+import { verifyIdentityHandle } from "verify-identity-journey";
+import { addPaymentMethodHandle } from "add-payment-method-journey";
+
+defineJourney<CheckoutModules, CheckoutState>()({
+  id: "checkout",
+  version: "1.0.0",
+  // Closed set — the runtime rejects any other handle at invoke time, and
+  // the registry runs cycle detection across the declared graph at boot.
+  invokes: [verifyIdentityHandle, addPaymentMethodHandle],
+  // ...transitions / resumes that may dispatch invoke() to either handle.
+});
+```
+
+When **every** journey in a registration declares `invokes`, the registry's `validateJourneyContracts` builds the full directed graph and rejects the whole registration on a cycle:
+
+```
+JourneyValidationError: Invalid journey registration:
+  - journey invoke cycle detected: "checkout" → "verify-identity" → "checkout"
+```
+
+When some journeys omit `invokes`, the static check is incomplete (their out-edges are unknown), so the runtime guards remain the safety net. There is no penalty for omitting `invokes`; it's purely a confidence dial.
+
+`validateJourneyGraph(journeys)` is also exported separately for shells that compose registrations across plugin boundaries and want to run the graph check on a partial slice without invoking the full contracts validator.
+
+#### Tuning `maxCallStackDepth`
+
+Set on the journey's registration options. Any journey in the chain can lower the cap; none can raise it. Setting it to `1` blocks `invoke` from this journey outright (useful for "leaf" journeys that should never spawn children).
+
+```ts
+registry.registerJourney(checkoutJourney, {
+  maxCallStackDepth: 4, // checkout is happy to host up to 3 nested children
+  persistence: ...,
+});
+```
+
+The resolved cap on each `invoke` is `min(non-undefined options across [ancestors..., parent, child])`, falling back to `16`. The strictest journey in the chain wins, which means a cautious utility journey can lower the cap for any composition that includes it without coordinating with the other journeys.
+
+#### Tuning `maxResumeBouncesPerStep`
+
+A "bounce" is a resume that returns `{ invoke }` instead of advancing the parent's step. Counted per-parent, scoped to the parent's current step (not the parent's instance) — so a flow that legitimately retries a sub-flow several times in a row is fine, as long as the parent eventually advances. The counter resets whenever the parent's step actually changes (`{ next | complete | abort }` from any source).
+
+```ts
+registry.registerJourney(checkoutJourney, {
+  maxResumeBouncesPerStep: 3, // verify, fail, retry, fail, retry → abort
+});
+```
+
+The bounce cap is per-parent — only the parent's own option governs (children don't see the parent's resumes and have no business voting). The counter is **persisted on the parent's blob** as `resumeBouncesAtStep`, so a hostile or accidental reload-bounce-reload-bounce sequence cannot reset the budget through storage.
+
+#### Failure surface
+
+All four guards abort the offending parent with a structured `terminalPayload` that's safe to log. The shapes:
+
+```ts
+// invoke-undeclared-child
+{ reason: "invoke-undeclared-child", parentJourneyId: "...", childJourneyId: "...", exit: "..." }
+
+// invoke-cycle
+{ reason: "invoke-cycle", childJourneyId: "...", chain: ["a", "b", "a"], exit: "..." }
+
+// invoke-stack-overflow
+{ reason: "invoke-stack-overflow", depth: 17, cap: 16, chain: ["a", "b", ..., "p"], exit: "..." }
+
+// resume-bounce-limit
+{ reason: "resume-bounce-limit", cap: 8, count: 9, resume: "afterChild" }
+```
+
+Each one fires the registration's `onError` first (with `phase: "invoke"` for the first three, `phase: "resume"` for the last), so telemetry still observes the underlying control-plane failure even when the abort itself is what reaches the user.
+
 ## Runtime surface
 
 `manifest.journeys` implements `JourneyRuntime`:
@@ -1679,6 +1767,7 @@ For a fully-headless trace, drive a scenario through `simulateJourney` and inspe
 - **Hydrate blob whose `rollbackSnapshots` length disagrees with `history`** - rejected with `JourneyHydrationError`. Use `onHydrate` to migrate or pad the blob.
 - **Duplicate `instanceId` on hydrate** - `runtime.hydrate()` throws if an instance with that id is already live. Call `forget(id)` first if the replace-in-place is intentional.
 - **Circular transitions** - allowed; `history` grows. Long-running journeys should use `maxHistory` or be designed to terminate.
+- **Circular invocations across journeys** - guarded. The four-layer safety net (static cycle check + runtime same-id, depth-cap, and resume-bounce-cap) aborts the offending parent with `invoke-cycle`, `invoke-stack-overflow`, `invoke-undeclared-child`, or `resume-bounce-limit` — see [Cycle and recursion safety](#cycle-and-recursion-safety) for tuning the caps and declaring the call set up-front.
 - **Deep mutation of journey state corrupts rollback snapshots** - snapshots are **shallow clones**, so a mutation that reaches into nested objects updates the snapshot too. Treat state as immutable; produce new objects rather than mutating in place. In development the runtime shallow-freezes each captured snapshot, so a top-level mutation throws immediately - deep mutations still slip through.
 - **Runtime input validation is not built in** - `schema<T>()` is type-only and gives you compile-time checking on entry inputs. The runtime does not validate at the boundary. If `start()` / `hydrate()` inputs come from untrusted sources (URL params, server payloads), wire `zod` / `valibot` / your validator of choice in front of them.
 
@@ -1781,8 +1870,9 @@ Every export you're likely to call, grouped by role.
 | `defineJourney`               | `<TModules, TState, TOutput?>() => <TInput>(def: JourneyDefinition<TModules, TState, TInput, TOutput>) => def` | Identity helper with full inference on transitions and state. Curried so `TInput` infers from `initialState`. The optional third generic `TOutput` narrows `complete` payloads (and a parent's resume `outcome.payload` when invoked).     |
 | `defineJourneyHandle`         | `<TModules, TState, TInput, TOutput>(def) => JourneyHandle<string, TInput, TOutput>`                           | Builds a typed token from a journey definition so modules and shells can call `runtime.start(handle, input)` without importing the journey's runtime code. Carries `TOutput` so a parent's resume sees `outcome.payload` typed end-to-end. |
 | `invoke`                      | `<TInput, TOutput>({ handle, input, resume }) => { invoke: InvokeSpec<TInput, TOutput> }`                      | Typed builder for the `{ invoke }` arm of `TransitionResult`. Cross-checks `input` against the handle's `TInput` — a bare object literal won't. See [Composing journeys](#composing-journeys-invoke--resume).                              |
-| `selectModule`                | `<TModules>() => <TKey>(key, cases) => StepSpec<TModules>`                                                     | Exhaustive state-driven dispatch helper for transition handlers - see [the pattern](#pattern--exhaustive-state-driven-module-dispatch-selectmodule). Missing branches are a compile error.                                                 |
-| `selectModuleOrDefault`       | `<TModules>() => <TKey>(key, cases, fallback) => StepSpec<TModules>`                                           | Sibling of `selectModule` accepting a partial cases map plus an explicit fallback `StepSpec` - see [the pattern](#pattern--fallback-dispatch-selectmoduleordefault). Use when most discriminator values funnel through a generic module.   |
+| `validateJourneyGraph`        | `(journeys: readonly RegisteredJourney[]) => void`                                                             | Static cycle check over the directed graph derived from each journey's `invokes` field. Run automatically by `validateJourneyContracts`; exported separately for shells that compose registrations across plugin boundaries. See [Cycle and recursion safety](#cycle-and-recursion-safety). |
+| `selectModule`                | `<TModules>() => <TKey>(key, cases) => StepSpec<TModules>`                                                     | Exhaustive state-driven dispatch helper for transition handlers - see [the pattern](#pattern---exhaustive-state-driven-module-dispatch-selectmodule). Missing branches are a compile error.                                                |
+| `selectModuleOrDefault`       | `<TModules>() => <TKey>(key, cases, fallback) => StepSpec<TModules>`                                           | Sibling of `selectModule` accepting a partial cases map plus an explicit fallback `StepSpec` - see [the pattern](#pattern---fallback-dispatch-selectmoduleordefault). Use when most discriminator values funnel through a generic module.  |
 | `defineJourneyPersistence`    | `<TInput, TState>(adapter) => JourneyPersistence<TState, TInput>`                                              | Types `keyFor`'s `input` against `TInput`, `load`/`save` against `TState`.                                                                                                                                                                 |
 | `createWebStoragePersistence` | `<TInput, TState>({ keyFor, storage? }) => JourneyPersistence<TState, TInput>`                                 | Stock `localStorage` / `sessionStorage` adapter. SSR-safe, auto-clears corrupt JSON entries. Pass `storage` to override the backing store.                                                                                                 |
 | `createMemoryPersistence`     | `<TInput, TState>({ keyFor, initial?, clone? }) => MemoryPersistence<TInput, TState>`                          | `Map`-backed adapter for tests/SSR. Exposes `size()` / `entries()` / `clear()`. Deep-clones on `save` and `load` by default.                                                                                                               |
@@ -1897,6 +1987,19 @@ interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
    * shell's navbar dispatcher starts the journey on click.
    */
   nav?: JourneyNavContribution<TInput>;
+  /**
+   * Cap on the depth of an in-flight invoke chain that includes this
+   * journey. Resolved as the **minimum** non-undefined `maxCallStackDepth`
+   * across the active chain (ancestors + parent + child). Default: `16`.
+   * See [Cycle and recursion safety](#cycle-and-recursion-safety).
+   */
+  maxCallStackDepth?: number;
+  /**
+   * Cap on consecutive resume bounces at the same parent step (a "bounce"
+   * is a resume returning `{ invoke }` instead of advancing). Default:
+   * `8`. Per-parent only — children don't influence their parent's budget.
+   */
+  maxResumeBouncesPerStep?: number;
 }
 
 interface JourneyNavContribution<TInput = unknown> {

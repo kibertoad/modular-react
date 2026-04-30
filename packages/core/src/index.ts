@@ -117,5 +117,6 @@ export type {
   ResumeMap,
   PendingInvoke,
   ParentLink,
+  ResumeBounceCounter,
 } from "./journey-contracts.js";
 export { isTerminal } from "./journey-contracts.js";

@@ -14,6 +14,7 @@ import type {
   ModuleTypeMap,
   PendingInvoke,
   RegisteredJourney,
+  ResumeBounceCounter,
   ResumeHandler,
   ResumeMap,
   SerializedJourney,
@@ -22,6 +23,29 @@ import type {
   TransitionResult,
 } from "./types.js";
 import { JourneyHydrationError, UnknownJourneyError } from "./validation.js";
+
+/**
+ * Default cap on the depth of an in-flight invoke chain (root parent +
+ * descendants). A journey's registration can override this via
+ * `JourneyRegisterOptions.maxCallStackDepth`; the runtime takes the
+ * minimum of all non-undefined settings across the chain so the most
+ * cautious journey wins.
+ *
+ * The default of 16 is chosen to be larger than any reasonable
+ * invocation chain we've seen (deepest real-world: 3) while still
+ * catching unbounded recursion long before it becomes a memory or
+ * call-stack hazard.
+ */
+const DEFAULT_MAX_CALL_STACK_DEPTH = 16;
+
+/**
+ * Default cap on consecutive resume bounces at the same parent step.
+ * A "bounce" is a resume that returns `{ invoke }` instead of advancing
+ * the parent's step; the counter resets when the parent's step changes
+ * for any reason. Override via
+ * `JourneyRegisterOptions.maxResumeBouncesPerStep`.
+ */
+const DEFAULT_MAX_RESUME_BOUNCES_PER_STEP = 8;
 
 export interface InstanceRecord<TState = unknown> {
   id: InstanceId;
@@ -86,6 +110,16 @@ export interface InstanceRecord<TState = unknown> {
     exit: (name: string, output?: unknown) => void;
     goBack: (() => void) | undefined;
   } | null;
+  /**
+   * Per-step bounce counter for the resume-bounce-limit guard. Set when
+   * a resume on this record's current step returns `{ invoke }`;
+   * incremented on each subsequent same-step resume that does the same;
+   * cleared whenever the step actually advances. Mirrored to the
+   * persisted blob as `resumeBouncesAtStep` so a hostile or accidental
+   * reload-bounce-reload-bounce cannot reset the counter through
+   * storage.
+   */
+  resumeBouncesAtStep: ResumeBounceCounter | null;
 }
 
 export interface JourneyRuntimeOptions {
@@ -376,6 +410,7 @@ export function createJourneyRuntime(
       updatedAt: record.updatedAt,
       pendingInvoke,
       parentLink,
+      resumeBouncesAtStep: record.resumeBouncesAtStep ?? undefined,
     };
   }
 
@@ -508,6 +543,75 @@ export function createJourneyRuntime(
   }
 
   /**
+   * Walk a record's ancestor chain via `parent` links, returning every
+   * ancestor in root → immediate-parent order (excluding `record`
+   * itself). Used by the cycle and depth guards in {@link beginInvoke}.
+   * Stops at the first dangling pointer (an ancestor that has been
+   * `forget()`-ed mid-flight) — the chain we have is what we work with;
+   * we do not synthesize phantom links.
+   */
+  function ancestorChain(record: InstanceRecord): InstanceRecord[] {
+    const chain: InstanceRecord[] = [];
+    let cur = record.parent;
+    // Cap the walk at MAX_ANCESTOR_WALK so a corrupted in-memory cycle
+    // (parent pointer landing back on a descendant after a forget +
+    // re-hydrate race) cannot lock the runtime in an infinite loop.
+    // The cap is far above any realistic chain depth and any finite
+    // guard limit.
+    const seen = new Set<InstanceId>([record.id]);
+    while (cur) {
+      if (seen.has(cur.instanceId)) break;
+      const ancestor = instances.get(cur.instanceId);
+      if (!ancestor) break;
+      seen.add(ancestor.id);
+      chain.unshift(ancestor);
+      cur = ancestor.parent;
+    }
+    return chain;
+  }
+
+  /**
+   * Resolve the effective `maxResumeBouncesPerStep` for a record. Unlike
+   * `maxCallStackDepth`, the bounce counter is per-record (per-step,
+   * actually) and can only be sensibly governed by the journey that
+   * owns the resume returning the bounce — i.e. the parent's own
+   * registration. Other journeys in the call chain don't see the
+   * resumes; they would have no business voting on the cap.
+   */
+  function resolveBounceCap(reg: RegisteredJourney): number {
+    const opt = reg.options?.maxResumeBouncesPerStep;
+    if (typeof opt === "number" && Number.isFinite(opt) && opt > 0) return opt;
+    return DEFAULT_MAX_RESUME_BOUNCES_PER_STEP;
+  }
+
+  /**
+   * Resolve the effective `maxCallStackDepth` for an invoke about to
+   * happen. Walks the chain (ancestors + parent + would-be child) and
+   * picks the **minimum** non-undefined option, falling back to the
+   * library default. Any journey in the chain can lower the cap; none
+   * can quietly raise it.
+   */
+  function resolveMaxCallStackDepth(
+    chain: readonly InstanceRecord[],
+    parent: InstanceRecord,
+    childReg: RegisteredJourney | undefined,
+  ): number {
+    let cap = DEFAULT_MAX_CALL_STACK_DEPTH;
+    let sawOverride = false;
+    const visit = (reg: RegisteredJourney | undefined) => {
+      const opt = reg?.options?.maxCallStackDepth;
+      if (typeof opt === "number" && Number.isFinite(opt) && opt > 0) {
+        cap = sawOverride ? Math.min(cap, opt) : opt;
+        sawOverride = true;
+      }
+    };
+    for (const ancestor of chain) visit(definitions.get(ancestor.journeyId));
+    visit(definitions.get(parent.journeyId));
+    visit(childReg);
+    return cap;
+  }
+
+  /**
    * Open a child journey from a parent's transition. Validates the handle
    * up-front; on any failure (unknown journey id, missing resume on the
    * parent step), fires `onError` and drives the parent into `abort` so
@@ -515,6 +619,11 @@ export function createJourneyRuntime(
    * Returns the live child `InstanceRecord` when the invoke was committed,
    * or `false` when it fell through to abort (and the caller must skip
    * the post-transition persistence/notify pass).
+   *
+   * The cycle / depth / undeclared-child guards run *before* the handle
+   * is dispatched to `runtime.start`, so a guard rejection never
+   * materialises a child record. This keeps the failure path symmetric
+   * with the existing unknown-journey / missing-resume validations.
    */
   function beginInvoke(
     parent: InstanceRecord,
@@ -606,6 +715,140 @@ export function createJourneyRuntime(
       return false;
     }
 
+    // ---------------------------------------------------------------------
+    // Cycle / depth / declared-set guards (cycle-safety net).
+    //
+    // All three run before we dispatch to `runtime.start` so a guard
+    // rejection never materialises a child record nor touches the child's
+    // persistence. The order is deliberate:
+    //   1. undeclared-child: cheapest, catches dynamic-dispatch typos
+    //      whose blast radius is the parent's own definition.
+    //   2. cycle: catches "this exact id is already on the active chain"
+    //      with the most actionable error message (a printed chain).
+    //   3. depth: backstop for graphs that cycle through ids the
+    //      runtime has not seen yet (e.g. ABCABC where each link is a
+    //      different journey).
+    // ---------------------------------------------------------------------
+
+    const childReg = definitions.get(childJourneyId);
+    const declaredInvokes = parentReg.definition.invokes;
+    if (Array.isArray(declaredInvokes)) {
+      let allowed = false;
+      for (const handle of declaredInvokes) {
+        if (handle?.id === childJourneyId) {
+          allowed = true;
+          break;
+        }
+      }
+      if (!allowed) {
+        if (debug) {
+          console.error(
+            `[@modular-react/journeys] Invoke from "${parent.journeyId}.${parentStep.moduleId}.${parentStep.entry}" dispatched handle "${childJourneyId}" which is not in the parent's declared invokes[]. Add the handle to the parent journey's \`invokes\` array, or remove the declaration to opt out of static checking.`,
+          );
+        }
+        fireOnError(
+          parentReg,
+          parent,
+          new Error(
+            `Child journey "${childJourneyId}" is not in "${parent.journeyId}".invokes[]`,
+          ),
+          parentStep,
+          "invoke",
+        );
+        applyTransitionLocal(
+          parent,
+          parentReg,
+          {
+            abort: {
+              reason: "invoke-undeclared-child",
+              parentJourneyId: parent.journeyId,
+              childJourneyId,
+              exit: exitName,
+            },
+          },
+          { kind: "invoke" },
+        );
+        return false;
+      }
+    }
+
+    const chain = ancestorChain(parent);
+    // Same-id guard. Walks every ancestor + the parent itself; if the
+    // target id is anywhere on the active chain we abort with a printed
+    // chain so the author can see exactly where the recursion closed.
+    {
+      const chainIds = chain.map((r) => r.journeyId).concat(parent.journeyId);
+      const collisionIdx = chainIds.indexOf(childJourneyId);
+      if (collisionIdx >= 0) {
+        const display = [...chainIds.slice(collisionIdx), childJourneyId]
+          .map((id) => `"${id}"`)
+          .join(" → ");
+        if (debug) {
+          console.error(
+            `[@modular-react/journeys] Invoke would re-enter journey "${childJourneyId}" already on the active chain: ${display}. Aborting parent "${parent.id}".`,
+          );
+        }
+        fireOnError(
+          parentReg,
+          parent,
+          new Error(`Invoke cycle on chain: ${display}`),
+          parentStep,
+          "invoke",
+        );
+        applyTransitionLocal(
+          parent,
+          parentReg,
+          {
+            abort: {
+              reason: "invoke-cycle",
+              childJourneyId,
+              chain: chainIds.concat(childJourneyId),
+              exit: exitName,
+            },
+          },
+          { kind: "invoke" },
+        );
+        return false;
+      }
+    }
+
+    // Depth guard. The chain reaching `parent` is `chain.length + 1`
+    // (ancestors + parent); the new child would push it to
+    // `chain.length + 2`. Compare against the resolved cap.
+    const cap = resolveMaxCallStackDepth(chain, parent, childReg);
+    const depthAfterInvoke = chain.length + 2;
+    if (depthAfterInvoke > cap) {
+      const chainIds = chain.map((r) => r.journeyId).concat(parent.journeyId, childJourneyId);
+      const display = chainIds.map((id) => `"${id}"`).join(" → ");
+      if (debug) {
+        console.error(
+          `[@modular-react/journeys] Invoke would exceed maxCallStackDepth (${cap}) — chain: ${display}. Aborting parent "${parent.id}".`,
+        );
+      }
+      fireOnError(
+        parentReg,
+        parent,
+        new Error(`Invoke would exceed depth cap ${cap} on chain ${display}`),
+        parentStep,
+        "invoke",
+      );
+      applyTransitionLocal(
+        parent,
+        parentReg,
+        {
+          abort: {
+            reason: "invoke-stack-overflow",
+            depth: depthAfterInvoke,
+            cap,
+            chain: chainIds,
+            exit: exitName,
+          },
+        },
+        { kind: "invoke" },
+      );
+      return false;
+    }
+
     // Mint or load the child via the standard `start` path so persistence
     // and idempotency work uniformly. `start` returns an existing instance
     // id when the child's keyFor matches an in-flight one (rare here, but
@@ -643,8 +886,9 @@ export function createJourneyRuntime(
     // Persist the child *now* that its parentLink is set — otherwise the
     // blob written during `runtime.start(...)` above has parentLink=undefined,
     // and a reload would resurrect the child with no back-pointer to the
-    // parent's resume.
-    const childReg = definitions.get(child.journeyId);
+    // parent's resume. Reuses the `childReg` looked up by the cycle/depth
+    // guards above; that lookup is by `childJourneyId === child.journeyId`,
+    // so it is the same registration record.
     const childPersistence = childReg?.options?.persistence;
     if (childPersistence) schedulePersist(child, childPersistence);
     // Bump the child's revision so subscribers picking up `instance.parent`
@@ -817,6 +1061,15 @@ export function createJourneyRuntime(
       record.state = result.state;
     }
 
+    // Any step change clears the per-step bounce counter — the counter is
+    // scoped to the step that fired the bouncing resumes; once we move
+    // off that step, we're in a fresh per-step budget. Cleared up front
+    // so all three step-advancing arms (next / complete / abort) inherit
+    // the reset uniformly.
+    if ("next" in result || "complete" in result || "abort" in result) {
+      record.resumeBouncesAtStep = null;
+    }
+
     if ("next" in result) {
       const nextStep = stepFromSpec(result.next);
       if (debug) {
@@ -896,6 +1149,55 @@ export function createJourneyRuntime(
       // handler (declared on `def.resumes[mod][entry][name]`) with the
       // child's outcome and applies the result as the parent's next
       // transition.
+      //
+      // Bounce-limit guard: when this `{ invoke }` arm is the result of
+      // a *resume* on the same step (kind === "resume"), the parent has
+      // not advanced since the previous invoke at this step — that is a
+      // "bounce." Cap the consecutive bounces so a malformed
+      // resume → invoke → resume → invoke loop cannot spin indefinitely.
+      // The check runs before `beginInvoke` so a rejected bounce never
+      // mints a child instance.
+      if (eventExtras?.kind === "resume") {
+        const bounceCap = resolveBounceCap(reg);
+        const prior = record.resumeBouncesAtStep;
+        const nextCount =
+          prior && prior.stepToken === record.stepToken ? prior.count + 1 : 1;
+        if (nextCount > bounceCap) {
+          if (debug) {
+            console.error(
+              `[@modular-react/journeys] Resume on "${record.journeyId}.${previousStep?.moduleId}.${previousStep?.entry}" would bounce ${nextCount} times in a row at the same step (cap ${bounceCap}). Aborting "${record.id}" to break the loop.`,
+            );
+          }
+          fireOnError(
+            reg,
+            record,
+            new Error(
+              `Resume bounce limit exceeded (${bounceCap}) at ${previousStep?.moduleId}.${previousStep?.entry}`,
+            ),
+            previousStep,
+            "resume",
+          );
+          // Re-enter the abort branch via the standard machinery — that
+          // gives us the persist + notify + onAbort tail for free, and
+          // fires `kind: "resume"` so telemetry filters work.
+          applyTransition(
+            record,
+            reg,
+            {
+              abort: {
+                reason: "resume-bounce-limit",
+                cap: bounceCap,
+                count: nextCount,
+                resume: eventExtras.resume,
+              },
+            },
+            null,
+            { kind: "resume", outcome: eventExtras.outcome, resume: eventExtras.resume },
+          );
+          return;
+        }
+        record.resumeBouncesAtStep = { stepToken: record.stepToken, count: nextCount };
+      }
       const childRecord = beginInvoke(record, reg, result.invoke, exitName);
       if (!childRecord) {
         // beginInvoke already applied the abort path on validation failure.
@@ -1162,6 +1464,7 @@ export function createJourneyRuntime(
       cachedCallbacks: null,
       parent: null,
       activeChildId: null,
+      resumeBouncesAtStep: null,
     };
   }
 
@@ -1255,6 +1558,21 @@ export function createJourneyRuntime(
       record.activeChildId = blob.pendingInvoke.childInstanceId;
     } else {
       record.activeChildId = null;
+    }
+    // Restore the bounce counter. The persisted `stepToken` is from the
+    // pre-hydrate runtime, so it cannot be compared against the new
+    // `record.stepToken` (which we just bumped). We retain the count
+    // and re-stamp the token to the *current* step so the counter
+    // continues to police the same step. If the parent advances after
+    // hydrate, the next applyTransition's reset-on-step-change clears
+    // it — exactly matching pre-hydrate semantics.
+    if (blob.resumeBouncesAtStep && Number.isFinite(blob.resumeBouncesAtStep.count)) {
+      record.resumeBouncesAtStep = {
+        stepToken: record.stepToken,
+        count: Math.max(0, Math.floor(blob.resumeBouncesAtStep.count)),
+      };
+    } else {
+      record.resumeBouncesAtStep = null;
     }
   }
 
