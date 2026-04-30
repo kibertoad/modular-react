@@ -1,0 +1,35 @@
+{
+  "name": "@example-rr-invoke/shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@example-rr-invoke/age-verify-module": "workspace:*",
+    "@example-rr-invoke/app-shared": "workspace:*",
+    "@example-rr-invoke/checkout-confirm-module": "workspace:*",
+    "@example-rr-invoke/checkout-journey": "workspace:*",
+    "@example-rr-invoke/checkout-review-module": "workspace:*",
+    "@example-rr-invoke/verify-identity-journey": "workspace:*",
+    "@modular-react/core": "^1.0.0",
+    "@modular-react/journeys": "^0.1.0",
+    "@modular-react/react": "^1.0.0",
+    "@react-router-modules/core": "^2.0.0",
+    "@react-router-modules/runtime": "^2.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router": "^7.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.3"
+  }
+}

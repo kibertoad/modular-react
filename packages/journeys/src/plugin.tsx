@@ -36,8 +36,8 @@ export interface JourneysPluginExtension {
    * `options.nav.buildInput` is typed against the journey's input — pass a
    * typed definition and both are checked end-to-end.
    */
-  registerJourney<TModules extends ModuleTypeMap, TState, TInput>(
-    definition: JourneyDefinition<TModules, TState, TInput>,
+  registerJourney<TModules extends ModuleTypeMap, TState, TInput, TOutput = unknown>(
+    definition: JourneyDefinition<TModules, TState, TInput, TOutput>,
     options?: JourneyRegisterOptions<TState, TInput>,
   ): void;
 }
@@ -138,8 +138,8 @@ export function journeysPlugin<TNavItem extends NavigationItemBase = JourneyDefa
 
     extend() {
       return {
-        registerJourney<TModules extends ModuleTypeMap, TState, TInput>(
-          definition: JourneyDefinition<TModules, TState, TInput>,
+        registerJourney<TModules extends ModuleTypeMap, TState, TInput, TOutput = unknown>(
+          definition: JourneyDefinition<TModules, TState, TInput, TOutput>,
           regOpts?: JourneyRegisterOptions<TState, TInput>,
         ): void {
           const def = definition as AnyJourneyDefinition;
