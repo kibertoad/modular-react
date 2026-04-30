@@ -37,6 +37,8 @@ export type {
   JourneyStep,
   MaybePromise,
   ModuleTypeMap,
+  ParentLink,
+  PendingInvoke,
   ResumeHandler,
   ResumeMap,
   SerializedJourney,

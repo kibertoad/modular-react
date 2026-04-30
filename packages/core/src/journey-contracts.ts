@@ -298,7 +298,47 @@ export interface JourneyInstance<TState = unknown> {
   readonly terminalPayload?: unknown;
   readonly startedAt: string;
   readonly updatedAt: string;
+  /**
+   * Instance id of the child journey currently in flight from this
+   * instance's invoking step, or `null` when no invoke is pending. The
+   * `<JourneyOutlet>` follows this chain by default to render the active
+   * leaf; shells that want layered presentations can read it directly.
+   */
+  readonly activeChildId: InstanceId | null;
+  /**
+   * Parent link — set on a child instance to identify the parent that
+   * invoked it and the named resume the runtime will fire on the parent
+   * when this instance terminates. `null` for root instances and for
+   * instances started via `runtime.start()` outside a parent transition.
+   */
+  readonly parent: { readonly instanceId: InstanceId; readonly resumeName: string } | null;
   serialize(): SerializedJourney<TState>;
+}
+
+/**
+ * Persisted parent-side link to a child journey that is in flight from
+ * this instance's current step. Survives a reload — on hydrate, the
+ * runtime relinks the parent to the child via `childInstanceId` (in
+ * memory) or `childPersistenceKey` (loaded from storage). `resumeName`
+ * names the entry in `JourneyDefinition.resumes[mod][entry]` that fires
+ * when the child terminates.
+ */
+export interface PendingInvoke {
+  readonly childJourneyId: string;
+  readonly childInstanceId: InstanceId;
+  readonly childPersistenceKey: string | null;
+  readonly resumeName: string;
+}
+
+/**
+ * Persisted child-side back-pointer. Mirrors the parent's `pendingInvoke`
+ * so a child blob loaded out-of-order on reload still knows which parent
+ * to resume. The runtime tolerates either side being missing — see the
+ * hydrate link-up pass for the recovery semantics.
+ */
+export interface ParentLink {
+  readonly parentInstanceId: InstanceId;
+  readonly resumeName: string;
 }
 
 export interface SerializedJourney<TState = unknown> {
@@ -319,6 +359,18 @@ export interface SerializedJourney<TState = unknown> {
   readonly state: TState;
   readonly startedAt: string;
   readonly updatedAt: string;
+  /**
+   * Set when a child journey is in flight from this instance's current
+   * step. Persisted so the runtime can relink parent → child after a
+   * reload. Cleared when the child resumes the parent.
+   */
+  readonly pendingInvoke?: PendingInvoke;
+  /**
+   * Set on a child instance whose parent invoked it. Mirrors the parent's
+   * `pendingInvoke` so a child blob loaded out-of-order still knows
+   * which parent to resume.
+   */
+  readonly parentLink?: ParentLink;
 }
 
 export interface JourneyDefinitionSummary {

@@ -115,5 +115,7 @@ export type {
   InvokeSpec,
   ResumeHandler,
   ResumeMap,
+  PendingInvoke,
+  ParentLink,
 } from "./journey-contracts.js";
 export { isTerminal } from "./journey-contracts.js";
