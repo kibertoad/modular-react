@@ -1,5 +1,6 @@
 import type { ModuleDescriptor } from "@modular-react/core";
 import type { AnyJourneyDefinition, RegisteredJourney } from "./types.js";
+import { parseRange, parseVersion, satisfiesParsed, SemverParseError } from "./semver.js";
 
 /**
  * Aggregated error thrown when one or more registered journeys reference
@@ -124,6 +125,54 @@ export function validateJourneyContracts(
               `journey "${def.id}" sets allowBack on "${moduleId}.${entryName}" but the module entry does not declare allowBack`,
             );
           }
+        }
+      }
+    }
+
+    // Validate `moduleCompat`: each declared range must parse, the named
+    // module must be registered, and the registered module's `version`
+    // must satisfy the range. We accumulate every issue (rather than
+    // throwing on the first) so a deployment with several mismatched
+    // teams sees the full list in one CI run.
+    if (def.moduleCompat) {
+      for (const [moduleId, rangeRaw] of Object.entries(def.moduleCompat)) {
+        if (typeof rangeRaw !== "string" || rangeRaw.length === 0) {
+          issues.push(
+            `journey "${def.id}" declares a non-string version range for module "${moduleId}" in moduleCompat`,
+          );
+          continue;
+        }
+        const mod = moduleById.get(moduleId);
+        if (!mod) {
+          issues.push(
+            `journey "${def.id}" requires module "${moduleId}" (range "${rangeRaw}") in moduleCompat but it is not registered`,
+          );
+          continue;
+        }
+        let parsedRange;
+        try {
+          parsedRange = parseRange(rangeRaw);
+        } catch (err) {
+          const message = err instanceof SemverParseError ? err.message : String(err);
+          issues.push(
+            `journey "${def.id}" has an unparseable moduleCompat range for "${moduleId}": ${message}`,
+          );
+          continue;
+        }
+        let modVersion;
+        try {
+          modVersion = parseVersion(mod.version);
+        } catch (err) {
+          const message = err instanceof SemverParseError ? err.message : String(err);
+          issues.push(
+            `module "${moduleId}" declares an unparseable version "${mod.version}" (referenced by journey "${def.id}"): ${message}`,
+          );
+          continue;
+        }
+        if (!satisfiesParsed(modVersion, parsedRange)) {
+          issues.push(
+            `journey "${def.id}" requires module "${moduleId}" "${rangeRaw}" but registered version is "${mod.version}"`,
+          );
         }
       }
     }

@@ -28,6 +28,15 @@ export {
   validateJourneyDefinition,
   validateJourneyGraph,
 } from "./validation.js";
+export {
+  parseRange,
+  parseVersion,
+  satisfies,
+  satisfiesParsed,
+  compareTriples,
+  SemverParseError,
+} from "./semver.js";
+export type { ParsedRange, SemverTriple } from "./semver.js";
 export { JourneyOutlet, useJourneyCallStack } from "./outlet.js";
 export type {
   JourneyOutletProps,

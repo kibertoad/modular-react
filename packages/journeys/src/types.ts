@@ -109,6 +109,50 @@ export interface JourneyDefinition<
    */
   readonly invokes?: ReadonlyArray<JourneyHandleRef<string, any, any>>;
 
+  /**
+   * Expected module version ranges, keyed by `module.id`. The journeys
+   * plugin checks each entry at registry resolve time against the
+   * actually-registered module's `version` field; any incompatibility
+   * fails assembly with a {@link JourneyValidationError} listing every
+   * mismatch at once.
+   *
+   * **Why declare this even though the journey already references modules
+   * by id in `transitions`?** A journey that mixes in a module from another
+   * team is implicitly coupled to that module's exit-name and input-shape
+   * contract. The id-and-shape match holds today, but a backwards-
+   * incompatible bump on the other side ("we renamed the `success` exit
+   * to `done`") would otherwise only surface at runtime when the journey
+   * actually navigates to that step. Adding a compat declaration moves
+   * that failure to startup so an incompatible deployment refuses to come
+   * up at all, instead of breaking a single user mid-flow.
+   *
+   * The range syntax is the npm-style subset documented on
+   * `@modular-react/journeys/semver` — caret/tilde/x-range/comparators/AND
+   * /OR/hyphen. Pre-release tags and build metadata are not supported.
+   * Module ids that aren't registered are reported with a dedicated
+   * "module not registered" issue (so a typo on the journey side is
+   * distinguishable from a version mismatch).
+   *
+   * Optional. A journey that omits this field opts out of compatibility
+   * enforcement entirely; the existing structural validators
+   * (`transitions` referencing real modules / entries / exits) still run.
+   *
+   * @example
+   * ```ts
+   * defineJourney<OnboardingModules, OnboardingState>()({
+   *   id: "onboarding",
+   *   version: "1.0.0",
+   *   moduleCompat: {
+   *     profile: "^1.0.0",
+   *     billing: "^2.0.0 || ^3.0.0",
+   *     plan: ">=1.5.0 <2.0.0",
+   *   },
+   *   // ...
+   * });
+   * ```
+   */
+  readonly moduleCompat?: Readonly<Record<string, string>>;
+
   readonly onTransition?: (ev: TransitionEvent<TModules, TState>) => void;
   readonly onAbandon?: (
     ctx: AbandonCtx<TModules, TState>,
