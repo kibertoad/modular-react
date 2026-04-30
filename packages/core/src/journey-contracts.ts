@@ -567,3 +567,154 @@ export interface JourneyRuntime {
 export function isTerminal(instance: JourneyInstance): boolean {
   return instance.status === "completed" || instance.status === "aborted";
 }
+
+// -----------------------------------------------------------------------------
+// System-emitted abort reasons
+// -----------------------------------------------------------------------------
+
+/**
+ * String code identifying every abort reason the runtime itself emits
+ * (as opposed to author-supplied `{ abort: ... }` payloads). Authors and
+ * shells can narrow against this union when interpreting an abort
+ * outcome — see {@link JourneySystemAbortReason} for the per-code
+ * payload shape and {@link isJourneySystemAbort} for the type guard.
+ */
+export type JourneySystemAbortReasonCode =
+  | "invoke-cycle"
+  | "invoke-stack-overflow"
+  | "invoke-undeclared-child"
+  | "invoke-unknown-journey"
+  | "invoke-unknown-resume"
+  | "invoke-missing-resume"
+  | "invoke-missing-spec"
+  | "invoke-without-step"
+  | "invoke-start-threw"
+  | "invoke-start-no-record"
+  | "resume-missing"
+  | "resume-threw"
+  | "resume-returned-promise"
+  | "resume-bounce-limit"
+  | "transition-error"
+  | "transition-returned-promise";
+
+/**
+ * Discriminated union of every abort payload the runtime emits. Each arm
+ * is keyed on `reason` and carries the metadata authored on the runtime
+ * side — telemetry consumers and parent resume handlers can switch on
+ * `reason` for typed access:
+ *
+ * ```ts
+ * if (outcome.status === "aborted" && isJourneySystemAbort(outcome.reason)) {
+ *   if (outcome.reason.reason === "resume-bounce-limit") {
+ *     metrics.record("bounce_limit", { cap: outcome.reason.cap });
+ *   }
+ * }
+ * ```
+ *
+ * **Distinct from author-supplied aborts.** A transition handler is free
+ * to return `{ abort: anything }` — the runtime preserves the payload
+ * verbatim. {@link isJourneySystemAbort} narrows specifically to runtime-
+ * emitted reasons (matching one of the codes in
+ * {@link JourneySystemAbortReasonCode}); author payloads carrying a
+ * collidingly-named `reason` field are correctly excluded.
+ *
+ * Author-supplied abort payloads remain `unknown` on the wire — this
+ * union is purely a help for narrowing the system slice.
+ */
+export type JourneySystemAbortReason =
+  | {
+      readonly reason: "invoke-cycle";
+      readonly childJourneyId: string;
+      /**
+       * Closing-cycle path including the duplicate target id at both
+       * ends, e.g. `["B", "C", "D", "B"]`. Pre-cycle prefix is dropped
+       * — the path mirrors the printed runtime warning.
+       */
+      readonly chain: readonly string[];
+      readonly exit: string | null;
+    }
+  | {
+      readonly reason: "invoke-stack-overflow";
+      readonly depth: number;
+      readonly cap: number;
+      /** Full chain ancestors → parent → would-be child, in that order. */
+      readonly chain: readonly string[];
+      readonly exit: string | null;
+    }
+  | {
+      readonly reason: "invoke-undeclared-child";
+      readonly parentJourneyId: string;
+      readonly childJourneyId: string;
+      readonly exit: string | null;
+    }
+  | {
+      readonly reason: "invoke-unknown-journey";
+      readonly journeyId: string;
+      readonly exit: string | null;
+    }
+  | {
+      readonly reason: "invoke-unknown-resume";
+      readonly resume: string;
+      readonly exit: string | null;
+    }
+  | { readonly reason: "invoke-missing-resume"; readonly exit: string | null }
+  | { readonly reason: "invoke-missing-spec"; readonly exit: string | null }
+  | { readonly reason: "invoke-without-step"; readonly exit: string | null }
+  | {
+      readonly reason: "invoke-start-threw";
+      readonly error: unknown;
+      readonly exit: string | null;
+    }
+  | { readonly reason: "invoke-start-no-record"; readonly exit: string | null }
+  | {
+      readonly reason: "resume-missing";
+      readonly resume: string;
+      readonly childJourneyId: string;
+    }
+  | { readonly reason: "resume-threw"; readonly resume: string; readonly error: unknown }
+  | { readonly reason: "resume-returned-promise"; readonly resume: string }
+  | {
+      readonly reason: "resume-bounce-limit";
+      readonly cap: number;
+      readonly count: number;
+      readonly resume: string | undefined;
+    }
+  | {
+      readonly reason: "transition-error";
+      readonly exit: string | null;
+      readonly error: unknown;
+    }
+  | { readonly reason: "transition-returned-promise"; readonly exit: string | null };
+
+const JOURNEY_SYSTEM_ABORT_REASON_CODES: ReadonlySet<string> = new Set<JourneySystemAbortReasonCode>([
+  "invoke-cycle",
+  "invoke-stack-overflow",
+  "invoke-undeclared-child",
+  "invoke-unknown-journey",
+  "invoke-unknown-resume",
+  "invoke-missing-resume",
+  "invoke-missing-spec",
+  "invoke-without-step",
+  "invoke-start-threw",
+  "invoke-start-no-record",
+  "resume-missing",
+  "resume-threw",
+  "resume-returned-promise",
+  "resume-bounce-limit",
+  "transition-error",
+  "transition-returned-promise",
+]);
+
+/**
+ * Narrows an `unknown` abort payload (from `instance.terminalPayload`,
+ * `outcome.reason` on a parent's resume, or a serialized blob) to one of
+ * the runtime's system-emitted shapes. Returns `false` for author-
+ * supplied payloads — including ones whose `reason` field happens to be
+ * a string but is not a known system code, so an author who picks
+ * `reason: "user-cancelled"` does not collide with this guard.
+ */
+export function isJourneySystemAbort(payload: unknown): payload is JourneySystemAbortReason {
+  if (typeof payload !== "object" || payload === null) return false;
+  const reason = (payload as { readonly reason?: unknown }).reason;
+  return typeof reason === "string" && JOURNEY_SYSTEM_ABORT_REASON_CODES.has(reason);
+}

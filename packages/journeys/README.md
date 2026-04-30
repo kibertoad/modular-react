@@ -949,16 +949,16 @@ defineJourney<CheckoutModules, CheckoutState>()({
 });
 ```
 
-When **every** journey in a registration declares `invokes`, the registry's `validateJourneyContracts` builds the full directed graph and rejects the whole registration on a cycle:
+When **every** journey in a registration declares `invokes`, the registry's `validateJourneyContracts` (which calls `validateJourneyGraph` internally before its own structural checks) builds the full directed graph and rejects the whole registration on a cycle:
 
 ```
 JourneyValidationError: Invalid journey registration:
   - journey invoke cycle detected: "checkout" → "verify-identity" → "checkout"
 ```
 
-When some journeys omit `invokes`, the static check is incomplete (their out-edges are unknown), so the runtime guards remain the safety net. There is no penalty for omitting `invokes`; it's purely a confidence dial.
+The cycle check is **already part of the standard registry validation pipeline** — you do not need to opt in. Authors who want to run the graph check by hand (e.g. while composing registrations across plugin boundaries before handing them to the registry) can call `validateJourneyGraph(journeys)` directly; both functions throw `JourneyValidationError` with the same per-cycle message format.
 
-`validateJourneyGraph(journeys)` is also exported separately for shells that compose registrations across plugin boundaries and want to run the graph check on a partial slice without invoking the full contracts validator.
+When some journeys omit `invokes`, the static check is incomplete (their out-edges are unknown), so the runtime guards remain the safety net. There is no penalty for omitting `invokes`; it's purely a confidence dial.
 
 #### Tuning `maxCallStackDepth`
 
@@ -973,6 +973,8 @@ registry.registerJourney(checkoutJourney, {
 
 The resolved cap on each `invoke` is `min(non-undefined options across [ancestors..., parent, child])`, falling back to `16`. The strictest journey in the chain wins, which means a cautious utility journey can lower the cap for any composition that includes it without coordinating with the other journeys.
 
+`0`, negative, or non-finite values are treated as "no opinion" (consistent with `maxHistory`) so a misconfigured `0` cannot silently disable the guard.
+
 #### Tuning `maxResumeBouncesPerStep`
 
 A "bounce" is a resume that returns `{ invoke }` instead of advancing the parent's step. Counted per-parent, scoped to the parent's current step (not the parent's instance) — so a flow that legitimately retries a sub-flow several times in a row is fine, as long as the parent eventually advances. The counter resets whenever the parent's step actually changes (`{ next | complete | abort }` from any source).
@@ -983,7 +985,7 @@ registry.registerJourney(checkoutJourney, {
 });
 ```
 
-The bounce cap is per-parent — only the parent's own option governs (children don't see the parent's resumes and have no business voting). The counter is **persisted on the parent's blob** as `resumeBouncesAtStep`, so a hostile or accidental reload-bounce-reload-bounce sequence cannot reset the budget through storage.
+The bounce cap is per-parent — only the parent's own option governs (children don't see the parent's resumes and have no business voting). The counter is **persisted on the parent's blob** as `resumeBouncesAtStep`, so a hostile or accidental reload-bounce-reload-bounce sequence cannot reset the budget through storage. `0`, negative, or non-finite values fall through to the library default of `8`.
 
 #### Failure surface
 
@@ -993,10 +995,11 @@ All four guards abort the offending parent with a structured `terminalPayload` t
 // invoke-undeclared-child
 { reason: "invoke-undeclared-child", parentJourneyId: "...", childJourneyId: "...", exit: "..." }
 
-// invoke-cycle
-{ reason: "invoke-cycle", childJourneyId: "...", chain: ["a", "b", "a"], exit: "..." }
+// invoke-cycle (chain mirrors the printed warning — cycle portion only,
+// pre-cycle prefix dropped, duplicate target id appears at both ends)
+{ reason: "invoke-cycle", childJourneyId: "B", chain: ["B", "C", "D", "B"], exit: "..." }
 
-// invoke-stack-overflow
+// invoke-stack-overflow (chain is the full ancestors → parent → child)
 { reason: "invoke-stack-overflow", depth: 17, cap: 16, chain: ["a", "b", ..., "p"], exit: "..." }
 
 // resume-bounce-limit
@@ -1004,6 +1007,40 @@ All four guards abort the offending parent with a structured `terminalPayload` t
 ```
 
 Each one fires the registration's `onError` first (with `phase: "invoke"` for the first three, `phase: "resume"` for the last), so telemetry still observes the underlying control-plane failure even when the abort itself is what reaches the user.
+
+**Typed narrowing.** The four guards above plus every other runtime-emitted abort (`invoke-unknown-journey`, `invoke-unknown-resume`, `resume-missing`, `resume-threw`, `transition-error`, …) share a single discriminated union, `JourneySystemAbortReason`. Pair it with the `isJourneySystemAbort` predicate to narrow against author-supplied aborts (`{ abort: "user-cancelled" }`, `{ abort: { reason: "user-thing" } }`, etc.), which the predicate excludes by checking the `reason` against the closed set of system codes:
+
+```ts
+import { isJourneySystemAbort } from "@modular-react/journeys";
+
+resumes: {
+  checkout: {
+    review: {
+      afterIdentity: ({ outcome }) => {
+        if (outcome.status !== "aborted") return /* ... */;
+        if (isJourneySystemAbort(outcome.reason)) {
+          // outcome.reason is now the discriminated union — switch on `reason`
+          // for typed access to per-arm fields:
+          switch (outcome.reason.reason) {
+            case "invoke-cycle":
+              metrics.record("invoke_cycle", { chain: outcome.reason.chain });
+              break;
+            case "resume-bounce-limit":
+              metrics.record("bounce_limit", { cap: outcome.reason.cap });
+              break;
+          }
+        } else {
+          // author-supplied abort (e.g. `{ abort: { code: "denied" } }`) —
+          // narrow as you would any other unknown payload.
+        }
+        return { abort: outcome.reason };
+      },
+    },
+  },
+},
+```
+
+The `JourneySystemAbortReasonCode` literal-string union is also exported if you only need the code list (e.g. for a `Set` membership check or a switch over an external classification).
 
 ## Runtime surface
 
@@ -1871,6 +1908,7 @@ Every export you're likely to call, grouped by role.
 | `defineJourneyHandle`         | `<TModules, TState, TInput, TOutput>(def) => JourneyHandle<string, TInput, TOutput>`                           | Builds a typed token from a journey definition so modules and shells can call `runtime.start(handle, input)` without importing the journey's runtime code. Carries `TOutput` so a parent's resume sees `outcome.payload` typed end-to-end. |
 | `invoke`                      | `<TInput, TOutput>({ handle, input, resume }) => { invoke: InvokeSpec<TInput, TOutput> }`                      | Typed builder for the `{ invoke }` arm of `TransitionResult`. Cross-checks `input` against the handle's `TInput` — a bare object literal won't. See [Composing journeys](#composing-journeys-invoke--resume).                              |
 | `validateJourneyGraph`        | `(journeys: readonly RegisteredJourney[]) => void`                                                             | Static cycle check over the directed graph derived from each journey's `invokes` field. Run automatically by `validateJourneyContracts`; exported separately for shells that compose registrations across plugin boundaries. See [Cycle and recursion safety](#cycle-and-recursion-safety). |
+| `isJourneySystemAbort`        | `(payload: unknown) => payload is JourneySystemAbortReason`                                                    | Type guard that narrows an `unknown` abort payload to the runtime's discriminated `JourneySystemAbortReason` union. Returns `false` for author-supplied aborts so a `{ abort: { reason: "user-cancelled" } }` does not collide with the system codes. See [Cycle and recursion safety - Failure surface](#cycle-and-recursion-safety).                                                                                                                                                                                      |
 | `selectModule`                | `<TModules>() => <TKey>(key, cases) => StepSpec<TModules>`                                                     | Exhaustive state-driven dispatch helper for transition handlers - see [the pattern](#pattern---exhaustive-state-driven-module-dispatch-selectmodule). Missing branches are a compile error.                                                |
 | `selectModuleOrDefault`       | `<TModules>() => <TKey>(key, cases, fallback) => StepSpec<TModules>`                                           | Sibling of `selectModule` accepting a partial cases map plus an explicit fallback `StepSpec` - see [the pattern](#pattern---fallback-dispatch-selectmoduleordefault). Use when most discriminator values funnel through a generic module.  |
 | `defineJourneyPersistence`    | `<TInput, TState>(adapter) => JourneyPersistence<TState, TInput>`                                              | Types `keyFor`'s `input` against `TInput`, `load`/`save` against `TState`.                                                                                                                                                                 |

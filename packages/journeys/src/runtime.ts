@@ -590,10 +590,14 @@ export function createJourneyRuntime(
    * picks the **minimum** non-undefined option, falling back to the
    * library default. Any journey in the chain can lower the cap; none
    * can quietly raise it.
+   *
+   * `0` and negative values are treated as "no opinion" (consistent with
+   * `maxHistory` semantics) so a misconfigured `0` cannot silently
+   * disable invoke from this journey.
    */
   function resolveMaxCallStackDepth(
     chain: readonly InstanceRecord[],
-    parent: InstanceRecord,
+    parentReg: RegisteredJourney,
     childReg: RegisteredJourney | undefined,
   ): number {
     let cap = DEFAULT_MAX_CALL_STACK_DEPTH;
@@ -606,7 +610,7 @@ export function createJourneyRuntime(
       }
     };
     for (const ancestor of chain) visit(definitions.get(ancestor.journeyId));
-    visit(definitions.get(parent.journeyId));
+    visit(parentReg);
     visit(childReg);
     return cap;
   }
@@ -774,15 +778,17 @@ export function createJourneyRuntime(
 
     const chain = ancestorChain(parent);
     // Same-id guard. Walks every ancestor + the parent itself; if the
-    // target id is anywhere on the active chain we abort with a printed
-    // chain so the author can see exactly where the recursion closed.
+    // target id is anywhere on the active chain we abort with the
+    // closing-cycle path so the author can see exactly where recursion
+    // closed. The `chain` payload mirrors the printed display (cycle
+    // portion only — pre-cycle prefix is dropped) so telemetry consumers
+    // and the human-readable warning agree.
     {
-      const chainIds = chain.map((r) => r.journeyId).concat(parent.journeyId);
-      const collisionIdx = chainIds.indexOf(childJourneyId);
+      const fullIds = chain.map((r) => r.journeyId).concat(parent.journeyId);
+      const collisionIdx = fullIds.indexOf(childJourneyId);
       if (collisionIdx >= 0) {
-        const display = [...chainIds.slice(collisionIdx), childJourneyId]
-          .map((id) => `"${id}"`)
-          .join(" → ");
+        const cyclePath = [...fullIds.slice(collisionIdx), childJourneyId];
+        const display = cyclePath.map((id) => `"${id}"`).join(" → ");
         if (debug) {
           console.error(
             `[@modular-react/journeys] Invoke would re-enter journey "${childJourneyId}" already on the active chain: ${display}. Aborting parent "${parent.id}".`,
@@ -802,7 +808,7 @@ export function createJourneyRuntime(
             abort: {
               reason: "invoke-cycle",
               childJourneyId,
-              chain: chainIds.concat(childJourneyId),
+              chain: cyclePath,
               exit: exitName,
             },
           },
@@ -815,7 +821,7 @@ export function createJourneyRuntime(
     // Depth guard. The chain reaching `parent` is `chain.length + 1`
     // (ancestors + parent); the new child would push it to
     // `chain.length + 2`. Compare against the resolved cap.
-    const cap = resolveMaxCallStackDepth(chain, parent, childReg);
+    const cap = resolveMaxCallStackDepth(chain, parentReg, childReg);
     const depthAfterInvoke = chain.length + 2;
     if (depthAfterInvoke > cap) {
       const chainIds = chain.map((r) => r.journeyId).concat(parent.journeyId, childJourneyId);

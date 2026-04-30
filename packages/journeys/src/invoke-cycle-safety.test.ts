@@ -4,7 +4,13 @@
 // `validateJourneyGraph`; this file targets the runtime-side aborts.
 
 import { describe, expect, it } from "vitest";
-import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
+import {
+  defineEntry,
+  defineExit,
+  defineModule,
+  isJourneySystemAbort,
+  schema,
+} from "@modular-react/core";
 import { defineJourney } from "./define-journey.js";
 import { defineJourneyHandle, invoke } from "./handle.js";
 import { createJourneyRuntime } from "./runtime.js";
@@ -180,18 +186,60 @@ describe("validateJourneyGraph — static cycle detection", () => {
     expect(cycleIssues[0]).toMatch(/"a".*"b".*"c".*"a"/);
   });
 
-  it("ignores edges to journeys not in the registration set", () => {
-    const a = defineJourney<Modules, {}>()({
+  it("ignores edges to journeys not in the registration set, and the runtime emits invoke-unknown-journey for the missing handle", () => {
+    // Static check: edges to ids outside the registration set don't produce
+    // cycle reports — the missing-id failure mode is the runtime's job.
+    const aMod = defineModule({
+      id: "a-mod",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const missingHandle = { id: "missing" } as never;
+    const a = defineJourney<{ "a-mod": typeof aMod }, void>()({
       id: "a",
       version: "1.0.0",
-      initialState: () => ({}),
-      start: () => ({ module: "m", entry: "step", input: undefined }),
-      invokes: [{ id: "missing" } as never],
-      transitions: { m: { step: { go: () => ({ complete: null }) } } },
+      initialState: () => undefined,
+      start: () => ({ module: "a-mod", entry: "s", input: undefined }),
+      invokes: [missingHandle],
+      transitions: {
+        "a-mod": {
+          s: {
+            go: () =>
+              invoke({ handle: missingHandle, input: undefined, resume: "after" }) as never,
+          },
+        },
+      },
+      resumes: {
+        "a-mod": {
+          s: { after: () => ({ complete: undefined as never }) },
+        },
+      },
     });
+
+    // Static check passes — `missing` is outside the closed graph.
     expect(() =>
       validateJourneyGraph([{ definition: a, options: undefined }]),
     ).not.toThrow();
+
+    // Runtime check: dispatching that handle fires `invoke-unknown-journey`
+    // (the existing missing-id path) — NOT `invoke-undeclared-child`. The
+    // declared-set guard is downstream of the unknown-journey check, so a
+    // declared-but-unregistered handle still surfaces the more useful error.
+    const rt = createJourneyRuntime(
+      [{ definition: a, options: undefined }],
+      { modules: { "a-mod": aMod }, debug: false },
+    );
+    const harness = createTestHarness(rt);
+    const id = rt.start("a", undefined);
+    harness.fireExit(id, "go");
+    const inst = rt.getInstance(id)!;
+    expect(inst.status).toBe("aborted");
+    expect((inst.terminalPayload as { reason: string }).reason).toBe(
+      "invoke-unknown-journey",
+    );
   });
 
   it("validateJourneyContracts surfaces cycle errors alongside structural ones", () => {
@@ -1066,5 +1114,844 @@ describe("runtime guard — resume-bounce-limit", () => {
     expect(
       (rt2.getInstance(newParentId)!.terminalPayload as { reason: string }).reason,
     ).toBe("resume-bounce-limit");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Additional coverage from the post-implementation review.
+//
+// These exercise the corners that the original suite hand-waved over:
+// the empty-set semantic, deeper runtime cycles, multi-level abort
+// propagation through the standard resume cascade, and the depth-cap
+// resolver picking up a child journey's own override.
+// ---------------------------------------------------------------------------
+
+describe("runtime guard — invokes:[] (empty set)", () => {
+  it("rejects every dispatch with invoke-undeclared-child", () => {
+    // An empty `invokes` is a deliberate authoring statement: "this
+    // journey invokes nothing, even though it ships an invoke()
+    // transition." The guard should reject any dispatch — no opt-out,
+    // no implicit allow — so a refactor that adds an invoke() without
+    // updating invokes[] fails loudly.
+    const childMod = defineModule({
+      id: "ch",
+      version: "1.0.0",
+      exitPoints: { ok: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const child = defineJourney<{ ch: typeof childMod }, void>()({
+      id: "child-empty",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "ch", entry: "s", input: undefined }),
+      transitions: {
+        ch: { s: { ok: () => ({ complete: undefined as never }) } },
+      },
+    });
+    const childHandle = defineJourneyHandle(child);
+
+    const parentMod = defineModule({
+      id: "p",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const parent = defineJourney<{ p: typeof parentMod }, void>()({
+      id: "parent-empty",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "p", entry: "s", input: undefined }),
+      // Deliberately empty — declares "this journey invokes nothing."
+      invokes: [],
+      transitions: {
+        p: {
+          s: {
+            go: () =>
+              invoke({ handle: childHandle, input: undefined, resume: "after" }) as never,
+          },
+        },
+      },
+      resumes: {
+        p: {
+          s: { after: () => ({ complete: undefined as never }) },
+        },
+      },
+    });
+
+    const rt = createJourneyRuntime(
+      [
+        { definition: parent, options: undefined },
+        { definition: child, options: undefined },
+      ],
+      { modules: { p: parentMod, ch: childMod }, debug: false },
+    );
+    const harness = createTestHarness(rt);
+    const id = rt.start("parent-empty", undefined);
+    harness.fireExit(id, "go");
+    const inst = rt.getInstance(id)!;
+    expect(inst.status).toBe("aborted");
+    const reason = inst.terminalPayload as {
+      reason: string;
+      childJourneyId: string;
+    };
+    expect(reason.reason).toBe("invoke-undeclared-child");
+    expect(reason.childJourneyId).toBe("child-empty");
+  });
+});
+
+describe("runtime guard — invoke-cycle (3+ level chain)", () => {
+  it("aborts when a 3-link chain A→B→C closes a cycle by re-invoking A", () => {
+    // None of the three journeys declares `invokes`, so the static check
+    // never sees the cycle. The runtime same-id guard is what catches it
+    // when C's transition tries to dispatch back into A.
+
+    const aMod = defineModule({
+      id: "a-mod",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const bMod = defineModule({
+      id: "b-mod",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const cMod = defineModule({
+      id: "c-mod",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+
+    const aHandlePlaceholder = { id: "a3" } as never;
+
+    const c = defineJourney<{ "c-mod": typeof cMod }, void>()({
+      id: "c3",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "c-mod", entry: "s", input: undefined }),
+      transitions: {
+        "c-mod": {
+          s: {
+            // Closes the cycle — runtime same-id guard fires here.
+            go: () =>
+              invoke({
+                handle: aHandlePlaceholder,
+                input: undefined,
+                resume: "afterA",
+              }) as never,
+          },
+        },
+      },
+      resumes: {
+        "c-mod": {
+          s: { afterA: () => ({ complete: undefined as never }) },
+        },
+      },
+    });
+    const cHandle = defineJourneyHandle(c);
+    const b = defineJourney<{ "b-mod": typeof bMod }, void>()({
+      id: "b3",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "b-mod", entry: "s", input: undefined }),
+      transitions: {
+        "b-mod": {
+          s: {
+            go: () =>
+              invoke({ handle: cHandle, input: undefined, resume: "afterC" }) as never,
+          },
+        },
+      },
+      resumes: {
+        "b-mod": {
+          s: { afterC: () => ({ complete: undefined as never }) },
+        },
+      },
+    });
+    const bHandle = defineJourneyHandle(b);
+    const a = defineJourney<{ "a-mod": typeof aMod }, void>()({
+      id: "a3",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "a-mod", entry: "s", input: undefined }),
+      transitions: {
+        "a-mod": {
+          s: {
+            go: () =>
+              invoke({ handle: bHandle, input: undefined, resume: "afterB" }) as never,
+          },
+        },
+      },
+      resumes: {
+        "a-mod": {
+          s: { afterB: () => ({ complete: undefined as never }) },
+        },
+      },
+    });
+
+    const rt = createJourneyRuntime(
+      [
+        { definition: a, options: undefined },
+        { definition: b, options: undefined },
+        { definition: c, options: undefined },
+      ],
+      {
+        modules: { "a-mod": aMod, "b-mod": bMod, "c-mod": cMod },
+        debug: false,
+      },
+    );
+    const harness = createTestHarness(rt);
+    const aId = rt.start("a3", undefined);
+    harness.fireExit(aId, "go");
+    const bId = rt.getInstance(aId)!.activeChildId!;
+    harness.fireExit(bId, "go");
+    const cId = rt.getInstance(bId)!.activeChildId!;
+    expect(cId).toBeTruthy();
+    harness.fireExit(cId, "go"); // C tries to invoke A — cycle.
+
+    const cInst = rt.getInstance(cId)!;
+    expect(cInst.status).toBe("aborted");
+    const reason = cInst.terminalPayload as { reason: string; chain: string[] };
+    expect(reason.reason).toBe("invoke-cycle");
+    // The chain payload mirrors the printed warning — cycle portion only,
+    // pre-cycle prefix dropped. Since the cycle here closes from the very
+    // first ancestor (A), there is no prefix to drop and the chain is
+    // [A, B, C, A].
+    expect(reason.chain).toEqual(["a3", "b3", "c3", "a3"]);
+  });
+
+  it("drops the pre-cycle prefix in the chain payload when the cycle closes mid-chain", () => {
+    // A → B → C → D where D invokes B (cycle starts at B). The chain
+    // payload should be [B, C, D, B], NOT [A, B, C, D, B] — the printed
+    // warning and the payload agree.
+    const mods = ["a", "b", "c", "d"].map((name) =>
+      defineModule({
+        id: `${name}-mod`,
+        version: "1.0.0",
+        exitPoints: { go: defineExit() } as const,
+        entryPoints: {
+          s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+        },
+      }),
+    );
+    const [aMod, bMod, cMod, dMod] = mods;
+
+    const bHandlePlaceholder = { id: "b4" } as never;
+    const d = defineJourney<{ "d-mod": typeof dMod }, void>()({
+      id: "d4",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "d-mod", entry: "s", input: undefined }),
+      transitions: {
+        "d-mod": {
+          s: {
+            go: () =>
+              invoke({
+                handle: bHandlePlaceholder,
+                input: undefined,
+                resume: "afterB",
+              }) as never,
+          },
+        },
+      },
+      resumes: {
+        "d-mod": {
+          s: { afterB: () => ({ complete: undefined as never }) },
+        },
+      },
+    });
+    const dHandle = defineJourneyHandle(d);
+    const c = defineJourney<{ "c-mod": typeof cMod }, void>()({
+      id: "c4",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "c-mod", entry: "s", input: undefined }),
+      transitions: {
+        "c-mod": {
+          s: {
+            go: () =>
+              invoke({ handle: dHandle, input: undefined, resume: "afterD" }) as never,
+          },
+        },
+      },
+      resumes: {
+        "c-mod": {
+          s: { afterD: () => ({ complete: undefined as never }) },
+        },
+      },
+    });
+    const cHandle = defineJourneyHandle(c);
+    const b = defineJourney<{ "b-mod": typeof bMod }, void>()({
+      id: "b4",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "b-mod", entry: "s", input: undefined }),
+      transitions: {
+        "b-mod": {
+          s: {
+            go: () =>
+              invoke({ handle: cHandle, input: undefined, resume: "afterC" }) as never,
+          },
+        },
+      },
+      resumes: {
+        "b-mod": {
+          s: { afterC: () => ({ complete: undefined as never }) },
+        },
+      },
+    });
+    const bHandle = defineJourneyHandle(b);
+    const a = defineJourney<{ "a-mod": typeof aMod }, void>()({
+      id: "a4",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "a-mod", entry: "s", input: undefined }),
+      transitions: {
+        "a-mod": {
+          s: {
+            go: () =>
+              invoke({ handle: bHandle, input: undefined, resume: "afterB" }) as never,
+          },
+        },
+      },
+      resumes: {
+        "a-mod": {
+          s: { afterB: () => ({ complete: undefined as never }) },
+        },
+      },
+    });
+
+    const rt = createJourneyRuntime(
+      [
+        { definition: a, options: undefined },
+        { definition: b, options: undefined },
+        { definition: c, options: undefined },
+        { definition: d, options: undefined },
+      ],
+      {
+        modules: { "a-mod": aMod, "b-mod": bMod, "c-mod": cMod, "d-mod": dMod },
+        debug: false,
+      },
+    );
+    const harness = createTestHarness(rt);
+    const aId = rt.start("a4", undefined);
+    harness.fireExit(aId, "go");
+    const bId = rt.getInstance(aId)!.activeChildId!;
+    harness.fireExit(bId, "go");
+    const cId = rt.getInstance(bId)!.activeChildId!;
+    harness.fireExit(cId, "go");
+    const dId = rt.getInstance(cId)!.activeChildId!;
+    harness.fireExit(dId, "go"); // D tries to invoke B — cycle starts at B.
+
+    const dInst = rt.getInstance(dId)!;
+    expect(dInst.status).toBe("aborted");
+    const reason = dInst.terminalPayload as { reason: string; chain: string[] };
+    expect(reason.reason).toBe("invoke-cycle");
+    // Pre-cycle prefix `["a4"]` is dropped — only the cycle portion ships.
+    expect(reason.chain).toEqual(["b4", "c4", "d4", "b4"]);
+  });
+});
+
+describe("runtime guard — bounce-limit propagation through a multi-level chain", () => {
+  it("aborts the leaf with resume-bounce-limit and propagates the abort up the chain via standard resume cascade", () => {
+    // outer → middle → leaf. Leaf's resume always re-invokes a sub-leaf,
+    // bouncing forever. With a small cap on the leaf, the leaf aborts;
+    // middle's resume sees `outcome.status === "aborted"` and chooses to
+    // propagate (returns its own abort). Outer does likewise. End state:
+    // every record is aborted, the system reasons cascade up.
+    const subMod = defineModule({
+      id: "sub-mod",
+      version: "1.0.0",
+      exitPoints: { done: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const subLeaf = defineJourney<{ "sub-mod": typeof subMod }, void>()({
+      id: "sub-leaf",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "sub-mod", entry: "s", input: undefined }),
+      transitions: {
+        "sub-mod": {
+          s: { done: () => ({ complete: undefined as never }) },
+        },
+      },
+    });
+    const subLeafHandle = defineJourneyHandle(subLeaf);
+
+    const leafMod = defineModule({
+      id: "leaf-mod",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const leaf = defineJourney<{ "leaf-mod": typeof leafMod }, void>()({
+      id: "leaf",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "leaf-mod", entry: "s", input: undefined }),
+      invokes: [subLeafHandle],
+      transitions: {
+        "leaf-mod": {
+          s: {
+            go: () =>
+              invoke({
+                handle: subLeafHandle,
+                input: undefined,
+                resume: "afterSub",
+              }) as never,
+          },
+        },
+      },
+      // Adversarial — always bounces.
+      resumes: {
+        "leaf-mod": {
+          s: {
+            afterSub: () =>
+              invoke({
+                handle: subLeafHandle,
+                input: undefined,
+                resume: "afterSub",
+              }) as never,
+          },
+        },
+      },
+    });
+    const leafHandle = defineJourneyHandle(leaf);
+
+    const middleMod = defineModule({
+      id: "middle-mod",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const middle = defineJourney<{ "middle-mod": typeof middleMod }, void>()({
+      id: "middle",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "middle-mod", entry: "s", input: undefined }),
+      invokes: [leafHandle],
+      transitions: {
+        "middle-mod": {
+          s: {
+            go: () =>
+              invoke({
+                handle: leafHandle,
+                input: undefined,
+                resume: "afterLeaf",
+              }) as never,
+          },
+        },
+      },
+      resumes: {
+        "middle-mod": {
+          s: {
+            afterLeaf: ({ outcome }) =>
+              outcome.status === "aborted"
+                ? { abort: { reason: "leaf-aborted", cause: outcome.reason } }
+                : ({ complete: undefined as never }),
+          },
+        },
+      },
+    });
+    const middleHandle = defineJourneyHandle(middle);
+
+    const outerMod = defineModule({
+      id: "outer-mod",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const outer = defineJourney<{ "outer-mod": typeof outerMod }, void>()({
+      id: "outer",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "outer-mod", entry: "s", input: undefined }),
+      invokes: [middleHandle],
+      transitions: {
+        "outer-mod": {
+          s: {
+            go: () =>
+              invoke({
+                handle: middleHandle,
+                input: undefined,
+                resume: "afterMiddle",
+              }) as never,
+          },
+        },
+      },
+      resumes: {
+        "outer-mod": {
+          s: {
+            afterMiddle: ({ outcome }) =>
+              outcome.status === "aborted"
+                ? { abort: { reason: "middle-aborted", cause: outcome.reason } }
+                : ({ complete: undefined as never }),
+          },
+        },
+      },
+    });
+
+    const rt = createJourneyRuntime(
+      [
+        { definition: outer, options: undefined },
+        { definition: middle, options: undefined },
+        // Tight bounce cap so the leaf trips after a couple of bounces.
+        { definition: leaf, options: { maxResumeBouncesPerStep: 2 } },
+        { definition: subLeaf, options: undefined },
+      ],
+      {
+        modules: {
+          "outer-mod": outerMod,
+          "middle-mod": middleMod,
+          "leaf-mod": leafMod,
+          "sub-mod": subMod,
+        },
+        debug: false,
+      },
+    );
+    const harness = createTestHarness(rt);
+    const outerId = rt.start("outer", undefined);
+    harness.fireExit(outerId, "go");
+    const middleId = rt.getInstance(outerId)!.activeChildId!;
+    harness.fireExit(middleId, "go");
+    const leafId = rt.getInstance(middleId)!.activeChildId!;
+    expect(leafId).toBeTruthy();
+    // Drive the leaf's first invoke (its initial `go` exit). The leaf's
+    // resume is what bounces; we need a child in flight to terminate
+    // before the resume can fire.
+    harness.fireExit(leafId, "go");
+
+    // Bounce the leaf until the cap trips. With cap=2: bounce 1 OK,
+    // bounce 2 OK, bounce 3 trips. Each `done` exit on the in-flight
+    // sub-leaf triggers the bouncing resume.
+    let subId = rt.getInstance(leafId)!.activeChildId!;
+    expect(subId).toBeTruthy();
+    harness.fireExit(subId, "done"); // bounce 1
+    subId = rt.getInstance(leafId)!.activeChildId!;
+    harness.fireExit(subId, "done"); // bounce 2
+    subId = rt.getInstance(leafId)!.activeChildId!;
+    harness.fireExit(subId, "done"); // bounce 3 — leaf aborts
+
+    const leafInst = rt.getInstance(leafId)!;
+    expect(leafInst.status).toBe("aborted");
+    expect((leafInst.terminalPayload as { reason: string }).reason).toBe(
+      "resume-bounce-limit",
+    );
+
+    // Middle's resume saw the aborted outcome and propagated.
+    const middleInst = rt.getInstance(middleId)!;
+    expect(middleInst.status).toBe("aborted");
+    expect((middleInst.terminalPayload as { reason: string }).reason).toBe(
+      "leaf-aborted",
+    );
+
+    // Outer's resume saw middle's abort and propagated again.
+    const outerInst = rt.getInstance(outerId)!;
+    expect(outerInst.status).toBe("aborted");
+    expect((outerInst.terminalPayload as { reason: string }).reason).toBe(
+      "middle-aborted",
+    );
+
+    // The leaf's terminal payload (a system abort) is reachable from the
+    // outer's abort cause via the cascade — verifying typed narrowing
+    // through the new isJourneySystemAbort predicate would require also
+    // exercising the predicate, but the structural assertion is enough
+    // for the propagation path.
+    const outerCause = (outerInst.terminalPayload as { cause: { cause: { reason: string } } })
+      .cause.cause;
+    expect(outerCause.reason).toBe("resume-bounce-limit");
+  });
+});
+
+describe("runtime guard — depth cap resolved across multiple overrides", () => {
+  it("uses the child journey's maxCallStackDepth when it is the strictest in the chain", () => {
+    // A → B → C; A and B both leave the cap at the default (16). C sets
+    // its own cap to 2. When B tries to invoke C (would be depth 3), the
+    // resolver picks up C's option and aborts. This guards the
+    // documented behavior: ANY journey in the chain — including the
+    // child being invoked — can lower the cap.
+    const aMod = defineModule({
+      id: "a-mod",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const bMod = defineModule({
+      id: "b-mod",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const cMod = defineModule({
+      id: "c-mod",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+
+    const c = defineJourney<{ "c-mod": typeof cMod }, void>()({
+      id: "c-strict",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "c-mod", entry: "s", input: undefined }),
+      transitions: {
+        "c-mod": { s: { go: () => ({ complete: undefined as never }) } },
+      },
+    });
+    const cHandle = defineJourneyHandle(c);
+    const b = defineJourney<{ "b-mod": typeof bMod }, void>()({
+      id: "b-strict",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "b-mod", entry: "s", input: undefined }),
+      invokes: [cHandle],
+      transitions: {
+        "b-mod": {
+          s: {
+            go: () =>
+              invoke({ handle: cHandle, input: undefined, resume: "afterC" }) as never,
+          },
+        },
+      },
+      resumes: {
+        "b-mod": {
+          s: { afterC: () => ({ complete: undefined as never }) },
+        },
+      },
+    });
+    const bHandle = defineJourneyHandle(b);
+    const a = defineJourney<{ "a-mod": typeof aMod }, void>()({
+      id: "a-strict",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "a-mod", entry: "s", input: undefined }),
+      invokes: [bHandle],
+      transitions: {
+        "a-mod": {
+          s: {
+            go: () =>
+              invoke({ handle: bHandle, input: undefined, resume: "afterB" }) as never,
+          },
+        },
+      },
+      resumes: {
+        "a-mod": {
+          s: { afterB: () => ({ complete: undefined as never }) },
+        },
+      },
+    });
+
+    const rt = createJourneyRuntime(
+      [
+        { definition: a, options: undefined },
+        { definition: b, options: undefined },
+        // Only C overrides — its 2 must win even though it's the leaf
+        // and not the parent issuing the invoke.
+        { definition: c, options: { maxCallStackDepth: 2 } },
+      ],
+      {
+        modules: { "a-mod": aMod, "b-mod": bMod, "c-mod": cMod },
+        debug: false,
+      },
+    );
+    const harness = createTestHarness(rt);
+    const aId = rt.start("a-strict", undefined);
+    harness.fireExit(aId, "go"); // A → B (depth 2)
+    const bId = rt.getInstance(aId)!.activeChildId!;
+    harness.fireExit(bId, "go"); // B tries to invoke C — depth 3 > C's cap of 2.
+
+    const bInst = rt.getInstance(bId)!;
+    expect(bInst.status).toBe("aborted");
+    const reason = bInst.terminalPayload as {
+      reason: string;
+      cap: number;
+      depth: number;
+    };
+    expect(reason.reason).toBe("invoke-stack-overflow");
+    expect(reason.cap).toBe(2);
+    expect(reason.depth).toBe(3);
+  });
+
+  it("treats 0/negative/non-finite maxCallStackDepth as 'no opinion' so a misconfigured value falls back to the default", () => {
+    // Two journeys, each setting an out-of-band value. The resolver
+    // should ignore them and apply the library default (16) — a chain
+    // of depth 2 must succeed, and a much deeper chain isn't realistic
+    // to test here. We just verify the depth-2 path doesn't trip.
+    const childMod = defineModule({
+      id: "ch",
+      version: "1.0.0",
+      exitPoints: { ok: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const child = defineJourney<{ ch: typeof childMod }, void>()({
+      id: "child-noop",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "ch", entry: "s", input: undefined }),
+      transitions: {
+        ch: { s: { ok: () => ({ complete: undefined as never }) } },
+      },
+    });
+    const childHandle = defineJourneyHandle(child);
+    const parentMod = defineModule({
+      id: "p",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const parent = defineJourney<{ p: typeof parentMod }, void>()({
+      id: "parent-noop",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "p", entry: "s", input: undefined }),
+      invokes: [childHandle],
+      transitions: {
+        p: {
+          s: {
+            go: () =>
+              invoke({ handle: childHandle, input: undefined, resume: "after" }) as never,
+          },
+        },
+      },
+      resumes: {
+        p: { s: { after: () => ({ complete: undefined as never }) } },
+      },
+    });
+
+    const rt = createJourneyRuntime(
+      [
+        { definition: parent, options: { maxCallStackDepth: 0 } }, // no opinion
+        { definition: child, options: { maxCallStackDepth: -3 } }, // no opinion
+      ],
+      { modules: { p: parentMod, ch: childMod }, debug: false },
+    );
+    const harness = createTestHarness(rt);
+    const parentId = rt.start("parent-noop", undefined);
+    harness.fireExit(parentId, "go");
+    // Default cap is 16; depth 2 should succeed.
+    expect(rt.getInstance(parentId)!.activeChildId).toBeTruthy();
+  });
+});
+
+describe("isJourneySystemAbort predicate", () => {
+  it("narrows a runtime-emitted abort payload to the discriminated union", () => {
+    const childMod = defineModule({
+      id: "ch",
+      version: "1.0.0",
+      exitPoints: { ok: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const child = defineJourney<{ ch: typeof childMod }, void>()({
+      id: "child-narrow",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "ch", entry: "s", input: undefined }),
+      transitions: {
+        ch: { s: { ok: () => ({ complete: undefined as never }) } },
+      },
+    });
+    const childHandle = defineJourneyHandle(child);
+    const parentMod = defineModule({
+      id: "p",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        s: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const parent = defineJourney<{ p: typeof parentMod }, void>()({
+      id: "parent-narrow",
+      version: "1.0.0",
+      initialState: () => undefined,
+      start: () => ({ module: "p", entry: "s", input: undefined }),
+      // Empty invokes → any dispatch trips invoke-undeclared-child.
+      invokes: [],
+      transitions: {
+        p: {
+          s: {
+            go: () =>
+              invoke({ handle: childHandle, input: undefined, resume: "after" }) as never,
+          },
+        },
+      },
+      resumes: {
+        p: { s: { after: () => ({ complete: undefined as never }) } },
+      },
+    });
+
+    const rt = createJourneyRuntime(
+      [
+        { definition: parent, options: undefined },
+        { definition: child, options: undefined },
+      ],
+      { modules: { p: parentMod, ch: childMod }, debug: false },
+    );
+    const harness = createTestHarness(rt);
+    const id = rt.start("parent-narrow", undefined);
+    harness.fireExit(id, "go");
+    const inst = rt.getInstance(id)!;
+    expect(inst.status).toBe("aborted");
+
+    // The predicate narrows the unknown payload to the union; a switch
+    // on `reason` then yields typed access to the per-arm fields.
+    const payload: unknown = inst.terminalPayload;
+    expect(isJourneySystemAbort(payload)).toBe(true);
+    if (isJourneySystemAbort(payload)) {
+      // Without the narrow, `payload.parentJourneyId` would not type-check.
+      if (payload.reason === "invoke-undeclared-child") {
+        expect(payload.parentJourneyId).toBe("parent-narrow");
+        expect(payload.childJourneyId).toBe("child-narrow");
+      } else {
+        throw new Error(`unexpected reason: ${payload.reason}`);
+      }
+    }
+  });
+
+  it("returns false for author-supplied abort payloads, even ones with a string `reason` field", () => {
+    // Author-defined abort whose reason looks similar but isn't in the
+    // closed set of system codes — the predicate must not narrow.
+    const collidingPayload = { reason: "user-cancelled", code: 42 };
+    expect(isJourneySystemAbort(collidingPayload)).toBe(false);
+
+    // Non-string reason.
+    expect(isJourneySystemAbort({ reason: 42 })).toBe(false);
+
+    // Plain author payload.
+    expect(isJourneySystemAbort("abandoned")).toBe(false);
+    expect(isJourneySystemAbort(null)).toBe(false);
+    expect(isJourneySystemAbort(undefined)).toBe(false);
+    expect(isJourneySystemAbort({})).toBe(false);
   });
 });

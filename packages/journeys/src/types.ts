@@ -36,6 +36,8 @@ export type {
   JourneyRuntime,
   JourneyStatus,
   JourneyStep,
+  JourneySystemAbortReason,
+  JourneySystemAbortReasonCode,
   MaybePromise,
   ModuleTypeMap,
   ParentLink,
@@ -274,6 +276,12 @@ export interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
    * to be shallow; raise it (carefully) only for genuinely deep
    * compositions. Setting it to `1` blocks `invoke` from this journey
    * outright.
+   *
+   * `0`, negative, or non-finite values are treated as "no opinion" and
+   * fall through to the next journey's setting (or the library default
+   * if no journey in the chain expresses an opinion). This matches the
+   * `maxHistory` convention so a misconfigured `0` cannot accidentally
+   * disable the guard.
    */
   maxCallStackDepth?: number;
   /**
@@ -295,6 +303,9 @@ export interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
    * many times in a row; lower it for paranoia. The check uses the
    * parent's setting only — children do not influence their parent's
    * bounce budget.
+   *
+   * `0`, negative, or non-finite values fall through to the library
+   * default (matches `maxCallStackDepth` and `maxHistory`).
    */
   maxResumeBouncesPerStep?: number;
 }

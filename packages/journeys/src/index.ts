@@ -80,11 +80,14 @@ export type {
   JourneyRuntime,
   JourneyStatus,
   JourneyStep,
+  JourneySystemAbortReason,
+  JourneySystemAbortReasonCode,
   MaybePromise,
   ModuleTypeMap,
   ParentLink,
   PendingInvoke,
   RegisteredJourney,
+  ResumeBounceCounter,
   ResumeHandler,
   ResumeMap,
   SerializedJourney,
@@ -95,3 +98,5 @@ export type {
   TransitionMap,
   TransitionResult,
 } from "./types.js";
+
+export { isJourneySystemAbort } from "@modular-react/core";
