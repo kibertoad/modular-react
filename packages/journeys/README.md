@@ -24,6 +24,7 @@ Routes, slots, navigation, workspaces - none of that changes. Journeys sit **on 
 - [Core concepts](#core-concepts) - entries, exits, `allowBack`, lifecycle, statuses, keys
 - [Authoring patterns](#authoring-patterns) - module entries, exits, loading flows, `goBack` opt-in
 - [Journey definition patterns](#journey-definition-patterns) - branching, `selectModule` dispatch, terminals, state rewrites, bounded history
+- [Composing journeys (invoke / resume)](#composing-journeys-invoke--resume) - call out to a child journey mid-flow and resume on its outcome
 - [Runtime surface](#runtime-surface) - the `JourneyRuntime` you get back from `manifest.journeys`
 - [Journey handles](#journey-handles) - typed tokens for `runtime.start(handle, input)`
 - [`JourneyProvider` + context](#journeyprovider--context)
@@ -712,6 +713,181 @@ registry.registerJourney(journey, { maxHistory: 50 });
 Caveat: a cap smaller than the deepest reachable back-chain silently breaks `goBack` past the trim point (the rollback snapshot `goBack` would restore is among the dropped entries). Size it to at least the longest user-reachable back chain, or treat it as a hard "no-one will navigate back this far" window.
 
 Omitting `maxHistory`, or passing `0` or a negative number, leaves history unbounded.
+
+## Composing journeys (invoke / resume)
+
+Sometimes mid-flow you need to detour into a *different* journey — e.g. inside checkout the customer needs to verify identity, or inside an integration setup the user needs to add a new credential. The parent journey suspends, the child runs to a terminal, the parent picks up where it left off with the child's terminal payload in hand, and continues. Modular-react models this as a **subroutine**: one new transition primitive (`invoke`) plus a **named resume** handler that fires when the child terminates.
+
+The model is deliberately narrow: a parent can have at most one in-flight child per step, the parent's step doesn't change while the child runs, the parent advances only via the resume, and end-ing the parent cascades to the child. If you genuinely need parallel sub-flows (rare), call `runtime.start()` directly and own the bookkeeping — that path remains available.
+
+### The shape
+
+A transition handler returns `{ invoke: { handle, input, resume } }` instead of `{ next | complete | abort }`. The parent's journey definition declares a sibling `resumes` map mirroring `transitions`:
+
+```ts
+import { defineJourney, defineJourneyHandle } from "@modular-react/journeys";
+import { verifyIdentityHandle } from "verify-identity-journey";
+//        ^ exported from the child's package via defineJourneyHandle.
+
+defineJourney<CheckoutModules, CheckoutState, { token: string }>()({
+  id: "checkout",
+  version: "1.0.0",
+  initialState: (input: { orderId: string }) => ({ orderId: input.orderId, token: null }),
+  start: (s) => ({ module: "checkout", entry: "review", input: { orderId: s.orderId } }),
+  transitions: {
+    checkout: {
+      review: {
+        // Exit handler dispatches an invoke instead of next.
+        requestPayment: ({ state }) => ({
+          invoke: {
+            handle: verifyIdentityHandle,        // typed handle, see "Journey handles"
+            input: { customerId: state.customerId },
+            resume: "afterIdentity",             // names the resume below
+          },
+        }),
+      },
+    },
+  },
+  resumes: {
+    checkout: {
+      review: {
+        // outcome is ChildOutcome<TVerifyOutput> — completed has a typed
+        // payload; aborted carries reason. Both are surfaced; you decide.
+        afterIdentity: ({ state, outcome }) =>
+          outcome.status === "completed"
+            ? {
+                state: { ...state, token: outcome.payload.token },
+                next: { module: "billing", entry: "collect", input: { orderId: state.orderId, token: outcome.payload.token } },
+              }
+            : { abort: { reason: "identity-failed", cause: outcome.reason } },
+      },
+    },
+  },
+});
+```
+
+The child journey is a totally normal `defineJourney` — it doesn't know it's being invoked. It only declares its `TInput` (input from the parent) and its `TOutput` (the type of `complete` payloads). Its handle, exported via `defineJourneyHandle(childJourney)`, carries both as phantom types so the parent's `invoke` checks `input` and the parent's resume sees `outcome.payload` typed end-to-end.
+
+### Why named resumes (and not closures)
+
+You might expect `invoke` to take a `resume: (ctx) => ...` closure. We deliberately don't — closures don't survive a persistence reload. Naming the resume keeps everything serializable: the parent's blob records `pendingInvoke.resumeName`, the runtime looks up `def.resumes[mod][entry][name]` on hydrate, and the call chain restores exactly. See the persistence section below for the round-trip details.
+
+### Lifecycle and edge cases
+
+| Situation | Behavior |
+| - | - |
+| Child completes | Parent's named resume fires with `{ status: "completed", payload }` (typed). |
+| Child aborts (its own `{ abort }` or `runtime.end`) | Parent's named resume fires with `{ status: "aborted", reason }`. Author decides whether to recover or propagate. |
+| Parent ended while child active | Cascade — runtime ends the child first with reason `parent-ended`. Parent then aborts. Use `cause` on the child's terminal payload to distinguish. |
+| Child invokes a grandchild | Same machinery; the resume bubbles up the chain. The runtime maintains parent links and a reverse map; nothing special. |
+| Parent fires an exit while child is in flight | Dropped with a debug warn — the parent advances only via resume. |
+| Invoke names an unknown journey id | Parent aborts immediately with reason `invoke-unknown-journey`. `onError` fires. |
+| Invoke names a resume that isn't declared on the current step | Parent aborts with reason `invoke-unknown-resume`. `onError` fires. |
+| Resume handler throws | Parent aborts with reason `resume-threw`, `error` carries the throw. `onError` fires. |
+| Resume handler returns a Promise | Parent aborts with reason `resume-returned-promise`. Resumes must be sync and pure, like exit handlers. |
+| Hydrate: child blob missing on reload | Parent stays `active` with `activeChildId` set; exits remain blocked. The shell decides whether to load the child later or `runtime.end` the parent to give up. |
+
+### Outlet behavior
+
+`<JourneyOutlet>` walks the active call chain by default and renders the *leaf*. If the parent has invoked a child, the parent's component disappears and the child's component takes over the same outlet — matching the subroutine intuition. The chain re-renders when any link changes.
+
+For a layered presentation (parent visible underneath, child in a modal), pass `leafOnly={false}` on the outer outlet to keep it on the parent's step, and mount a sibling outlet against `instance.activeChildId` (or use `useJourneyCallStack`) for the child:
+
+```tsx
+import { JourneyOutlet, useJourneyCallStack } from "@modular-react/journeys";
+
+function CheckoutPanel({ instanceId }: { instanceId: InstanceId }) {
+  const chain = useJourneyCallStack(runtime, instanceId);
+  const childId = chain.length > 1 ? chain[chain.length - 1] : null;
+  return (
+    <>
+      <JourneyOutlet runtime={runtime} instanceId={instanceId} leafOnly={false} />
+      {childId ? (
+        <Modal>
+          <JourneyOutlet runtime={runtime} instanceId={childId} />
+        </Modal>
+      ) : null}
+    </>
+  );
+}
+```
+
+`onFinished` on a `<JourneyOutlet>` fires for the **root** instance only — it's the journey the caller mounted. Child terminations are observed via the parent's resume handler, not the outer outlet.
+
+### Persistence (round-tripping invoke state)
+
+When a parent has an in-flight child, `serialize()` emits `pendingInvoke` on the parent and `parentLink` on the child:
+
+```jsonc
+// parent blob
+{
+  // ...standard fields
+  "pendingInvoke": {
+    "childJourneyId": "verify-identity",
+    "childInstanceId": "ji_abc",
+    "childPersistenceKey": "verify-identity:cust-42",
+    "resumeName": "afterIdentity"
+  }
+}
+
+// child blob
+{
+  // ...standard fields
+  "parentLink": { "parentInstanceId": "ji_xyz", "resumeName": "afterIdentity" }
+}
+```
+
+After every hydrate path (sync start, async start, explicit `runtime.hydrate`), the runtime relinks every in-memory pair via the `parent` / `activeChildId` fields. Order doesn't matter — hydrate the parent first, then the child, or vice versa; the link reconciles either way. A parent whose `activeChildId` references a not-yet-loaded child stays `active` (exits blocked) until the child arrives.
+
+If the child's blob is gone for good (TTL expired, manual remove), the shell decides recovery: keep the parent suspended, or `runtime.end(parent)` to give up. The runtime does not auto-abort, because that would race with multi-step hydrates that legitimately load the parent first.
+
+### Telemetry: `TransitionEvent.kind`
+
+Every event a registered `onTransition` hook receives now carries a `kind` discriminator:
+
+```ts
+onTransition: (ev) => {
+  if (ev.kind === "step")   metrics.record("journey.hop",    { id: ev.journeyId });
+  if (ev.kind === "invoke") metrics.record("journey.invoke", { id: ev.journeyId, child: ev.child?.journeyId });
+  if (ev.kind === "resume") metrics.record("journey.resume", { id: ev.journeyId, resume: ev.resume });
+};
+```
+
+A consumer that only cares about top-level steps filters `kind === "step"`. Otherwise read `ev.child` on invokes and `ev.outcome` / `ev.resume` on resumes.
+
+### Testing
+
+The simulator drives both modes:
+
+```ts
+import { simulateJourney } from "@modular-react/journeys";
+
+// Drive a real child sub-simulator end-to-end:
+const sim = simulateJourney(parentJourney, { orderId: "O-1" }, {
+  children: [verifyIdentityJourney],
+});
+sim.fireExit("requestPayment");
+sim.activeChild!.fireExit("verified", { token: "T" });   // child runs to terminal
+expect(sim.currentStep.entry).toBe("collect");           // parent has resumed
+
+// Or mock the child's outcome to unit-test the parent's resume in isolation:
+const sim2 = simulateJourney(parentJourney, { orderId: "O-2" }, {
+  children: [verifyIdentityJourney],
+});
+sim2.fireExit("requestPayment");
+sim2.completeChild({ token: "T-MOCK" });                  // synthesize completed
+expect(sim2.state.token).toBe("T-MOCK");
+
+sim2.abortChild({ code: "denied" });                      // synthesize aborted (via runtime.end)
+```
+
+`completeChild` uses the runtime's standard transition machinery — `onComplete`, `onTransition`, persistence, and the parent's resume hook all fire as they would for a real `{ complete }`.
+
+### What this is *not*
+
+- **Not shared state.** Each journey owns its `TState`; communication is exclusively via `input` (down) and `outcome.payload` (up). Preserves the mental-model boundary.
+- **Not concurrent spawn.** A parent has at most one active invocation. If you need parallel children, call `runtime.start()` directly and store ids in state — that path remains available.
+- **Not back-navigation across the boundary.** `goBack` stays scoped to a journey's own history. To return from a child without completing, fire an exit that maps to `{ abort }`; the parent's resume handler decides what to do.
 
 ## Runtime surface
 
