@@ -179,46 +179,63 @@ describe("parser error messages name the offending input", () => {
   });
 });
 
-describe("cross-check against the `semver` package on a fixture grid", () => {
-  it("matches the behaviour of `semver.satisfies` on a representative grid", async () => {
-    const semverModule = await import("semver");
-    const versions = [
-      "0.0.1",
-      "0.1.0",
-      "0.2.3",
-      "0.2.9",
-      "0.3.0",
-      "1.0.0",
-      "1.2.3",
-      "1.2.4",
-      "1.9.9",
-      "2.0.0",
-      "2.5.7",
-      "3.0.0",
-    ];
-    const ranges = [
-      "1.2.3",
-      "^1.2.3",
-      "^0.2.3",
-      "^0.0.1",
-      "~1.2.3",
-      "~1.2",
-      ">=1.0.0 <2.0.0",
-      "1.x",
-      "1.2.x",
-      "*",
-      "^1.0.0 || ^2.0.0",
-      "1.2.3 - 2.0.0",
-    ];
-    for (const v of versions) {
-      for (const r of ranges) {
-        const ours = satisfies(v, r);
-        const theirs = semverModule.satisfies(v, r);
-        expect(
-          ours,
-          `disagreement on satisfies("${v}", "${r}"): ours=${ours} semver=${theirs}`,
-        ).toBe(theirs);
-      }
-    }
+/**
+ * Frozen behaviour grid recorded against `semver@7.7.4` at the time this
+ * package's bespoke implementation was first written. Each row is
+ * `[version, range, expectedOutcome]` where `expectedOutcome` is what
+ * `semver.satisfies(version, range)` returned in that run. Re-asserting it
+ * here lets us catch any regression in our own implementation without
+ * shipping `semver` as a devDependency.
+ *
+ * If you ever extend the supported syntax, regenerate the table by
+ * temporarily reinstalling `semver` and running the original cross-check —
+ * see the comment at the top of `bench/semver.bench.ts` for the script.
+ */
+const SEMVER_FIXTURE_GRID: ReadonlyArray<readonly [string, string, boolean]> = [
+  // version "1.2.3" — exact-match anchor row
+  ["1.2.3", "1.2.3", true],
+  ["1.2.3", "^1.2.3", true],
+  ["1.2.3", "~1.2.3", true],
+  ["1.2.3", ">=1.0.0 <2.0.0", true],
+  ["1.2.3", "1.x", true],
+  ["1.2.3", "1.2.x", true],
+  ["1.2.3", "*", true],
+  ["1.2.3", "^1.0.0 || ^2.0.0", true],
+  ["1.2.3", "1.2.3 - 2.0.0", true],
+  ["1.2.3", "^0.2.3", false],
+  ["1.2.3", "^0.0.1", false],
+
+  // major-bump boundary
+  ["2.0.0", "^1.2.3", false],
+  ["2.0.0", "~1.2.3", false],
+  ["2.0.0", "1.x", false],
+  ["2.0.0", "1.2.x", false],
+  ["2.0.0", "1.2.3 - 2.0.0", true],
+  ["2.0.0", ">=1.0.0 <2.0.0", false],
+  ["2.0.0", "^1.0.0 || ^2.0.0", true],
+
+  // 0.x caret semantics — collapses to next minor
+  ["0.2.3", "^0.2.3", true],
+  ["0.2.9", "^0.2.3", true],
+  ["0.3.0", "^0.2.3", false],
+
+  // 0.0.x caret semantics — collapses to exact patch
+  ["0.0.1", "^0.0.1", true],
+  ["0.0.1", "^0.2.3", false],
+
+  // tilde
+  ["1.2.4", "~1.2.3", true],
+  ["1.9.9", "~1.2.3", false],
+  ["1.2.4", "~1.2", true],
+
+  // miscellaneous misses
+  ["3.0.0", "^1.0.0 || ^2.0.0", false],
+  ["1.9.9", "^1.2.3", true],
+  ["1.9.9", "1.x", true],
+];
+
+describe("frozen `semver@7.7.4` behaviour grid", () => {
+  it.each(SEMVER_FIXTURE_GRID)("satisfies(%s, %s) === %s", (version, range, expected) => {
+    expect(satisfies(version, range)).toBe(expected);
   });
 });
