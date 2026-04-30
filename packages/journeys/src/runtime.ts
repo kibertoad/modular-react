@@ -387,6 +387,12 @@ export function createJourneyRuntime(
     from: JourneyStep | null,
     to: JourneyStep | null,
     exit: string | null,
+    extras?: {
+      readonly kind?: TransitionEvent["kind"];
+      readonly child?: TransitionEvent["child"];
+      readonly outcome?: TransitionEvent["outcome"];
+      readonly resume?: TransitionEvent["resume"];
+    },
   ) {
     const ev: TransitionEvent = {
       journeyId: record.journeyId,
@@ -400,6 +406,10 @@ export function createJourneyRuntime(
       // telemetry) would otherwise observe later mutations when they
       // finally inspect the event.
       history: [...record.history],
+      kind: extras?.kind ?? "step",
+      child: extras?.child,
+      outcome: extras?.outcome,
+      resume: extras?.resume,
     };
     try {
       reg.definition.onTransition?.(ev);
@@ -715,10 +725,18 @@ export function createJourneyRuntime(
         parentReg,
         { abort: { reason: "resume-returned-promise", resume: parentLink.resumeName } },
         null,
+        { kind: "resume", outcome, resume: parentLink.resumeName },
       );
       return;
     }
-    applyTransition(parent, parentReg, result, null);
+    // Tag the parent's transition as "resume" — same flow through
+    // applyTransition, but `onTransition` consumers can filter by
+    // `kind === "resume"` and read `outcome` / `resume` to correlate.
+    applyTransition(parent, parentReg, result, null, {
+      kind: "resume",
+      outcome,
+      resume: parentLink.resumeName,
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -730,6 +748,11 @@ export function createJourneyRuntime(
     reg: RegisteredJourney,
     result: TransitionResult<ModuleTypeMap, unknown>,
     exitName: string | null,
+    eventExtras?: {
+      readonly kind?: TransitionEvent["kind"];
+      readonly outcome?: TransitionEvent["outcome"];
+      readonly resume?: TransitionEvent["resume"];
+    },
   ) {
     const previousStep = record.step;
     // Snapshot the *pre-transition* state (before any state update) — this
@@ -784,7 +807,7 @@ export function createJourneyRuntime(
       record.updatedAt = nowIso();
       record.cachedCallbacks = null;
       trimHistory(record, reg);
-      fireOnTransition(reg, record, previousStep, nextStep, exitName);
+      fireOnTransition(reg, record, previousStep, nextStep, exitName, eventExtras);
     } else if ("complete" in result) {
       if (previousStep) {
         record.history.push(previousStep);
@@ -797,7 +820,7 @@ export function createJourneyRuntime(
       record.updatedAt = nowIso();
       record.cachedCallbacks = null;
       trimHistory(record, reg);
-      fireOnTransition(reg, record, previousStep, null, exitName);
+      fireOnTransition(reg, record, previousStep, null, exitName, eventExtras);
       fireOnComplete(reg, record, result.complete);
     } else if ("abort" in result) {
       if (previousStep) {
@@ -811,7 +834,7 @@ export function createJourneyRuntime(
       record.updatedAt = nowIso();
       record.cachedCallbacks = null;
       trimHistory(record, reg);
-      fireOnTransition(reg, record, previousStep, null, exitName);
+      fireOnTransition(reg, record, previousStep, null, exitName, eventExtras);
       fireOnAbort(reg, record, result.abort);
     } else if ("invoke" in result) {
       // Invoke a child journey from this step. The parent's step does NOT
@@ -831,7 +854,14 @@ export function createJourneyRuntime(
       // parent step would still resolve, but `dispatchExit` short-circuits
       // on `record.activeChildId` (see the guard added there) so a stray
       // exit fires from the now-paused parent are dropped with a warning.
-      fireOnTransition(reg, record, previousStep, previousStep, exitName);
+      const childIdForEvent = record.activeChildId;
+      const childRecord = childIdForEvent ? instances.get(childIdForEvent) : null;
+      fireOnTransition(reg, record, previousStep, previousStep, exitName, {
+        kind: "invoke",
+        child: childRecord
+          ? { instanceId: childRecord.id, journeyId: childRecord.journeyId }
+          : undefined,
+      });
     }
 
     const persistence = reg.options?.persistence;

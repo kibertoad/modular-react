@@ -262,6 +262,37 @@ export interface TransitionEvent<
   readonly exit: string | null;
   readonly state: TState;
   readonly history: readonly JourneyStep[];
+  /**
+   * Discriminator on the *kind* of hop this event represents. Lets
+   * telemetry consumers filter to top-level step transitions and skip
+   * the (often noisy) invoke / resume bookkeeping events.
+   *
+   * - `"step"` — ordinary `{ next | complete | abort }` transition. The
+   *   default for events fired today.
+   * - `"invoke"` — the parent has just started a child journey. `from`
+   *   and `to` are equal (the parent's step doesn't change). `child` is
+   *   populated.
+   * - `"resume"` — the parent's named resume handler has just been
+   *   applied with the child's outcome. The actual transition the
+   *   handler returned is reflected in `from` / `to` / `exit`. `outcome`
+   *   is populated.
+   */
+  readonly kind: "step" | "invoke" | "resume";
+  /**
+   * Set on `kind === "invoke"` events — identifies the child journey that
+   * was just started.
+   */
+  readonly child?: { readonly instanceId: InstanceId; readonly journeyId: string };
+  /**
+   * Set on `kind === "resume"` events — the child outcome that fed into
+   * the parent's resume handler.
+   */
+  readonly outcome?: ChildOutcome<unknown>;
+  /**
+   * Set on `kind === "resume"` events — the resume handler name that was
+   * fired.
+   */
+  readonly resume?: string;
 }
 
 export interface AbandonCtx<_TModules extends ModuleTypeMap = ModuleTypeMap, TState = unknown> {

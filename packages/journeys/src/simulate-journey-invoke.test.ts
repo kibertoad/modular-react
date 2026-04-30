@@ -182,4 +182,25 @@ describe("simulateJourney — invoke/resume", () => {
     expect(() => sim.completeChild({ token: "x" })).toThrow(/no child is in flight/);
     expect(() => sim.abortChild()).toThrow(/no child is in flight/);
   });
+
+  it("tags TransitionEvent.kind so telemetry can distinguish step / invoke / resume hops", () => {
+    const sim = simulateJourney(parentJourney, { orderId: "O-K" }, { children: [childJourney] });
+    sim.fireExit("pickPlan");
+    sim.activeChild!.fireExit("done", { token: "T-K" });
+    expect(sim.status).toBe("active");
+
+    const eventsForParent = sim.transitions.filter((ev) => ev.journeyId === "checkout");
+    // Expected sequence on the parent:
+    //   1. step (initial step on start)
+    //   2. invoke (parent fires `pickPlan`, transitions to invoke)
+    //   3. resume (child completes, parent's afterVerify resumes into "confirm")
+    expect(eventsForParent.map((ev) => ev.kind)).toEqual(["step", "invoke", "resume"]);
+
+    const invokeEv = eventsForParent.find((ev) => ev.kind === "invoke")!;
+    expect(invokeEv.child?.journeyId).toBe("verify");
+
+    const resumeEv = eventsForParent.find((ev) => ev.kind === "resume")!;
+    expect(resumeEv.resume).toBe("afterVerify");
+    expect(resumeEv.outcome).toEqual({ status: "completed", payload: { token: "T-K" } });
+  });
 });
