@@ -1513,6 +1513,181 @@ importers:
         specifier: ^8.0.3
         version: 8.0.10(@types/node@25.6.0)
 
+  examples/tanstack-router/journey-invoke/app-shared:
+    dependencies:
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../packages/core
+      '@tanstack-react-modules/core':
+        specifier: ^2.0.0
+        version: link:../../../../packages/tanstack-router-core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/journey-invoke/journeys/checkout:
+    dependencies:
+      '@example-tsr-invoke/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@example-tsr-invoke/checkout-confirm-module':
+        specifier: workspace:*
+        version: link:../../modules/checkout-confirm
+      '@example-tsr-invoke/checkout-review-module':
+        specifier: workspace:*
+        version: link:../../modules/checkout-review
+      '@example-tsr-invoke/verify-identity-journey':
+        specifier: workspace:*
+        version: link:../verify-identity
+      '@modular-react/journeys':
+        specifier: ^0.1.0
+        version: link:../../../../../packages/journeys
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/journey-invoke/journeys/verify-identity:
+    dependencies:
+      '@example-tsr-invoke/age-verify-module':
+        specifier: workspace:*
+        version: link:../../modules/age-verify
+      '@example-tsr-invoke/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/journeys':
+        specifier: ^0.1.0
+        version: link:../../../../../packages/journeys
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/journey-invoke/modules/age-verify:
+    dependencies:
+      '@example-tsr-invoke/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/journey-invoke/modules/checkout-confirm:
+    dependencies:
+      '@example-tsr-invoke/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/journey-invoke/modules/checkout-review:
+    dependencies:
+      '@example-tsr-invoke/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/journey-invoke/shell:
+    dependencies:
+      '@example-tsr-invoke/age-verify-module':
+        specifier: workspace:*
+        version: link:../modules/age-verify
+      '@example-tsr-invoke/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-tsr-invoke/checkout-confirm-module':
+        specifier: workspace:*
+        version: link:../modules/checkout-confirm
+      '@example-tsr-invoke/checkout-journey':
+        specifier: workspace:*
+        version: link:../journeys/checkout
+      '@example-tsr-invoke/checkout-review-module':
+        specifier: workspace:*
+        version: link:../modules/checkout-review
+      '@example-tsr-invoke/verify-identity-journey':
+        specifier: workspace:*
+        version: link:../journeys/verify-identity
+      '@modular-react/core':
+        specifier: ^1.0.0
+        version: link:../../../../packages/core
+      '@modular-react/journeys':
+        specifier: ^0.1.0
+        version: link:../../../../packages/journeys
+      '@modular-react/react':
+        specifier: ^1.0.0
+        version: link:../../../../packages/react
+      '@tanstack-react-modules/core':
+        specifier: ^2.0.0
+        version: link:../../../../packages/tanstack-router-core
+      '@tanstack-react-modules/runtime':
+        specifier: ^2.0.0
+        version: link:../../../../packages/tanstack-router-runtime
+      '@tanstack/react-router':
+        specifier: ^1.168.8
+        version: 1.168.22(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.5(react@19.2.5)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.1(vite@8.0.10(@types/node@25.6.0))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.3
+        version: 8.0.10(@types/node@25.6.0)
+
   packages/cli-core:
     dependencies:
       '@clack/prompts':
