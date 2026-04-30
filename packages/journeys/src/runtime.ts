@@ -1606,6 +1606,18 @@ export function createJourneyRuntime(
     __moduleMap: moduleMap,
     __debug: debug,
     __fireComponentError: dispatchComponentError,
+    __synthesizeCompletion: (childId: InstanceId, payload: unknown) => {
+      const child = instances.get(childId);
+      if (!child) return;
+      const reg = definitions.get(child.journeyId);
+      if (!reg) return;
+      // Drive the child through the standard transition machinery so
+      // onComplete, onTransition, persistence, AND the parent's resume
+      // hook all fire exactly as they would for a real `{ complete }`
+      // transition. The shape we hand `applyTransition` is the same one
+      // a transition handler would have returned.
+      applyTransition(child, reg, { complete: payload }, null);
+    },
   };
   INTERNALS.set(runtime, internals);
 
@@ -1642,6 +1654,16 @@ export interface JourneyRuntimeInternals {
    * keeps the runtime the single owner of hook firing.
    */
   __fireComponentError(id: InstanceId, err: unknown, step: JourneyStep): void;
+  /**
+   * Drive a child instance to a `completed` terminal with a synthesized
+   * payload. Test-only — the simulator's `completeChild()` uses this to
+   * exercise a parent's resume handler in isolation without enumerating
+   * the child's transition graph. Routes through the standard
+   * `applyTransition` so onComplete / onTransition / persistence / the
+   * parent's resume all fire as they would for a real `{ complete }`.
+   * No-op for unknown ids.
+   */
+  __synthesizeCompletion(childId: InstanceId, payload: unknown): void;
 }
 
 export function getInternals(runtime: JourneyRuntime): JourneyRuntimeInternals {
