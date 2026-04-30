@@ -39,11 +39,11 @@ export const defineJourney =
   // want their terminal payload type-checked (and surfaced to a parent's
   // resume handler) explicitly pass it as the third generic.
   <TModules extends ModuleTypeMap, TState, TOutput = unknown>() =>
-  // `TInput = void` matters: when `initialState` takes no parameter
-  // there is no inferable position for TInput, and without a default TS
-  // falls back to `unknown`. That silently disables the rest-tuple
-  // ergonomics on `runtime.start(handle)` and `simulateJourney(journey)`
-  // — callers would still have to pass `undefined`. Defaulting to `void`
-  // keeps "no input" journeys truly zero-arg.
-  <TInput = void>(definition: JourneyDefinition<TModules, TState, TInput, TOutput>) =>
-    definition;
+    // `TInput = void` matters: when `initialState` takes no parameter
+    // there is no inferable position for TInput, and without a default TS
+    // falls back to `unknown`. That silently disables the rest-tuple
+    // ergonomics on `runtime.start(handle)` and `simulateJourney(journey)`
+    // — callers would still have to pass `undefined`. Defaulting to `void`
+    // keeps "no input" journeys truly zero-arg.
+    <TInput = void>(definition: JourneyDefinition<TModules, TState, TInput, TOutput>) =>
+      definition;

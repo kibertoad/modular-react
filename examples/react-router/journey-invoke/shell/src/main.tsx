@@ -1,7 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { createRegistry } from "@react-router-modules/runtime";
 import { JourneyProvider, journeysPlugin } from "@modular-react/journeys";
-import type { JourneyRuntime } from "@modular-react/journeys";
 import type { AppDependencies, AppSlots } from "@example-rr-invoke/app-shared";
 
 import checkoutReviewModule from "@example-rr-invoke/checkout-review-module";
@@ -56,11 +55,5 @@ const { App, journeys } = registry.resolve({
   ),
   indexComponent: () => <Home runtime={journeys} />,
 });
-
-// `journeys` (the JourneyRuntime) is now ready for `runtime.start(handle, …)`.
-// The Home component receives it via prop; in a larger shell you'd usually
-// pull it from context (`useJourneyContext`) instead.
-const _unusedRuntime: JourneyRuntime = journeys;
-void _unusedRuntime;
 
 createRoot(document.getElementById("root")!).render(<App />);

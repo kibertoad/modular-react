@@ -10,9 +10,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import { defineJourney } from "./define-journey.js";
-import { defineJourneyHandle } from "./handle.js";
+import { defineJourneyHandle, invoke } from "./handle.js";
 import { createJourneyRuntime } from "./runtime.js";
 import { createTestHarness } from "./testing.js";
+import type { SerializedJourney } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Shared test fixtures
@@ -91,13 +92,12 @@ const parentJourney = defineJourney<ParentModules, ParentState>()({
   transitions: {
     checkout: {
       review: {
-        pickPlan: ({ state }) => ({
-          invoke: {
+        pickPlan: ({ state }) =>
+          invoke({
             handle: childHandle,
             input: { subject: state.orderId },
             resume: "afterVerify",
-          },
-        }),
+          }),
         cancelled: () => ({ abort: { reason: "user-cancelled" } }),
       },
     },
@@ -116,7 +116,12 @@ const parentJourney = defineJourney<ParentModules, ParentState>()({
                 },
               }
             : {
-                state: { ...state, aborted: { code: String((outcome.reason as { code?: string })?.code ?? "unknown") } },
+                state: {
+                  ...state,
+                  aborted: {
+                    code: String((outcome.reason as { code?: string })?.code ?? "unknown"),
+                  },
+                },
                 complete: undefined as never,
               },
       },
@@ -245,15 +250,17 @@ describe("invoke / resume — cascade-end on parent termination", () => {
     expect(rt.getInstance(parentId)!.status).toBe("aborted");
     const child = rt.getInstance(childId)!;
     expect(child.status).toBe("aborted");
-    // The child's terminal payload reflects the cascade reason — useful
-    // for telemetry that distinguishes parent-driven cleanup from voluntary
-    // child aborts. `runtime.end` wraps the supplied reason inside its
-    // default-abort `{ reason }`, so the cascade marker lives one level in:
-    // `terminalPayload = { reason: { reason: "parent-ended", parentId, cause: <user reason> } }`.
-    const inner = (child.terminalPayload as { reason: { reason: string; parentId: string } })
-      .reason;
-    expect(inner.reason).toBe("parent-ended");
-    expect(inner.parentId).toBe(parentId);
+    // The child's terminal payload reflects the cascade reason directly —
+    // `runtime.end()` no longer wraps the supplied reason in `{ reason }`,
+    // so telemetry sees the cascade marker at the top level.
+    const payload = child.terminalPayload as {
+      reason: string;
+      parentId: string;
+      cause: { reason: string };
+    };
+    expect(payload.reason).toBe("parent-ended");
+    expect(payload.parentId).toBe(parentId);
+    expect(payload.cause).toEqual({ reason: "user-closed" });
   });
 });
 
@@ -305,7 +312,11 @@ describe("invoke / resume — multi-level nesting", () => {
         }),
       },
     });
-    const middleJourney = defineJourney<{ middle: typeof middleMod }, { v: number | null }, { v: number }>()({
+    const middleJourney = defineJourney<
+      { middle: typeof middleMod },
+      { v: number | null },
+      { v: number }
+    >()({
       id: "middle-j",
       version: "1.0.0",
       initialState: () => ({ v: null }),
@@ -313,9 +324,7 @@ describe("invoke / resume — multi-level nesting", () => {
       transitions: {
         middle: {
           gate: {
-            go: () => ({
-              invoke: { handle: leafHandle, input: undefined, resume: "afterLeaf" },
-            }),
+            go: () => invoke({ handle: leafHandle, input: undefined, resume: "afterLeaf" }),
           },
         },
       },
@@ -344,7 +353,11 @@ describe("invoke / resume — multi-level nesting", () => {
         }),
       },
     });
-    const outerJourney = defineJourney<{ outer: typeof outerMod }, { v: number | null }, { v: number }>()({
+    const outerJourney = defineJourney<
+      { outer: typeof outerMod },
+      { v: number | null },
+      { v: number }
+    >()({
       id: "outer-j",
       version: "1.0.0",
       initialState: () => ({ v: null }),
@@ -352,9 +365,7 @@ describe("invoke / resume — multi-level nesting", () => {
       transitions: {
         outer: {
           wait: {
-            begin: () => ({
-              invoke: { handle: middleHandle, input: undefined, resume: "afterMiddle" },
-            }),
+            begin: () => invoke({ handle: middleHandle, input: undefined, resume: "afterMiddle" }),
           },
         },
       },
@@ -431,7 +442,7 @@ describe("invoke / resume — validation failures abort the parent with discover
       start: () => ({ module: "m", entry: "s", input: undefined }),
       transitions: {
         m: {
-          s: { go: () => ({ invoke: { handle: stranger, input: undefined, resume: "x" } }) },
+          s: { go: () => invoke({ handle: stranger, input: undefined, resume: "x" }) },
         },
       },
       resumes: { m: { s: { x: ({ outcome }) => ({ complete: outcome }) } } },
@@ -476,9 +487,12 @@ describe("invoke / resume — validation failures abort the parent with discover
       transitions: {
         m: {
           s: {
-            go: () => ({
-              invoke: { handle: defineJourneyHandle(dummyJ), input: undefined, resume: "missing" },
-            }),
+            go: () =>
+              invoke({
+                handle: defineJourneyHandle(dummyJ),
+                input: undefined,
+                resume: "missing",
+              }),
           },
         },
       },
@@ -503,9 +517,6 @@ describe("invoke / resume — validation failures abort the parent with discover
   });
 
   it("resume handler that throws → abort with reason resume-threw", () => {
-    const rt = buildRuntime();
-    const harness = createTestHarness(rt);
-
     // Patch the parent's resume to throw.
     const j2 = defineJourney<ParentModules, ParentState>()({
       ...parentJourney,
@@ -537,7 +548,6 @@ describe("invoke / resume — validation failures abort the parent with discover
     expect((rt2.getInstance(pid)!.terminalPayload as { reason: string }).reason).toBe(
       "resume-threw",
     );
-    expect(rt).toBe(rt); // (silence the unused-locals lint when this branch fails)
   });
 });
 
@@ -605,5 +615,91 @@ describe("invoke / resume — persistence", () => {
       instanceId: parentId,
       resumeName: "afterVerify",
     });
+  });
+
+  it("auto-rehydrates the child via the parent's pendingInvoke.childPersistenceKey on start()", async () => {
+    // Parent + child each have their own (memory-backed) persistence
+    // adapter. After a "reload" — i.e. building a fresh runtime against
+    // the same backing stores — calling `start()` on the parent should
+    // pull the child blob back automatically, so the shell does not
+    // have to know which children to start by hand.
+    const parentStore = new Map<string, SerializedJourney<unknown>>();
+    const childStore = new Map<string, SerializedJourney<unknown>>();
+    type ParentTState = ParentState;
+    type ChildTState = { subject: string };
+    const parentPersistence = {
+      keyFor: ({ input }: { input: { orderId: string } }) => `checkout:${input.orderId}`,
+      load: (k: string) => parentStore.get(k) ?? null,
+      save: (k: string, b: SerializedJourney<ParentTState>) =>
+        void parentStore.set(k, b as SerializedJourney<unknown>),
+      remove: (k: string) => void parentStore.delete(k),
+    };
+    const childPersistence = {
+      keyFor: ({ input }: { input: { subject: string } }) => `verify:${input.subject}`,
+      load: (k: string) => childStore.get(k) ?? null,
+      save: (k: string, b: SerializedJourney<ChildTState>) =>
+        void childStore.set(k, b as SerializedJourney<unknown>),
+      remove: (k: string) => void childStore.delete(k),
+    };
+
+    const rt1 = createJourneyRuntime(
+      [
+        {
+          definition: parentJourney,
+          options: { persistence: parentPersistence as never },
+        },
+        {
+          definition: childJourney,
+          options: { persistence: childPersistence as never },
+        },
+      ],
+      { modules: { checkout: parentMod, verifier: childMod }, debug: false },
+    );
+    const harness1 = createTestHarness(rt1);
+    const parentId = rt1.start(parentHandle, { orderId: "O-AUTO" });
+    harness1.fireExit(parentId, "pickPlan", { plan: "paid" });
+    const childId = rt1.getInstance(parentId)!.activeChildId!;
+    // Flush the runtime's coalesced save pipeline (`schedulePersist`
+    // chains saves through a microtask) so the parent blob with
+    // `pendingInvoke` and the child blob both land in storage before
+    // we simulate a reload.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(parentStore.size).toBe(1);
+    expect(childStore.size).toBe(1);
+
+    // "Reload": fresh runtime over the same stores. Calling start() on
+    // the parent must auto-rehydrate the child even though the shell
+    // never explicitly starts the child journey.
+    const rt2 = createJourneyRuntime(
+      [
+        {
+          definition: parentJourney,
+          options: { persistence: parentPersistence as never },
+        },
+        {
+          definition: childJourney,
+          options: { persistence: childPersistence as never },
+        },
+      ],
+      { modules: { checkout: parentMod, verifier: childMod }, debug: false },
+    );
+    const restoredParentId = rt2.start(parentHandle, { orderId: "O-AUTO" });
+    expect(restoredParentId).toBe(parentId);
+
+    const restoredParent = rt2.getInstance(parentId)!;
+    expect(restoredParent.activeChildId).toBe(childId);
+    const restoredChild = rt2.getInstance(childId)!;
+    expect(restoredChild).not.toBeNull();
+    expect(restoredChild.parent).toEqual({ instanceId: parentId, resumeName: "afterVerify" });
+
+    // Driving the child forward in the restored runtime resumes the parent —
+    // the same flow the user would see if the page never reloaded.
+    const harness2 = createTestHarness(rt2);
+    harness2.fireExit(childId, "done", { token: "T-AFTER-RELOAD" });
+    const resumed = rt2.getInstance(parentId)!;
+    expect(resumed.activeChildId).toBeNull();
+    expect(resumed.state.token).toBe("T-AFTER-RELOAD");
+    expect(resumed.step?.entry).toBe("confirm");
   });
 });

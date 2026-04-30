@@ -36,15 +36,14 @@ export function Home({ runtime }: Props) {
       <Layout>
         <h1 style={{ marginBottom: "1rem" }}>Journey invoke / resume — React Router</h1>
         <p style={{ marginBottom: "1rem", color: "#475569" }}>
-          The checkout journey runs from review → confirm. Mid-flow, it{" "}
-          <strong>invokes</strong> the verify-identity child journey when the order requires
-          age verification, and <strong>resumes</strong> after the child completes — picking
-          up the verification token typed end-to-end.
+          The checkout journey runs from review → confirm. Mid-flow, it <strong>invokes</strong> the
+          verify-identity child journey when the order requires age verification, and{" "}
+          <strong>resumes</strong> after the child completes — picking up the verification token
+          typed end-to-end.
         </p>
         <p style={{ marginBottom: "1rem", color: "#475569" }}>
-          Reload the page during the verify step: both the parent and the child rehydrate
-          from <code>localStorage</code> and the link is restored. The verify modal pops
-          right back up.
+          Reload the page during the verify step: both the parent and the child rehydrate from{" "}
+          <code>localStorage</code> and the link is restored. The verify modal pops right back up.
         </p>
         <button type="button" onClick={start} style={primaryButton}>
           Start checkout
@@ -112,18 +111,13 @@ function CallStackBanner({
         color: "#78350f",
       }}
     >
-      Call stack:{" "}
-      {chain
-        .map((id) => runtime.getInstance(id)?.journeyId ?? "?")
-        .join(" → ")}
+      Call stack: {chain.map((id) => runtime.getInstance(id)?.journeyId ?? "?").join(" → ")}
     </p>
   );
 }
 
 function Layout({ children }: { readonly children: React.ReactNode }) {
-  return (
-    <main style={{ maxWidth: 720, margin: "2rem auto", padding: "0 1rem" }}>{children}</main>
-  );
+  return <main style={{ maxWidth: 720, margin: "2rem auto", padding: "0 1rem" }}>{children}</main>;
 }
 
 const primaryButton = {

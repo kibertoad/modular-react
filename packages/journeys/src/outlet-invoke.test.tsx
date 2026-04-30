@@ -13,7 +13,7 @@ import { createElement } from "react";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import type { ModuleEntryProps } from "@modular-react/core";
 import { defineJourney } from "./define-journey.js";
-import { defineJourneyHandle } from "./handle.js";
+import { defineJourneyHandle, invoke } from "./handle.js";
 import { createJourneyRuntime } from "./runtime.js";
 import { JourneyOutlet, useJourneyCallStack } from "./outlet.js";
 
@@ -58,7 +58,11 @@ const childMod = defineModule({
   },
 });
 
-const childJourney = defineJourney<{ verifier: typeof childMod }, { subject: string }, { token: string }>()({
+const childJourney = defineJourney<
+  { verifier: typeof childMod },
+  { subject: string },
+  { token: string }
+>()({
   id: "verify",
   version: "1.0.0",
   initialState: (input: { subject: string }) => ({ subject: input.subject }),
@@ -72,7 +76,10 @@ const childJourney = defineJourney<{ verifier: typeof childMod }, { subject: str
 const childHandle = defineJourneyHandle(childJourney);
 
 const parentExits = { pickPlan: defineExit() } as const;
-function ReviewComponent({ input, exit }: ModuleEntryProps<{ orderId: string }, typeof parentExits>) {
+function ReviewComponent({
+  input,
+  exit,
+}: ModuleEntryProps<{ orderId: string }, typeof parentExits>) {
   return createElement(
     "div",
     null,
@@ -85,11 +92,7 @@ function ReviewComponent({ input, exit }: ModuleEntryProps<{ orderId: string }, 
   );
 }
 function ConfirmComponent({ input }: ModuleEntryProps<{ orderId: string; token: string }, never>) {
-  return createElement(
-    "div",
-    { "data-testid": "confirm" },
-    `${input.orderId}:${input.token}`,
-  );
+  return createElement("div", { "data-testid": "confirm" }, `${input.orderId}:${input.token}`);
 }
 
 const parentMod = defineModule({
@@ -121,9 +124,12 @@ const parentJourney = defineJourney<{ checkout: typeof parentMod }, ParentState>
   transitions: {
     checkout: {
       review: {
-        pickPlan: ({ state }) => ({
-          invoke: { handle: childHandle, input: { subject: state.orderId }, resume: "afterVerify" },
-        }),
+        pickPlan: ({ state }) =>
+          invoke({
+            handle: childHandle,
+            input: { subject: state.orderId },
+            resume: "afterVerify",
+          }),
       },
     },
   },
@@ -205,9 +211,7 @@ describe("JourneyOutlet — onFinished binds to the root", () => {
     const rt = buildRuntime();
     const id = rt.start(parentHandle, { orderId: "O-200" });
     const onFinished = vi.fn();
-    const ui = render(
-      createElement(JourneyOutlet, { runtime: rt, instanceId: id, onFinished }),
-    );
+    const ui = render(createElement(JourneyOutlet, { runtime: rt, instanceId: id, onFinished }));
     act(() => {
       ui.getByTestId("review-pick").click();
     });
@@ -243,9 +247,7 @@ describe("JourneyOutlet — onFinished binds to the root", () => {
     );
     const id = rt.start(defineJourneyHandle(j), { orderId: "O-300" });
     const onFinished = vi.fn();
-    const ui = render(
-      createElement(JourneyOutlet, { runtime: rt, instanceId: id, onFinished }),
-    );
+    const ui = render(createElement(JourneyOutlet, { runtime: rt, instanceId: id, onFinished }));
     act(() => {
       ui.getByTestId("review-pick").click();
     });
@@ -274,7 +276,12 @@ describe("useJourneyCallStack", () => {
       return null;
     }
     const ui = render(
-      createElement("div", null, createElement(Probe), createElement(JourneyOutlet, { runtime: rt, instanceId: id })),
+      createElement(
+        "div",
+        null,
+        createElement(Probe),
+        createElement(JourneyOutlet, { runtime: rt, instanceId: id }),
+      ),
     );
     expect(observed.at(-1)).toBe(id);
 

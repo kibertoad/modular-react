@@ -1,4 +1,4 @@
-import { defineJourney, defineJourneyHandle } from "@modular-react/journeys";
+import { defineJourney, defineJourneyHandle, invoke } from "@modular-react/journeys";
 import type { OrderSummary, AgeVerificationToken } from "@example-rr-invoke/app-shared";
 import type checkoutReviewModule from "@example-rr-invoke/checkout-review-module";
 import type checkoutConfirmModule from "@example-rr-invoke/checkout-confirm-module";
@@ -19,9 +19,11 @@ export interface CheckoutInput {
 export interface CheckoutState {
   readonly order: OrderSummary;
   readonly verification: AgeVerificationToken | null;
-  readonly result:
-    | { readonly kind: "paid"; readonly reference: string; readonly amount: number }
-    | null;
+  readonly result: {
+    readonly kind: "paid";
+    readonly reference: string;
+    readonly amount: number;
+  } | null;
 }
 
 export type CheckoutOutput =
@@ -58,13 +60,11 @@ export const checkoutJourney = defineJourney<CheckoutModules, CheckoutState, Che
         // is needed for orders that don't require verification.
         confirmAge: ({ state }) =>
           state.order.requiresAgeCheck
-            ? {
-                invoke: {
-                  handle: verifyIdentityHandle,
-                  input: { customerId: state.order.customerId },
-                  resume: "afterAgeVerified",
-                },
-              }
+            ? invoke({
+                handle: verifyIdentityHandle,
+                input: { customerId: state.order.customerId },
+                resume: "afterAgeVerified",
+              })
             : {
                 next: {
                   module: "checkout-confirm",

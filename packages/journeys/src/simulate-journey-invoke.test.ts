@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import { defineJourney } from "./define-journey.js";
-import { defineJourneyHandle } from "./handle.js";
+import { defineJourneyHandle, invoke } from "./handle.js";
 import { simulateJourney } from "./simulate-journey.js";
 
 const childExits = {
@@ -75,13 +75,12 @@ const parentJourney = defineJourney<{ checkout: typeof parentMod }, ParentState>
   transitions: {
     checkout: {
       review: {
-        pickPlan: ({ state }) => ({
-          invoke: {
+        pickPlan: ({ state }) =>
+          invoke({
             handle: childHandle,
             input: { subject: state.orderId },
             resume: "afterVerify",
-          },
-        }),
+          }),
       },
     },
   },
@@ -160,21 +159,15 @@ describe("simulateJourney — invoke/resume", () => {
     expect(sim.currentStep.entry).toBe("confirm");
   });
 
-  it("abortChild() drives the child to aborted via the runtime's normal end path", () => {
+  it("abortChild() delivers the reason directly to the parent's resume handler", () => {
     const sim = simulateJourney(parentJourney, { orderId: "O-5" }, { children: [childJourney] });
     sim.fireExit("pickPlan");
     sim.abortChild({ code: "timeout" });
     expect(sim.status).toBe("aborted");
-    // `runtime.end` wraps the supplied reason inside its default-abort
-    // `{ reason }` shape, so the parent's `outcome.reason` here is
-    // `{ reason: { code: "timeout" } }` — one level deeper than what a
-    // child's own `{ abort: { code: ... } }` transition would produce.
-    // The parent's handler reads `outcome.reason.code` which is therefore
-    // undefined and falls back to "x". Test pins this current behavior;
-    // a more ergonomic invariant would have abortChild bypass the wrap,
-    // but doing so would diverge from real `runtime.end` semantics that
-    // shells observe in production.
-    expect(sim.state.aborted).toEqual({ code: "x" });
+    // Symmetric with `completeChild`: the supplied reason is what the
+    // parent's resume sees as `outcome.reason`. No wrapping — equivalent
+    // to the child's own `{ abort: { code: ... } }` transition.
+    expect(sim.state.aborted).toEqual({ code: "timeout" });
   });
 
   it("completeChild / abortChild throw when no child is in flight", () => {

@@ -175,11 +175,17 @@ export interface JourneyRegisterOptions<TState = unknown, TInput = unknown> {
    */
   onHydrate?: (blob: SerializedJourney<TState>) => SerializedJourney<TState>;
   /**
-   * Fires when a step component throws or a transition handler throws for
-   * an instance of this journey. Observation-only — the runtime still
-   * aborts / retries according to the outlet's `onStepError` policy.
+   * Fires when a step component throws, a transition handler throws,
+   * or an invoke / resume / abandon hook throws. Observation-only — the
+   * runtime still aborts / retries according to the outlet's
+   * `onStepError` policy. The `phase` discriminator lets telemetry
+   * distinguish a component throw (`"step"`) from an invoke/resume
+   * control-plane failure or a custom `onAbandon` crash.
    */
-  onError?: (err: unknown, ctx: { step: JourneyStep | null }) => void;
+  onError?: (
+    err: unknown,
+    ctx: { step: JourneyStep | null; phase: "step" | "invoke" | "resume" | "abandon" },
+  ) => void;
   /**
    * Optional. Without it, journeys live in memory only — every
    * `runtime.start()` mints a fresh instance and nothing is written to

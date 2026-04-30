@@ -208,14 +208,11 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     internals.__fireComponentError(instance.id, err, step);
     let policy = onStepError?.(err, { step }) ?? "abort";
     if (policy === "retry") {
-      // The retry counter lives on the runtime record (not a ref) so it
-      // survives a transition side-effect that advances stepToken mid-retry:
-      // a step that throws during render and calls `exit()` in cleanup would
-      // otherwise reset the budget on every hop.
-      if (record.retryCount >= retryLimit) {
+      // Defer the budget check to the runtime so the counter is owned in
+      // one place and survives transition side-effects that advance
+      // stepToken mid-retry.
+      if (!internals.__consumeRetry(instance.id, retryLimit)) {
         policy = "abort";
-      } else {
-        record.retryCount += 1;
       }
     }
     if (policy === "abort") {
@@ -342,9 +339,14 @@ export function useJourneyCallStack(
 /**
  * Shared chain-walker used by both `useLeafId` (which takes the last
  * element) and `useJourneyCallStack` (which takes the whole array).
- * Subscribes to every instance along the way so React re-renders on
- * any link change.
+ * Subscribes to every instance along the way and re-subscribes
+ * whenever the chain shifts so deep transitions still trigger snapshot
+ * reads.
  */
+// Sanity bound to break a corrupted cycle in the activeChild graph; legitimate
+// invoke nesting is not expected to approach this depth. If a real product
+// stacks deeper, surface this through `JourneyRuntimeOptions` rather than
+// raising the constant blindly.
 const MAX_CHAIN_DEPTH = 64;
 
 function useCallChain(
@@ -354,27 +356,50 @@ function useCallChain(
 ): readonly InstanceId[] {
   // useSyncExternalStore over a virtual "chain" store: subscribe to each
   // instance the chain currently traverses, return a frozen-per-render
-  // array on snapshot read. Re-reading the chain on each snapshot picks
-  // up new links the moment they're applied.
+  // array on snapshot read. The chain can shift while we're subscribed
+  // (a leaf invokes a grandchild, mid-chain instance terminates) — when
+  // that happens, `fire` re-walks the chain and tops up subscriptions
+  // for any newly-reachable instance, so deep transitions still surface.
   const subscribe = useMemo(
     () => (listener: () => void) => {
-      // Resolve the current chain so we know which instances to subscribe
-      // to. On any notify from any of them, re-resolve. This is conservative
-      // — a tighter implementation would diff the chain — but the chain is
-      // bounded (MAX_CHAIN_DEPTH) and notifies are infrequent.
-      const unsubs: Array<() => void> = [];
-      const wire = (id: InstanceId) => unsubs.push(runtime.subscribe(id, fire));
-      const fire = () => listener();
-      let id: InstanceId | null = rootId;
-      let depth = 0;
-      while (id && depth < MAX_CHAIN_DEPTH) {
-        wire(id);
-        const inst = runtime.getInstance(id);
-        id = enabled && inst ? inst.activeChildId : null;
-        depth += 1;
-      }
+      const unsubs = new Map<InstanceId, () => void>();
+      let stopped = false;
+      const fire = () => {
+        if (stopped) return;
+        // The chain may have grown — top up subscriptions before notifying.
+        // This keeps `useJourneyCallStack` correct for chains beyond depth
+        // 1 without paying for unnecessary work: only newly-reachable ids
+        // call into `runtime.subscribe`.
+        rewire();
+        listener();
+      };
+      const rewire = () => {
+        const seen = new Set<InstanceId>();
+        let id: InstanceId | null = rootId;
+        let depth = 0;
+        while (id && depth < MAX_CHAIN_DEPTH) {
+          if (seen.has(id)) break;
+          seen.add(id);
+          if (!unsubs.has(id)) {
+            unsubs.set(id, runtime.subscribe(id, fire));
+          }
+          const inst = runtime.getInstance(id);
+          id = enabled && inst ? inst.activeChildId : null;
+          depth += 1;
+        }
+        // Drop subscriptions for ids no longer in the chain.
+        for (const [subscribedId, unsub] of unsubs) {
+          if (!seen.has(subscribedId)) {
+            unsub();
+            unsubs.delete(subscribedId);
+          }
+        }
+      };
+      rewire();
       return () => {
-        for (const u of unsubs) u();
+        stopped = true;
+        for (const unsub of unsubs.values()) unsub();
+        unsubs.clear();
       };
     },
     [runtime, rootId, enabled],

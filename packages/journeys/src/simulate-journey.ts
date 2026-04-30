@@ -187,6 +187,14 @@ function wrapInstanceAsSim<TModules extends ModuleTypeMap, TState>(
     if (!inst) throw new Error(`[simulateJourney] instance ${instanceId} not found`);
     return inst;
   }
+  // Cache `activeChild` sub-sims by child instance id so consecutive reads
+  // of `sim.activeChild` return the same object reference. Without this
+  // each getter access allocated a fresh wrapper, defeating consumers that
+  // want to keep a stable reference to the child sim across assertions.
+  let cachedChildSim: {
+    childId: InstanceId;
+    sim: JourneySimulator<ModuleTypeMap, unknown>;
+  } | null = null;
   return {
     journeyId,
     instanceId,
@@ -223,10 +231,19 @@ function wrapInstanceAsSim<TModules extends ModuleTypeMap, TState>(
     get activeChild() {
       const inst = instanceOrThrow();
       const childId = inst.activeChildId;
-      if (!childId) return null;
+      if (!childId) {
+        cachedChildSim = null;
+        return null;
+      }
+      if (cachedChildSim && cachedChildSim.childId === childId) {
+        return cachedChildSim.sim;
+      }
       const child = runtime.getInstance(childId);
-      if (!child) return null;
-      return wrapInstanceAsSim<ModuleTypeMap, unknown>(
+      if (!child) {
+        cachedChildSim = null;
+        return null;
+      }
+      const sim = wrapInstanceAsSim<ModuleTypeMap, unknown>(
         runtime,
         harness,
         internals,
@@ -234,6 +251,8 @@ function wrapInstanceAsSim<TModules extends ModuleTypeMap, TState>(
         childId,
         child.journeyId,
       );
+      cachedChildSim = { childId, sim };
+      return sim;
     },
     serialize() {
       return instanceOrThrow().serialize() as SerializedJourney<TState>;
@@ -263,7 +282,9 @@ function wrapInstanceAsSim<TModules extends ModuleTypeMap, TState>(
           `[simulateJourney] abortChild() called on instance "${instanceId}" but no child is in flight.`,
         );
       }
-      runtime.end(childId, reason);
+      // Symmetric with `completeChild`: synthesize the abort directly so
+      // the parent's resume sees the reason as-is, with no wrapping.
+      internals.__synthesizeAbort(childId, reason);
     },
   };
 }

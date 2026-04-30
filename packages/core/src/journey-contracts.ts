@@ -141,13 +141,20 @@ export interface InvokeSpec<TInput = unknown, TOutput = unknown> {
  * `complete` arm). `invoke.handle` carries the *child* journey's TInput /
  * TOutput independently — a parent's resume handler is type-checked against
  * the child handle's TOutput, not the parent's.
+ *
+ * **Type-checking `invoke.input`.** The union arm declares
+ * `InvokeSpec<unknown, unknown>` so the discriminator works for any handle,
+ * but a bare `{ invoke: { handle, input, resume } }` literal won't link
+ * `input` to the handle's `TInput`. Use the `invoke()` builder from
+ * `@modular-react/journeys` (re-exported via `defineJourney`'s helpers) to
+ * get end-to-end type-checking on `input`. The runtime accepts both forms.
  */
 export type TransitionResult<TModules extends ModuleTypeMap, TState, TOutput = unknown> =
   | { readonly next: StepSpec<TModules>; readonly state?: TState }
   | { readonly complete: TOutput; readonly state?: TState }
   | { readonly abort: unknown; readonly state?: TState }
   | {
-      readonly invoke: InvokeSpec<any, any>;
+      readonly invoke: InvokeSpec<unknown, unknown>;
       readonly state?: TState;
     };
 

@@ -51,7 +51,7 @@ export type {
 
 // Handles — export a handle from each journey package so modules and shells
 // open journeys with typed `input` without importing the journey's runtime.
-export { defineJourneyHandle } from "./handle.js";
+export { defineJourneyHandle, invoke } from "./handle.js";
 export type { JourneyHandle } from "./handle.js";
 
 // Authoring helpers — exhaustive (and fallback) state-driven dispatch.
@@ -61,6 +61,7 @@ export type { SelectModuleCases, SelectModuleCasesPartial } from "./select-modul
 export type {
   AbandonCtx,
   AnyJourneyDefinition,
+  ChildOutcome,
   EntryInputOf,
   EntryNamesOf,
   EntryTransitions,
@@ -68,6 +69,7 @@ export type {
   ExitNamesOf,
   ExitOutputOf,
   InstanceId,
+  InvokeSpec,
   JourneyDefinition,
   JourneyDefinitionSummary,
   JourneyInstance,
@@ -79,7 +81,11 @@ export type {
   JourneyStep,
   MaybePromise,
   ModuleTypeMap,
+  ParentLink,
+  PendingInvoke,
   RegisteredJourney,
+  ResumeHandler,
+  ResumeMap,
   SerializedJourney,
   StepSpec,
   TerminalCtx,

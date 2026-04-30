@@ -122,6 +122,56 @@ export function validateJourneyContracts(
         }
       }
     }
+
+    // Validate the sibling `resumes` map. Like `transitions`, the runtime
+    // tolerates a malformed value (handlers are looked up by name at child
+    // terminal time), but spelling errors at authoring time are easier to
+    // diagnose here than as a generic "invoke-unknown-resume" abort.
+    const resumes = (def.resumes ?? {}) as Record<string, unknown>;
+    for (const [moduleId, perModule] of Object.entries(resumes)) {
+      const mod = moduleById.get(moduleId);
+      if (!mod) {
+        issues.push(`journey "${def.id}" references unknown module id "${moduleId}" in resumes`);
+        continue;
+      }
+      if (!perModule || typeof perModule !== "object") {
+        issues.push(
+          `journey "${def.id}" has malformed resumes for module "${moduleId}" (expected an object)`,
+        );
+        continue;
+      }
+      for (const [entryName, perEntry] of Object.entries(perModule as Record<string, unknown>)) {
+        if (!mod.entryPoints?.[entryName]) {
+          issues.push(
+            `journey "${def.id}" references unknown entry "${moduleId}.${entryName}" in resumes`,
+          );
+          continue;
+        }
+        if (!perEntry || typeof perEntry !== "object") {
+          issues.push(
+            `journey "${def.id}" has malformed resumes for entry "${moduleId}.${entryName}" (expected an object)`,
+          );
+          continue;
+        }
+        // Resume names live in their own keyspace, but a name that collides
+        // with a module exit on the same entry is almost certainly an error
+        // (the author probably meant a transition handler, not a resume).
+        // Surface it loudly.
+        for (const resumeName of Object.keys(perEntry as Record<string, unknown>)) {
+          if (mod.exitPoints && Object.prototype.hasOwnProperty.call(mod.exitPoints, resumeName)) {
+            issues.push(
+              `journey "${def.id}" declares resume "${moduleId}.${entryName}.${resumeName}" but "${resumeName}" is also an exit name on that module — rename one to avoid silent confusion`,
+            );
+          }
+          const handler = (perEntry as Record<string, unknown>)[resumeName];
+          if (typeof handler !== "function") {
+            issues.push(
+              `journey "${def.id}" has non-function resume "${moduleId}.${entryName}.${resumeName}"`,
+            );
+          }
+        }
+      }
+    }
   }
 
   if (issues.length > 0) throw new JourneyValidationError(issues);

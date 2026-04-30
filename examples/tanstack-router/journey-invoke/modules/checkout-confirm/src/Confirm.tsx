@@ -37,6 +37,8 @@ export function Confirm({ input, exit }: ModuleEntryProps<ConfirmInput, ConfirmE
       <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
         <button
           type="button"
+          // demo only: a real shell would call its payment service here,
+          // not synthesize a reference with `Math.random()`.
           onClick={() =>
             exit("paid", {
               reference: `pay-${Math.random().toString(36).slice(2, 10)}`,

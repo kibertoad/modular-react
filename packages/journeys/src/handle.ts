@@ -1,4 +1,4 @@
-import type { JourneyHandleRef } from "@modular-react/core";
+import type { InvokeSpec, JourneyHandleRef } from "@modular-react/core";
 import type { JourneyDefinition, ModuleTypeMap } from "./types.js";
 
 /**
@@ -28,4 +28,33 @@ export function defineJourneyHandle<TModules extends ModuleTypeMap, TState, TInp
   def: JourneyDefinition<TModules, TState, TInput, TOutput>,
 ): JourneyHandle<string, TInput, TOutput> {
   return { id: def.id };
+}
+
+/**
+ * Typed builder for the `{ invoke }` arm of `TransitionResult`. The union
+ * arm itself declares `InvokeSpec<unknown, unknown>` — bare object literals
+ * like `{ invoke: { handle, input, resume } }` therefore won't catch a
+ * mismatch between `input` and the handle's `TInput`. Going through this
+ * helper threads both `TInput` and `TOutput` from the handle into `input`
+ * (which must be assignable) and the returned spec, so authors get
+ * end-to-end checking at the call site:
+ *
+ * ```ts
+ * confirmAge: ({ state }) =>
+ *   invoke({
+ *     handle: verifyIdentityHandle,    // TInput = { customerId: string }
+ *     input: { customerId: state.id }, // checked against TInput
+ *     resume: "afterAgeVerified",
+ *   }),
+ * ```
+ *
+ * The runtime treats the result identically to a hand-built literal — the
+ * only purpose is the compile-time check.
+ */
+export function invoke<TInput, TOutput>(spec: {
+  readonly handle: JourneyHandleRef<string, TInput, TOutput>;
+  readonly input: TInput;
+  readonly resume: string;
+}): { readonly invoke: InvokeSpec<TInput, TOutput> } {
+  return { invoke: spec };
 }
