@@ -48,6 +48,7 @@ export function Verify({ input, exit }: ModuleEntryProps<VerifyInput, AgeVerifyE
         </button>
         <button
           type="button"
+          disabled={confirming}
           onClick={() => exit("declined", { reason: "user-declined" })}
           style={secondaryButton}
         >

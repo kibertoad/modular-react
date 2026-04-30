@@ -24,9 +24,9 @@ export const verifyIdentityPersistence = createWebStoragePersistence<
   VerifyIdentityInput,
   VerifyIdentityState
 >({
-  // Namespacing the child by `parent-orderId:customerId` keeps the demo
-  // simple and predictable: re-opening the demo with the same order id
-  // resumes both the parent AND the child, exactly where the user left
-  // off mid-verification.
+  // Namespacing the child by `customerId` keeps the demo simple and
+  // predictable: re-opening the demo for the same customer resumes both
+  // the parent AND the child, exactly where the user left off
+  // mid-verification.
   keyFor: ({ input }) => `verify:${input.customerId}`,
 });
