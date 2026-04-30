@@ -110,7 +110,10 @@ export interface JourneyDefinition<
   readonly invokes?: ReadonlyArray<JourneyHandleRef<string, any, any>>;
 
   /**
-   * Expected module version ranges, keyed by `module.id`. The journeys
+   * Expected module version ranges, keyed by the `id` of a module declared
+   * in `TModules`. The keys are constrained to that map so a typo in a
+   * module id is a compile error rather than a registration-time issue
+   * ("requires module 'profil' but it is not registered"). The journeys
    * plugin checks each entry at registry resolve time against the
    * actually-registered module's `version` field; any incompatibility
    * fails assembly with a {@link JourneyValidationError} listing every
@@ -151,7 +154,7 @@ export interface JourneyDefinition<
    * });
    * ```
    */
-  readonly moduleCompat?: Readonly<Record<string, string>>;
+  readonly moduleCompat?: { readonly [K in keyof TModules & string]?: string };
 
   readonly onTransition?: (ev: TransitionEvent<TModules, TState>) => void;
   readonly onAbandon?: (

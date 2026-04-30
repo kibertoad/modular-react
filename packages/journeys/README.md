@@ -767,6 +767,8 @@ All issues are accumulated and reported in one error so a deployment with severa
 
 **When to omit it.** Modules that you and the journey ship together (same team, same release cadence, same monorepo) gain nothing from a compat declaration — the structural validators (`transitions` referencing real modules / entries / exits) already catch shape drift. The compat check earns its keep when the journey and a module are versioned independently.
 
+**Coverage is opt-in, not exhaustive.** `moduleCompat` is a one-way declaration: any module you list there is checked against the registered version, and a stale entry naming a module that isn't registered fails loudly. But a module the journey actually transitions through and *doesn't* list in `moduleCompat` is silently fine — the validator does not require coverage for every module referenced by `transitions`. List the modules whose compatibility you care about; omit the rest. Module ids are also typed against the journey's `TModules` map, so a typo on a known module id is a compile error.
+
 ## Composing journeys (invoke / resume)
 
 Sometimes mid-flow you need to detour into a _different_ journey — e.g. inside checkout the customer needs to verify identity, or inside an integration setup the user needs to add a new credential. The parent journey suspends, the child runs to a terminal, the parent picks up where it left off with the child's terminal payload in hand, and continues. Modular-react models this as a **subroutine**: one new transition primitive (`invoke`) plus a **named resume** handler that fires when the child terminates.

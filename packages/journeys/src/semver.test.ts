@@ -232,6 +232,48 @@ const SEMVER_FIXTURE_GRID: ReadonlyArray<readonly [string, string, boolean]> = [
   ["3.0.0", "^1.0.0 || ^2.0.0", false],
   ["1.9.9", "^1.2.3", true],
   ["1.9.9", "1.x", true],
+
+  // tilde with partial — `~1.2` ≡ `>=1.2.0 <1.3.0`
+  ["1.2.0", "~1.2", true],
+  ["1.2.99", "~1.2", true],
+  ["1.3.0", "~1.2", false],
+  ["1.1.99", "~1.2", false],
+
+  // v-prefixed comparator forms — npm semver tolerates the leading `v`
+  ["1.5.0", ">=v1.2.3", true],
+  ["1.0.0", ">=v1.2.3", false],
+  ["1.5.0", ">=v1.2.3 <v2.0.0", true],
+  ["2.0.0", ">=v1.2.3 <v2.0.0", false],
+
+  // hyphen with partial bounds — `1.2.3 - 2` bumps the upper to <3.0.0
+  ["2.99.99", "1.2.3 - 2", true],
+  ["3.0.0", "1.2.3 - 2", false],
+  ["1.2.2", "1.2.3 - 2", false],
+  // partial *both* sides — `1 - 3` ≡ `>=1.0.0 <4.0.0`
+  ["1.0.0", "1 - 3", true],
+  ["3.99.99", "1 - 3", true],
+  ["4.0.0", "1 - 3", false],
+  ["0.99.99", "1 - 3", false],
+
+  // three-group OR — proves the disjunction is n-ary, not just two-way
+  ["1.5.0", "^1.0.0 || ^2.0.0 || ^3.0.0", true],
+  ["3.5.0", "^1.0.0 || ^2.0.0 || ^3.0.0", true],
+  ["4.0.0", "^1.0.0 || ^2.0.0 || ^3.0.0", false],
+
+  // multi-comparator AND in a single conjunction
+  ["1.4.0", ">1.2.3 <=1.5.0", true],
+  ["1.5.0", ">1.2.3 <=1.5.0", true],
+  ["1.5.1", ">1.2.3 <=1.5.0", false],
+  ["1.2.3", ">1.2.3 <=1.5.0", false],
+
+  // explicit equals
+  ["1.2.3", "=1.2.3", true],
+  ["1.2.4", "=1.2.3", false],
+
+  // ^0.0.0 — npm semver collapses this to `>=0.0.0 <0.0.1` (matches 0.0.0
+  // exactly), the boundary case where caret on all-zeros gives no slack
+  ["0.0.0", "^0.0.0", true],
+  ["0.0.1", "^0.0.0", false],
 ];
 
 describe("frozen `semver@7.7.4` behaviour grid", () => {

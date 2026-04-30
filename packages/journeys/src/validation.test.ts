@@ -215,7 +215,7 @@ describe("validateJourneyContracts — moduleCompat", () => {
         [{ definition: withCompat({ m: "   " }), options: undefined }],
         [mod],
       ),
-    ).toThrow(/non-string version range for module "m"/);
+    ).toThrow(/empty version range for module "m"/);
   });
 
   it("aggregates issues across multiple journeys and modules", () => {

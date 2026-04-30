@@ -88,7 +88,11 @@ export class SemverParseError extends Error {
  * silently match nothing.
  */
 export function parseVersion(input: string): SemverTriple {
-  const trimmed = stripVersionPrefix(input);
+  // `parseVersion` is the only entry point that takes raw user/author input
+  // — internal callers receive tokens that the conjunction parser already
+  // split on whitespace. Trim here so `stripVersionPrefix` itself stays a
+  // pure prefix strip on the hot internal paths.
+  const trimmed = stripVersionPrefix(input.trim());
   const triple = parseTriple(trimmed);
   if (!triple) throw new SemverParseError(`invalid version "${input}"`);
   return triple;
@@ -150,6 +154,20 @@ export function compareTriples(a: SemverTriple, b: SemverTriple): number {
   if (a[1] !== b[1]) return a[1] < b[1] ? -1 : 1;
   if (a[2] !== b[2]) return a[2] < b[2] ? -1 : 1;
   return 0;
+}
+
+/**
+ * Convenience wrapper for ordering two version strings. Returns -1 if `a`
+ * sorts before `b`, 1 if after, 0 if equal. Throws {@link SemverParseError}
+ * if either input is not a strict `MAJOR.MINOR.PATCH`.
+ *
+ * Useful for persisted-data compatibility checks: "is the version recorded
+ * on this saved blob older than the cutoff at which we changed the on-disk
+ * shape?". For matching against a range (`^1.0.0`, `>=1.5 <2`, …) use
+ * {@link satisfies} instead.
+ */
+export function compareVersions(a: string, b: string): number {
+  return compareTriples(parseVersion(a), parseVersion(b));
 }
 
 // -----------------------------------------------------------------------------
@@ -370,15 +388,20 @@ function parseTriple(s: string): SemverTriple | null {
   const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(s);
   if (!m) return null;
   const triple: SemverTriple = [Number(m[1]), Number(m[2]), Number(m[3])];
-  // Mirror the `Number.isFinite` check parsePartial does on its components —
-  // pathologically long numeric strings (>~16 digits) coerce to `Infinity`
-  // and would otherwise produce nonsense comparisons in `satisfiesParsed`.
+  // Reject components that overflow `Number` to `Infinity`. This only catches
+  // truly absurd inputs (~309+ digits): the smaller "lots of digits" cases
+  // (17–308 digits) coerce to a finite Number with silent precision loss but
+  // pass this check — they're unreachable from real package.json / authoring
+  // surfaces, so we accept the precision-loss tail rather than imposing a
+  // tighter cap that would surprise authors writing a legitimate large
+  // major number.
   if (!triple.every((n) => Number.isFinite(n))) return null;
   return triple;
 }
 
 function stripVersionPrefix(s: string): string {
-  let out = s.trim();
-  if (out.startsWith("v") || out.startsWith("V")) out = out.slice(1);
-  return out;
+  if (s.length === 0) return s;
+  const c = s.charCodeAt(0);
+  if (c === 118 /* 'v' */ || c === 86 /* 'V' */) return s.slice(1);
+  return s;
 }
