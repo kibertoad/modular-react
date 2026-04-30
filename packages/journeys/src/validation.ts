@@ -136,7 +136,12 @@ export function validateJourneyContracts(
     // teams sees the full list in one CI run.
     if (def.moduleCompat) {
       for (const [moduleId, rangeRaw] of Object.entries(def.moduleCompat)) {
-        if (typeof rangeRaw !== "string" || rangeRaw.length === 0) {
+        // Trim before the empty-check so a whitespace-only value (e.g. `"   "`)
+        // can't slip past length===0 and then get treated as the wildcard
+        // range by `parseRange`, which would silently disable the compat
+        // enforcement for that module.
+        const rangeNormalized = typeof rangeRaw === "string" ? rangeRaw.trim() : "";
+        if (rangeNormalized.length === 0) {
           issues.push(
             `journey "${def.id}" declares a non-string version range for module "${moduleId}" in moduleCompat`,
           );
@@ -145,13 +150,13 @@ export function validateJourneyContracts(
         const mod = moduleById.get(moduleId);
         if (!mod) {
           issues.push(
-            `journey "${def.id}" requires module "${moduleId}" (range "${rangeRaw}") in moduleCompat but it is not registered`,
+            `journey "${def.id}" requires module "${moduleId}" (range "${rangeNormalized}") in moduleCompat but it is not registered`,
           );
           continue;
         }
         let parsedRange;
         try {
-          parsedRange = parseRange(rangeRaw);
+          parsedRange = parseRange(rangeNormalized);
         } catch (err) {
           const message = err instanceof SemverParseError ? err.message : String(err);
           issues.push(
@@ -171,7 +176,7 @@ export function validateJourneyContracts(
         }
         if (!satisfiesParsed(modVersion, parsedRange)) {
           issues.push(
-            `journey "${def.id}" requires module "${moduleId}" "${rangeRaw}" but registered version is "${mod.version}"`,
+            `journey "${def.id}" requires module "${moduleId}" "${rangeNormalized}" but registered version is "${mod.version}"`,
           );
         }
       }

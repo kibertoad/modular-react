@@ -369,7 +369,12 @@ function parseStrict(s: string, original: string): SemverTriple {
 function parseTriple(s: string): SemverTriple | null {
   const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(s);
   if (!m) return null;
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
+  const triple: SemverTriple = [Number(m[1]), Number(m[2]), Number(m[3])];
+  // Mirror the `Number.isFinite` check parsePartial does on its components —
+  // pathologically long numeric strings (>~16 digits) coerce to `Infinity`
+  // and would otherwise produce nonsense comparisons in `satisfiesParsed`.
+  if (!triple.every((n) => Number.isFinite(n))) return null;
+  return triple;
 }
 
 function stripVersionPrefix(s: string): string {

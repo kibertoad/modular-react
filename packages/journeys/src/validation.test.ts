@@ -209,6 +209,15 @@ describe("validateJourneyContracts — moduleCompat", () => {
     ).toThrow(/non-string version range for module "m"/);
   });
 
+  it("rejects a whitespace-only range (does not silently match the wildcard)", () => {
+    expect(() =>
+      validateJourneyContracts(
+        [{ definition: withCompat({ m: "   " }), options: undefined }],
+        [mod],
+      ),
+    ).toThrow(/non-string version range for module "m"/);
+  });
+
   it("aggregates issues across multiple journeys and modules", () => {
     const j1 = { ...base, id: "j1", moduleCompat: { m: "^2.0.0" } };
     const j2 = { ...base, id: "j2", moduleCompat: { m: "^3.0.0" } };
