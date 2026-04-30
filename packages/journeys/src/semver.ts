@@ -400,8 +400,14 @@ function parseTriple(s: string): SemverTriple | null {
 }
 
 function stripVersionPrefix(s: string): string {
+  // Tolerate `v`, `V`, or `=` as a leading prefix on a strict
+  // `MAJOR.MINOR.PATCH` — matching the npm-semver "loose" trim that's
+  // universal in the wild (`v1.2.3`, `=1.2.3`, both pasted from
+  // `package.json` or release notes). Strips a single character so
+  // doubled forms (`==1.2.3`, `vv1.2.3`) still fail loudly as
+  // malformed input.
   if (s.length === 0) return s;
   const c = s.charCodeAt(0);
-  if (c === 118 /* 'v' */ || c === 86 /* 'V' */) return s.slice(1);
+  if (c === 118 /* 'v' */ || c === 86 /* 'V' */ || c === 61 /* '=' */) return s.slice(1);
   return s;
 }

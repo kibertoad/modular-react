@@ -19,6 +19,19 @@ describe("parseVersion", () => {
     expect(parseVersion("v1.2.3")).toEqual([1, 2, 3]);
   });
 
+  it("strips a leading = prefix (npm 'loose' trim)", () => {
+    // The class doc on the file claims `Leading 'v'/'='` is tolerated; lock
+    // that contract here so a future stripVersionPrefix refactor can't drop
+    // the `=` arm without surfacing.
+    expect(parseVersion("=1.2.3")).toEqual([1, 2, 3]);
+    expect(parseVersion("=1.2.3")).toEqual(parseVersion("1.2.3"));
+  });
+
+  it("strips only a single prefix character (doubled forms still fail)", () => {
+    expect(() => parseVersion("==1.2.3")).toThrow(SemverParseError);
+    expect(() => parseVersion("vv1.2.3")).toThrow(SemverParseError);
+  });
+
   it("rejects prerelease and build metadata", () => {
     expect(() => parseVersion("1.0.0-rc.1")).toThrow(SemverParseError);
     expect(() => parseVersion("1.0.0+abc")).toThrow(SemverParseError);
