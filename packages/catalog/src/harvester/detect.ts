@@ -25,8 +25,7 @@ export function isModuleDescriptor(value: unknown): value is AnyModuleDescriptor
     "exitPoints" in value ||
     "lifecycle" in value ||
     "requires" in value ||
-    "optionalRequires" in value ||
-    "startsJourneys" in value
+    "optionalRequires" in value
   );
 }
 

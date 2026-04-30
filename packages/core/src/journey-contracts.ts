@@ -1,3 +1,5 @@
+import type { CatalogMeta } from "./catalog-meta.js";
+
 /**
  * Journey contract types — the type surfaces that describe "what a journey
  * runtime looks like to a consumer." Hoisted to core so runtime packages
@@ -439,7 +441,7 @@ export interface ResumeBounceCounter {
 export interface JourneyDefinitionSummary {
   readonly id: string;
   readonly version: string;
-  readonly meta?: Readonly<Record<string, unknown>>;
+  readonly meta?: Readonly<CatalogMeta & Record<string, unknown>>;
 }
 
 export type MaybePromise<T> = T | Promise<T>;

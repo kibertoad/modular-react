@@ -13,6 +13,10 @@ export default defineModule({
   meta: {
     name: "Checkout review",
     description: "Lets the user review the order and proceed to age verification.",
+    ownerTeam: "checkout",
+    domain: "commerce",
+    tags: ["checkout"],
+    status: "experimental",
   },
   exitPoints: reviewExits,
   entryPoints: {

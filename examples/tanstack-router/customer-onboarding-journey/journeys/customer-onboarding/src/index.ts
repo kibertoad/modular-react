@@ -33,6 +33,10 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
   meta: {
     name: "Customer onboarding",
     category: "growth",
+    ownerTeam: "onboarding-core",
+    domain: "onboarding",
+    tags: ["activation"],
+    status: "stable",
   },
 
   // OPTIONAL — declare the module version ranges this journey was authored

@@ -40,8 +40,6 @@ export interface SerializedModuleEntry {
   readonly entryPointNames: readonly string[];
   readonly exitPointNames: readonly string[];
   readonly navigationLabels: readonly string[];
-  /** Journey ids this module declares it starts via `startsJourneys`. */
-  readonly startsJourneyIds: readonly string[];
   /** Resolved extension tabs (omitted when none configured). */
   readonly extensionTabs?: readonly ResolvedExtensionTab[];
   /** Custom facet values from `extensions.facets` (omitted when none). */
@@ -126,11 +124,6 @@ export interface CatalogModel {
    * "Invoked by …" without scanning at render time.
    */
   readonly journeysByInvokedJourney: Readonly<Record<string, readonly string[]>>;
-  /**
-   * Index from journey id → list of module ids that declare they start it
-   * via `startsJourneys` (reverse of each module's `startsJourneyIds`).
-   */
-  readonly modulesByStartedJourney: Readonly<Record<string, readonly string[]>>;
   /**
    * Index from module id → entry/exit point usage by journeys. For each
    * entry point, lists the journeys whose transitions reference that

@@ -1,3 +1,5 @@
+import type { CatalogMeta } from "./catalog-meta.js";
+
 /**
  * A reactive external source that components can subscribe to.
  * Matches React's useSyncExternalStore API — the standard way to
@@ -186,7 +188,7 @@ export interface ModuleDescriptor<
    * defineModule<AppDeps, AppSlots, JourneyMeta>({ meta: { name: '...', ... } })
    * ```
    */
-  readonly meta?: Readonly<TMeta>;
+  readonly meta?: Readonly<CatalogMeta & TMeta>;
 
   /** Keys from TSharedDependencies that this module needs. Throws at resolve() if missing. */
   readonly requires?: readonly (keyof TSharedDependencies)[];

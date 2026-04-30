@@ -55,7 +55,6 @@ describe("harvest", () => {
     expect(billing.exitPointNames).toEqual(["paid", "cancelled"]);
     expect(billing.hasRoutes).toBe(false);
     expect(billing.navigationLabels).toEqual(["Billing"]);
-    expect(billing.startsJourneyIds).toEqual(["refund-flow", "renewal"]);
   });
 
   it("derives journey shape data (modulesUsed, invokes, moduleCompat)", async () => {

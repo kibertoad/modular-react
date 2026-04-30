@@ -30,7 +30,14 @@ export type CheckoutOutput =
 export const checkoutJourney = defineJourney<CheckoutModules, CheckoutState, CheckoutOutput>()({
   id: "checkout",
   version: "1.0.0",
-  meta: { name: "Checkout (with age verification)" },
+  meta: {
+    name: "Checkout (with age verification)",
+    ownerTeam: "checkout",
+    domain: "commerce",
+    tags: ["checkout"],
+    status: "stable",
+  },
+  invokes: [verifyIdentityHandle],
 
   initialState: ({ order }: CheckoutInput) => ({ order, verification: null, result: null }),
 

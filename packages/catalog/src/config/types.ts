@@ -195,8 +195,6 @@ export interface CatalogModuleEntry extends CatalogEntryBase {
   readonly exitPointNames: readonly string[];
   /** Navigation labels (whatever the descriptor declared). */
   readonly navigationLabels: readonly string[];
-  /** Journey ids this module declares it starts (`startsJourneys`). */
-  readonly startsJourneyIds: readonly string[];
   /** Raw descriptor reference for advanced enrich logic. Not serialized. */
   readonly descriptor: AnyModuleDescriptor;
 }
@@ -217,7 +215,7 @@ export interface CatalogJourneyEntry extends CatalogEntryBase {
    */
   readonly transitionShape: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
   /**
-   * Statically-resolved `{ next | abort | complete }` outcomes per
+ * Statically-resolved `{ next | invoke | abort | complete }` outcomes per
    * `[moduleId][entryName][exitName]`, when AST analysis is enabled and
    * found a literal. Empty when AST is off or the handler is dynamic.
    * Never serialized.

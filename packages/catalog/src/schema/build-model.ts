@@ -160,7 +160,6 @@ export function buildCatalogModel(
     facets,
     journeysByModule: computeJourneysByModule(journeys),
     journeysByInvokedJourney: computeJourneysByInvokedJourney(journeys),
-    modulesByStartedJourney: computeModulesByStartedJourney(modules),
     moduleEntryUsage: entryUsage,
     moduleExitUsage: exitUsage,
     ...(extensionsMeta && { extensions: extensionsMeta }),
@@ -352,19 +351,6 @@ function computeJourneysByInvokedJourney(
   }
   for (const ids of Object.values(byInvoked)) ids.sort();
   return byInvoked;
-}
-
-function computeModulesByStartedJourney(
-  modules: readonly SerializedModuleEntry[],
-): Readonly<Record<string, readonly string[]>> {
-  const byStarted: Record<string, string[]> = {};
-  for (const module of modules) {
-    for (const journeyId of module.startsJourneyIds) {
-      (byStarted[journeyId] ??= []).push(module.id);
-    }
-  }
-  for (const ids of Object.values(byStarted)) ids.sort();
-  return byStarted;
 }
 
 function computeModuleUsage(journeys: readonly CatalogJourneyEntry[]): {

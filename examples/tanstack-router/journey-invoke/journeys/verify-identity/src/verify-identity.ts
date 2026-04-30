@@ -21,7 +21,13 @@ export const verifyIdentityJourney = defineJourney<
 >()({
   id: "verify-identity",
   version: "1.0.0",
-  meta: { name: "Age verification" },
+  meta: {
+    name: "Age verification",
+    ownerTeam: "trust-and-safety",
+    domain: "compliance",
+    tags: ["identity"],
+    status: "stable",
+  },
 
   initialState: ({ customerId }: VerifyIdentityInput) => ({ customerId }),
 

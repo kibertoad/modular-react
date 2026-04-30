@@ -18,5 +18,4 @@ export default {
   optionalRequires: ["analytics"] as const,
   entryPoints: { review: { component: () => null } },
   exitPoints: { paid: {}, cancelled: {} },
-  startsJourneys: [{ id: "renewal" }, { id: "refund-flow" }],
 };

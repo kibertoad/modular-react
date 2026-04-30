@@ -66,11 +66,6 @@ export function extractModuleEntry(
   const entryPointNames = descriptor.entryPoints ? Object.keys(descriptor.entryPoints) : [];
   const exitPointNames = descriptor.exitPoints ? Object.keys(descriptor.exitPoints) : [];
 
-  const startsJourneyIds = (descriptor.startsJourneys ?? [])
-    .map((handle) => (typeof handle?.id === "string" ? handle.id : null))
-    .filter((id): id is string => id !== null)
-    .sort();
-
   return {
     kind: "module",
     id: descriptor.id,
@@ -87,7 +82,6 @@ export function extractModuleEntry(
     entryPointNames,
     exitPointNames,
     navigationLabels,
-    startsJourneyIds,
     descriptor,
   };
 }

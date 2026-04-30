@@ -214,9 +214,9 @@ test.describe("catalog SPA", () => {
     await expect(page).toHaveURL(/\/modules\/plan$/);
   });
 
-  test("journey-to-journey and module-to-journey cross-links round-trip", async ({ page }) => {
-    // verify-identity is invoked by checkout (declared via journey.invokes) and
-    // declared as `startsJourneys: [verifyIdentityHandle]` on checkout-review.
+  test("journey-to-journey cross-links round-trip", async ({ page }) => {
+    // verify-identity is invoked by checkout, declared via checkout.invokes.
+    // Modules intentionally do not declare which journeys might launch them.
     await page.goto("/journeys/verify-identity");
 
     // The grid renders each row as a <dt> label + adjacent <dd> value;
@@ -227,17 +227,12 @@ test.describe("catalog SPA", () => {
       .locator("xpath=following-sibling::dd[1]");
     await expect(invokedByValue.getByRole("link", { name: /^checkout$/ })).toBeVisible();
 
-    const startedByValue = page
-      .locator("dt", { hasText: "Started by modules" })
+    // Reverse direction: checkout declares the child journey in its details.
+    await page.goto("/journeys/checkout");
+    const invokesValue = page
+      .locator("dt", { hasText: "Invokes journeys" })
       .locator("xpath=following-sibling::dd[1]");
-    await expect(startedByValue.getByRole("link", { name: /^checkout-review$/ })).toBeVisible();
-
-    // Reverse direction: checkout-review's "Starts journeys" row links back.
-    await page.goto("/modules/checkout-review");
-    const startsValue = page
-      .locator("dt", { hasText: "Starts journeys" })
-      .locator("xpath=following-sibling::dd[1]");
-    await startsValue.getByRole("link", { name: /^verify-identity$/ }).click();
+    await invokesValue.getByRole("link", { name: /^verify-identity$/ }).click();
     await expect(page).toHaveURL(/\/journeys\/verify-identity$/);
   });
 });

@@ -13,6 +13,10 @@ export default defineModule({
   meta: {
     name: "Checkout confirm",
     description: "Final confirm step after age verification has succeeded.",
+    ownerTeam: "checkout",
+    domain: "commerce",
+    tags: ["payments"],
+    status: "stable",
   },
   exitPoints: confirmExits,
   entryPoints: {

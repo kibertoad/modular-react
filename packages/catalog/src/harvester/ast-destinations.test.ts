@@ -45,7 +45,11 @@ describe("extractTransitionDestinations", () => {
     expect(map).toEqual({
       a: {
         x: {
-          ok: { nexts: [{ module: "b", entry: "y" }], aborts: false, completes: false },
+          ok: {
+            nexts: [{ module: "b", entry: "y" }],
+            aborts: false,
+            completes: false,
+          },
           cancel: { nexts: [], aborts: true, completes: false },
           done: { nexts: [], aborts: false, completes: true },
         },

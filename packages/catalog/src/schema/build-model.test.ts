@@ -20,7 +20,6 @@ const moduleEntry = (
   entryPointNames: overrides.entryPointNames ?? [],
   exitPointNames: overrides.exitPointNames ?? [],
   navigationLabels: overrides.navigationLabels ?? [],
-  startsJourneyIds: overrides.startsJourneyIds ?? [],
   descriptor: overrides.descriptor ?? ({} as never),
 });
 
@@ -107,21 +106,6 @@ describe("buildCatalogModel", () => {
     expect(model.journeysByModule).toEqual({
       profile: ["j-onboarding"],
       billing: ["j-onboarding", "j-renewal"],
-    });
-  });
-
-  it("computes modulesByStartedJourney from startsJourneyIds", () => {
-    const model = buildCatalogModel(
-      [
-        moduleEntry({ id: "checkout-button", startsJourneyIds: ["onboarding", "kyc"] }),
-        moduleEntry({ id: "renewal-banner", startsJourneyIds: ["onboarding"] }),
-        moduleEntry({ id: "no-launchers" }),
-      ],
-      {},
-    );
-    expect(model.modulesByStartedJourney).toEqual({
-      onboarding: ["checkout-button", "renewal-banner"],
-      kyc: ["checkout-button"],
     });
   });
 
