@@ -111,5 +111,9 @@ export type {
   TerminalOutcome,
   JourneyRuntime,
   JourneyHandleRef,
+  ChildOutcome,
+  InvokeSpec,
+  ResumeHandler,
+  ResumeMap,
 } from "./journey-contracts.js";
 export { isTerminal } from "./journey-contracts.js";

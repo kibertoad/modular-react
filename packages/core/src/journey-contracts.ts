@@ -98,32 +98,152 @@ export interface ExitCtx<TState, TOutput, TEntryInput> {
 }
 
 /**
- * Result of a transition handler. Exactly one of `next` / `complete` /
- * `abort` is present. `state` is optional — if omitted, the incoming state
- * is preserved.
+ * Outcome surfaced to a parent journey's named resume handler when a child
+ * journey terminates. Mirrors the closed shape the parent could have observed
+ * by subscribing to the child directly — `completed` carries the child's
+ * `TerminalPayload` (typed end-to-end via the child handle's `TOutput`),
+ * `aborted` carries the child's abort reason. `TOutput` defaults to
+ * `unknown` so resume handlers that don't know (or care) about a typed
+ * payload still compile.
  */
-export type TransitionResult<TModules extends ModuleTypeMap, TState> =
+export type ChildOutcome<TOutput = unknown> =
+  | { readonly status: "completed"; readonly payload: TOutput }
+  | { readonly status: "aborted"; readonly reason: unknown };
+
+/**
+ * Names a child journey to invoke and the resume handler that fires when it
+ * terminates. The resume name is a string — closures don't round-trip
+ * through persistence, so resume identity is reified by name and looked up
+ * on the parent's current step (`transitions[mod][entry].resumes[name]`).
+ *
+ * Generic over the child handle's `TOutput` so a typed handle threads the
+ * child's terminal payload type into the parent's resume handler signature
+ * without any cast at the call site.
+ */
+export interface InvokeSpec<TInput = unknown, TOutput = unknown> {
+  readonly handle: JourneyHandleRef<string, TInput, TOutput>;
+  readonly input: TInput;
+  /**
+   * Names a resume handler declared on the parent's *current* step's
+   * transitions (i.e. `transitions[currentMod][currentEntry].resumes[name]`).
+   * Looked up at child terminal time. The phantom `TOutput` flows from the
+   * handle into that resume handler's `outcome` parameter.
+   */
+  readonly resume: string;
+}
+
+/**
+ * Result of a transition handler. Exactly one of `next` / `complete` /
+ * `abort` / `invoke` is present. `state` is optional — if omitted, the
+ * incoming state is preserved.
+ *
+ * `TOutput` is the journey's *own* terminal payload type (narrows the
+ * `complete` arm). `invoke.handle` carries the *child* journey's TInput /
+ * TOutput independently — a parent's resume handler is type-checked against
+ * the child handle's TOutput, not the parent's.
+ */
+export type TransitionResult<TModules extends ModuleTypeMap, TState, TOutput = unknown> =
   | { readonly next: StepSpec<TModules>; readonly state?: TState }
-  | { readonly complete: unknown; readonly state?: TState }
-  | { readonly abort: unknown; readonly state?: TState };
+  | { readonly complete: TOutput; readonly state?: TState }
+  | { readonly abort: unknown; readonly state?: TState }
+  | {
+      readonly invoke: InvokeSpec<any, any>;
+      readonly state?: TState;
+    };
+
+/**
+ * Resume handler — fired when a child journey `invoke`d from a parent step
+ * terminates. Pure synchronous functions returning a `TransitionResult`,
+ * exactly like exit handlers. They receive the parent's current `state`,
+ * the original `input` of the parent's step, and the child's `outcome`
+ * (a `ChildOutcome<TChildOutput>` discriminated union — the parent always
+ * sees abort outcomes and decides how to react).
+ *
+ * `TOutput` is the *parent* journey's terminal payload (so a resume can
+ * `return { complete: ... }` typed correctly); `TChildOutput` is the
+ * *child* journey's terminal payload (the type behind `outcome.payload`).
+ */
+export type ResumeHandler<
+  TModules extends ModuleTypeMap,
+  TState,
+  TEntryInput,
+  TOutput = unknown,
+  TChildOutput = unknown,
+> = (ctx: {
+  readonly state: TState;
+  readonly input: TEntryInput;
+  readonly outcome: ChildOutcome<TChildOutput>;
+}) => TransitionResult<TModules, TState, TOutput>;
 
 /**
  * Per-entry transitions for a single module. `allowBack` enables `goBack`
  * into the previous step from this entry; must agree with the target
  * entry's own `allowBack` declaration (checked at resolveManifest time).
+ *
+ * Authors should not pass `TOutput` explicitly — `TransitionMap` and
+ * `JourneyDefinition` thread it through so a handler's `complete` return
+ * narrows to the journey's declared terminal payload.
+ *
+ * Resume handlers (continuation points fired when a child journey
+ * `invoke`d from this step terminates) live in a sibling map at the
+ * `JourneyDefinition` level (`resumes[mod][entry][name]`), not inline on
+ * this intersection. Nesting an index-signature value here causes
+ * TypeScript to collapse the intersection's variance and break
+ * assignability to the registry's wide `AnyJourneyDefinition` form —
+ * keeping the resume map separate avoids that footgun and reads cleanly.
  */
-export type EntryTransitions<TModules extends ModuleTypeMap, TState, TMod, TEntry> = {
+export type EntryTransitions<
+  TModules extends ModuleTypeMap,
+  TState,
+  TMod,
+  TEntry,
+  TOutput = unknown,
+> = {
   readonly [X in ExitNamesOf<TMod>]?: (
     ctx: ExitCtx<TState, ExitOutputOf<TMod, X>, EntryInputOf<TMod, TEntry>>,
-  ) => TransitionResult<TModules, TState>;
+  ) => TransitionResult<TModules, TState, TOutput>;
 } & {
   readonly allowBack?: boolean;
 };
 
 /** Map of module id → entry name → exit transitions. */
-export type TransitionMap<TModules extends ModuleTypeMap, TState> = {
+export type TransitionMap<TModules extends ModuleTypeMap, TState, TOutput = unknown> = {
   readonly [M in keyof TModules]?: {
-    readonly [E in EntryNamesOf<TModules[M]>]?: EntryTransitions<TModules, TState, TModules[M], E>;
+    readonly [E in EntryNamesOf<TModules[M]>]?: EntryTransitions<
+      TModules,
+      TState,
+      TModules[M],
+      E,
+      TOutput
+    >;
+  };
+};
+
+/**
+ * Resume map — sibling of `TransitionMap` keyed identically by
+ * `[moduleId][entryName]`, with each leaf an object of named resume
+ * handlers. A transition handler's `{ invoke: { ..., resume: "<name>" } }`
+ * resolves to a key under this map at the parent's *current* step's
+ * `[moduleId][entryName]` slot.
+ *
+ * Kept separate from `TransitionMap` because nesting an index-signature
+ * value inside `EntryTransitions`' intersection collapses TypeScript's
+ * mapped-type variance — see the doc on `EntryTransitions`. The structural
+ * cost is duplicating the `[moduleId][entryName]` path; the conceptual
+ * benefit is that resume names live in their own keyspace and never
+ * collide with exit names.
+ */
+export type ResumeMap<TModules extends ModuleTypeMap, TState, TOutput = unknown> = {
+  readonly [M in keyof TModules]?: {
+    readonly [E in EntryNamesOf<TModules[M]>]?: {
+      readonly [resumeName: string]: ResumeHandler<
+        TModules,
+        TState,
+        EntryInputOf<TModules[M], E>,
+        TOutput,
+        any
+      >;
+    };
   };
 };
 
@@ -236,10 +356,15 @@ export interface JourneyPersistence<TState = unknown, TInput = unknown> {
  * last transition (`{ complete }` or `{ abort }`). `instanceId` and
  * `journeyId` are included so analytics / tab-close hooks can correlate
  * without re-reading the outlet's props.
+ *
+ * Generic over `TOutput` — when a journey declares its terminal payload
+ * type via the fourth generic on `defineJourney`, callers that thread the
+ * journey's handle through `onFinished` see a typed `payload`. Defaults to
+ * `unknown` for shells that don't bind to a specific journey.
  */
-export interface TerminalOutcome {
+export interface TerminalOutcome<TOutput = unknown> {
   readonly status: "completed" | "aborted";
-  readonly payload: unknown;
+  readonly payload: TOutput;
   readonly instanceId: InstanceId;
   readonly journeyId: string;
 }
@@ -249,15 +374,25 @@ export interface TerminalOutcome {
  * package can export so callers open journeys with typed `input` without
  * importing the journey's runtime code. Declared in core so the overload
  * on `JourneyRuntime.start` does not force core to depend on
- * `@modular-react/journeys`. The `__input` field is phantom (never read).
+ * `@modular-react/journeys`. The `__input` and `__output` fields are
+ * phantom (never read at runtime).
+ *
+ * `TOutput` carries the journey's terminal payload type so a parent
+ * journey's `invoke` resume handler receives a typed `outcome.payload`
+ * without any cast at the call site.
  *
  * The implementation package (`@modular-react/journeys`) re-exports this
  * under the canonical name `JourneyHandle` and ships `defineJourneyHandle`
  * as the constructor.
  */
-export interface JourneyHandleRef<TId extends string = string, TInput = unknown> {
+export interface JourneyHandleRef<
+  TId extends string = string,
+  TInput = unknown,
+  TOutput = unknown,
+> {
   readonly id: TId;
   readonly __input?: TInput;
+  readonly __output?: TOutput;
 }
 
 export interface JourneyRuntime {
@@ -266,8 +401,8 @@ export interface JourneyRuntime {
    * When the handle's `TInput` is `void`, callers can omit the second
    * argument entirely.
    */
-  start<TId extends string, TInput>(
-    handle: JourneyHandleRef<TId, TInput>,
+  start<TId extends string, TInput, TOutput>(
+    handle: JourneyHandleRef<TId, TInput, TOutput>,
     ...rest: [TInput] extends [void] ? [] | [input?: TInput] : [input: TInput]
   ): InstanceId;
   /** String-id form — accepts any `input` (the handle form is preferred). */

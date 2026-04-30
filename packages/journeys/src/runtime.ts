@@ -875,8 +875,8 @@ export function createJourneyRuntime(
   // ---------------------------------------------------------------------------
 
   const runtime: JourneyRuntime = {
-    start<TInput>(
-      journeyIdOrHandle: string | JourneyHandleRef<string, TInput>,
+    start<TInput, TOutput>(
+      journeyIdOrHandle: string | JourneyHandleRef<string, TInput, TOutput>,
       ...rest: [input?: TInput]
     ): InstanceId {
       const input = (rest.length > 0 ? rest[0] : undefined) as TInput;

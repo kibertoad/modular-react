@@ -9,6 +9,7 @@ import type {
   JourneyPersistence,
   JourneyStep,
   ModuleTypeMap,
+  ResumeMap,
   SerializedJourney,
   StepSpec,
   TerminalCtx,
@@ -19,6 +20,7 @@ import type {
 
 export type {
   AbandonCtx,
+  ChildOutcome,
   EntryInputOf,
   EntryNamesOf,
   EntryTransitions,
@@ -26,6 +28,7 @@ export type {
   ExitNamesOf,
   ExitOutputOf,
   InstanceId,
+  InvokeSpec,
   JourneyDefinitionSummary,
   JourneyInstance,
   JourneyPersistence,
@@ -34,6 +37,8 @@ export type {
   JourneyStep,
   MaybePromise,
   ModuleTypeMap,
+  ResumeHandler,
+  ResumeMap,
   SerializedJourney,
   StepSpec,
   TerminalCtx,
@@ -47,7 +52,12 @@ export type {
 // Journey definition — stays in this package (authoring shape)
 // -----------------------------------------------------------------------------
 
-export interface JourneyDefinition<TModules extends ModuleTypeMap, TState, TInput = void> {
+export interface JourneyDefinition<
+  TModules extends ModuleTypeMap,
+  TState,
+  TInput = void,
+  TOutput = unknown,
+> {
   readonly id: string;
   readonly version: string;
   readonly meta?: Readonly<Record<string, unknown>>;
@@ -55,22 +65,38 @@ export interface JourneyDefinition<TModules extends ModuleTypeMap, TState, TInpu
   readonly initialState: (input: TInput) => TState;
   readonly start: (state: TState, input: TInput) => StepSpec<TModules>;
 
-  readonly transitions: TransitionMap<TModules, TState>;
+  readonly transitions: TransitionMap<TModules, TState, TOutput>;
+
+  /**
+   * Resume handlers fired when a child journey `invoke`d from a parent
+   * step terminates. Keyed by `[moduleId][entryName][resumeName]` — the
+   * runtime looks up `resumes[currentMod][currentEntry][invokeSpec.resume]`
+   * at child terminal time and applies the result as the parent's next
+   * transition. Optional — journeys that never invoke can omit it.
+   */
+  readonly resumes?: ResumeMap<TModules, TState, TOutput>;
 
   readonly onTransition?: (ev: TransitionEvent<TModules, TState>) => void;
-  readonly onAbandon?: (ctx: AbandonCtx<TModules, TState>) => TransitionResult<TModules, TState>;
-  readonly onComplete?: (ctx: TerminalCtx<TState>, result: unknown) => void;
+  readonly onAbandon?: (
+    ctx: AbandonCtx<TModules, TState>,
+  ) => TransitionResult<TModules, TState, TOutput>;
+  readonly onComplete?: (ctx: TerminalCtx<TState>, result: TOutput) => void;
   readonly onAbort?: (ctx: TerminalCtx<TState>, reason: unknown) => void;
   readonly onHydrate?: (blob: SerializedJourney<TState>) => SerializedJourney<TState>;
 }
 
-/** Erased shape used by the registry — `any` on the generics lets the
+/** Erased shape used by the registry — `any` on every generic lets the
  *  registry store definitions from different journeys side-by-side.
  *  Tightening to `unknown` breaks variance: `initialState: (input: TInput)
  *  => TState` for a specific journey is not assignable to
  *  `(input: unknown) => unknown` because function parameters are
- *  contravariant, so the registry would reject any concrete definition. */
-export type AnyJourneyDefinition = JourneyDefinition<ModuleTypeMap, any, any>;
+ *  contravariant, so the registry would reject any concrete definition.
+ *
+ *  TModules is also `any` (rather than `ModuleTypeMap`) so the structural
+ *  variance check on `ResumeMap`/`TransitionMap` does not strictly require
+ *  the wide form to carry every specific module key — `any` short-circuits
+ *  the property-by-property check and admits any concrete TModules. */
+export type AnyJourneyDefinition = JourneyDefinition<any, any, any, any>;
 
 // -----------------------------------------------------------------------------
 // Registration options + internal record — stay in this package
