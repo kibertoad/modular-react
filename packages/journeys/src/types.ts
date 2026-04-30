@@ -129,12 +129,14 @@ export interface JourneyDefinition<
    * that failure to startup so an incompatible deployment refuses to come
    * up at all, instead of breaking a single user mid-flow.
    *
-   * The range syntax is the npm-style subset documented on
-   * `@modular-react/journeys/semver` — caret/tilde/x-range/comparators/AND
-   * /OR/hyphen. Pre-release tags and build metadata are not supported.
-   * Module ids that aren't registered are reported with a dedicated
-   * "module not registered" issue (so a typo on the journey side is
-   * distinguishable from a version mismatch).
+   * The range syntax is an npm-style subset: caret, tilde, x-range,
+   * comparators, AND, OR, and hyphen — see the README's
+   * "Pattern - module compatibility (`moduleCompat`)" section for the
+   * exhaustive list. Pre-release tags and build metadata are not
+   * supported. Module ids in this map are typed against `TModules` so
+   * a typo is a compile error; an entry naming a module that genuinely
+   * isn't registered (e.g. via the erased `AnyJourneyDefinition` path)
+   * is reported with a dedicated "module not registered" issue.
    *
    * Optional. A journey that omits this field opts out of compatibility
    * enforcement entirely; the existing structural validators
