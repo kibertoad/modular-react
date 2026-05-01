@@ -14,6 +14,8 @@ Good for: plugin-style apps, apps where many teams contribute features, and apps
 
 When a domain flow must span **several modules in sequence** (e.g. "confirm the customer's profile → branch into plan selection → collect a payment or activate a trial"), an optional [Journeys](packages/journeys/README.md) layer composes those modules into a typed, serializable workflow without leaking state into the shell.
 
+Once a workspace has accumulated more modules than any one team can keep in their head, the optional [Catalog](packages/catalog/README.md) layer harvests every `defineModule` and `defineJourney` it can find and emits a static, deployable discovery portal — searchable, faceted by owner team / domain / tags / status, with a pre-computed cross-reference graph between modules and the journeys that route through them.
+
 ## What a running app looks like
 
 ```
@@ -83,6 +85,7 @@ Conceptual documentation for building apps with the framework. Start with a gett
 | [Workspace Patterns](docs/workspace-patterns.md)                                   | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                                                                                  |
 | [Sibling modules sharing a screen](docs/sibling-modules-shared-screen.md)          | One generic screen (e.g. an integration manager) rendered by several sibling modules with per-module config flowing through typed handle (React Router) or staticData (TanStack Router). |
 | [Journeys](packages/journeys/README.md)                                            | Typed multi-module workflows with serializable shared state — entry/exit contracts, branch/complete/abort transitions, pluggable persistence.                                            |
+| [Catalog](packages/catalog/README.md)                                              | Build-time discovery portal: harvest every `defineModule` / `defineJourney`, surface owner/domain/tags facets, pre-compute the journey↔module cross-reference graph, ship as static HTML.|
 | [Remote Capability Manifests](docs/remote-capability-manifests.md)                 | Drive slots/navigation from backend JSON — `RemoteModuleManifest`, `mergeRemoteManifests`, validation, SSR, and the single-module pattern.                                               |
 
 ## What the code looks like
@@ -188,6 +191,7 @@ See [`examples/README.md`](examples/README.md) for how to run them and how to ad
 | [`@modular-react/react`](packages/react)       | React bindings: context providers, hooks (`useStore`, `useSlots`, `useNavigation`, etc.), error boundary. |
 | [`@modular-react/testing`](packages/testing)   | Test utilities for resolving modules without rendering.                                                   |
 | [`@modular-react/journeys`](packages/journeys) | Typed, serializable multi-module workflows with entry/exit contracts and a pluggable persistence adapter. |
+| [`@modular-react/catalog`](packages/catalog)   | Build-time harvester + static SPA: scans for descriptors and emits a deployable discovery portal.         |
 | [`@modular-react/cli-core`](packages/cli-core) | Shared command implementations and templates for the router-specific CLI binaries.                        |
 
 ### React Router integration
@@ -219,6 +223,8 @@ Shared layer (router-agnostic):
   @modular-react/testing    (resolveModule without rendering)
        |
   @modular-react/journeys   (typed multi-module workflows, optional)
+       |
+  @modular-react/catalog    (static discovery portal, build-time only, optional)
        |
   @modular-react/cli-core   (shared CLI commands + templates)
 
