@@ -4,122 +4,124 @@
 // don't need — the schema is small and JSON-stable.
 
 export interface CatalogMetaShape {
-  name?: string;
-  description?: string;
-  ownerTeam?: string;
-  domain?: string;
-  tags?: readonly string[];
-  status?: "experimental" | "stable" | "deprecated";
-  since?: string;
-  links?: {
-    docs?: string;
-    source?: string;
-    slack?: string;
-    runbook?: string;
+  readonly name?: string;
+  readonly description?: string;
+  readonly ownerTeam?: string;
+  readonly domain?: string;
+  readonly tags?: readonly string[];
+  readonly status?: "experimental" | "stable" | "deprecated";
+  readonly since?: string;
+  readonly links?: {
+    readonly docs?: string;
+    readonly source?: string;
+    readonly slack?: string;
+    readonly runbook?: string;
   };
-  screenshots?: readonly string[];
+  readonly screenshots?: readonly string[];
 }
 
 export interface ResolvedExtensionTab {
-  id: string;
-  label: string;
-  url?: string;
-  html?: string;
+  readonly id: string;
+  readonly label: string;
+  readonly url?: string;
+  readonly html?: string;
 }
 
-export type CustomFacetValues = Record<string, readonly string[]>;
+export type CustomFacetValues = Readonly<Record<string, readonly string[]>>;
 
 export interface ModuleEntry {
-  kind: "module";
-  id: string;
-  version: string;
-  sourcePath: string;
-  rootName: string;
-  meta: CatalogMetaShape;
-  extraMeta: Record<string, unknown>;
-  slotKeys: readonly string[];
-  hasRoutes: boolean;
-  hasComponent: boolean;
-  requires: readonly string[];
-  optionalRequires: readonly string[];
-  entryPointNames: readonly string[];
-  exitPointNames: readonly string[];
-  navigationLabels: readonly string[];
-  startsJourneyIds: readonly string[];
-  extensionTabs?: readonly ResolvedExtensionTab[];
-  customFacets?: CustomFacetValues;
+  readonly kind: "module";
+  readonly id: string;
+  readonly version: string;
+  readonly sourcePath: string;
+  readonly rootName: string;
+  readonly meta: CatalogMetaShape;
+  readonly extraMeta: Readonly<Record<string, unknown>>;
+  readonly slotKeys: readonly string[];
+  readonly hasRoutes: boolean;
+  readonly hasComponent: boolean;
+  readonly requires: readonly string[];
+  readonly optionalRequires: readonly string[];
+  readonly entryPointNames: readonly string[];
+  readonly exitPointNames: readonly string[];
+  readonly navigationLabels: readonly string[];
+  readonly extensionTabs?: readonly ResolvedExtensionTab[];
+  readonly customFacets?: CustomFacetValues;
 }
 
 export interface JourneyEntry {
-  kind: "journey";
-  id: string;
-  version: string;
-  sourcePath: string;
-  rootName: string;
-  meta: CatalogMetaShape;
-  extraMeta: Record<string, unknown>;
-  modulesUsed: readonly string[];
-  invokesJourneyIds: readonly string[];
-  moduleCompat: Record<string, string>;
-  extensionTabs?: readonly ResolvedExtensionTab[];
-  customFacets?: CustomFacetValues;
+  readonly kind: "journey";
+  readonly id: string;
+  readonly version: string;
+  readonly sourcePath: string;
+  readonly rootName: string;
+  readonly meta: CatalogMetaShape;
+  readonly extraMeta: Readonly<Record<string, unknown>>;
+  readonly modulesUsed: readonly string[];
+  readonly invokesJourneyIds: readonly string[];
+  readonly moduleCompat: Readonly<Record<string, string>>;
+  readonly extensionTabs?: readonly ResolvedExtensionTab[];
+  readonly customFacets?: CustomFacetValues;
 }
 
 export interface CustomFacet {
-  key: string;
-  label: string;
-  values: readonly string[];
+  readonly key: string;
+  readonly label: string;
+  readonly values: readonly string[];
 }
 
 export interface CatalogFacets {
-  teams: readonly string[];
-  domains: readonly string[];
-  tags: readonly string[];
-  statuses: readonly ("experimental" | "stable" | "deprecated")[];
-  custom?: readonly CustomFacet[];
+  readonly teams: readonly string[];
+  readonly domains: readonly string[];
+  readonly tags: readonly string[];
+  readonly statuses: readonly ("experimental" | "stable" | "deprecated")[];
+  readonly custom?: readonly CustomFacet[];
 }
 
 export interface CatalogExtensionsMeta {
-  moduleDetailTabs?: readonly { id: string; label: string }[];
-  journeyDetailTabs?: readonly { id: string; label: string }[];
+  readonly moduleDetailTabs?: readonly { readonly id: string; readonly label: string }[];
+  readonly journeyDetailTabs?: readonly { readonly id: string; readonly label: string }[];
 }
 
 export interface TransitionDestination {
-  module: string;
-  entry?: string;
+  readonly module: string;
+  readonly entry?: string;
 }
 
 export interface ModuleEntryUsage {
-  journeyId: string;
-  handledExits: readonly string[];
+  readonly journeyId: string;
+  readonly handledExits: readonly string[];
 }
 
 export interface ModuleExitUsage {
-  journeyId: string;
-  fromEntry: string;
-  destinations?: readonly TransitionDestination[];
-  aborts?: boolean;
-  completes?: boolean;
+  readonly journeyId: string;
+  readonly fromEntry: string;
+  readonly destinations?: readonly TransitionDestination[];
+  readonly aborts?: boolean;
+  readonly completes?: boolean;
 }
 
 export interface CatalogModel {
-  schemaVersion: string;
-  title: string;
-  builtAt: string;
-  modules: readonly ModuleEntry[];
-  journeys: readonly JourneyEntry[];
-  facets: CatalogFacets;
-  journeysByModule: Record<string, readonly string[]>;
-  journeysByInvokedJourney: Record<string, readonly string[]>;
-  modulesByStartedJourney: Record<string, readonly string[]>;
-  moduleEntryUsage: Record<string, Record<string, readonly ModuleEntryUsage[]>>;
-  moduleExitUsage: Record<string, Record<string, readonly ModuleExitUsage[]>>;
-  extensions?: CatalogExtensionsMeta;
+  readonly schemaVersion: string;
+  readonly title: string;
+  readonly builtAt: string;
+  readonly modules: readonly ModuleEntry[];
+  readonly journeys: readonly JourneyEntry[];
+  readonly facets: CatalogFacets;
+  readonly journeysByModule: Readonly<Record<string, readonly string[]>>;
+  readonly journeysByInvokedJourney: Readonly<Record<string, readonly string[]>>;
+  readonly moduleEntryUsage: Readonly<
+    Record<string, Readonly<Record<string, readonly ModuleEntryUsage[]>>>
+  >;
+  readonly moduleExitUsage: Readonly<
+    Record<string, Readonly<Record<string, readonly ModuleExitUsage[]>>>
+  >;
+  readonly extensions?: CatalogExtensionsMeta;
 }
 
 export interface CatalogTheme {
-  brandName?: string;
-  logoUrl?: string;
-  primaryColor?: string;
-  backgroundColor?: string;
+  readonly brandName?: string;
+  readonly logoUrl?: string;
+  readonly primaryColor?: string;
+  readonly backgroundColor?: string;
 }

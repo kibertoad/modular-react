@@ -94,7 +94,7 @@ export function FilterBar({
 
   return (
     <div className="mb-6 flex flex-col gap-3">
-      <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+      <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
         <Input
           placeholder="Search…"
           value={value.query}
@@ -111,6 +111,12 @@ export function FilterBar({
           options={facets.domains}
           value={value.domain}
           onChange={(domain) => onChange({ ...value, domain })}
+        />
+        <FacetSelect
+          placeholder="All tags"
+          options={facets.tags}
+          value={value.tag}
+          onChange={(tag) => onChange({ ...value, tag })}
         />
         <FacetSelect
           placeholder="All statuses"

@@ -5,8 +5,8 @@
   "description": "Demo catalog generated from the tanstack-router examples — populates a catalog with modules and journeys from two sibling example apps.",
   "type": "module",
   "scripts": {
-    "build": "modular-react-catalog build",
-    "serve": "modular-react-catalog serve dist-catalog",
+    "build": "pnpm --filter @modular-react/catalog build && node ../../packages/catalog/dist/cli/index.js build",
+    "serve": "node ../../packages/catalog/dist/cli/index.js serve dist-catalog",
     "start": "pnpm build && pnpm serve",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",

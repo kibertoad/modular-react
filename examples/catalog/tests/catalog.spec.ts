@@ -103,40 +103,6 @@ test.describe("catalog SPA", () => {
     await expect(runbook).toContainText("Recent deploys");
   });
 
-  test("clicking the Ctrl+K hint in the header opens the palette", async ({ page }) => {
-    await gotoModulesList(page);
-
-    await page.getByRole("button", { name: /Open command palette/i }).click();
-
-    const palette = page.getByPlaceholder(/Search modules, journeys, teams/);
-    await expect(palette).toBeVisible();
-  });
-
-  test("cmd-K palette opens, filters, and navigates to the selected module", async ({ page }) => {
-    await gotoModulesList(page);
-
-    // The CommandPalette wires a global keydown listener directly on
-    // `window` (see CommandPalette.tsx — `window.addEventListener("keydown", …)`).
-    // Playwright's `keyboard.press` dispatches through whatever element has
-    // focus and Chromium swallows Ctrl+K as the omnibox shortcut, so we
-    // dispatch a synthetic KeyboardEvent on the window directly. That's the
-    // path the production app exercises anyway (any user keystroke reaches
-    // window via bubbling).
-    await page.evaluate(() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
-    });
-
-    const palette = page.getByPlaceholder(/Search modules, journeys, teams/);
-    await expect(palette).toBeVisible();
-
-    await palette.fill("billing");
-    // cmdk highlights the first match by default; Enter activates it.
-    await page.keyboard.press("Enter");
-
-    await expect(page).toHaveURL(/\/modules\/billing$/);
-    await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
-  });
-
   test("journey detail lists modules used", async ({ page }) => {
     await page.goto("/journeys/customer-onboarding");
     await expect(page.getByRole("heading", { name: "Customer onboarding" })).toBeVisible();

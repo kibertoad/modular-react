@@ -14,7 +14,7 @@ export function ModuleEntryCard({ entry, search }: { entry: ModuleEntry; search?
         to="/modules/$id"
         params={{ id: entry.id }}
         search={search ?? {}}
-        className="block focus:outline-none"
+        className="block rounded focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         <CardHeader className="gap-1">
           <div className="flex items-start justify-between gap-3">
@@ -54,7 +54,7 @@ export function JourneyEntryCard({ entry, search }: { entry: JourneyEntry; searc
         to="/journeys/$id"
         params={{ id: entry.id }}
         search={search ?? {}}
-        className="block focus:outline-none"
+        className="block rounded focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         <CardHeader className="gap-1">
           <div className="flex items-start justify-between gap-3">

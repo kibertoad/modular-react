@@ -13,13 +13,12 @@ import { ModuleDetailView } from "./views/ModuleDetailView";
 import { JourneysListView } from "./views/JourneysListView";
 import { JourneyDetailView } from "./views/JourneyDetailView";
 import { DomainPivotView, TagPivotView, TeamPivotView } from "./views/PivotView";
-import { CommandPalette, openCommandPalette } from "./components/CommandPalette";
 import { cn } from "@/lib/utils";
 
 /**
  * Search-param shape on the list routes. Built-in keys are typed; custom
  * facet selections ride along under the `c.<key>` namespace and are passed
- * through verbatim (the router doesn't know which facet keys exist —
+ * through verbatim (the router doesn't know which facet keys exist;
  * extensions are configured per-build).
  */
 export interface ListSearch {
@@ -106,8 +105,8 @@ const routeTree = rootRoute.addChildren([
   tagPivotRoute,
 ]);
 
-// Catalogs are usually opened by clicking through a hosted index — file:// shows
-// up too (someone unzips the artifact and opens index.html). Memory history
+// Catalogs are usually opened by clicking through a hosted index. file:// shows
+// up too when someone unzips the artifact and opens index.html. Memory history
 // makes both work without a server-side rewrite.
 const isFileProtocol = typeof window !== "undefined" && window.location.protocol === "file:";
 
@@ -131,13 +130,12 @@ function RootLayout() {
         <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-4">
           {theme.logoUrl && <img src={theme.logoUrl} alt="" className="h-8 w-auto" />}
           <h1 className="text-xl font-bold">{theme.brandName ?? model.title}</h1>
-          <CommandPaletteHint />
-          <div className="text-xs text-muted-foreground">
+          <div className="ml-auto text-xs text-muted-foreground">
             {model.modules.length} module{model.modules.length === 1 ? "" : "s"}
-            {" · "}
+            {" - "}
             {model.journeys.length} journey
             {model.journeys.length === 1 ? "" : "s"}
-            {" · "}
+            {" - "}
             built {new Date(model.builtAt).toLocaleString()}
           </div>
         </div>
@@ -149,27 +147,7 @@ function RootLayout() {
         </nav>
         <Outlet />
       </main>
-      <CommandPalette />
     </div>
-  );
-}
-
-function CommandPaletteHint() {
-  // Doubles as the click target for opening the palette — the keystroke and
-  // the click both end up calling `openCommandPalette()`.
-  const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
-  return (
-    <button
-      type="button"
-      onClick={openCommandPalette}
-      aria-label="Open command palette"
-      className="ml-auto hidden cursor-pointer items-center gap-1 rounded text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring md:flex"
-    >
-      <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono">
-        {isMac ? "⌘" : "Ctrl"} K
-      </kbd>
-      <span>to search</span>
-    </button>
   );
 }
 

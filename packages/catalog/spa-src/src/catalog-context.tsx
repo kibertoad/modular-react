@@ -16,11 +16,11 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      fetch("./catalog.json").then((r) => {
+      fetch(new URL("../catalog.json", import.meta.url).toString()).then((r) => {
         if (!r.ok) throw new Error(`catalog.json: ${r.status}`);
         return r.json() as Promise<CatalogModel>;
       }),
-      fetch("./theme.json")
+      fetch(new URL("../theme.json", import.meta.url).toString())
         .then((r) => (r.ok ? (r.json() as Promise<CatalogTheme>) : ({} as CatalogTheme)))
         .catch(() => ({}) as CatalogTheme),
     ])

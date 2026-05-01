@@ -7,7 +7,7 @@ The config (`catalog.config.ts`) scans **two** sibling example apps:
 - `examples/tanstack-router/customer-onboarding-journey/` — three modules (`profile`, `plan`, `billing`) and one journey (`customer-onboarding`)
 - `examples/tanstack-router/journey-invoke/` — three modules (`age-verify`, `checkout-review`, `checkout-confirm`) and two journeys (`checkout`, `verify-identity`)
 
-That's six modules and three journeys — enough to exercise the filter rail, the pivot pages (`/teams/checkout`, `/domains/commerce`, …), the Cmd-K palette, and a custom facet (`Compliance`).
+That's six modules and three journeys — enough to exercise the filter rail, the pivot pages (`/teams/checkout`, `/domains/commerce`, …), and a custom facet (`Compliance`).
 
 ## Run it
 
@@ -37,7 +37,6 @@ The `tests/` directory ships a [Playwright](https://playwright.dev) suite that d
 - module/journey list rendering and counts
 - filter rail URL round-trip (team / domain / status / custom facet)
 - pivot pages (`/teams/...`, `/domains/...`, `/tags/...`)
-- Cmd-K palette open + select-by-keyboard, plus header-button click
 - module detail page with the Runbook extension tab (mock on-call + deploys)
 
 ```bash

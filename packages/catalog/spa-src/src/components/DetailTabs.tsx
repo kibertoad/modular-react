@@ -43,25 +43,72 @@ export function DetailTabs({
 
 function ExtensionTabBody({ tab }: { tab: ResolvedExtensionTab }) {
   if (tab.url) {
+    const safeUrl = toSafeTabUrl(tab.url);
+    if (!safeUrl) {
+      return <p className="text-sm text-muted-foreground">Extension URL was blocked.</p>;
+    }
     return (
       <iframe
-        src={tab.url}
+        src={safeUrl}
         title={tab.label}
-        // Default sandbox: scripts + same-origin only. Hosts that need broader
-        // capabilities should resolve to a URL on a hardened path that
-        // serves its own embed-safe page.
         sandbox="allow-scripts allow-same-origin"
+        referrerPolicy="no-referrer"
         className="h-[60vh] w-full rounded border"
       />
     );
   }
   if (tab.html) {
-    // SAFETY: this HTML originates from the host's catalog config, which is
-    // trusted (it ran the rest of the build). The catalog itself is a static
-    // artifact; the host owns both ends.
-    return (
-      <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: tab.html }} />
-    );
+    const html = sanitizeExtensionHtml(tab.html);
+    return <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: html }} />;
   }
   return null;
+}
+
+function toSafeTabUrl(raw: string): string | null {
+  try {
+    const url = new URL(raw, window.location.href);
+    if (url.origin === window.location.origin || url.protocol === "https:") {
+      return url.toString();
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function sanitizeExtensionHtml(raw: string): string {
+  const template = document.createElement("template");
+  template.innerHTML = raw;
+  for (const el of template.content.querySelectorAll("*")) {
+    const tag = el.tagName.toLowerCase();
+    if (["script", "iframe", "object", "embed", "link", "meta", "base", "form"].includes(tag)) {
+      el.remove();
+      continue;
+    }
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      const value = attr.value.trim();
+      if (
+        name.startsWith("on") ||
+        name === "srcdoc" ||
+        value.toLowerCase().startsWith("javascript:")
+      ) {
+        el.removeAttribute(attr.name);
+        continue;
+      }
+      if ((name === "href" || name === "src") && !isSafeResourceUrl(value)) {
+        el.removeAttribute(attr.name);
+      }
+    }
+  }
+  return template.innerHTML;
+}
+
+function isSafeResourceUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw, window.location.href);
+    return ["http:", "https:", "mailto:", "tel:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
 }

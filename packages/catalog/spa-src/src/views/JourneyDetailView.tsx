@@ -29,7 +29,6 @@ export function JourneyDetailView() {
   }
 
   const invokedBy = model.journeysByInvokedJourney[entry.id] ?? [];
-  const startedBy = model.modulesByStartedJourney[entry.id] ?? [];
 
   return (
     <Card>
@@ -56,22 +55,14 @@ export function JourneyDetailView() {
       <CardContent>
         <DetailTabs
           tabs={entry.extensionTabs ?? []}
-          overview={<Overview entry={entry} invokedBy={invokedBy} startedBy={startedBy} />}
+          overview={<Overview entry={entry} invokedBy={invokedBy} />}
         />
       </CardContent>
     </Card>
   );
 }
 
-function Overview({
-  entry,
-  invokedBy,
-  startedBy,
-}: {
-  entry: JourneyEntry;
-  invokedBy: readonly string[];
-  startedBy: readonly string[];
-}) {
+function Overview({ entry, invokedBy }: { entry: JourneyEntry; invokedBy: readonly string[] }) {
   return (
     <>
       <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
@@ -164,25 +155,6 @@ function Overview({
                     className="font-mono text-xs underline"
                   >
                     {jid}
-                  </Link>
-                ))}
-              </div>
-            }
-          />
-        )}
-        {startedBy.length > 0 && (
-          <Row
-            label="Started by modules"
-            value={
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {startedBy.map((mid) => (
-                  <Link
-                    key={mid}
-                    to="/modules/$id"
-                    params={{ id: mid }}
-                    className="font-mono text-xs underline"
-                  >
-                    {mid}
                   </Link>
                 ))}
               </div>

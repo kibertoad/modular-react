@@ -99,8 +99,8 @@ function DetailGrid({
 }: {
   entry: ModuleEntry;
   usedBy: readonly string[];
-  entryUsage: Record<string, readonly ModuleEntryUsage[]>;
-  exitUsage: Record<string, readonly ModuleExitUsage[]>;
+  entryUsage: Readonly<Record<string, readonly ModuleEntryUsage[]>>;
+  exitUsage: Readonly<Record<string, readonly ModuleExitUsage[]>>;
 }) {
   const rows: { label: string; value: React.ReactNode }[] = [];
 
@@ -159,25 +159,6 @@ function DetailGrid({
       label: "Exit points",
       value: <ExitPointsList names={entry.exitPointNames} usage={exitUsage} />,
     });
-  if (entry.startsJourneyIds.length) {
-    rows.push({
-      label: "Starts journeys",
-      value: (
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
-          {entry.startsJourneyIds.map((jid) => (
-            <Link
-              key={jid}
-              to="/journeys/$id"
-              params={{ id: jid }}
-              className="font-mono text-xs underline"
-            >
-              {jid}
-            </Link>
-          ))}
-        </div>
-      ),
-    });
-  }
   if (usedBy.length) {
     rows.push({
       label: "Used by journeys",
@@ -203,25 +184,49 @@ function DetailGrid({
     const linkEls: React.ReactNode[] = [];
     if (links.docs)
       linkEls.push(
-        <a key="d" className="underline" href={links.docs}>
+        <a
+          key="d"
+          className="underline"
+          href={links.docs}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           docs
         </a>,
       );
     if (links.source)
       linkEls.push(
-        <a key="s" className="underline" href={links.source}>
+        <a
+          key="s"
+          className="underline"
+          href={links.source}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           source
         </a>,
       );
     if (links.runbook)
       linkEls.push(
-        <a key="r" className="underline" href={links.runbook}>
+        <a
+          key="r"
+          className="underline"
+          href={links.runbook}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           runbook
         </a>,
       );
     if (links.slack)
       linkEls.push(
-        <a key="sl" className="underline" href={links.slack}>
+        <a
+          key="sl"
+          className="underline"
+          href={links.slack}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           slack
         </a>,
       );
@@ -250,7 +255,7 @@ function EntryPointsList({
   usage,
 }: {
   names: readonly string[];
-  usage: Record<string, readonly ModuleEntryUsage[]>;
+  usage: Readonly<Record<string, readonly ModuleEntryUsage[]>>;
 }) {
   return (
     <ul className="flex flex-col gap-1">
@@ -303,7 +308,7 @@ function ExitPointsList({
   usage,
 }: {
   names: readonly string[];
-  usage: Record<string, readonly ModuleExitUsage[]>;
+  usage: Readonly<Record<string, readonly ModuleExitUsage[]>>;
 }) {
   return (
     <ul className="flex flex-col gap-1">
@@ -337,7 +342,7 @@ function ExitPointsList({
                       <span className="ml-2 text-muted-foreground">
                         from <span className="font-mono">{ref.fromEntry}</span>
                       </span>
-                      <ExitOutcomes ref={ref} />
+                      <ExitOutcomes usage={ref} />
                     </li>
                   ))}
                 </ul>
@@ -350,12 +355,12 @@ function ExitPointsList({
   );
 }
 
-function ExitOutcomes({ ref }: { ref: ModuleExitUsage }) {
-  const dests = ref.destinations ?? [];
+function ExitOutcomes({ usage }: { usage: ModuleExitUsage }) {
+  const dests = usage.destinations ?? [];
   const tags: React.ReactNode[] = [];
   for (const d of dests) tags.push(<DestinationChip key={`d-${tags.length}`} dest={d} />);
-  if (ref.aborts) tags.push(<OutcomeChip key={`a-${tags.length}`} kind="abort" />);
-  if (ref.completes) tags.push(<OutcomeChip key={`c-${tags.length}`} kind="complete" />);
+  if (usage.aborts) tags.push(<OutcomeChip key={`a-${tags.length}`} kind="abort" />);
+  if (usage.completes) tags.push(<OutcomeChip key={`c-${tags.length}`} kind="complete" />);
   if (tags.length === 0) return null;
   return (
     <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">

@@ -30,7 +30,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm build && pnpm exec modular-react-catalog serve dist-catalog --port ${PORT}`,
+    command: `pnpm build && node ../../packages/catalog/dist/cli/index.js serve dist-catalog --port ${PORT}`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

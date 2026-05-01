@@ -2,7 +2,7 @@
 
 Build a deployable, static **discovery portal** for the modules and journeys in your modular-react codebase. Point it at one or more directories, configure how descriptors are exposed, and get back a directory of HTML/JS/CSS/JSON you can host on any static server.
 
-> **Status:** v0.2 — harvester, CLI, and SPA are stable. URL-driven filter state, pivot pages, the Cmd-K command palette, and the build-time extension API are all in. The catalog also pre-computes a cross-reference graph (entry/exit usage, journey-to-journey invocations, module-to-journey launches) and recovers transition destinations from journey source via static analysis. Catalog `schemaVersion` is `"2"`.
+> **Status:** v0.2 — harvester, CLI, and SPA are stable. URL-driven filter state, pivot pages, and the build-time extension API are all in. The catalog also pre-computes a cross-reference graph (entry/exit usage, journey-to-journey invocations, module-to-journey launches) and recovers transition destinations from journey source via static analysis. Catalog `schemaVersion` is `"2"`.
 
 ## Why
 
@@ -306,10 +306,6 @@ The SPA exposes three pivot routes that show every module and journey matching a
 - `/tags/$tag` — everything tagged with a value
 
 The team / domain / tag chips on cards and detail pages link straight to these pages.
-
-## Cmd-K palette
-
-Press `⌘K` (mac) / `Ctrl-K` (win/linux) anywhere in the SPA to open a global command palette. Results are grouped by Module / Journey / Team / Domain / Tag and use the same hand-rolled matcher as the filter rail. Arrow keys to navigate, `Enter` to select, `Esc` to close.
 
 ## Architecture
 
