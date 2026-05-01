@@ -1,6 +1,6 @@
 {
   "name": "@modular-react/catalog",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Build a deployable static catalog UI for modular-react modules and journeys. Scans configured directories, harvests descriptors, and emits a self-contained SPA you can host on any static server.",
   "repository": {
     "type": "git",
