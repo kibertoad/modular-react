@@ -88,7 +88,7 @@ export interface CatalogFacets {
   /** Sorted, deduped list of every `meta.tags[*]` value seen. */
   readonly tags: readonly string[];
   /** Sorted, deduped list of `meta.status` values present. */
-  readonly statuses: readonly ("experimental" | "stable" | "deprecated")[];
+  readonly statuses: readonly NonNullable<CatalogMeta["status"]>[];
   /** Custom facets contributed via `config.extensions.facets`. */
   readonly custom?: readonly CustomFacet[];
 }

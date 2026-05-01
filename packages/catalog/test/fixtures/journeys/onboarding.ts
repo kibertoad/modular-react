@@ -13,14 +13,14 @@ export default {
     profile: {
       review: {
         allowBack: true,
-        profileComplete: () => ({ next: { module: "billing", entry: "collect", input: {} } }),
+        profileComplete: () => ({ next: { module: "billing", entry: "review", input: {} } }),
         cancelled: () => ({ abort: { reason: "rep-cancelled" } }),
       },
     },
     billing: {
-      collect: {
+      review: {
         paid: () => ({ complete: { kind: "paid" } }),
-        failed: () => ({ abort: { reason: "payment-failed" } }),
+        cancelled: () => ({ abort: { reason: "payment-failed" } }),
       },
     },
   },

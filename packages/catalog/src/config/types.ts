@@ -26,8 +26,8 @@ export interface CatalogRoot {
 
   /**
    * Glob pattern resolved relative to the project root (the directory
-   * containing the config file). Examples: `"packages/* /src/index.ts"`,
-   * `"vendor/modules/index.ts"`, `"legacy/**\/module.ts"`.
+   * containing the config file). Examples: `["packages/*", "src/index.ts"].join("/")`,
+   * `"vendor/modules/index.ts"`, `["legacy/**", "module.ts"].join("/")`.
    */
   readonly pattern: string;
 

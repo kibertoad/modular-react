@@ -116,34 +116,6 @@ export default defineModule({
 
 Any keys that aren't part of `CatalogMeta` are still accepted (your `TMeta` flows through unchanged) and surface in the SPA under an "Other metadata" expander on detail pages.
 
-## Declaring journeys a module starts
-
-Modules that launch journeys at runtime — typically by calling
-`runtime.start(handle)` from an exit handler or a UI affordance — can declare
-those handles on the descriptor itself so the catalog can build a cross-link.
-This is purely descriptive; the framework does not enforce it.
-
-```ts
-import { defineModule } from "@modular-react/core";
-import type { checkoutJourneyHandle } from "@example/checkout-journey";
-
-export default defineModule({
-  id: "checkout-review",
-  version: "1.0.0",
-  // …
-  startsJourneys: [checkoutJourneyHandle],
-});
-```
-
-The catalog harvests the `id` of each handle and renders two cross-links:
-
-- On the **module** detail page: a "Starts journeys" row linking to each declared journey.
-- On the **journey** detail page: a "Started by modules" row listing every module that names this journey in `startsJourneys`.
-
-Modules that launch journeys but never declare them simply won't appear in
-those cross-links — declaration is opt-in. There's no static analysis of
-`runtime.start(...)` calls; declare it explicitly on the descriptor.
-
 ## Cross-links and the transition graph
 
 Beyond the basics, the catalog pre-computes a cross-reference graph the SPA
@@ -154,7 +126,6 @@ build-time work — the SPA never scans at render time.
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `journeysByModule`         | `moduleId` → journey ids that reference the module via `transitions`                                                       |
 | `journeysByInvokedJourney` | `journeyId` → journey ids that call `invoke` against this journey (reverse of each journey's `invokes`)                    |
-| `modulesByStartedJourney`  | `journeyId` → module ids that declared `startsJourneys: [<thisJourneyHandle>]`                                             |
 | `moduleEntryUsage`         | `moduleId.entryName` → `[{ journeyId, handledExits }]` — which journeys route into this entry, and which exits they handle |
 | `moduleExitUsage`          | `moduleId.exitName` → `[{ journeyId, fromEntry, destinations?, aborts?, completes? }]` — handlers and what they route to   |
 
@@ -302,7 +273,7 @@ export default defineCatalogConfig({
       {
         id: "runbook",
         label: "Runbook",
-        // Either `url` (sandboxed iframe) or `render` (inlined HTML string).
+        // Either `url` (sandboxed iframe) or `render` (sanitized HTML string).
         // Returning undefined hides the tab for that entry.
         url: (entry) => `https://runbooks.internal/modules/${entry.id}`,
       },
@@ -322,8 +293,8 @@ export default defineCatalogConfig({
 
 Notes:
 
-- Extension HTML is inlined verbatim with `dangerouslySetInnerHTML` — the catalog config is host-trusted code, so it's treated like any other build-time output. Don't pass user-controlled strings into `render`.
-- Iframes default to `sandbox="allow-scripts allow-same-origin"`. Hosts that need broader capabilities should serve their own embed-safe page at the URL.
+- Extension HTML is sanitized in the SPA before rendering. Still escape any user-controlled strings in `render`; the sanitizer is a last line of defense, not a templating API.
+- Iframes default to `sandbox="allow-scripts allow-same-origin"` and `referrerPolicy="no-referrer"`. URLs are limited to same-origin or HTTPS targets.
 - Tabs that declare both `url` and `render` are rejected at build time.
 
 ## Pivot pages
@@ -343,6 +314,6 @@ Press `⌘K` (mac) / `Ctrl-K` (win/linux) anywhere in the SPA to open a global c
 ## Architecture
 
 - **Harvester** (`src/harvester/`): a single Vite SSR server `ssrLoadModule`s every file matching a root's pattern. Loaded modules are passed through the configured resolver, then duck-typed against `ModuleDescriptor` / `JourneyDefinition` shapes. After the runtime walk, journeys are also re-read from disk and statically analyzed via `oxc-parser` to recover transition destinations. Files that throw at load or parse time are reported as non-fatal `HarvestError`s and the run continues.
-- **Schema** (`src/schema/`): builds the JSON-safe `CatalogModel` from harvested entries — partitions `meta` into `CatalogMeta` keys + `extraMeta`, derives slot/route/journey-modules info, pre-computes the cross-reference graph (`journeysByModule`, `journeysByInvokedJourney`, `modulesByStartedJourney`, `moduleEntryUsage`, `moduleExitUsage`), and resolves any configured extension tabs/facets. Schema is versioned via `CATALOG_SCHEMA_VERSION` (currently `"2"`); the SPA refuses to load a payload whose version doesn't match.
+- **Schema** (`src/schema/`): builds the JSON-safe `CatalogModel` from harvested entries — partitions `meta` into `CatalogMeta` keys + `extraMeta`, derives slot/route/journey-modules info, pre-computes the cross-reference graph (`journeysByModule`, `journeysByInvokedJourney`, `moduleEntryUsage`, `moduleExitUsage`), and resolves any configured extension tabs/facets. Schema is versioned via `CATALOG_SCHEMA_VERSION` (currently `"2"`); the SPA refuses to load a payload whose version doesn't match.
 - **CLI** (`src/cli/`): citty-based binary. `build` runs the harvester, writes `catalog.json` + `manifest.json` + `theme.{json,css}`, and copies the prebuilt SPA from `dist-spa/`.
 - **SPA** (`spa-src/`): Vite + React 19 + TanStack Router + Tailwind v4 + Base UI primitives (the shadcn Base UI variant). Built once at package publish time; ships inside `dist-spa/` and is copied to the user's output directory by the CLI.

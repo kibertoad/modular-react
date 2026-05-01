@@ -55,7 +55,14 @@ export async function loadCatalogConfig(
           `(use \`export default defineCatalogConfig({ ... })\`).`,
       );
     }
-    return { config: mod.default, configPath };
+    const config = mod.default;
+    if (!Array.isArray(config.roots)) {
+      throw new Error(
+        `Catalog config at ${configPath} must export a 'roots' array ` +
+          `(use \`export default defineCatalogConfig({ roots: [...] })\`).`,
+      );
+    }
+    return { config, configPath };
   } finally {
     await server.close();
   }

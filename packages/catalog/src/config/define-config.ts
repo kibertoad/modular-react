@@ -12,11 +12,11 @@ import type { CatalogConfig } from "./types.js";
  *   out: "dist-catalog",
  *   title: "Acme Portal",
  *   roots: [
- *     { name: "monorepo", pattern: "packages/* /src/index.ts", resolver: "defaultExport" },
+ *     { name: "monorepo", pattern: ["packages/*", "src/index.ts"].join("/"), resolver: "defaultExport" },
  *   ],
  * });
  * ```
  */
-export function defineCatalogConfig(config: CatalogConfig): CatalogConfig {
+export function defineCatalogConfig<T extends CatalogConfig>(config: T): T {
   return config;
 }

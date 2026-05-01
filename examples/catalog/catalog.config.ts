@@ -55,29 +55,29 @@ function renderModuleRunbook(
     const date = new Date(today.getTime() - daysAgo * 24 * 60 * 60 * 1000);
     const ymd = date.toISOString().slice(0, 10);
     const version = ["1.0.0", "0.9.6", "0.9.5"][i]!;
-    return `<li><code>${version}</code> &mdash; ${ymd}</li>`;
+    return `<li><code>${escapeHtml(version)}</code> &mdash; ${escapeHtml(ymd)}</li>`;
   });
 
-  const statusLine = status ? `<p><strong>Status:</strong> <code>${status}</code></p>` : "";
+  const statusLine = status
+    ? `<p><strong>Status:</strong> <code>${escapeHtml(status)}</code></p>`
+    : "";
+  const slackChannel = encodeURIComponent(ops.slack.slice(1));
+  const slackHref = `https://acme.slack.com/channels/${slackChannel}`;
 
-  // Build-time HTML render. Strings are derived from trusted host config
-  // (the team table above), so direct interpolation is safe — see the
-  // "Extension HTML uses dangerouslySetInnerHTML" decision in the catalog
-  // package's handover doc.
+  // Build-time HTML render. Escape all interpolated values so the generated
+  // tab remains safe if the fixture data is replaced by external metadata.
   return `
-    <div data-testid="runbook-${moduleId}">
+    <div data-testid="runbook-${escapeHtml(moduleId)}">
       <h4 style="margin: 0 0 0.25rem 0;">On-call &amp; escalation</h4>
       <ul>
-        <li><strong>Owner team:</strong> ${team}</li>
-        <li><strong>Primary on-call:</strong> ${ops.onCall}</li>
-        <li><strong>Slack:</strong> <a href="https://acme.slack.com/channels/${encodeURIComponent(
-          ops.slack.slice(1),
-        )}">${ops.slack}</a></li>
-        <li><strong>PagerDuty:</strong> <a href="${ops.pagerduty}">${ops.pagerduty}</a></li>
+        <li><strong>Owner team:</strong> ${escapeHtml(team)}</li>
+        <li><strong>Primary on-call:</strong> ${escapeHtml(ops.onCall)}</li>
+        <li><strong>Slack:</strong> <a href="${escapeAttribute(slackHref)}">${escapeHtml(ops.slack)}</a></li>
+        <li><strong>PagerDuty:</strong> <a href="${escapeAttribute(ops.pagerduty)}">${escapeHtml(ops.pagerduty)}</a></li>
       </ul>
 
       <h4 style="margin: 1rem 0 0.25rem 0;">Observability</h4>
-      <p>Dashboard: <a href="${ops.dashboard}">${ops.dashboard}</a></p>
+      <p>Dashboard: <a href="${escapeAttribute(ops.dashboard)}">${escapeHtml(ops.dashboard)}</a></p>
       ${statusLine}
 
       <h4 style="margin: 1rem 0 0.25rem 0;">Recent deploys</h4>
@@ -90,6 +90,22 @@ function renderModuleRunbook(
     </div>
   `;
 }
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (ch) => HTML_ESCAPE[ch]!);
+}
+
+function escapeAttribute(value: string): string {
+  return escapeHtml(value);
+}
+
+const HTML_ESCAPE: Readonly<Record<string, string>> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
 
 /**
  * Demo catalog config. Scans both tanstack-router example apps in this

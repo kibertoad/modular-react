@@ -82,7 +82,7 @@ describe("harvest", () => {
     if (journey.kind !== "journey") throw new Error("expected journey");
     expect(journey.transitionShape).toEqual({
       profile: { review: ["profileComplete", "cancelled"] },
-      billing: { collect: ["paid", "failed"] },
+      billing: { review: ["paid", "cancelled"] },
     });
   });
 
@@ -100,7 +100,7 @@ describe("harvest", () => {
       profile: {
         review: {
           profileComplete: {
-            nexts: [{ module: "billing", entry: "collect" }],
+            nexts: [{ module: "billing", entry: "review" }],
             aborts: false,
             completes: false,
           },
@@ -108,9 +108,9 @@ describe("harvest", () => {
         },
       },
       billing: {
-        collect: {
+        review: {
           paid: { nexts: [], aborts: false, completes: true },
-          failed: { nexts: [], aborts: true, completes: false },
+          cancelled: { nexts: [], aborts: true, completes: false },
         },
       },
     });
@@ -144,16 +144,15 @@ describe("harvest", () => {
     const { errors, entries } = await harvest(
       {
         roots: [
-          // pattern that doesn't match anything yields zero candidates;
-          // a syntactically broken file would produce an error — this fixture
-          // set has no broken file so we just verify the empty-error case.
-          { name: "missing", pattern: "modules/does-not-exist.ts", resolver: "defaultExport" },
+          { name: "broken", pattern: "broken-modules/broken.ts", resolver: "defaultExport" },
           { name: "modules", pattern: "modules/billing.ts", resolver: "defaultExport" },
         ],
       },
       FIXTURES,
     );
-    expect(errors).toEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.filePath).toContain("broken.ts");
+    expect(errors[0]!.message).toContain("broken fixture load failure");
     expect(entries.length).toBe(1);
   });
 });

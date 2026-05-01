@@ -5,14 +5,18 @@ import { join } from "pathe";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startServer, type StartedServer } from "./serve-command.js";
 
-function rawHttpGet(port: number, path: string): Promise<string> {
+function rawHttpGet(port: number, path: string): Promise<{ status: number; body: string }> {
   return new Promise((resolvePromise, rejectPromise) => {
     const socket = connect({ host: "127.0.0.1", port });
     let data = "";
     socket.on("data", (chunk) => {
       data += chunk.toString("utf8");
     });
-    socket.on("end", () => resolvePromise(data));
+    socket.on("end", () => {
+      const [head = "", ...bodyParts] = data.split("\r\n\r\n");
+      const status = Number(head.match(/^HTTP\/\d\.\d\s+(\d+)/)?.[1] ?? 0);
+      resolvePromise({ status, body: bodyParts.join("\r\n\r\n") });
+    });
     socket.on("error", rejectPromise);
     socket.write(`GET ${path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n`);
   });
@@ -87,7 +91,8 @@ describe("startServer", () => {
     const sentinel = "outside-root-" + Math.random().toString(36).slice(2);
     writeFileSync(join(dir, "..", `${sentinel}.txt`), "secret");
     try {
-      const body = await rawHttpGet(started.port, `/../${sentinel}.txt`);
+      const { status, body } = await rawHttpGet(started.port, `/../${sentinel}.txt`);
+      expect(status).toBeGreaterThanOrEqual(400);
       expect(body).not.toContain("secret");
     } finally {
       rmSync(join(dir, "..", `${sentinel}.txt`), { force: true });

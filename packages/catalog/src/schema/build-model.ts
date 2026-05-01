@@ -256,12 +256,8 @@ function resolveCustomFacets(
   const out: Record<string, readonly string[]> = {};
   for (const def of defs) {
     const raw = def.source(entry);
-    const values =
-      typeof raw === "string"
-        ? [raw]
-        : Array.isArray(raw)
-          ? raw.filter((v): v is string => typeof v === "string" && v.length > 0)
-          : [];
+    const rawValues = typeof raw === "string" ? [raw] : Array.isArray(raw) ? raw : [];
+    const values = rawValues.filter((v): v is string => typeof v === "string" && v.length > 0);
     if (values.length === 0) continue;
     out[def.key] = values;
     const bucket = buckets.get(def.key)!;

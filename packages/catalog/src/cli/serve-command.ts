@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync, type Stats } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, normalize, resolve } from "pathe";
 import { defineCommand } from "citty";
@@ -152,7 +152,11 @@ function handleRequest(req: IncomingMessage, res: ServerResponse, root: string):
     return;
   }
 
-  const stat = statSync(target);
+  const stat = safeStat(target);
+  if (!stat) {
+    sendError(res, 404, "Not Found");
+    return;
+  }
   res.statusCode = 200;
   res.setHeader(
     "Content-Type",
@@ -176,7 +180,14 @@ function handleRequest(req: IncomingMessage, res: ServerResponse, root: string):
   // so all relative URLs in the shell resolve from the root, regardless of
   // which deep path triggered the fallback.
   if (target.endsWith("index.html")) {
-    const html = readFileSync(target, "utf8");
+    let html: string;
+    try {
+      html = readFileSync(target, "utf8");
+    } catch (err) {
+      console.error(`[catalog] Failed to read ${target}:`, err);
+      sendError(res, 500, "Internal Server Error");
+      return;
+    }
     const rewritten = html.includes("<base ")
       ? html
       : html.replace(/<head(\s[^>]*)?>/i, (m) => `${m}<base href="/">`);
@@ -195,7 +206,16 @@ function handleRequest(req: IncomingMessage, res: ServerResponse, root: string):
     res.end();
     return;
   }
-  createReadStream(target).pipe(res);
+  const stream = createReadStream(target);
+  stream.on("error", (err) => {
+    console.error(`[catalog] Failed to stream ${target}:`, err);
+    if (!res.headersSent) {
+      sendError(res, 500, "Internal Server Error");
+    } else {
+      res.destroy(err);
+    }
+  });
+  stream.pipe(res);
 }
 
 /**
@@ -203,11 +223,11 @@ function handleRequest(req: IncomingMessage, res: ServerResponse, root: string):
  * Order: exact file → directory's index.html → SPA fallback to root index.html.
  */
 function resolveStaticFile(filePath: string, root: string): string | null {
-  if (existsSync(filePath) && statSync(filePath).isFile()) {
+  if (safeStat(filePath)?.isFile()) {
     return filePath;
   }
   const indexInDir = join(filePath, "index.html");
-  if (existsSync(indexInDir) && statSync(indexInDir).isFile()) {
+  if (safeStat(indexInDir)?.isFile()) {
     return indexInDir;
   }
   // SPA fallback only for non-asset paths — don't paper over a missing /assets/foo.js.
@@ -216,6 +236,23 @@ function resolveStaticFile(filePath: string, root: string): string | null {
     if (existsSync(rootIndex)) return rootIndex;
   }
   return null;
+}
+
+function safeStat(path: string): Stats | null {
+  try {
+    return statSync(path);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT" && code !== "ENOTDIR") {
+      console.error(`[catalog] Failed to stat ${path}:`, err);
+    }
+    return null;
+  }
+}
+
+function sendError(res: ServerResponse, statusCode: number, message: string): void {
+  res.statusCode = statusCode;
+  res.end(message);
 }
 
 function safeDecode(s: string): string | null {
