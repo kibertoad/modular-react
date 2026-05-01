@@ -28,7 +28,7 @@
   },
   "scripts": {
     "build": "tsc && pnpm build:spa",
-    "build:spa": "cd spa-src && pnpm install --silent && pnpm build",
+    "build:spa": "pnpm --dir spa-src build",
     "dev": "tsc --watch",
     "test": "vitest run",
     "clean": "rimraf dist dist-spa .test-output",

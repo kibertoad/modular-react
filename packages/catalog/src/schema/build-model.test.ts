@@ -330,6 +330,23 @@ describe("buildCatalogModel", () => {
       expect(c.customFacets).toBeUndefined();
     });
 
+    it("omits empty scalar custom facet values", () => {
+      const model = buildCatalogModel([moduleEntry({ id: "a" })], {
+        extensions: {
+          facets: [
+            {
+              key: "compliance",
+              label: "Compliance",
+              source: () => "",
+            },
+          ],
+        },
+      });
+
+      expect(model.facets.custom).toEqual([{ key: "compliance", label: "Compliance", values: [] }]);
+      expect(model.modules[0]!.customFacets).toBeUndefined();
+    });
+
     it("throws when an extension tab declares neither url nor render", () => {
       expect(() =>
         buildCatalogModel([moduleEntry({ id: "a" })], {
