@@ -1,5 +1,13 @@
-import { createReadStream, existsSync, readFileSync, statSync, type Stats } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  type Stats,
+} from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { isAbsolute, relative } from "node:path";
 import { extname, join, normalize, resolve } from "pathe";
 import { defineCommand } from "citty";
 
@@ -84,8 +92,12 @@ export async function startServer(options: StartServerOptions): Promise<StartedS
   const root = resolve(options.root);
   const port = options.port ?? 0;
   const host = options.host ?? "127.0.0.1";
+  const canonicalRoot = safeRealpath(root);
+  if (!canonicalRoot) {
+    throw new Error(`Catalog root does not exist or is not readable: ${root}`);
+  }
 
-  const server = createServer((req, res) => handleRequest(req, res, root));
+  const server = createServer((req, res) => handleRequest(req, res, root, canonicalRoot));
 
   await new Promise<void>((resolvePromise, rejectPromise) => {
     server.once("error", rejectPromise);
@@ -118,7 +130,12 @@ const MIME_TYPES: Readonly<Record<string, string>> = {
   ".txt": "text/plain; charset=utf-8",
 };
 
-function handleRequest(req: IncomingMessage, res: ServerResponse, root: string): void {
+function handleRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  root: string,
+  canonicalRoot: string,
+): void {
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.statusCode = 405;
     res.setHeader("Allow", "GET, HEAD");
@@ -152,7 +169,13 @@ function handleRequest(req: IncomingMessage, res: ServerResponse, root: string):
     return;
   }
 
-  const stat = safeStat(target);
+  const canonicalTarget = safeRealpath(target);
+  if (!canonicalTarget || !isWithinRoot(canonicalRoot, canonicalTarget)) {
+    sendError(res, 404, "Not Found");
+    return;
+  }
+
+  const stat = safeStat(canonicalTarget);
   if (!stat) {
     sendError(res, 404, "Not Found");
     return;
@@ -160,12 +183,12 @@ function handleRequest(req: IncomingMessage, res: ServerResponse, root: string):
   res.statusCode = 200;
   res.setHeader(
     "Content-Type",
-    MIME_TYPES[extname(target).toLowerCase()] ?? "application/octet-stream",
+    MIME_TYPES[extname(canonicalTarget).toLowerCase()] ?? "application/octet-stream",
   );
   if (
-    target.endsWith("index.html") ||
-    target.endsWith("catalog.json") ||
-    target.endsWith("manifest.json")
+    canonicalTarget.endsWith("index.html") ||
+    canonicalTarget.endsWith("catalog.json") ||
+    canonicalTarget.endsWith("manifest.json")
   ) {
     res.setHeader("Cache-Control", "no-cache");
   } else {
@@ -179,12 +202,12 @@ function handleRequest(req: IncomingMessage, res: ServerResponse, root: string):
   // landing on `/modules/assets/foo.js`, which 404s. Inject `<base href="/">`
   // so all relative URLs in the shell resolve from the root, regardless of
   // which deep path triggered the fallback.
-  if (target.endsWith("index.html")) {
+  if (canonicalTarget.endsWith("index.html")) {
     let html: string;
     try {
-      html = readFileSync(target, "utf8");
+      html = readFileSync(canonicalTarget, "utf8");
     } catch (err) {
-      console.error(`[catalog] Failed to read ${target}:`, err);
+      console.error(`[catalog] Failed to read ${canonicalTarget}:`, err);
       sendError(res, 500, "Internal Server Error");
       return;
     }
@@ -206,9 +229,9 @@ function handleRequest(req: IncomingMessage, res: ServerResponse, root: string):
     res.end();
     return;
   }
-  const stream = createReadStream(target);
+  const stream = createReadStream(canonicalTarget);
   stream.on("error", (err) => {
-    console.error(`[catalog] Failed to stream ${target}:`, err);
+    console.error(`[catalog] Failed to stream ${canonicalTarget}:`, err);
     if (!res.headersSent) {
       sendError(res, 500, "Internal Server Error");
     } else {
@@ -248,6 +271,23 @@ function safeStat(path: string): Stats | null {
     }
     return null;
   }
+}
+
+function safeRealpath(path: string): string | null {
+  try {
+    return realpathSync(path);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT" && code !== "ENOTDIR") {
+      console.error(`[catalog] Failed to resolve real path for ${path}:`, err);
+    }
+    return null;
+  }
+}
+
+function isWithinRoot(root: string, target: string): boolean {
+  const rel = relative(root, target);
+  return rel === "" || (rel !== "" && !rel.startsWith("..") && !isAbsolute(rel));
 }
 
 function sendError(res: ServerResponse, statusCode: number, message: string): void {

@@ -222,6 +222,8 @@ jobs:
           files: |
             packages/catalog/**
             examples/catalog/**
+            examples/tanstack-router/customer-onboarding-journey/**
+            examples/tanstack-router/journey-invoke/**
             .github/workflows/ci.yml
 
       - name: Setup Node

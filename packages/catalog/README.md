@@ -273,7 +273,7 @@ export default defineCatalogConfig({
       {
         id: "runbook",
         label: "Runbook",
-        // Either `url` (sandboxed iframe) or `render` (sanitized HTML string).
+        // Either `url` (sandboxed iframe) or `render` (trusted HTML string).
         // Returning undefined hides the tab for that entry.
         url: (entry) => `https://runbooks.internal/modules/${entry.id}`,
       },
@@ -293,7 +293,7 @@ export default defineCatalogConfig({
 
 Notes:
 
-- Extension HTML is sanitized in the SPA before rendering. Still escape any user-controlled strings in `render`; the sanitizer is a last line of defense, not a templating API.
+- Extension HTML returned from `render` is rendered directly by the SPA with `dangerouslySetInnerHTML`; it is not sanitized by the app. Always escape or sanitize any user-controlled strings before returning HTML.
 - Iframes default to `sandbox="allow-scripts allow-same-origin"` and `referrerPolicy="no-referrer"`. URLs are limited to same-origin or HTTPS targets.
 - Tabs that declare both `url` and `render` are rejected at build time.
 
