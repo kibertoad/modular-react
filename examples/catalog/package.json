@@ -1,0 +1,23 @@
+{
+  "name": "@example/catalog",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demo catalog generated from the tanstack-router examples — populates a catalog with modules and journeys from two sibling example apps.",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter @modular-react/catalog build && node ../../packages/catalog/dist/cli/index.js build",
+    "serve": "node ../../packages/catalog/dist/cli/index.js serve dist-catalog",
+    "start": "pnpm build && pnpm serve",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium",
+    "clean": "rimraf dist-catalog"
+  },
+  "dependencies": {
+    "@modular-react/catalog": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "rimraf": "^6.0.1",
+    "typescript": "^6.0.2"
+  }
+}

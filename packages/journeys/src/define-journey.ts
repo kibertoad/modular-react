@@ -1,3 +1,4 @@
+import type { CatalogMeta } from "@modular-react/core";
 import type { JourneyDefinition, ModuleTypeMap } from "./types.js";
 
 /**
@@ -38,12 +39,19 @@ export const defineJourney =
   // `complete: { ...arbitrary }` assigns to `unknown`. New journeys that
   // want their terminal payload type-checked (and surfaced to a parent's
   // resume handler) explicitly pass it as the third generic.
-  <TModules extends ModuleTypeMap, TState, TOutput = unknown>() =>
+  <
+    TModules extends ModuleTypeMap,
+    TState,
+    TOutput = unknown,
+    TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
+  >() =>
     // `TInput = void` matters: when `initialState` takes no parameter
     // there is no inferable position for TInput, and without a default TS
     // falls back to `unknown`. That silently disables the rest-tuple
     // ergonomics on `runtime.start(handle)` and `simulateJourney(journey)`
     // — callers would still have to pass `undefined`. Defaulting to `void`
     // keeps "no input" journeys truly zero-arg.
-    <TInput = void>(definition: JourneyDefinition<TModules, TState, TInput, TOutput>) =>
+    <TInput = void>(
+      definition: JourneyDefinition<TModules, TState, TInput, TOutput, CatalogMeta & TMeta>,
+    ) =>
       definition;

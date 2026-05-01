@@ -13,6 +13,10 @@ export default defineModule({
   meta: {
     name: "Age verify",
     description: "Confirms the user meets the age threshold for the order.",
+    ownerTeam: "trust-and-safety",
+    domain: "compliance",
+    tags: ["identity"],
+    status: "stable",
   },
   exitPoints: ageVerifyExits,
   entryPoints: {

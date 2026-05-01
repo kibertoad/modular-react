@@ -11,6 +11,10 @@ export default defineModule({
   meta: {
     name: "Plan",
     description: "Lets the customer pick a subscription tier.",
+    ownerTeam: "growth",
+    domain: "onboarding",
+    tags: ["subscription"],
+    status: "stable",
   },
   exitPoints: planExits,
   entryPoints: {

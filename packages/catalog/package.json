@@ -1,0 +1,56 @@
+{
+  "name": "@modular-react/catalog",
+  "version": "0.1.0",
+  "description": "Build a deployable static catalog UI for modular-react modules and journeys. Scans configured directories, harvests descriptors, and emits a self-contained SPA you can host on any static server.",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kibertoad/modular-react.git",
+    "directory": "packages/catalog"
+  },
+  "bin": {
+    "modular-react-catalog": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "dist-spa"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc && pnpm build:spa",
+    "build:spa": "pnpm --dir spa-src build",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "clean": "rimraf dist dist-spa .test-output",
+    "prepublishOnly": "pnpm build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.3.0",
+    "@modular-react/core": "workspace:*",
+    "citty": "^0.2.2",
+    "oxc-parser": "^0.128.0",
+    "pathe": "^2.0.3",
+    "tinyglobby": "^0.2.10",
+    "vite": "^8.0.10"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

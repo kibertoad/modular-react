@@ -16,6 +16,10 @@ export default defineModule({
   meta: {
     name: "Profile",
     description: "Confirms a customer's profile and suggests a starting plan.",
+    ownerTeam: "onboarding-core",
+    domain: "onboarding",
+    tags: ["profile"],
+    status: "stable",
   },
   exitPoints: profileExits,
   entryPoints: {

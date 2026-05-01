@@ -6,6 +6,7 @@
 
 import type {
   AbandonCtx,
+  CatalogMeta,
   JourneyHandleRef,
   JourneyPersistence,
   JourneyStep,
@@ -63,10 +64,11 @@ export interface JourneyDefinition<
   TState,
   TInput = void,
   TOutput = unknown,
+  TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
 > {
   readonly id: string;
   readonly version: string;
-  readonly meta?: Readonly<Record<string, unknown>>;
+  readonly meta?: Readonly<CatalogMeta & TMeta>;
 
   readonly initialState: (input: TInput) => TState;
   readonly start: (state: TState, input: TInput) => StepSpec<TModules>;
@@ -178,7 +180,7 @@ export interface JourneyDefinition<
  *  variance check on `ResumeMap`/`TransitionMap` does not strictly require
  *  the wide form to carry every specific module key — `any` short-circuits
  *  the property-by-property check and admits any concrete TModules. */
-export type AnyJourneyDefinition = JourneyDefinition<any, any, any, any>;
+export type AnyJourneyDefinition = JourneyDefinition<any, any, any, any, any>;
 
 // -----------------------------------------------------------------------------
 // Registration options + internal record — stay in this package

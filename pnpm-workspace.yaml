@@ -1,6 +1,16 @@
 packages:
   - "packages/*"
+  - "packages/catalog/spa-src"
+  - "examples/*"
   - "examples/*/*/app-shared"
   - "examples/*/*/shell"
   - "examples/*/*/modules/*"
   - "examples/*/*/journeys/*"
+allowBuilds:
+  esbuild: set this to true or false
+  msw: set this to true or false
+
+onlyBuiltDependencies:
+  - esbuild
+  - msw
+pmOnFail: ignore

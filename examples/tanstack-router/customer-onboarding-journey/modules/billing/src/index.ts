@@ -12,6 +12,10 @@ export default defineModule({
   meta: {
     name: "Billing",
     description: "Charges the customer or activates a free trial.",
+    ownerTeam: "billing-platform",
+    domain: "finance",
+    tags: ["payments"],
+    status: "stable",
   },
   exitPoints: billingExits,
   entryPoints: {

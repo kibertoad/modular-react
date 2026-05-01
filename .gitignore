@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-store/
 dist/
 .turbo/
 *.tsbuildinfo
@@ -7,3 +8,5 @@ dist/
 .e2e-output
 playwright-report/
 test-results/
+/examples/catalog/dist-catalog
+/packages/catalog/dist-spa
