@@ -1,7 +1,5 @@
 // Types
-export type {
-  CatalogMeta,
-} from "./catalog-meta.js";
+export type { CatalogMeta } from "./catalog-meta.js";
 
 export type {
   ModuleDescriptor,

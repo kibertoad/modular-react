@@ -215,7 +215,7 @@ export interface CatalogJourneyEntry extends CatalogEntryBase {
    */
   readonly transitionShape: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
   /**
- * Statically-resolved `{ next | invoke | abort | complete }` outcomes per
+   * Statically-resolved `{ next | invoke | abort | complete }` outcomes per
    * `[moduleId][entryName][exitName]`, when AST analysis is enabled and
    * found a literal. Empty when AST is off or the handler is dynamic.
    * Never serialized.
