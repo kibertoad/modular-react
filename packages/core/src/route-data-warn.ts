@@ -1,3 +1,4 @@
+import { isDevEnv } from "./dev-env.js";
 import type { RouteStaticDataOverrideInfo } from "./route-data.js";
 
 /**
@@ -82,37 +83,4 @@ function readMatchId(match: unknown): string {
     if (typeof m.routeId === "string") return m.routeId;
   }
   return "<unknown>";
-}
-
-// Local ambient declaration — `@modular-react/core` doesn't depend on
-// `@types/node`, but we deliberately reference the literal
-// `process.env.NODE_ENV` token below so bundlers can statically replace
-// it. The declare is scoped to this module file (it has imports/exports,
-// so it doesn't pollute the global namespace) and is erased at compile
-// time. Bundlers rewrite the literal access; runtime Node uses the real
-// `process` global; un-bundled browsers hit the try/catch fallback.
-declare const process: { env: { readonly NODE_ENV?: string } };
-
-function isDevEnv(): boolean {
-  // Use a *literal* `process.env.NODE_ENV` access — Vite, esbuild, Rollup
-  // (and most React bundlers) statically replace this token at build time,
-  // so the production branch becomes `"production" !== "production"` (a
-  // dead-code constant) and the warner factory + the rest of this module
-  // tree-shake out of production bundles.
-  //
-  // A dynamic chain like `globalThis.process?.env?.NODE_ENV` is *not*
-  // replaced by bundlers — it stays as a runtime lookup. In a browser
-  // bundle without a `process` shim that lookup throws ReferenceError or
-  // returns undefined, and the warner silently no-ops in development.
-  // The literal pattern avoids that footgun.
-  //
-  // The try/catch covers the rare un-bundled browser case (no static
-  // replacement, no `process` global). Default to dev there so the
-  // warning surfaces in unusual environments — production builds rely on
-  // the bundler's static replacement to skip this branch entirely.
-  try {
-    return process.env.NODE_ENV !== "production";
-  } catch {
-    return true;
-  }
 }

@@ -53,6 +53,9 @@ export type {
   RouteDataFieldLabel,
 } from "./route-data-warn.js";
 
+// Environment detection
+export { isDevEnv } from "./dev-env.js";
+
 // Lazy-module helpers
 export { warnIgnoredLazyFields } from "./lazy-module.js";
 

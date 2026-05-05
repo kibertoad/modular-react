@@ -1,3 +1,4 @@
+import { isDevEnv } from "@modular-react/core";
 import type { JourneyHandleRef, ModuleDescriptor } from "@modular-react/core";
 import type {
   AnyJourneyDefinition,
@@ -155,7 +156,7 @@ export function createJourneyRuntime(
   registered: readonly RegisteredJourney[],
   options: JourneyRuntimeOptions = {},
 ): JourneyRuntime {
-  const debug = options.debug ?? defaultDebug();
+  const debug = options.debug ?? isDevEnv();
   const moduleMap = options.modules ?? {};
   const definitions = new Map<string, RegisteredJourney>();
   for (const entry of registered) definitions.set(entry.definition.id, entry);
@@ -2223,11 +2224,6 @@ export function createJourneyRuntime(
   INTERNALS.set(runtime, internals);
 
   return runtime;
-}
-
-function defaultDebug(): boolean {
-  const g = globalThis as { process?: { env?: { NODE_ENV?: string } } };
-  return !!g.process && g.process.env?.NODE_ENV !== "production";
 }
 
 export interface JourneyRuntimeInternals {
