@@ -101,32 +101,30 @@ Deeper routes override shallower ones: if a billing section root sets `staticDat
 
 ### Compile-time gating for shell-owned zones
 
-The augmentation above lets every route write every key — fine for keys that any matched route may legitimately contribute (a `detailPanel` for the active page) but the wrong default for keys the shell layout owns (`HeaderTitle`, `HeaderActions`, `headerVariant`). When a child route accidentally declares a shell-owned key, today's only signal is the dev-mode override warning fired by `useZones` at navigation time.
+The augmentation above lets every route write every key — fine for keys that any matched route may legitimately contribute (a `detailPanel` for the active page) but the wrong default for keys the shell layout owns (`HeaderTitle`, `HeaderActions`). When a child route accidentally declares a shell-owned key, today's only signal is the dev-mode override warning fired by `useZones` at navigation time.
 
 TanStack's `StaticDataRouteOption` augmentation can do better — split the shape and only augment the page-contributable half:
 
 ```typescript
-// app-shared/src/static-data.ts
+// app-shared/src/zones.ts
 import type { ComponentType } from "react";
 
 /** Page-contributable keys — any matched route may write these. */
-export interface AppPageStaticData {
+export interface AppPageZones {
   detailPanel?: ComponentType;
-  pageTitle?: string;
 }
 
 /** Shell-owned keys — only the route that owns the layout region may write these. */
-export interface AppShellStaticData {
+export interface AppShellZones {
   HeaderTitle?: ComponentType;
   HeaderActions?: ComponentType;
-  headerVariant?: "portal" | "project";
 }
 
 declare module "@tanstack/router-core" {
   // Only page-contributable keys flow through the augmentation. Object-
   // literal excess-property checking blocks shell-owned keys on every
   // route's `staticData: { ... }` literal.
-  interface StaticDataRouteOption extends AppPageStaticData {}
+  interface StaticDataRouteOption extends AppPageZones {}
 }
 ```
 
@@ -147,13 +145,13 @@ The shell route — the one place that _should_ set shell-owned keys — uses `d
 ```typescript
 import { createRoute } from "@tanstack/react-router";
 import { defineShellStaticData } from "@tanstack-react-modules/runtime";
-import type { AppPageStaticData, AppShellStaticData } from "@myorg/app-shared";
+import type { AppPageZones, AppShellZones } from "@myorg/app-shared";
 
 export const projectRoute = createRoute({
   getParentRoute: () => root,
   path: "project/$projectId",
   component: ProjectPage,
-  staticData: defineShellStaticData<AppShellStaticData & AppPageStaticData>({
+  staticData: defineShellStaticData<AppShellZones & AppPageZones>({
     HeaderTitle: ProjectTitle,
     HeaderActions: ProjectActions,
     detailPanel: ProjectPanel,
@@ -166,12 +164,38 @@ export const projectRoute = createRoute({
 The shell still reads everything with one merged hook — the gating is on the _write_ side; the read side is unchanged:
 
 ```typescript
-const { HeaderTitle, HeaderActions, detailPanel } = useZones<
-  AppShellStaticData & AppPageStaticData
->();
+const { HeaderTitle, HeaderActions, detailPanel } = useZones<AppShellZones & AppPageZones>();
 ```
 
-> **React Router does not have an equivalent.** RR's `RouteObject.handle` is typed as `unknown` with no module-augmentation slot, so it cannot offer compile-time gating on shell-owned keys. RR users get the runtime override warning (same dev-mode log as TanStack) plus a `satisfies AppRouteData` annotation at the call site. See [Shell Patterns for React Router § Route data](shell-patterns-react-router.md#route-data-non-component-handles) and the comparison in [Shell Patterns § Zone ownership and override semantics](shell-patterns.md#zone-ownership-and-override-semantics).
+#### Extending the pattern to non-component shell-owned route data
+
+The same split works for non-component shell-owned fields read via `useRouteData` (header variant enums, page titles, feature flags). Declare `AppShellRouteData` / `AppPageRouteData` interfaces alongside the zones, augment `StaticDataRouteOption` with both page-side interfaces, and pass the full union into `defineShellStaticData`:
+
+```typescript
+export interface AppShellRouteData {
+  headerVariant?: "portal" | "project";
+}
+export interface AppPageRouteData {
+  pageTitle?: string;
+}
+
+declare module "@tanstack/router-core" {
+  interface StaticDataRouteOption extends AppPageZones, AppPageRouteData {}
+}
+
+// On the shell route:
+staticData: defineShellStaticData<
+  AppShellZones & AppPageZones & AppShellRouteData & AppPageRouteData
+>({
+  HeaderTitle: ProjectTitle,
+  headerVariant: "project",
+  detailPanel: ProjectPanel,
+});
+```
+
+Reads stay split by channel — `useZones<AppShellZones & AppPageZones>()` for components, `useRouteData<AppShellRouteData & AppPageRouteData>()` for everything else — because `useZones` constrains values to `ComponentType | undefined` and rejects string-literal types at the generic.
+
+> **React Router does not have an equivalent.** RR's `RouteObject.handle` is typed as `unknown` with no module-augmentation slot, so it cannot offer compile-time gating on shell-owned keys. RR users get the runtime override warning (same dev-mode log as TanStack) plus a `satisfies AppZones` annotation at the call site. See [Shell Patterns for React Router § Route data](shell-patterns-react-router.md#route-data-non-component-handles) and the comparison in [Shell Patterns § Zone ownership and override semantics](shell-patterns.md#zone-ownership-and-override-semantics).
 
 ## Route data (non-component staticData)
 

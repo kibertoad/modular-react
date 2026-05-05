@@ -73,8 +73,9 @@ export function mergeRouteStaticData<T extends object>(
     if (data && typeof data === "object" && !Array.isArray(data)) {
       for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
         if (value !== undefined) {
-          if (onOverride && sources && Object.prototype.hasOwnProperty.call(merged, key)) {
-            onOverride({
+          if (sources && Object.prototype.hasOwnProperty.call(merged, key)) {
+            // `sources` is non-null iff `onOverride` was provided.
+            onOverride!({
               key,
               previousValue: merged[key],
               nextValue: value,
