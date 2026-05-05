@@ -1,13 +1,17 @@
 {
   "name": "@tanstack-react-modules/runtime",
   "version": "2.6.0",
+  "keywords": [
+    "tanstack-intent"
+  ],
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
     "directory": "packages/tanstack-router-runtime"
   },
   "files": [
-    "dist"
+    "dist",
+    "skills"
   ],
   "type": "module",
   "main": "./dist/index.js",

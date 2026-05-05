@@ -2,13 +2,17 @@
   "name": "@modular-react/journeys",
   "version": "0.1.0",
   "description": "Typed, serializable workflows that compose multiple modules. A journey declares entry/exit transitions between modules and owns shared state; modules stay journey-unaware.",
+  "keywords": [
+    "tanstack-intent"
+  ],
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
     "directory": "packages/journeys"
   },
   "files": [
-    "dist"
+    "dist",
+    "skills"
   ],
   "type": "module",
   "main": "./dist/index.js",

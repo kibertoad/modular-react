@@ -1,6 +1,9 @@
 {
   "name": "@react-router-modules/cli",
   "version": "2.4.0",
+  "keywords": [
+    "tanstack-intent"
+  ],
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
@@ -10,7 +13,8 @@
     "react-router-modules": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "skills"
   ],
   "type": "module",
   "publishConfig": {
