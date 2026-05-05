@@ -99,6 +99,80 @@ function Layout() {
 
 Deeper routes override shallower ones: if a billing section root sets `staticData.detailPanel = BillingSidebar` and the invoice detail page sets `staticData.detailPanel = InvoiceSidebar`, the detail page wins while it is active.
 
+### Compile-time gating for shell-owned zones
+
+The augmentation above lets every route write every key — fine for keys that any matched route may legitimately contribute (a `detailPanel` for the active page) but the wrong default for keys the shell layout owns (`HeaderTitle`, `HeaderActions`, `headerVariant`). When a child route accidentally declares a shell-owned key, today's only signal is the dev-mode override warning fired by `useZones` at navigation time.
+
+TanStack's `StaticDataRouteOption` augmentation can do better — split the shape and only augment the page-contributable half:
+
+```typescript
+// app-shared/src/static-data.ts
+import type { ComponentType } from "react";
+
+/** Page-contributable keys — any matched route may write these. */
+export interface AppPageStaticData {
+  detailPanel?: ComponentType;
+  pageTitle?: string;
+}
+
+/** Shell-owned keys — only the route that owns the layout region may write these. */
+export interface AppShellStaticData {
+  HeaderTitle?: ComponentType;
+  HeaderActions?: ComponentType;
+  headerVariant?: "portal" | "project";
+}
+
+declare module "@tanstack/router-core" {
+  // Only page-contributable keys flow through the augmentation. Object-
+  // literal excess-property checking blocks shell-owned keys on every
+  // route's `staticData: { ... }` literal.
+  interface StaticDataRouteOption extends AppPageStaticData {}
+}
+```
+
+A descendant route that tries to write a shell-owned key now fails at compile time:
+
+```typescript
+createRoute({
+  getParentRoute: () => projectRoute,
+  path: "dashboard",
+  staticData: {
+    HeaderTitle: DashboardTitle, // ❌ TS2353: 'HeaderTitle' is not in StaticDataRouteOption
+  },
+});
+```
+
+The shell route — the one place that _should_ set shell-owned keys — uses `defineShellStaticData` to escape the augmentation in a single named, greppable place:
+
+```typescript
+import { createRoute } from "@tanstack/react-router";
+import { defineShellStaticData } from "@tanstack-react-modules/runtime";
+import type { AppPageStaticData, AppShellStaticData } from "@myorg/app-shared";
+
+export const projectRoute = createRoute({
+  getParentRoute: () => root,
+  path: "project/$projectId",
+  component: ProjectPage,
+  staticData: defineShellStaticData<AppShellStaticData & AppPageStaticData>({
+    HeaderTitle: ProjectTitle,
+    HeaderActions: ProjectActions,
+    detailPanel: ProjectPanel,
+  }),
+});
+```
+
+`defineShellStaticData` is the identity function at runtime; its job is to be the audit point. Code review can grep for `defineShellStaticData(` instead of every `staticData: { ... }` in the codebase, and shell-owned keys remain blocked everywhere else.
+
+The shell still reads everything with one merged hook — the gating is on the _write_ side; the read side is unchanged:
+
+```typescript
+const { HeaderTitle, HeaderActions, detailPanel } = useZones<
+  AppShellStaticData & AppPageStaticData
+>();
+```
+
+> **React Router does not have an equivalent.** RR's `RouteObject.handle` is typed as `unknown` with no module-augmentation slot, so it cannot offer compile-time gating on shell-owned keys. RR users get the runtime override warning (same dev-mode log as TanStack) plus a `satisfies AppRouteData` annotation at the call site. See [Shell Patterns for React Router § Route data](shell-patterns-react-router.md#route-data-non-component-handles) and the comparison in [Shell Patterns § Zone ownership and override semantics](shell-patterns.md#zone-ownership-and-override-semantics).
+
 ## Route data (non-component staticData)
 
 `useZones` enforces `ComponentType | undefined` on every zone value — a useful rail 95% of the time, but it gets in the way for non-component route metadata: header variant enums, page titles, analytics event names, per-route feature flags. `useRouteData` is the relaxed-typing counterpart: same deepest-wins merge over `staticData`, no constraint on value types.

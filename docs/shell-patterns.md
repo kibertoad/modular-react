@@ -350,6 +350,8 @@ export type AppZones = AppShellZones & AppPageZones;
 
 The runtime still merges everything into one map — this split is a documentation contract for code review. Pair it with a JSDoc note on each shell-owned key naming the route that owns it (`@owner /project/$projectId`).
 
+**The TanStack adapter can enforce this split at compile time** via `StaticDataRouteOption` augmentation + `defineShellStaticData`; the React Router adapter cannot, because RR's `RouteObject.handle` is `unknown` with no module-augmentation slot. See the [adapter comparison](#enforcement-mechanisms-by-adapter) below.
+
 **Declare zones at the shallowest route they cover.** A shell-owned zone like `HeaderTitle` belongs on the section root (`/project/$projectId`), not on each child page. If a child page sets `HeaderTitle` "to be safe," it's clobbering the inherited value — the override warning (below) will flag it.
 
 **Use `useRouteData` for non-component metadata.** Header variant enums, page titles, analytics event names, and feature flags don't belong in `useZones` — its `ComponentType | undefined` type rail will fight you. The two hooks share the same merge over the same field; you just declare two TypeScript shapes (zones and route data) and read them with separate generics. See the runtime-specific guides for the augmentation pattern.
@@ -375,6 +377,25 @@ In development (`NODE_ENV !== "production"`), `useZones` and `useRouteData` log 
 The warning fires once per unique `(key, ancestorRouteId, descendantRouteId)` triple per process — not once per render — so legitimate overrides log a single line. Production builds skip the warning bookkeeping entirely (the merge takes the same fast path it always has).
 
 This is a diagnostic, not an error. If the override is intentional (a section page genuinely replacing a section-root default), ignore the warning. If it's accidental — the failure mode is "I added `HeaderTitle` to my child route to set a sub-page header and didn't realize the parent shell already owned that key" — fix the child route.
+
+#### Enforcement mechanisms by adapter
+
+The two adapters expose different surfaces for typing route static data, so the strength of the enforcement differs. Both runtime hooks emit the same dev-mode override warning; the compile-time story is asymmetric.
+
+| Mechanism                                                       | TanStack Router                                                                                                     | React Router 7                                                   |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Where route static data lives                                   | `route.staticData`                                                                                                  | `route.handle`                                                   |
+| Module-augmentation slot for narrowing the shape                | `StaticDataRouteOption` (purpose-built)                                                                             | None — `handle` stays `unknown`                                  |
+| Type check on a route's `staticData` / `handle` literal         | Excess-property checked against the augmented `StaticDataRouteOption`                                               | Opt-in via `satisfies AppZones` at the call site                 |
+| Compile-time gating of shell-owned keys (descendants can't set) | ✅ Two-tier augmentation: augment with `AppPageStaticData` only; shell route uses `defineShellStaticData` to escape | ❌ Not expressible — RR has no augmentation hook                 |
+| Runtime override warning (deepest-wins clobbers)                | ✅ Dev-mode `console.warn` from `useZones` / `useRouteData`                                                         | ✅ Same dev-mode `console.warn` from `useZones` / `useRouteData` |
+| Convention pattern that works on both adapters                  | Split `AppShellZones` + `AppPageZones` interfaces                                                                   | Same split, plus `satisfies AppZones` at every call site         |
+
+The TanStack adapter ships `defineShellStaticData` from `@tanstack-react-modules/runtime` — a thin identity-function helper that lets a shell route pass a wider shape (shell-owned + page-contributable) through the augmentation in a single named, greppable place. Descendant routes that try to write a shell-owned key fail at compile time. See [Shell Patterns for TanStack Router § Compile-time gating for shell-owned zones](shell-patterns-tanstack-router.md#compile-time-gating-for-shell-owned-zones) for the full pattern.
+
+The React Router adapter has no equivalent because the framework provides no hook to gate `RouteObject.handle` per shape. RR users get the runtime warning and `satisfies` at call sites — the warning fires at first navigation that exercises the override, not at compile time. See [Shell Patterns for React Router § Type-safe handle](shell-patterns-react-router.md#type-safe-handle).
+
+If portability across adapters matters (a workspace pattern, a shared module), code to the React Router constraints — the convention split + dev warning + `satisfies` works for both. The TanStack augmentation is a strict superset of the RR pattern, so adopting it on the TanStack side does not break portability of the shape declarations themselves.
 
 ### Decision guide
 
