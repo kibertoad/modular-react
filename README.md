@@ -87,6 +87,7 @@ Conceptual documentation for building apps with the framework. Start with a gett
 | [Journeys](packages/journeys/README.md)                                            | Typed multi-module workflows with serializable shared state — entry/exit contracts, branch/complete/abort transitions, pluggable persistence.                                             |
 | [Catalog](packages/catalog/README.md)                                              | Build-time discovery portal: harvest every `defineModule` / `defineJourney`, surface owner/domain/tags facets, pre-compute the journey↔module cross-reference graph, ship as static HTML. |
 | [Remote Capability Manifests](docs/remote-capability-manifests.md)                 | Drive slots/navigation from backend JSON — `RemoteModuleManifest`, `mergeRemoteManifests`, validation, SSR, and the single-module pattern.                                                |
+| [Agent support](docs/agent-support.md)                                             | TanStack Intent skills shipped with selected packages, how consumers install them, and how they relate to the human docs.                                                                 |
 
 ## What the code looks like
 
