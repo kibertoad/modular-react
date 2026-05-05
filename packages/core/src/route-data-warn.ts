@@ -62,7 +62,10 @@ export function createRouteDataOverrideWarner(
   return (info) => {
     const prevId = readMatchId(info.previousMatch);
     const nextId = readMatchId(info.nextMatch);
-    const dedupKey = `${info.key} ${prevId} ${nextId}`;
+    // Use ASCII Unit Separator (\x1F) between the triple parts so a
+    // space in any one component (theoretical for route IDs, possible
+    // for keys) can't bleed into another and create a false dedup hit.
+    const dedupKey = `${info.key}\x1F${prevId}\x1F${nextId}`;
     if (seen.has(dedupKey)) return;
     seen.add(dedupKey);
 

@@ -227,5 +227,37 @@ describe("createRouteDataOverrideWarner", () => {
 
       expect(warnSpy).toHaveBeenCalledTimes(2);
     });
+
+    it("uses an unambiguous separator so a space in any triple part can't collide", () => {
+      // Regression rail for the dedup-key serialization. Before the
+      // separator switched from a plain space to \x1F, the triples
+      //   ("Header Title", "/p",   "/p/c")  →  "Header Title /p /p/c"
+      //   ("Header",       "Title /p", "/p/c") → "Header Title /p /p/c"
+      // would have hashed to the same dedup key and silenced the second
+      // warning. With \x1F the two strings are distinguishable.
+      process.env.NODE_ENV = "development";
+      const warn = createRouteDataOverrideWarner(
+        "@react-router-modules/runtime",
+        "useZones",
+        "handle",
+      )!;
+
+      warn({
+        key: "Header Title",
+        previousValue: "A",
+        nextValue: "B",
+        previousMatch: { id: "/p" },
+        nextMatch: { id: "/p/c" },
+      });
+      warn({
+        key: "Header",
+        previousValue: "A",
+        nextValue: "B",
+        previousMatch: { id: "Title /p" },
+        nextMatch: { id: "/p/c" },
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+    });
   });
 });
