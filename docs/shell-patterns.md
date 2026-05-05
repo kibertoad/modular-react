@@ -376,6 +376,8 @@ In development (`NODE_ENV !== "production"`), `useZones` and `useRouteData` log 
 
 The warning fires once per unique `(key, ancestorRouteId, descendantRouteId)` triple per process — not once per render — so legitimate overrides log a single line. Production builds skip the warning bookkeeping entirely (the merge takes the same fast path it always has).
 
+The warning is **silenced for `null` overrides** — setting a key to `null` is the documented "explicit clear" path, and firing the warning on the canonical intentional usage would defeat its signal-to-noise value. Real overrides (one defined value replacing another) still log; explicit clears stay quiet. Reviving a cleared key with a real value at a deeper route does still fire — that's a real override.
+
 This is a diagnostic, not an error. If the override is intentional (a section page genuinely replacing a section-root default), ignore the warning. If it's accidental — the failure mode is "I added `HeaderTitle` to my child route to set a sub-page header and didn't realize the parent shell already owned that key" — fix the child route.
 
 #### Enforcement mechanisms by adapter

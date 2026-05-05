@@ -169,19 +169,44 @@ describe("mergeRouteStaticData", () => {
       expect(onOverride).not.toHaveBeenCalled();
     });
 
-    it("fires for `null` overrides — explicit clearing is still an override the dev tool should surface", () => {
+    it("does not fire for `null` overrides — null is the documented explicit-clear path", () => {
+      // The merge still preserves `null` (it's the canonical way to
+      // clear an inherited zone), but `onOverride` is silenced for it
+      // so the dev warning doesn't fire on the documented intentional
+      // path. Real value-replacing overrides still warn.
       const onOverride = vi.fn<(info: RouteStaticDataOverrideInfo) => void>();
       const matches: RRMatch[] = [
         { id: "/", handle: { HeaderTitle: "Title" } },
         { id: "/child", handle: { HeaderTitle: null } },
       ];
 
+      const merged = mergeRouteStaticData<{ HeaderTitle: unknown }>(matches, getHandle, {
+        onOverride,
+      });
+
+      expect(onOverride).not.toHaveBeenCalled();
+      // `null` is still preserved through the merge — the clear works.
+      expect(merged).toEqual({ HeaderTitle: null });
+    });
+
+    it("still fires when a real value replaces an explicit-clear `null`", () => {
+      // Once a route clears a zone with `null`, a deeper route reviving
+      // it with a component IS an override and the warning should fire —
+      // exempting `null` only applies to setting null, not to overwriting it.
+      const onOverride = vi.fn<(info: RouteStaticDataOverrideInfo) => void>();
+      const matches: RRMatch[] = [
+        { id: "/", handle: { HeaderTitle: "ParentTitle" } },
+        { id: "/mid", handle: { HeaderTitle: null } },
+        { id: "/leaf", handle: { HeaderTitle: "LeafTitle" } },
+      ];
+
       mergeRouteStaticData(matches, getHandle, { onOverride });
+
       expect(onOverride).toHaveBeenCalledTimes(1);
       expect(onOverride.mock.calls[0]?.[0]).toMatchObject({
         key: "HeaderTitle",
-        previousValue: "Title",
-        nextValue: null,
+        previousValue: null,
+        nextValue: "LeafTitle",
       });
     });
 
@@ -205,10 +230,10 @@ describe("mergeRouteStaticData", () => {
       });
     });
 
-    it("incurs no source-tracking when onOverride is omitted (regression rail)", () => {
-      // No explicit assertion possible without exposing internals — but the
-      // merged result must be identical to the no-options call. This pins
-      // the contract: optional bookkeeping must not change merge output.
+    it("produces identical merge output with and without an onOverride callback", () => {
+      // The optional source-tracking bookkeeping must not change merge
+      // output — adding a no-op `onOverride` shouldn't perturb anything
+      // observable.
       const matches: RRMatch[] = [
         { id: "/", handle: { a: 1, b: 2 } },
         { id: "/child", handle: { a: 9, c: 3 } },

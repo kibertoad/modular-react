@@ -75,6 +75,21 @@ describe("defineShellStaticData — type contract", () => {
       HeaderTitle: "not a component",
     });
   });
+
+  test("rejects arrays and primitives (the main accident shapes)", () => {
+    // The `NotArray` conditional collapses the parameter to `never` for
+    // any array type — the canonical "passed the wrong thing" accident.
+    // Primitives are blocked by `extends object`. Other exotic objects
+    // (Date, Map, Set, RegExp) aren't enumerated — they're unlikely
+    // accidents and broadening the exclusion set is a slippery slope.
+
+    // @ts-expect-error – arrays collapse the parameter type to `never`
+    defineShellStaticData([1, 2, 3]);
+    // @ts-expect-error – primitives don't satisfy `extends object`
+    defineShellStaticData("not an object");
+    // @ts-expect-error – null doesn't satisfy `extends object`
+    defineShellStaticData(null);
+  });
 });
 
 describe("Two-tier augmentation: descendants cannot write shell-owned keys", () => {

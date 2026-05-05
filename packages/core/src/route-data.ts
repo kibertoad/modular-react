@@ -49,9 +49,11 @@ export interface MergeRouteStaticDataOptions {
  *   (the shell's render is then responsible for treating `null` as
  *   "intentionally absent"). This is the only in-merge way to remove an
  *   inherited zone.
- * - When `onOverride` is provided, it fires once per overwritten key with
- *   both the previous (ancestor) and next (deeper) match objects, so
- *   callers can diagnose accidental clobbers.
+ * - When `onOverride` is provided, it fires once per overwritten key
+ *   *with a non-null new value* — `null` is the documented explicit-clear
+ *   escape hatch, and firing the warning for the canonical "intentional"
+ *   path would create signal-to-noise problems. Real overrides (one
+ *   defined value replacing another) still surface; clears stay silent.
  */
 export function mergeRouteStaticData<T extends object>(
   matches: readonly unknown[],
@@ -73,8 +75,11 @@ export function mergeRouteStaticData<T extends object>(
     if (data && typeof data === "object" && !Array.isArray(data)) {
       for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
         if (value !== undefined) {
-          if (sources && Object.prototype.hasOwnProperty.call(merged, key)) {
+          if (sources && value !== null && Object.prototype.hasOwnProperty.call(merged, key)) {
             // `sources` is non-null iff `onOverride` was provided.
+            // `null` is the documented "explicit clear" escape hatch —
+            // skip onOverride for it so the canonical intentional path
+            // is silent and only real value-replacing overrides warn.
             onOverride!({
               key,
               previousValue: merged[key],

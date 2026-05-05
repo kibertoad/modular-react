@@ -88,14 +88,29 @@ import type { StaticDataRouteOption } from "@tanstack/react-router";
  * `useRouteData` to catch accidental clobbers at navigation time. See the
  * shell-patterns guides for the full asymmetry comparison.
  *
+/**
+ * Internal helper — collapses the parameter type to `never` when `T` is an
+ * array (or readonly array), so `defineShellStaticData([1, 2, 3])` fails
+ * at compile time. A simpler `extends Record<string, unknown>` constraint
+ * would also reject interfaces (TS doesn't grant them implicit string
+ * index signatures); a `length?: never` rider works for object literals
+ * but TS lets it through for already-array-typed values.
+ */
+type NotArray<T> = T extends readonly unknown[] ? never : T;
+
+/**
  * @typeParam TShellStaticData  The shell-owned shape this route is
  *                              authoritative for. Typically
  *                              `AppShellZones & AppPageZones` when the
- *                              shell route also contributes
- *                              page-level zones.
+ *                              shell route also contributes page-level
+ *                              zones. The `NotArray` conditional in the
+ *                              parameter blocks accidents like
+ *                              `defineShellStaticData([1, 2, 3])`
+ *                              while still accepting plain interfaces
+ *                              and intersected zone types.
  */
 export function defineShellStaticData<TShellStaticData extends object>(
-  data: TShellStaticData,
+  data: NotArray<TShellStaticData>,
 ): StaticDataRouteOption {
   return data as StaticDataRouteOption;
 }
