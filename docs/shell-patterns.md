@@ -370,7 +370,7 @@ The framework deliberately doesn't make these errors — they all type-check, ru
 
 In development (`NODE_ENV !== "production"`), `useZones` and `useRouteData` log a deduped `console.warn` whenever a deeper match overrides a key already set by an ancestor:
 
-```
+```text
 [@react-router-modules/runtime] useZones: route "/project/$projectId/dashboard" overrides handle key "HeaderTitle" already set by ancestor "/project/$projectId". If this override is intentional, ignore this warning. If "HeaderTitle" is owned by the shell layout, the descendant route should not declare it — omit the key to inherit, or set it to `null` to explicitly clear it.
 ```
 
