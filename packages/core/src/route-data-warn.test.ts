@@ -17,19 +17,31 @@ describe("createRouteDataOverrideWarner", () => {
   describe("environment gating", () => {
     it("returns undefined in production so the merge skips its bookkeeping", () => {
       process.env.NODE_ENV = "production";
-      const warn = createRouteDataOverrideWarner("@x/runtime", "useZones", "handle");
+      const warn = createRouteDataOverrideWarner(
+        "@react-router-modules/runtime",
+        "useZones",
+        "handle",
+      );
       expect(warn).toBeUndefined();
     });
 
     it("returns a callback in development", () => {
       process.env.NODE_ENV = "development";
-      const warn = createRouteDataOverrideWarner("@x/runtime", "useZones", "handle");
+      const warn = createRouteDataOverrideWarner(
+        "@react-router-modules/runtime",
+        "useZones",
+        "handle",
+      );
       expect(typeof warn).toBe("function");
     });
 
     it("returns a callback when NODE_ENV is unset (treat as dev)", () => {
       delete process.env.NODE_ENV;
-      const warn = createRouteDataOverrideWarner("@x/runtime", "useZones", "handle");
+      const warn = createRouteDataOverrideWarner(
+        "@react-router-modules/runtime",
+        "useZones",
+        "handle",
+      );
       expect(typeof warn).toBe("function");
     });
   });
@@ -37,7 +49,11 @@ describe("createRouteDataOverrideWarner", () => {
   describe("warning content", () => {
     it("includes runtime label, hook, both route IDs, key, and field name", () => {
       process.env.NODE_ENV = "development";
-      const warn = createRouteDataOverrideWarner("@x/runtime", "useZones", "handle")!;
+      const warn = createRouteDataOverrideWarner(
+        "@react-router-modules/runtime",
+        "useZones",
+        "handle",
+      )!;
 
       warn({
         key: "HeaderTitle",
@@ -49,7 +65,7 @@ describe("createRouteDataOverrideWarner", () => {
 
       expect(warnSpy).toHaveBeenCalledTimes(1);
       const message = String(warnSpy.mock.calls[0]?.[0] ?? "");
-      expect(message).toContain("[@x/runtime]");
+      expect(message).toContain("[@react-router-modules/runtime]");
       expect(message).toContain("useZones");
       expect(message).toContain("handle");
       expect(message).toContain("HeaderTitle");
@@ -57,9 +73,35 @@ describe("createRouteDataOverrideWarner", () => {
       expect(message).toContain("/project/$id/dashboard");
     });
 
+    it("formats the message correctly for the TanStack runtime label", () => {
+      process.env.NODE_ENV = "development";
+      const warn = createRouteDataOverrideWarner(
+        "@tanstack-react-modules/runtime",
+        "useRouteData",
+        "staticData",
+      )!;
+
+      warn({
+        key: "headerVariant",
+        previousValue: "portal",
+        nextValue: "project",
+        previousMatch: { routeId: "/p" },
+        nextMatch: { routeId: "/p/c" },
+      });
+
+      const message = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(message).toContain("[@tanstack-react-modules/runtime]");
+      expect(message).toContain("useRouteData");
+      expect(message).toContain("staticData");
+    });
+
     it("falls back to TanStack-style routeId when id is absent", () => {
       process.env.NODE_ENV = "development";
-      const warn = createRouteDataOverrideWarner("@x/runtime", "useZones", "staticData")!;
+      const warn = createRouteDataOverrideWarner(
+        "@react-router-modules/runtime",
+        "useZones",
+        "staticData",
+      )!;
 
       warn({
         key: "HeaderTitle",
@@ -76,7 +118,11 @@ describe("createRouteDataOverrideWarner", () => {
 
     it("uses <unknown> when neither id nor routeId is present", () => {
       process.env.NODE_ENV = "development";
-      const warn = createRouteDataOverrideWarner("@x/runtime", "useZones", "handle")!;
+      const warn = createRouteDataOverrideWarner(
+        "@react-router-modules/runtime",
+        "useZones",
+        "handle",
+      )!;
 
       warn({
         key: "HeaderTitle",
@@ -91,10 +137,30 @@ describe("createRouteDataOverrideWarner", () => {
     });
   });
 
+  describe("type contract", () => {
+    it("rejects unknown labels at compile time", () => {
+      // Compile-time-only check: typecheck must catch label typos and
+      // out-of-set values. The function is never called — the assertions
+      // are the @ts-expect-error directives.
+      void (() => {
+        // @ts-expect-error – "@unknown/runtime" is not a RouteDataRuntimeLabel
+        createRouteDataOverrideWarner("@unknown/runtime", "useZones", "handle");
+        // @ts-expect-error – "useZone" (typo) is not a RouteDataHookName
+        createRouteDataOverrideWarner("@react-router-modules/runtime", "useZone", "handle");
+        // @ts-expect-error – "props" is not a RouteDataFieldLabel
+        createRouteDataOverrideWarner("@react-router-modules/runtime", "useZones", "props");
+      });
+    });
+  });
+
   describe("dedup behavior", () => {
     it("logs once per (key, prevId, nextId) triple regardless of call count", () => {
       process.env.NODE_ENV = "development";
-      const warn = createRouteDataOverrideWarner("@x/runtime", "useZones", "handle")!;
+      const warn = createRouteDataOverrideWarner(
+        "@react-router-modules/runtime",
+        "useZones",
+        "handle",
+      )!;
       const info = {
         key: "HeaderTitle",
         previousValue: "A",
@@ -112,7 +178,11 @@ describe("createRouteDataOverrideWarner", () => {
 
     it("logs separately for different keys at the same routes", () => {
       process.env.NODE_ENV = "development";
-      const warn = createRouteDataOverrideWarner("@x/runtime", "useZones", "handle")!;
+      const warn = createRouteDataOverrideWarner(
+        "@react-router-modules/runtime",
+        "useZones",
+        "handle",
+      )!;
 
       warn({
         key: "HeaderTitle",
@@ -134,7 +204,11 @@ describe("createRouteDataOverrideWarner", () => {
 
     it("logs separately for the same key on different route pairs", () => {
       process.env.NODE_ENV = "development";
-      const warn = createRouteDataOverrideWarner("@x/runtime", "useZones", "handle")!;
+      const warn = createRouteDataOverrideWarner(
+        "@react-router-modules/runtime",
+        "useZones",
+        "handle",
+      )!;
 
       warn({
         key: "HeaderTitle",
