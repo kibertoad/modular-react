@@ -161,7 +161,7 @@ function Shell() {
 }
 ```
 
-Merge semantics match `useZones` exactly: walks matched routes root-to-leaf, deepest match wins per key, `undefined` values at a deeper level don't clobber an ancestor's value.
+Merge semantics match `useZones` exactly: walks matched routes root-to-leaf, deepest match wins per key, `undefined` values at a deeper level don't clobber an ancestor's value. To **explicitly clear** an inherited value at a deeper route, set the key to `null` — `undefined` is silently skipped and cannot be used to "undeclare" a zone. In dev, both hooks log a deduped `console.warn` whenever a deeper match overrides a key set by an ancestor; see [Zone ownership and override semantics](shell-patterns.md#zone-ownership-and-override-semantics) for the recommended ownership patterns and the failure modes the warning catches.
 
 When to use which:
 
