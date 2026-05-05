@@ -311,6 +311,94 @@ Deeper routes override shallower ones. A billing section root can set a default 
 
 > **Workspace apps:** If your modules render in tabs (not routes), use `useActiveZones()` instead; it merges route zones with the active module's descriptor zones. See [Workspace Patterns Descriptor Zones](workspace-patterns.md#step-4-descriptor-zones-and-useactivezones).
 
+### Zone ownership and override semantics
+
+Zones merge **shallowly, root-to-leaf, deepest-wins, per key**. That model is intentional — it gives you "default zone at the section root, more specific zone at the leaf" for free — but it means _any_ descendant route can silently replace a zone declared by an ancestor by writing the same key. Treat zone keys as a contract, not a free-for-all namespace.
+
+**Inherit, override, or clear — pick one explicitly per key:**
+
+| Intent at a deeper route                     | Write                                       |
+| -------------------------------------------- | ------------------------------------------- |
+| Inherit the ancestor's value (most common)   | Omit the key, or set to `undefined`         |
+| Replace with a more specific component       | Set the key to the new component            |
+| Render _nothing_ for this zone on this route | Set the key to `null` (shell renders empty) |
+
+`undefined` is silently skipped — it cannot clear a parent value, so you can't "undeclare" a zone with `undefined`. `null` is preserved through the merge and is the only in-merge way to explicitly remove an inherited zone; the consuming shell decides how to render it (typically: as if the field was never set, distinct from "still loading").
+
+#### Recommended patterns
+
+**Split shell-owned zones from page-contributed zones in your type declarations.** A zone the shell layout reads at a _fixed_ layout position (header title, header actions, top-level breadcrumb) is owned by the shell route that defines it. A zone any descendant _may_ contribute to (detail panel, contextual sidebar) is page-contributed. Make this distinction explicit:
+
+```typescript
+// In @myorg/app-shared
+import type { ComponentType } from "react";
+
+/** Shell-owned: declared by /project shell, descendants should not redeclare. */
+export interface AppShellZones {
+  HeaderTitle?: ComponentType;
+  HeaderActions?: ComponentType;
+}
+
+/** Page-contributed: any matched route may contribute. */
+export interface AppPageZones {
+  detailPanel?: ComponentType;
+  contextualSidebar?: ComponentType;
+}
+
+export type AppZones = AppShellZones & AppPageZones;
+```
+
+The runtime still merges everything into one map — this split is a documentation contract for code review. Pair it with a JSDoc note on each shell-owned key naming the route that owns it (`@owner /project/$projectId`).
+
+**The TanStack adapter can enforce this split at compile time** via `StaticDataRouteOption` augmentation + `defineShellStaticData`; the React Router adapter cannot, because RR's `RouteObject.handle` is `unknown` with no module-augmentation slot. See the [adapter comparison](#enforcement-mechanisms-by-adapter) below.
+
+**Declare zones at the shallowest route they cover.** A shell-owned zone like `HeaderTitle` belongs on the section root (`/project/$projectId`), not on each child page. If a child page sets `HeaderTitle` "to be safe," it's clobbering the inherited value — the override warning (below) will flag it.
+
+**Use `useRouteData` for non-component metadata.** Header variant enums, page titles, analytics event names, and feature flags don't belong in `useZones` — its `ComponentType | undefined` type rail will fight you. The two hooks share the same merge over the same field; you just declare two TypeScript shapes (zones and route data) and read them with separate generics. See the runtime-specific guides for the augmentation pattern.
+
+#### Patterns to avoid
+
+The framework deliberately doesn't make these errors — they all type-check, run, and look fine in code review — but they're the failure modes the override detection (below) is designed to catch.
+
+- **Don't redeclare a shell-owned zone "just to be safe."** If `/project/$projectId` declares `HeaderTitle: ProjectTitle`, every descendant inherits it automatically. A child page writing `HeaderTitle: ProjectTitle` again is a no-op at best and a clobber at worst (someone later changes the constant). Omit the key.
+- **Don't use `undefined` to "clear" an inherited zone.** The merge skips `undefined` — your write does nothing. Use `null` if you really mean "render nothing here."
+- **Don't iterate `Object.keys(useRouteData())` or pass the result wholesale to `useEffect` deps.** A fresh object is returned on every render; field values are stable when the route hierarchy is unchanged, but the wrapping object is not. Destructure the keys you need.
+- **Don't reuse the same key across `useZones` and `useRouteData`.** The two hooks read the same underlying field — a key collision means one channel silently sees the other's value at runtime. The convention is PascalCase for components (`HeaderActions`), camelCase for data (`headerVariant`).
+- **Don't mix component and non-component values under one zone key across routes.** Once a route declares `HeaderActions: SomeComponent`, descendants must contribute the same shape (component or `null`). A descendant returning a string or object will type-check (the merge is `unknown`-typed) but break the shell render.
+
+#### Dev-mode override warnings
+
+In development (`NODE_ENV !== "production"`), `useZones` and `useRouteData` log a deduped `console.warn` whenever a deeper match overrides a key already set by an ancestor:
+
+```text
+[@react-router-modules/runtime] useZones: route "/project/$projectId/dashboard" overrides handle key "HeaderTitle" already set by ancestor "/project/$projectId". If this override is intentional, ignore this warning. If "HeaderTitle" is owned by the shell layout, the descendant route should not declare it — omit the key to inherit, or set it to `null` to explicitly clear it.
+```
+
+The warning fires once per unique `(key, ancestorRouteId, descendantRouteId)` triple per process — not once per render — so legitimate overrides log a single line. Production builds skip the warning bookkeeping entirely (the merge takes the same fast path it always has).
+
+The warning is **silenced for `null` overrides** — setting a key to `null` is the documented "explicit clear" path, and firing the warning on the canonical intentional usage would defeat its signal-to-noise value. Real overrides (one defined value replacing another) still log; explicit clears stay quiet. Reviving a cleared key with a real value at a deeper route does still fire — that's a real override.
+
+This is a diagnostic, not an error. If the override is intentional (a section page genuinely replacing a section-root default), ignore the warning. If it's accidental — the failure mode is "I added `HeaderTitle` to my child route to set a sub-page header and didn't realize the parent shell already owned that key" — fix the child route.
+
+#### Enforcement mechanisms by adapter
+
+The two adapters expose different surfaces for typing route static data, so the strength of the enforcement differs. Both runtime hooks emit the same dev-mode override warning; the compile-time story is asymmetric.
+
+| Mechanism                                                       | TanStack Router                                                                                                | React Router 7                                                   |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Where route static data lives                                   | `route.staticData`                                                                                             | `route.handle`                                                   |
+| Module-augmentation slot for narrowing the shape                | `StaticDataRouteOption` (purpose-built)                                                                        | None — `handle` stays `unknown`                                  |
+| Type check on a route's `staticData` / `handle` literal         | Excess-property checked against the augmented `StaticDataRouteOption`                                          | Opt-in via `satisfies AppZones` at the call site                 |
+| Compile-time gating of shell-owned keys (descendants can't set) | ✅ Two-tier augmentation: augment with `AppPageZones` only; shell route uses `defineShellStaticData` to escape | ❌ Not expressible — RR has no augmentation hook                 |
+| Runtime override warning (deepest-wins clobbers)                | ✅ Dev-mode `console.warn` from `useZones` / `useRouteData`                                                    | ✅ Same dev-mode `console.warn` from `useZones` / `useRouteData` |
+| Convention pattern that works on both adapters                  | Split `AppShellZones` + `AppPageZones` interfaces                                                              | Same split, plus `satisfies AppZones` at every call site         |
+
+The TanStack adapter ships `defineShellStaticData` from `@tanstack-react-modules/runtime` — a thin identity-function helper that lets a shell route pass a wider shape (shell-owned + page-contributable) through the augmentation in a single named, greppable place. Descendant routes that try to write a shell-owned key fail at compile time. See [Shell Patterns for TanStack Router § Compile-time gating for shell-owned zones](shell-patterns-tanstack-router.md#compile-time-gating-for-shell-owned-zones) for the full pattern.
+
+The React Router adapter has no equivalent because the framework provides no hook to gate `RouteObject.handle` per shape. RR users get the runtime warning and `satisfies` at call sites — the warning fires at first navigation that exercises the override, not at compile time. See [Shell Patterns for React Router § Type-safe handle](shell-patterns-react-router.md#type-safe-handle).
+
+If portability across adapters matters (a workspace pattern, a shared module), code to the React Router constraints — the convention split + dev warning + `satisfies` works for both. The TanStack augmentation is a strict superset of the RR pattern, so adopting it on the TanStack side does not break portability of the shape declarations themselves.
+
 ### Decision guide
 
 | Question                                           | Answer                                                                   |

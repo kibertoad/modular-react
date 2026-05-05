@@ -50,3 +50,4 @@ export type { SlotsSignal } from "@modular-react/react";
 export { useZones } from "./zones.js";
 export { useActiveZones } from "./active-zones.js";
 export { useRouteData } from "./route-data.js";
+export { defineShellStaticData } from "./shell-static-data.js";

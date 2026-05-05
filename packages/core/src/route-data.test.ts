@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { mergeRouteStaticData } from "./route-data.js";
+import { describe, it, expect, vi } from "vitest";
+import { mergeRouteStaticData, type RouteStaticDataOverrideInfo } from "./route-data.js";
 
 // Helpers to mimic the two router shapes without pulling the router deps in.
-type RRMatch = { handle?: unknown };
-type TSMatch = { staticData?: unknown };
+type RRMatch = { id?: string; handle?: unknown };
+type TSMatch = { id?: string; staticData?: unknown };
 const getHandle = (m: unknown) => (m as RRMatch).handle;
 const getStaticData = (m: unknown) => (m as TSMatch).staticData;
 
@@ -111,6 +111,137 @@ describe("mergeRouteStaticData", () => {
       const merged = mergeRouteStaticData<{ a: number }>(matches, getHandle);
       (merged as Record<string, unknown>).a = 999;
       expect(handle.a).toBe(1);
+    });
+  });
+
+  describe("null preservation (the explicit-clear escape hatch)", () => {
+    it("treats `null` as a normal defined value — a deeper route uses it to clear an ancestor's contribution", () => {
+      // The merge has no special-case for null: a leaf can clear an
+      // ancestor's zone by setting `null`, and the rendering shell decides
+      // how to interpret it (typically: as if absent). This is documented
+      // as the *only* in-merge way to remove an inherited value, since
+      // `undefined` is silently skipped by design.
+      const matches: RRMatch[] = [
+        { handle: { HeaderActions: "ParentBar" } },
+        { handle: { HeaderActions: null } },
+      ];
+      expect(mergeRouteStaticData(matches, getHandle)).toEqual({ HeaderActions: null });
+    });
+  });
+
+  describe("onOverride callback", () => {
+    it("fires when a deeper match overrides an ancestor's key, with both matches and values", () => {
+      const onOverride = vi.fn<(info: RouteStaticDataOverrideInfo) => void>();
+      const parent: RRMatch = { id: "/project", handle: { HeaderTitle: "ParentTitle" } };
+      const child: RRMatch = { id: "/project/$id", handle: { HeaderTitle: "ChildTitle" } };
+
+      mergeRouteStaticData([parent, child], getHandle, { onOverride });
+
+      expect(onOverride).toHaveBeenCalledTimes(1);
+      expect(onOverride).toHaveBeenCalledWith({
+        key: "HeaderTitle",
+        previousValue: "ParentTitle",
+        nextValue: "ChildTitle",
+        previousMatch: parent,
+        nextMatch: child,
+      });
+    });
+
+    it("does not fire when a deeper match contributes a brand-new key", () => {
+      const onOverride = vi.fn<(info: RouteStaticDataOverrideInfo) => void>();
+      const matches: RRMatch[] = [
+        { id: "/", handle: { HeaderTitle: "Title" } },
+        { id: "/child", handle: { DetailPanel: "Panel" } },
+      ];
+
+      mergeRouteStaticData(matches, getHandle, { onOverride });
+      expect(onOverride).not.toHaveBeenCalled();
+    });
+
+    it("does not fire for `undefined` at a deeper level — that is inheritance, not override", () => {
+      const onOverride = vi.fn<(info: RouteStaticDataOverrideInfo) => void>();
+      const matches: RRMatch[] = [
+        { id: "/", handle: { HeaderTitle: "Title" } },
+        { id: "/child", handle: { HeaderTitle: undefined } },
+      ];
+
+      mergeRouteStaticData(matches, getHandle, { onOverride });
+      expect(onOverride).not.toHaveBeenCalled();
+    });
+
+    it("does not fire for `null` overrides — null is the documented explicit-clear path", () => {
+      // The merge still preserves `null` (it's the canonical way to
+      // clear an inherited zone), but `onOverride` is silenced for it
+      // so the dev warning doesn't fire on the documented intentional
+      // path. Real value-replacing overrides still warn.
+      const onOverride = vi.fn<(info: RouteStaticDataOverrideInfo) => void>();
+      const matches: RRMatch[] = [
+        { id: "/", handle: { HeaderTitle: "Title" } },
+        { id: "/child", handle: { HeaderTitle: null } },
+      ];
+
+      const merged = mergeRouteStaticData<{ HeaderTitle: unknown }>(matches, getHandle, {
+        onOverride,
+      });
+
+      expect(onOverride).not.toHaveBeenCalled();
+      // `null` is still preserved through the merge — the clear works.
+      expect(merged).toEqual({ HeaderTitle: null });
+    });
+
+    it("still fires when a real value replaces an explicit-clear `null`", () => {
+      // Once a route clears a zone with `null`, a deeper route reviving
+      // it with a component IS an override and the warning should fire —
+      // exempting `null` only applies to setting null, not to overwriting it.
+      const onOverride = vi.fn<(info: RouteStaticDataOverrideInfo) => void>();
+      const matches: RRMatch[] = [
+        { id: "/", handle: { HeaderTitle: "ParentTitle" } },
+        { id: "/mid", handle: { HeaderTitle: null } },
+        { id: "/leaf", handle: { HeaderTitle: "LeafTitle" } },
+      ];
+
+      mergeRouteStaticData(matches, getHandle, { onOverride });
+
+      expect(onOverride).toHaveBeenCalledTimes(1);
+      expect(onOverride.mock.calls[0]?.[0]).toMatchObject({
+        key: "HeaderTitle",
+        previousValue: null,
+        nextValue: "LeafTitle",
+      });
+    });
+
+    it("fires once per chained override — every overwrite is reported", () => {
+      const onOverride = vi.fn<(info: RouteStaticDataOverrideInfo) => void>();
+      const matches: RRMatch[] = [
+        { id: "/", handle: { HeaderTitle: "A" } },
+        { id: "/mid", handle: { HeaderTitle: "B" } },
+        { id: "/leaf", handle: { HeaderTitle: "C" } },
+      ];
+
+      mergeRouteStaticData(matches, getHandle, { onOverride });
+      expect(onOverride).toHaveBeenCalledTimes(2);
+      expect(onOverride.mock.calls[0]?.[0]).toMatchObject({
+        previousValue: "A",
+        nextValue: "B",
+      });
+      expect(onOverride.mock.calls[1]?.[0]).toMatchObject({
+        previousValue: "B",
+        nextValue: "C",
+      });
+    });
+
+    it("produces identical merge output with and without an onOverride callback", () => {
+      // The optional source-tracking bookkeeping must not change merge
+      // output — adding a no-op `onOverride` shouldn't perturb anything
+      // observable.
+      const matches: RRMatch[] = [
+        { id: "/", handle: { a: 1, b: 2 } },
+        { id: "/child", handle: { a: 9, c: 3 } },
+      ];
+      const withoutOptions = mergeRouteStaticData(matches, getHandle);
+      const withNoopCallback = mergeRouteStaticData(matches, getHandle, { onOverride: () => {} });
+      expect(withoutOptions).toEqual(withNoopCallback);
+      expect(withoutOptions).toEqual({ a: 9, b: 2, c: 3 });
     });
   });
 });

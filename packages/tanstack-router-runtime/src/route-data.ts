@@ -1,5 +1,5 @@
 import { useMatches } from "@tanstack/react-router";
-import { mergeRouteStaticData } from "@modular-react/core";
+import { createRouteDataOverrideWarner, mergeRouteStaticData } from "@modular-react/core";
 
 /**
  * Read merged `staticData` values from the currently matched route
@@ -36,9 +36,20 @@ import { mergeRouteStaticData } from "@modular-react/core";
  * })
  * ```
  *
- * Merge semantics match `useZones`: walks matched routes root-to-leaf,
- * deepest match wins per key, `undefined` values at a deeper level don't
- * override an ancestor's value.
+ * ## Merge semantics
+ *
+ * Walks matched routes root-to-leaf, deepest match wins per key.
+ * `undefined` values at a deeper level don't override an ancestor —
+ * **omit the key (or set it to `undefined`) to inherit**. Set the key
+ * to `null` to **explicitly clear** an ancestor's value; the consuming
+ * shell decides how to render `null` (typically: as if the field was
+ * never set, but distinct from "still loading").
+ *
+ * In dev (NODE_ENV !== "production"), this hook logs a deduped
+ * `console.warn` whenever a deeper match overrides a key already set by
+ * an ancestor. The warning is intended to catch accidental clobbers of
+ * shell-owned route data (e.g. `headerVariant`); ignore it when the
+ * override is intentional.
  *
  * ## Returned object contains all staticData keys, not just declared ones
  *
@@ -57,9 +68,16 @@ import { mergeRouteStaticData } from "@modular-react/core";
  * pass the whole returned object into a `useEffect` / `useMemo` dependency
  * array or it will re-fire every render.
  */
+const onOverride = createRouteDataOverrideWarner(
+  "@tanstack-react-modules/runtime",
+  "useRouteData",
+  "staticData",
+);
+
 export function useRouteData<TRouteData extends object>(): Partial<TRouteData> {
   return mergeRouteStaticData<TRouteData>(
     useMatches(),
     (match) => (match as { staticData?: unknown }).staticData,
+    { onOverride },
   );
 }

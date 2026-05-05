@@ -64,7 +64,7 @@ const userDetail: RouteObject = {
 
 ### Type-safe handle
 
-`RouteObject.handle` is typed as `unknown` by default. Constrain it by declaring your zone shape once in `app-shared` and narrowing at the call site:
+`RouteObject.handle` is typed as `unknown` by default and React Router 7 does **not** expose a module-augmentation slot for narrowing it (unlike TanStack Router's `StaticDataRouteOption`). The library's typing strategy here is convention-based: declare the zone shape once in `app-shared` and constrain at the _call site_ with `satisfies`.
 
 ```typescript
 // app-shared/src/index.ts
@@ -75,6 +75,24 @@ export interface AppZones {
   headerActions?: ComponentType;
 }
 ```
+
+```typescript
+// modules/users/src/route.ts
+import type { AppZones } from "@myorg/app-shared";
+
+export const userDetailRoute: RouteObject = {
+  path: ":userId",
+  Component: UserDetailPage,
+  handle: {
+    detailPanel: UserDetailSidebar,
+    headerActions: UserDetailActions,
+  } satisfies AppZones,
+};
+```
+
+`satisfies AppZones` is checked at the literal — typos and wrong-shape values are caught at compile time, but the constraint is opt-in per call site. There is no equivalent to TanStack's two-tier augmentation; React Router cannot offer compile-time gating that says "only the project shell route may set `HeaderTitle`." Use the dev-mode override warning fired by `useZones` / `useRouteData` (see [Zone ownership](shell-patterns.md#zone-ownership-and-override-semantics)) to catch shell-key clobbers at first navigation.
+
+> **TanStack adapter has stronger compile-time guarantees here.** TanStack Router exposes a typed augmentation slot (`StaticDataRouteOption`) that lets the framework gate shell-owned keys at the compile level via `defineShellStaticData`. React Router 7 has no equivalent, so this adapter relies on the runtime warning + per-call-site `satisfies`. See [Shell Patterns § Zone ownership and override semantics](shell-patterns.md#zone-ownership-and-override-semantics) for the side-by-side comparison.
 
 The shell reads them via the generic on `useZones`:
 
@@ -152,7 +170,7 @@ function Shell() {
 }
 ```
 
-Merge semantics match `useZones` exactly: walks matched routes root-to-leaf, deepest match wins per key, `undefined` values at a deeper level don't clobber an ancestor's value. Tolerates routes that don't declare `handle` at all.
+Merge semantics match `useZones` exactly: walks matched routes root-to-leaf, deepest match wins per key, `undefined` values at a deeper level don't clobber an ancestor's value. Tolerates routes that don't declare `handle` at all. To **explicitly clear** an inherited value at a deeper route, set the key to `null` — `undefined` is silently skipped and cannot be used to "undeclare" a zone. In dev, both hooks log a deduped `console.warn` whenever a deeper match overrides a key set by an ancestor; see [Zone ownership and override semantics](shell-patterns.md#zone-ownership-and-override-semantics) for the recommended ownership patterns and the failure modes the warning catches.
 
 When to use which:
 

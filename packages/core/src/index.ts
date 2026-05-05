@@ -45,6 +45,16 @@ export { buildNavigationManifest, resolveNavHref } from "./navigation.js";
 
 // Route data
 export { mergeRouteStaticData } from "./route-data.js";
+export type { MergeRouteStaticDataOptions, RouteStaticDataOverrideInfo } from "./route-data.js";
+export { createRouteDataOverrideWarner } from "./route-data-warn.js";
+export type {
+  RouteDataRuntimeLabel,
+  RouteDataHookName,
+  RouteDataFieldLabel,
+} from "./route-data-warn.js";
+
+// Environment detection
+export { isDevEnv } from "./dev-env.js";
 
 // Lazy-module helpers
 export { warnIgnoredLazyFields } from "./lazy-module.js";

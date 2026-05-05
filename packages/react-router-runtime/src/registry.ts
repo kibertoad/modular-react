@@ -12,6 +12,7 @@ import {
   buildNavigationManifest,
   buildSlotsManifest,
   collectDynamicSlotFactories,
+  isDevEnv,
   validateNoDuplicateIds,
   validateDependencies,
   validateEntryExitShape,
@@ -585,15 +586,6 @@ export function createRegistry<
   };
 
   return registry as unknown as ModuleRegistry<TSharedDependencies, TSlots, TNavItem, readonly []>;
-}
-
-function isDevEnv(): boolean {
-  try {
-    const g = globalThis as unknown as { process?: { env?: { NODE_ENV?: string } } };
-    return !!g.process && g.process.env?.NODE_ENV !== "production";
-  } catch {
-    return false;
-  }
 }
 
 function buildDepsObject<TSharedDependencies extends Record<string, any>>(
