@@ -70,6 +70,26 @@ describe("defineTransition", () => {
       abort: { reason: "user-cancelled" },
     });
   });
+
+  it("curried form binds the journey's generics and stamps targets identically", () => {
+    // No-arg call returns the binder. The binder behaves like the bare form
+    // at runtime — the journey's generics flow only through the type system.
+    const tx = defineTransition();
+    const handler = tx({
+      targets: ["plan/choose"] as const,
+      handle: ({ output }) => ({
+        next: {
+          module: "plan",
+          entry: "choose",
+          input: { hint: (output as { hint: string }).hint },
+        },
+      }),
+    });
+    expect(handler.targets).toEqual(["plan/choose"]);
+    expect(typeof handler).toBe("function");
+    // Same metadata stamping behavior as the bare form.
+    expect(Object.keys(handler)).not.toContain("targets");
+  });
 });
 
 describe("isAnnotatedTransition", () => {

@@ -1,4 +1,4 @@
-import { defineJourney, defineJourneyHandle } from "@modular-react/journeys";
+import { defineJourney, defineJourneyHandle, defineTransition } from "@modular-react/journeys";
 import type { PlanHint, SubscriptionPlan } from "@example-tsr-onboarding/app-shared";
 import type profileModule from "@example-tsr-onboarding/profile-module";
 import type planModule from "@example-tsr-onboarding/plan-module";
@@ -26,6 +26,13 @@ export interface OnboardingState {
     | { readonly kind: "trial"; readonly trialId: string; readonly trialEndsAt: string }
     | null;
 }
+
+// Bind `defineTransition` to the journey's modules + state once so every
+// wrapped handler below gets contextual narrowing on `next.module` /
+// `next.entry` and autocomplete on `targets`. Bare-function handlers stay
+// fully supported — only the handlers that fan out to lazy steps need to
+// migrate.
+const tx = defineTransition<OnboardingModules, OnboardingState>();
 
 export const customerOnboardingJourney = defineJourney<OnboardingModules, OnboardingState>()({
   id: "customer-onboarding",
@@ -67,20 +74,31 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
   transitions: {
     profile: {
       review: {
-        profileComplete: ({ output, state }) => ({
-          state: { ...state, hint: output.hint },
-          next: {
-            module: "plan",
-            entry: "choose",
-            input: { customerId: state.customerId, hint: output.hint },
-          },
+        // `tx({ targets })` lets `<JourneyOutlet preload="precise">`
+        // (the default) speculatively warm the chunks for the steps this exit
+        // can advance into. With billing/collect now lazy-loaded, declaring
+        // the targets here ensures the chunk is hot before the rep clicks
+        // into it. Bare-function handlers below stay unchanged.
+        profileComplete: tx({
+          targets: ["plan/choose"] as const,
+          handle: ({ output, state }) => ({
+            state: { ...state, hint: output.hint },
+            next: {
+              module: "plan",
+              entry: "choose",
+              input: { customerId: state.customerId, hint: output.hint },
+            },
+          }),
         }),
-        readyToBuy: ({ output }) => ({
-          next: {
-            module: "billing",
-            entry: "collect",
-            input: { customerId: output.customerId, amount: output.amount },
-          },
+        readyToBuy: tx({
+          targets: ["billing/collect"] as const,
+          handle: ({ output }) => ({
+            next: {
+              module: "billing",
+              entry: "collect",
+              input: { customerId: output.customerId, amount: output.amount },
+            },
+          }),
         }),
         needsMoreDetails: ({ output }) => ({
           abort: { reason: "profile-incomplete", missing: output.missing },
@@ -91,21 +109,27 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
     plan: {
       choose: {
         allowBack: true,
-        choseStandard: ({ output, state }) => ({
-          state: { ...state, selectedPlan: output.plan },
-          next: {
-            module: "billing",
-            entry: "collect",
-            input: { customerId: state.customerId, amount: output.plan.monthly },
-          },
+        choseStandard: tx({
+          targets: ["billing/collect"] as const,
+          handle: ({ output, state }) => ({
+            state: { ...state, selectedPlan: output.plan },
+            next: {
+              module: "billing",
+              entry: "collect",
+              input: { customerId: state.customerId, amount: output.plan.monthly },
+            },
+          }),
         }),
-        choseWithTrial: ({ output, state }) => ({
-          state: { ...state, selectedPlan: output.plan },
-          next: {
-            module: "billing",
-            entry: "startTrial",
-            input: { customerId: state.customerId, plan: output.plan },
-          },
+        choseWithTrial: tx({
+          targets: ["billing/startTrial"] as const,
+          handle: ({ output, state }) => ({
+            state: { ...state, selectedPlan: output.plan },
+            next: {
+              module: "billing",
+              entry: "startTrial",
+              input: { customerId: state.customerId, plan: output.plan },
+            },
+          }),
         }),
         noFit: ({ output }) => ({
           abort: { reason: "plan-no-fit", detail: output.reason },
