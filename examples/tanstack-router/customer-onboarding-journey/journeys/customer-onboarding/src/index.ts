@@ -80,7 +80,7 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
         // the targets here ensures the chunk is hot before the rep clicks
         // into it. Bare-function handlers below stay unchanged.
         profileComplete: transition({
-          targets: ["plan/choose"],
+          targets: [{ module: "plan", entry: "choose" }],
           handle: ({ output, state }) => ({
             state: { ...state, hint: output.hint },
             next: {
@@ -91,7 +91,7 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
           }),
         }),
         readyToBuy: transition({
-          targets: ["billing/collect"],
+          targets: [{ module: "billing", entry: "collect" }],
           handle: ({ output }) => ({
             next: {
               module: "billing",
@@ -110,7 +110,7 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
       choose: {
         allowBack: true,
         choseStandard: transition({
-          targets: ["billing/collect"],
+          targets: [{ module: "billing", entry: "collect" }],
           handle: ({ output, state }) => ({
             state: { ...state, selectedPlan: output.plan },
             next: {
@@ -121,7 +121,7 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
           }),
         }),
         choseWithTrial: transition({
-          targets: ["billing/startTrial"],
+          targets: [{ module: "billing", entry: "startTrial" }],
           handle: ({ output, state }) => ({
             state: { ...state, selectedPlan: output.plan },
             next: {

@@ -130,13 +130,13 @@ function makeAnnotatedJourney(modules: PreloadFixtures["modules"]) {
       start: {
         pick: {
           toCheap: defineTransition({
-            targets: ["cheap/show"] as const,
+            targets: [{ module: "cheap", entry: "show" }],
             handle: () => ({
               next: { module: "cheap", entry: "show", input: undefined as never },
             }),
           }),
           toExpensive: defineTransition({
-            targets: ["expensive/show"] as const,
+            targets: [{ module: "expensive", entry: "show" }],
             handle: () => ({
               next: { module: "expensive", entry: "show", input: undefined as never },
             }),
@@ -233,13 +233,13 @@ describe("JourneyOutlet — auto-preload (precise, default)", () => {
         start: {
           pick: {
             toCheap: defineTransition({
-              targets: ["cheap/show"] as const,
+              targets: [{ module: "cheap", entry: "show" }],
               handle: () => ({
                 next: { module: "cheap", entry: "show", input: undefined as never },
               }),
             }),
             toExpensive: defineTransition({
-              targets: ["expensive/show"] as const,
+              targets: [{ module: "expensive", entry: "show" }],
               handle: () => ({
                 next: { module: "expensive", entry: "show", input: undefined as never },
               }),
@@ -249,7 +249,7 @@ describe("JourneyOutlet — auto-preload (precise, default)", () => {
         cheap: {
           show: {
             done: defineTransition({
-              targets: ["unrelated/show"] as const,
+              targets: [{ module: "unrelated", entry: "show" }],
               handle: () => ({
                 next: { module: "unrelated", entry: "show", input: undefined as never },
               }),
@@ -321,7 +321,7 @@ describe("JourneyOutlet — auto-preload (precise) with scoped module ids", () =
         start: {
           pick: {
             go: defineTransition({
-              targets: ["@scope/billing/review"] as const,
+              targets: [{ module: "@scope/billing", entry: "review" }],
               handle: () => ({
                 next: {
                   module: "@scope/billing",

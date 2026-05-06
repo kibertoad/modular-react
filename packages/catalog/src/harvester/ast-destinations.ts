@@ -151,22 +151,40 @@ interface HandlerOutcome {
 }
 
 /**
- * Parse a `targets` literal — `["moduleId/entryName", ...]` — into the
- * `{ module, entry }` shape `nexts` uses. Non-string elements / strings
- * without a `/` separator / strings whose `/` is at either end are skipped
- * (defensive: a hand-rolled call site might pass garbage). Returns `null`
- * when the value is not an array literal at all so callers can distinguish
- * "no targets declared" from "empty targets declared".
+ * Parse a `targets` literal — `[{ module: "m", entry: "e" }, ...]` — into the
+ * `{ module, entry }` shape `nexts` uses. The shape mirrors the `next:`
+ * field handlers return, so authors don't flip between an object and a
+ * slash-string for the same idea.
+ *
+ * Non-object elements / objects missing either a literal `module` or `entry`
+ * string are skipped (defensive: a hand-rolled call site might pass garbage).
+ * Returns `null` when the value is not an array literal at all so callers
+ * can distinguish "no targets declared" from "empty targets declared".
  */
-function readDeclaredTargets(node: AstNode): { module: string; entry?: string }[] | null {
+function readDeclaredTargets(node: AstNode): { module: string; entry: string }[] | null {
   if (!node || node.type !== "ArrayExpression" || !Array.isArray(node.elements)) return null;
-  const out: { module: string; entry?: string }[] = [];
+  const out: { module: string; entry: string }[] = [];
   for (const el of node.elements) {
-    if (!el || el.type !== "Literal" || typeof el.value !== "string") continue;
-    // Split on the LAST slash to round-trip scoped module ids ("@scope/foo/entry").
-    const slash = el.value.lastIndexOf("/");
-    if (slash <= 0 || slash === el.value.length - 1) continue;
-    out.push({ module: el.value.slice(0, slash), entry: el.value.slice(slash + 1) });
+    if (!el || el.type !== "ObjectExpression") continue;
+    let module: string | null = null;
+    let entry: string | null = null;
+    for (const prop of objectProperties(el)) {
+      const key = staticPropertyKey(prop);
+      if (
+        key === "module" &&
+        prop.value?.type === "Literal" &&
+        typeof prop.value.value === "string"
+      ) {
+        module = prop.value.value;
+      } else if (
+        key === "entry" &&
+        prop.value?.type === "Literal" &&
+        typeof prop.value.value === "string"
+      ) {
+        entry = prop.value.value;
+      }
+    }
+    if (module !== null && entry !== null) out.push({ module, entry });
   }
   return out;
 }

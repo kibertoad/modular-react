@@ -374,17 +374,15 @@ function collectPreloadTargets(
     | undefined;
   if (!transitions) return out;
 
-  const collectRef = (ref: string): void => {
-    if (seen.has(ref)) return;
-    seen.add(ref);
-    // Split on the LAST slash so scoped module ids (e.g. "@scope/foo")
-    // round-trip correctly — `@scope/foo/show` resolves to module
-    // `@scope/foo`, entry `show`.
-    const slash = ref.lastIndexOf("/");
-    if (slash <= 0 || slash === ref.length - 1) return;
-    const moduleId = ref.slice(0, slash);
-    const entryName = ref.slice(slash + 1);
+  const collectPair = (moduleId: string, entryName: string): void => {
+    if (!moduleId || !entryName) return;
     if (moduleId === currentModuleId && entryName === currentEntry) return;
+    // Composite key only used to dedupe. Using ` ` as the separator
+    // sidesteps any collision risk with module ids that legitimately
+    // contain `/` (npm-style scopes) or other punctuation.
+    const seenKey = `${moduleId} ${entryName}`;
+    if (seen.has(seenKey)) return;
+    seen.add(seenKey);
     const entry = modules[moduleId]?.entryPoints?.[entryName];
     if (entry) out.push(entry);
   };
@@ -394,7 +392,7 @@ function collectPreloadTargets(
     if (!perEntry) return out;
     for (const value of Object.values(perEntry)) {
       if (!isAnnotatedTransition(value)) continue;
-      for (const ref of value.targets) collectRef(ref);
+      for (const target of value.targets) collectPair(target.module, target.entry);
     }
     return out;
   }
@@ -402,9 +400,7 @@ function collectPreloadTargets(
   // Aggressive — every (module, entry) referenced as a transition source.
   for (const [moduleId, perModule] of Object.entries(transitions)) {
     if (!perModule) continue;
-    for (const entryName of Object.keys(perModule)) {
-      collectRef(`${moduleId}/${entryName}`);
-    }
+    for (const entryName of Object.keys(perModule)) collectPair(moduleId, entryName);
   }
   return out;
 }

@@ -76,12 +76,16 @@ interface State {
 const transition = defineTransition<Modules, State>();
 
 // -----------------------------------------------------------------------------
-// `StepRef<TModules>` — the union the curried form constrains `targets` to.
+// `StepRef<TModules>` — same `{ module, entry }` shape `next:` uses, minus
+// the runtime-computed `input`. Sharing the structure with `next:` keeps
+// the API consistent: authors don't flip between an object and a slash-string.
 // -----------------------------------------------------------------------------
 
-test("StepRef<TModules> resolves to the union of `${moduleId}/${entryName}` literals", () => {
+test("StepRef<TModules> resolves to the union of `{ module, entry }` literals", () => {
   expectTypeOf<StepRef<Modules>>().toEqualTypeOf<
-    "profile/review" | "plan/choose" | "billing/collect"
+    | { readonly module: "profile"; readonly entry: "review" }
+    | { readonly module: "plan"; readonly entry: "choose" }
+    | { readonly module: "billing"; readonly entry: "collect" }
   >();
 });
 
@@ -91,18 +95,24 @@ test("StepRef<TModules> resolves to the union of `${moduleId}/${entryName}` lite
 
 test("curried form: targets infer as a literal tuple without `as const`", () => {
   const handler = transition({
-    targets: ["plan/choose"],
+    targets: [{ module: "plan", entry: "choose" }],
     handle: () => ({ abort: { reason: "noop" } }),
   });
-  // The `const TTargets` modifier on the binder preserves the literal tuple,
-  // so callers never need `as const` on the targets array.
-  expectTypeOf(handler.targets).toEqualTypeOf<readonly ["plan/choose"]>();
+  // The `const TTargets` modifier on the binder preserves the literal
+  // tuple AND each target's literal property values, so callers never
+  // need `as const` on the targets array.
+  expectTypeOf(handler.targets).toEqualTypeOf<
+    readonly [{ readonly module: "plan"; readonly entry: "choose" }]
+  >();
 });
 
 test("curried form: targets accept any subset of valid step refs", () => {
   // Multi-target — autocomplete-checked against the journey's StepRef union.
   const handler = transition({
-    targets: ["plan/choose", "billing/collect"],
+    targets: [
+      { module: "plan", entry: "choose" },
+      { module: "billing", entry: "collect" },
+    ],
     handle: ({ output }) => ({
       next:
         (output as { hint: "cheap" | "premium" }).hint === "cheap"
@@ -110,37 +120,50 @@ test("curried form: targets accept any subset of valid step refs", () => {
           : { module: "billing", entry: "collect", input: { customerId: "c", amount: 0 } },
     }),
   });
-  expectTypeOf(handler.targets).toEqualTypeOf<readonly ["plan/choose", "billing/collect"]>();
+  expectTypeOf(handler.targets).toEqualTypeOf<
+    readonly [
+      { readonly module: "plan"; readonly entry: "choose" },
+      { readonly module: "billing"; readonly entry: "collect" },
+    ]
+  >();
 });
 
-test("curried form: typo in `targets` is a compile error with did-you-mean", () => {
+test("curried form: typo on `entry` is a compile error", () => {
   transition({
-    // @ts-expect-error — '"plan/chooze"' is not assignable to StepRef<Modules>;
-    // TS surfaces a "Did you mean 'plan/choose'?" hint.
-    targets: ["plan/chooze"],
+    // @ts-expect-error — `entry: "chooze"` is not a valid entry of `plan`;
+    // TS reports an excess-property / mismatch error against StepRef<Modules>.
+    targets: [{ module: "plan", entry: "chooze" }],
     handle: () => ({ abort: { reason: "noop" } }),
   });
 });
 
-test("curried form: unknown module id in `targets` is a compile error", () => {
+test("curried form: unknown `module` is a compile error", () => {
   transition({
-    // @ts-expect-error — '"ghost/x"' is not assignable to StepRef<Modules>.
-    targets: ["ghost/x"],
+    // @ts-expect-error — `module: "ghost"` is not a key of TModules.
+    targets: [{ module: "ghost", entry: "x" }],
     handle: () => ({ abort: { reason: "noop" } }),
   });
 });
 
-test("curried form: bare module id (missing `/entry`) is a compile error", () => {
+test("curried form: missing `entry` field is a compile error", () => {
   transition({
-    // @ts-expect-error — '"plan"' is not assignable; entry name required.
-    targets: ["plan"],
+    // @ts-expect-error — every target must specify both `module` and `entry`.
+    targets: [{ module: "plan" }],
+    handle: () => ({ abort: { reason: "noop" } }),
+  });
+});
+
+test("curried form: cross-pair (entry from a different module) is a compile error", () => {
+  transition({
+    // @ts-expect-error — `plan` has no entry called `collect` (that's billing's).
+    targets: [{ module: "plan", entry: "collect" }],
     handle: () => ({ abort: { reason: "noop" } }),
   });
 });
 
 test("curried form: handler `next.module` narrows to keys of TModules", () => {
   transition({
-    targets: ["plan/choose"],
+    targets: [{ module: "plan", entry: "choose" }],
     handle: () => ({
       // @ts-expect-error — '"ghost"' is not assignable to keyof Modules.
       next: { module: "ghost", entry: "choose", input: {} },
@@ -150,7 +173,7 @@ test("curried form: handler `next.module` narrows to keys of TModules", () => {
 
 test("curried form: handler `next.entry` narrows against the chosen module's entries", () => {
   transition({
-    targets: ["plan/choose"],
+    targets: [{ module: "plan", entry: "choose" }],
     handle: () => ({
       // @ts-expect-error — entry "wrong" is not on plan.entryPoints.
       next: { module: "plan", entry: "wrong", input: { customerId: "c", hint: "cheap" } },
@@ -160,7 +183,7 @@ test("curried form: handler `next.entry` narrows against the chosen module's ent
 
 test("curried form: handler `next.input` narrows against the entry's input schema", () => {
   transition({
-    targets: ["plan/choose"],
+    targets: [{ module: "plan", entry: "choose" }],
     handle: () => ({
       // @ts-expect-error — plan.choose's input requires `customerId` AND `hint`;
       // omitting `hint` makes the whole `next` literal incompatible with StepSpec.
@@ -179,31 +202,36 @@ test("curried form: empty `targets` are accepted (handler returns complete/abort
 
 // -----------------------------------------------------------------------------
 // Bare form — no contextual narrowing on `next`, but `targets` is still
-// inferred as a literal tuple via the `const TTargets` modifier.
+// inferred as a literal tuple via the `const TTargets` modifier. Runtime
+// validates each target's `{ module, entry }` shape via `isAnnotatedTransition`.
 // -----------------------------------------------------------------------------
 
 test("bare form: targets infer as a literal tuple without `as const`", () => {
   const handler = defineTransition({
-    targets: ["plan/choose"],
+    targets: [{ module: "plan", entry: "choose" }],
     handle: () => ({ abort: { reason: "noop" } }),
   });
-  expectTypeOf(handler.targets).toEqualTypeOf<readonly ["plan/choose"]>();
+  expectTypeOf(handler.targets).toEqualTypeOf<
+    readonly [{ readonly module: "plan"; readonly entry: "choose" }]
+  >();
 });
 
-test("bare form: targets are typed `readonly string[]` (no StepRef constraint)", () => {
-  // Any string passes — the bare form trades autocomplete for the simpler
-  // signature. The runtime preloader's lookup against `modules[m]?.entryPoints`
-  // is the safety net.
+test("bare form: targets accept any `{ module, entry }` pair (no StepRef constraint)", () => {
+  // Any string-keyed object passes — the bare form trades autocomplete for the
+  // simpler signature. The runtime preloader's lookup against
+  // `modules[m]?.entryPoints` is the safety net.
   const handler = defineTransition({
-    targets: ["anything/at-all"],
+    targets: [{ module: "anything", entry: "atall" }],
     handle: () => ({ abort: { reason: "noop" } }),
   });
-  expectTypeOf(handler.targets).toEqualTypeOf<readonly ["anything/at-all"]>();
+  expectTypeOf(handler.targets).toEqualTypeOf<
+    readonly [{ readonly module: "anything"; readonly entry: "atall" }]
+  >();
 });
 
 test("bare form: returns AnnotatedTransitionHandler with intersection of handler + targets", () => {
   const handler = defineTransition({
-    targets: ["plan/choose"],
+    targets: [{ module: "plan", entry: "choose" }],
     handle: (ctx: { state: number; input: string; output: boolean }) => ({
       complete: ctx.input,
     }),
@@ -224,17 +252,23 @@ test("bare form: returns AnnotatedTransitionHandler with intersection of handler
 
 test("both forms produce values assignable to AnnotatedTransitionHandler", () => {
   const curried = transition({
-    targets: ["plan/choose"],
+    targets: [{ module: "plan", entry: "choose" }],
     handle: () => ({ abort: { reason: "x" } }),
   });
   const bare = defineTransition({
-    targets: ["plan/choose"],
+    targets: [{ module: "plan", entry: "choose" }],
     handle: () => ({ abort: { reason: "x" } }),
   });
   expectTypeOf(curried).toMatchTypeOf<
-    AnnotatedTransitionHandler<(ctx: any) => any, readonly string[]>
+    AnnotatedTransitionHandler<
+      (ctx: any) => any,
+      readonly { readonly module: string; readonly entry: string }[]
+    >
   >();
   expectTypeOf(bare).toMatchTypeOf<
-    AnnotatedTransitionHandler<(ctx: any) => any, readonly string[]>
+    AnnotatedTransitionHandler<
+      (ctx: any) => any,
+      readonly { readonly module: string; readonly entry: string }[]
+    >
   >();
 });

@@ -204,7 +204,7 @@ describe("extractTransitionDestinations", () => {
            a: {
              x: {
                ok: defineTransition({
-                 targets: ["b/y"],
+                 targets: [{ module: "b", entry: "y" }],
                  handle: () => ({ next: { module: "b", entry: "y", input: {} } }),
                }),
                cancel: defineTransition({
@@ -250,7 +250,7 @@ describe("extractTransitionDestinations", () => {
            a: {
              x: {
                ok: transition({
-                 targets: ["b/y"],
+                 targets: [{ module: "b", entry: "y" }],
                  handle: () => ({ next: { module: "b", entry: "y", input: {} } }),
                }),
              },
@@ -283,7 +283,7 @@ describe("extractTransitionDestinations", () => {
            a: {
              x: {
                branch: defineTransition({
-                 targets: ["b/y", "c/z"],
+                 targets: [{ module: "b", entry: "y" }, { module: "c", entry: "z" }],
                  handle: ({ output }) => ({
                    next:
                      output.kind === "y"
