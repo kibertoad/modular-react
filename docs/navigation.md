@@ -22,6 +22,17 @@ interface NavigationItem<
 
 `TAction` defaults to `never`, so the `action` field is absent from the item surface until an app opts in. `action` is how a nav item carries a dispatchable intent (start a journey, open a module as a tab, trigger a shell command) without overloading `meta`. The framework treats it as opaque — the shell's navbar renderer switches on `action.kind` and dispatches. See the `TAction` section below.
 
+## Ordering
+
+`buildNavigationManifest` (and therefore `useNavigation`) sorts items with these rules, in order:
+
+- `order` is ascending — lower numbers render first.
+- Items without an explicit `order` render after items with one (they default to `999` at sort time).
+- Ties — including the common case where no item sets `order` — preserve insertion order: modules in the order they were registered with the registry, items in the order declared in each module's `navigation` array, plugin-contributed items (via `RegistryPlugin.contributeNavigation`) last.
+- Label is **not** a tiebreaker. Labels are typically i18n keys (especially when `TLabel` is narrowed to `ParseKeys`), so sorting on label would sort by key naming rather than anything user-meaningful.
+
+Practical guidance: set explicit `order` when you care about the position. Rely on registration order when modules collaborate to express intent ("project's nav comes before assets'"). Don't rely on label-alphabetical ordering — it isn't a thing.
+
 ## The typical pattern: one alias, used everywhere
 
 Declare the alias in your `app-shared` package so every module and the shell agree:

@@ -4,9 +4,11 @@ import type { NavigationManifest, NavigationGroup } from "./runtime-types.js";
 /**
  * Collect navigation items from every module into a sorted + grouped manifest.
  *
- * Items are sorted by `order` ascending (missing order sorts last), then by
- * label alphabetically. Items with a `group` key land in the matching entry
- * of `groups`; items without a group land in `ungrouped`.
+ * Items are sorted by `order` ascending (missing order sorts last); ties
+ * preserve insertion order (modules in registration order, items in declared
+ * order within each module, plugin items last). Items with a `group` key
+ * land in the matching entry of `groups`; items without a group land in
+ * `ungrouped`.
  *
  * Generic over `TNavItem` so host-specific NavigationItem subtypes (typed
  * labels, typed dynamic-href context, typed meta) are preserved end-to-end —
@@ -33,19 +35,16 @@ export function buildNavigationManifest<TNavItem extends NavigationItemBase = Na
     allItems.push(...extraItems);
   }
 
-  // Sort by order (lower first), then by label lexicographically.
-  // NOTE: deliberately NOT using String.prototype.localeCompare — it reads the
-  // runtime's default locale, so server and client can disagree on collation
-  // for non-ASCII labels and the rendered nav order diverges, producing a
-  // hydration mismatch. A plain `<` / `>` comparison is deterministic and
-  // good enough for nav item ordering (labels are typically i18n keys or
-  // ASCII-dominant anyway).
-  const sorted = [...allItems].sort((a, b) => {
-    const orderDiff = (a.order ?? 999) - (b.order ?? 999);
-    if (orderDiff !== 0) return orderDiff;
-    if (a.label === b.label) return 0;
-    return (a.label as string) < (b.label as string) ? -1 : 1;
-  });
+  // Sort by `order` ascending; missing `order` sorts last (treated as 999).
+  // Ties preserve insertion order (Array.prototype.sort is stable in ES2019+):
+  // modules in registration order, items in declared order within each
+  // module's `navigation` array, plugin `extraItems` last. Deterministic,
+  // SSR-safe, and matches developer intent — the things you declared first
+  // render first. Label is intentionally not a tiebreaker: labels are typed
+  // as i18n keys in host apps (`TLabel` defaults to `string` but narrows to
+  // `ParseKeys`), so lexicographic comparison would sort by translation-
+  // system artifact rather than anything meaningful.
+  const sorted = [...allItems].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 
   // Group items
   const groupMap = new Map<string, TNavItem[]>();
