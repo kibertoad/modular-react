@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSlots } from "@tanstack-react-modules/runtime";
 import { JourneyOutlet, useJourneyContext, type TerminalOutcome } from "@modular-react/journeys";
 import {
@@ -84,8 +84,11 @@ export default function IntegrationsPage() {
     integration: IntegrationDefinition;
     outcome: TerminalOutcome;
   } | null>(null);
-  // Synchronous re-entry guard — without it, a double-click between renders
-  // would mint two journey instances and orphan the first.
+  // Synchronous re-entry guard. We hold it `true` from the moment a click
+  // is accepted until React commits the new `instanceId` (effect below) —
+  // otherwise a fast second click between `setInstanceId(...)` and the
+  // re-render would still see the closed-over `instanceId === null` and
+  // mint a second journey instance, orphaning the first.
   const startingRef = useRef(false);
 
   if (!ctx) {
@@ -95,20 +98,32 @@ export default function IntegrationsPage() {
   }
 
   const startConfigure = (integration: IntegrationDefinition) => {
-    if (startingRef.current) return;
+    if (startingRef.current || instanceId !== null) return;
     startingRef.current = true;
+    setTerminal(null);
+    setActiveIntegration(integration);
     try {
-      setTerminal(null);
-      setActiveIntegration(integration);
       const id = ctx.runtime.start(integrationSetupHandle, {
         tenantId: "tenant-demo",
         integration,
       });
       setInstanceId(id);
-    } finally {
+    } catch (err) {
+      // Release the guard on a failed start so the user can retry.
       startingRef.current = false;
+      setActiveIntegration(null);
+      throw err;
     }
   };
+
+  // Release the guard once the journey instance is no longer mounted
+  // (either it was just started — see effect commit ordering — or it has
+  // terminated and `setInstanceId(null)` ran in the onFinished handler).
+  // Pairing the release with React's commit is what closes the
+  // double-start window the synchronous `finally` left open.
+  useEffect(() => {
+    if (instanceId === null) startingRef.current = false;
+  }, [instanceId]);
 
   const dismissTerminal = () => setTerminal(null);
 
