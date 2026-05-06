@@ -142,6 +142,10 @@ jobs:
             example_path: examples/tanstack-router/customer-onboarding-journey
             runtime_path: packages/tanstack-router-runtime
             core_path: packages/tanstack-router-core
+          - shell: "@example-tsr-remote-capabilities/shell"
+            example_path: examples/tanstack-router/remote-capabilities
+            runtime_path: packages/tanstack-router-runtime
+            core_path: packages/tanstack-router-core
     steps:
       - uses: actions/checkout@v6
 
