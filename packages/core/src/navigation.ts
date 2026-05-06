@@ -35,16 +35,18 @@ export function buildNavigationManifest<TNavItem extends NavigationItemBase = Na
     allItems.push(...extraItems);
   }
 
-  // Sort by `order` ascending; missing `order` sorts last (treated as 999).
-  // Ties preserve insertion order (Array.prototype.sort is stable in ES2019+):
-  // modules in registration order, items in declared order within each
-  // module's `navigation` array, plugin `extraItems` last. Deterministic,
-  // SSR-safe, and matches developer intent — the things you declared first
-  // render first. Label is intentionally not a tiebreaker: labels are typed
-  // as i18n keys in host apps (`TLabel` defaults to `string` but narrows to
-  // `ParseKeys`), so lexicographic comparison would sort by translation-
-  // system artifact rather than anything meaningful.
-  const sorted = [...allItems].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+  // Sort by `order` ascending; missing `order` sorts after every explicit
+  // value (no upper-bound sentinel — an item with `order: 9999` still sorts
+  // before unordered items). Ties preserve insertion order
+  // (Array.prototype.sort is stable in ES2019+): modules in registration
+  // order, items in declared order within each module's `navigation` array,
+  // plugin `extraItems` last. Deterministic, SSR-safe, and matches developer
+  // intent — the things you declared first render first. Label is
+  // intentionally not a tiebreaker: labels are typed as i18n keys in host
+  // apps (`TLabel` defaults to `string` but narrows to `ParseKeys`), so
+  // lexicographic comparison would sort by translation-system artifact
+  // rather than anything meaningful.
+  const sorted = [...allItems].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
 
   // Group items
   const groupMap = new Map<string, TNavItem[]>();

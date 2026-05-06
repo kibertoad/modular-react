@@ -97,6 +97,19 @@ describe("buildNavigationManifest", () => {
       ]);
     });
 
+    it("explicit order values larger than any sentinel still sort before unordered items", () => {
+      // Pins the contract: missing order always sorts last, regardless of
+      // how large an explicit order value is. Guards against reintroducing a
+      // numeric sentinel (e.g. `?? 999`) that would silently flip the order
+      // of any item using order >= the sentinel.
+      const m = mod([
+        { label: "Unordered", to: "/u" },
+        { label: "Huge", to: "/h", order: 100_000 },
+      ]);
+      const result = buildNavigationManifest([m]);
+      expect(result.items.map((i) => i.label)).toEqual(["Huge", "Unordered"]);
+    });
+
     it("plugin extraItems land after module items when ties on order", () => {
       const m = mod([{ label: "ModuleA", to: "/a" }]);
       const result = buildNavigationManifest([m], [{ label: "PluginA", to: "/pa" }]);

@@ -27,7 +27,7 @@ interface NavigationItem<
 `buildNavigationManifest` (and therefore `useNavigation`) sorts items with these rules, in order:
 
 - `order` is ascending — lower numbers render first.
-- Items without an explicit `order` render after items with one (they default to `999` at sort time).
+- Items without an explicit `order` render after every item that has one — there's no sentinel cap, so `order: 9999` still sorts before an unordered item.
 - Ties — including the common case where no item sets `order` — preserve insertion order: modules in the order they were registered with the registry, items in the order declared in each module's `navigation` array, plugin-contributed items (via `RegistryPlugin.contributeNavigation`) last.
 - Label is **not** a tiebreaker. Labels are typically i18n keys (especially when `TLabel` is narrowed to `ParseKeys`), so sorting on label would sort by key naming rather than anything user-meaningful.
 
