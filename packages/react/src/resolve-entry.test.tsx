@@ -127,4 +127,18 @@ describe("resolveEntryComponent — invalid input", () => {
       /neither `component` nor `lazy`/,
     );
   });
+
+  it("traps a sync-throwing importer as a cached rejected promise", async () => {
+    const failure = new Error("module is broken");
+    const importer = vi.fn(() => {
+      throw failure;
+    });
+    const entry: LazyModuleEntryPoint<{ value: string }> = { lazy: importer };
+    const { preload } = resolveEntryComponent(entry);
+    // First call traps the throw and stores a rejected promise.
+    await expect(preload()).rejects.toBe(failure);
+    // Second call replays the cached rejection — importer is NOT re-invoked.
+    await expect(preload()).rejects.toBe(failure);
+    expect(importer).toHaveBeenCalledTimes(1);
+  });
 });

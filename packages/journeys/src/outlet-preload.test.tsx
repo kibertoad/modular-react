@@ -216,6 +216,137 @@ describe("JourneyOutlet — auto-preload (precise, default)", () => {
     expect(fx.cheapImporter).not.toHaveBeenCalled();
     expect(fx.expensiveImporter).not.toHaveBeenCalled();
   });
+
+  it("re-runs the preload set when the step advances", async () => {
+    // Targets vary by exit (`toCheap` → cheap/show; `toExpensive` → expensive/show).
+    // Pick `cheap` first; only that chunk is preloaded. Then advance to it and
+    // verify nothing new is scheduled for the now-current step (its own
+    // transitions in this fixture are empty, so no further preload).
+    const fx = makeFixtures();
+    type M = typeof fx.modules;
+    const stepThroughJourney = defineJourney<M, { _: true }>()({
+      id: "step-through",
+      version: "1.0.0",
+      initialState: () => ({ _: true }) as const,
+      start: () => ({ module: "start", entry: "pick", input: undefined as never }),
+      transitions: {
+        start: {
+          pick: {
+            toCheap: defineTransition({
+              targets: ["cheap/show"] as const,
+              handle: () => ({
+                next: { module: "cheap", entry: "show", input: undefined as never },
+              }),
+            }),
+            toExpensive: defineTransition({
+              targets: ["expensive/show"] as const,
+              handle: () => ({
+                next: { module: "expensive", entry: "show", input: undefined as never },
+              }),
+            }),
+          },
+        },
+        cheap: {
+          show: {
+            done: defineTransition({
+              targets: ["unrelated/show"] as const,
+              handle: () => ({
+                next: { module: "unrelated", entry: "show", input: undefined as never },
+              }),
+            }),
+          },
+        },
+      },
+    });
+    const rt = createJourneyRuntime([{ definition: stepThroughJourney, options: undefined }], {
+      modules: fx.modules,
+      debug: false,
+    });
+    const id = rt.start("step-through", undefined as never);
+    const { getByText } = render(
+      <Suspense fallback={null}>
+        <JourneyOutlet runtime={rt} instanceId={id} modules={fx.modules} />
+      </Suspense>,
+    );
+    await flushIdle();
+    // First step's targets: cheap/show + expensive/show.
+    expect(fx.cheapImporter).toHaveBeenCalledTimes(1);
+    expect(fx.expensiveImporter).toHaveBeenCalledTimes(1);
+    expect(fx.unrelatedImporter).not.toHaveBeenCalled();
+
+    // Advance to cheap/show — the next step's targets reference unrelated/show,
+    // which should now be preloaded.
+    await act(async () => {
+      getByText("cheap").click();
+    });
+    await flushIdle();
+    expect(fx.unrelatedImporter).toHaveBeenCalledTimes(1);
+    // Already-preloaded chunks aren't re-fetched (idempotent).
+    expect(fx.cheapImporter).toHaveBeenCalledTimes(1);
+    expect(fx.expensiveImporter).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("JourneyOutlet — auto-preload (precise) with scoped module ids", () => {
+  it("splits `${module}/${entry}` on the LAST slash so scoped ids round-trip", async () => {
+    // Module id contains a slash (npm-style scope). The preloader must
+    // split on the LAST `/` or it would look up `@scope` instead of
+    // `@scope/billing`.
+    const importer = vi.fn(() => Promise.resolve({ default: CheapStep }));
+    const scopedExits = { done: defineExit() } as const;
+    const scopedModule = defineModule({
+      id: "@scope/billing",
+      version: "1.0.0",
+      exitPoints: scopedExits,
+      entryPoints: {
+        review: defineEntry({ lazy: importer, input: schema<void>() }),
+      },
+    });
+    const startMod = defineModule({
+      id: "start",
+      version: "1.0.0",
+      exitPoints: { go: defineExit() } as const,
+      entryPoints: {
+        pick: defineEntry({ component: StartScreen, input: schema<void>() }),
+      },
+    });
+    const localModules = { start: startMod, "@scope/billing": scopedModule };
+    type LocalModules = typeof localModules;
+    const journey = defineJourney<LocalModules, { _: true }>()({
+      id: "scoped",
+      version: "1.0.0",
+      initialState: () => ({ _: true }) as const,
+      start: () => ({ module: "start", entry: "pick", input: undefined as never }),
+      transitions: {
+        start: {
+          pick: {
+            go: defineTransition({
+              targets: ["@scope/billing/review"] as const,
+              handle: () => ({
+                next: {
+                  module: "@scope/billing",
+                  entry: "review",
+                  input: undefined as never,
+                },
+              }),
+            }),
+          },
+        },
+      },
+    });
+    const rt = createJourneyRuntime([{ definition: journey, options: undefined }], {
+      modules: localModules,
+      debug: false,
+    });
+    const id = rt.start("scoped", undefined as never);
+    render(
+      <Suspense fallback={null}>
+        <JourneyOutlet runtime={rt} instanceId={id} modules={localModules} />
+      </Suspense>,
+    );
+    await flushIdle();
+    expect(importer).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("JourneyOutlet — auto-preload (aggressive)", () => {

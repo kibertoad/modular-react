@@ -64,9 +64,23 @@ export function resolveEntryComponent(entry: ModuleEntryPoint<any>): ResolvedEnt
     let importPromise:
       | Promise<{ default: ComponentType<ModuleEntryProps<unknown, ExitPointMap>> }>
       | undefined;
+    // Importer is invoked synchronously on first call so React.lazy and
+    // explicit preload() see the same observable timing. The try/catch
+    // converts a sync-throwing importer into a cached rejected promise —
+    // without it, a sync throw would skip the assignment and the next
+    // call would re-invoke the broken importer instead of replaying the
+    // failure (and consumers would never see the error via Suspense).
     const cachedImport = (): Promise<{
       default: ComponentType<ModuleEntryProps<unknown, ExitPointMap>>;
-    }> => (importPromise ??= Promise.resolve(importer()).then(normalize));
+    }> => {
+      if (importPromise) return importPromise;
+      try {
+        importPromise = Promise.resolve(importer()).then(normalize);
+      } catch (err) {
+        importPromise = Promise.reject(err);
+      }
+      return importPromise;
+    };
     const Component = lazy(cachedImport) as unknown as ComponentType<
       ModuleEntryProps<unknown, ExitPointMap>
     >;

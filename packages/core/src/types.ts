@@ -252,12 +252,6 @@ interface ModuleEntryPointBase<TInput> {
    *   false (default)  — no `goBack` prop is supplied to the component.
    */
   readonly allowBack?: "preserve-state" | "rollback" | false;
-  /**
-   * Optional Suspense fallback rendered while a lazy entry's chunk is loading.
-   * Ignored for eager entries. Hosts (JourneyOutlet, ModuleTab) wrap the
-   * resolved component in `<Suspense fallback={fallback ?? null}>`.
-   */
-  readonly fallback?: React.ReactNode;
 }
 
 /**
@@ -268,6 +262,7 @@ export interface EagerModuleEntryPoint<TInput> extends ModuleEntryPointBase<TInp
   /** Component to render when this entry is opened. Receives `ModuleEntryProps<TInput, …>`. */
   readonly component: React.ComponentType<ModuleEntryProps<TInput, any>>;
   readonly lazy?: never;
+  readonly fallback?: never;
 }
 
 /**
@@ -279,6 +274,12 @@ export interface LazyModuleEntryPoint<TInput> extends ModuleEntryPointBase<TInpu
   readonly component?: never;
   /** Dynamic import of the entry's component. Called at most once per descriptor. */
   readonly lazy: LazyEntryComponent<TInput>;
+  /**
+   * Suspense fallback rendered while the lazy chunk is loading. Hosts wrap
+   * the resolved component in `<Suspense fallback={fallback ?? null}>`. Only
+   * meaningful for lazy entries — eager entries don't suspend.
+   */
+  readonly fallback?: React.ReactNode;
 }
 
 /**

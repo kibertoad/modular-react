@@ -44,6 +44,32 @@ describe("defineTransition", () => {
     targets.push("billing/collect");
     expect(handler.targets).toEqual(["plan/choose"]);
   });
+
+  it("supports handlers that return `complete` (terminal exit, no targets)", () => {
+    // A handler can declare empty targets if its only outcome is to complete
+    // the journey — preload skips it (no entries to fetch), but the
+    // annotation is preserved for symmetry with non-terminal handlers.
+    const handler = defineTransition({
+      targets: [] as const,
+      handle: ({ output }: { output: { id: string } }) => ({
+        complete: { result: output.id },
+      }),
+    });
+    expect(handler.targets).toEqual([]);
+    expect(handler({ state: undefined, input: undefined, output: { id: "x" } })).toEqual({
+      complete: { result: "x" },
+    });
+  });
+
+  it("supports handlers that return `abort`", () => {
+    const handler = defineTransition({
+      targets: [] as const,
+      handle: () => ({ abort: { reason: "user-cancelled" } }),
+    });
+    expect(handler({ state: undefined, input: undefined, output: undefined })).toEqual({
+      abort: { reason: "user-cancelled" },
+    });
+  });
 });
 
 describe("isAnnotatedTransition", () => {

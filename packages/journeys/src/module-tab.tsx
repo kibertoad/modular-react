@@ -104,7 +104,9 @@ export function ModuleTab<TInput = unknown>(props: ModuleTabProps<TInput>): Reac
       );
     } else {
       const { Component } = resolveEntryComponent(entryPoint);
-      const fallback = (entryPoint as { fallback?: ReactNode }).fallback ?? null;
+      // `fallback` is typed `never` on eager entries (always `undefined` at
+      // runtime), `ReactNode | undefined` on lazy entries.
+      const fallback = entryPoint.fallback ?? null;
       content = createElement(
         Suspense,
         { fallback },

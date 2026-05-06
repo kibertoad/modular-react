@@ -208,13 +208,16 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
 
   // Speculative preload of reachable entries' chunks. Runs after the current
   // step is settled in-DOM; cancels on step change so a fast advance does
-  // not race with the previous step's preload set.
+  // not race with the previous step's preload set. Deps are deliberately
+  // narrow — `instance` itself changes reference on every snapshot bump
+  // (timestamps, child-id shifts), and re-running preload on those is wasted
+  // work. We re-key the effect on (status, module, entry, journey) instead.
+  const isActive = instance?.status === "active";
   const stepModuleId = instance?.step?.moduleId;
   const stepEntryName = instance?.step?.entry;
   const journeyId = instance?.journeyId;
   useEffect(() => {
-    if (preload === false) return;
-    if (!instance || instance.status !== "active") return;
+    if (preload === false || !isActive) return;
     if (!stepModuleId || !stepEntryName || !journeyId) return;
     const reg = internals.__getRegistered(journeyId);
     if (!reg) return;
@@ -260,7 +263,7 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
       if (idleHandle !== undefined && typeof cicFn === "function") cicFn(idleHandle);
       if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
     };
-  }, [preload, instance, stepModuleId, stepEntryName, journeyId, internals, modules]);
+  }, [preload, isActive, stepModuleId, stepEntryName, journeyId, internals, modules]);
 
   if (!instance) return null;
   if (instance.status === "loading") return loadingFallback ?? null;
@@ -324,7 +327,10 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
   // is shared.
   const { Component: StepComponent } = resolveEntryComponent(entry);
   const stepKey = `${record.stepToken}:${retryKey}`;
-  const suspenseFallback = (entry as { fallback?: ReactNode }).fallback ?? loadingFallback ?? null;
+  // For eager entries `entry.fallback` is typed `never` (and is always
+  // `undefined` at runtime); for lazy entries it's the optional Suspense
+  // fallback. Either way, fall through to the outlet-level `loadingFallback`.
+  const suspenseFallback = entry.fallback ?? loadingFallback ?? null;
 
   return createElement(
     StepErrorBoundary,
@@ -371,7 +377,10 @@ function collectPreloadTargets(
   const collectRef = (ref: string): void => {
     if (seen.has(ref)) return;
     seen.add(ref);
-    const slash = ref.indexOf("/");
+    // Split on the LAST slash so scoped module ids (e.g. "@scope/foo")
+    // round-trip correctly — `@scope/foo/show` resolves to module
+    // `@scope/foo`, entry `show`.
+    const slash = ref.lastIndexOf("/");
     if (slash <= 0 || slash === ref.length - 1) return;
     const moduleId = ref.slice(0, slash);
     const entryName = ref.slice(slash + 1);
