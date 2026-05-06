@@ -639,9 +639,11 @@ The helper has two call shapes:
 ```ts
 import { defineJourney, defineTransition } from "@modular-react/journeys";
 
-// Bind the journey's generics once — every `tx({ ... })` call below gets
-// autocomplete on `targets` and contextual narrowing on `next`.
-const tx = defineTransition<OnboardingModules, OnboardingState>();
+// Bind the journey's generics once — every `transition({ ... })` call below
+// gets autocomplete on `targets` and contextual narrowing on `next`. Naming
+// mirrors `selectModule`: a descriptive verb for the binder, not an
+// abbreviation (`tx` reads as "transaction" in most codebases).
+const transition = defineTransition<OnboardingModules, OnboardingState>();
 
 export const onboardingJourney = defineJourney<OnboardingModules, OnboardingState>()({
   // ...
@@ -651,7 +653,7 @@ export const onboardingJourney = defineJourney<OnboardingModules, OnboardingStat
         // Annotated. The outlet preloads `plan/choose` and `billing/collect`
         // chunks during the idle window after profile/review mounts, so the
         // user's click into the next step finds the chunk already cached.
-        profileComplete: tx({
+        profileComplete: transition({
           targets: ["plan/choose", "billing/collect"],
           handle: ({ output, state }) => ({
             state: { ...state, hint: output.hint },

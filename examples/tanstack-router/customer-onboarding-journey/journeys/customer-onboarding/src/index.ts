@@ -32,7 +32,7 @@ export interface OnboardingState {
 // `next.entry` and autocomplete on `targets`. Bare-function handlers stay
 // fully supported — only the handlers that fan out to lazy steps need to
 // migrate.
-const tx = defineTransition<OnboardingModules, OnboardingState>();
+const transition = defineTransition<OnboardingModules, OnboardingState>();
 
 export const customerOnboardingJourney = defineJourney<OnboardingModules, OnboardingState>()({
   id: "customer-onboarding",
@@ -74,13 +74,13 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
   transitions: {
     profile: {
       review: {
-        // `tx({ targets })` lets `<JourneyOutlet preload="precise">`
+        // `transition({ targets })` lets `<JourneyOutlet preload="precise">`
         // (the default) speculatively warm the chunks for the steps this exit
         // can advance into. With billing/collect now lazy-loaded, declaring
         // the targets here ensures the chunk is hot before the rep clicks
         // into it. Bare-function handlers below stay unchanged.
-        profileComplete: tx({
-          targets: ["plan/choose"] as const,
+        profileComplete: transition({
+          targets: ["plan/choose"],
           handle: ({ output, state }) => ({
             state: { ...state, hint: output.hint },
             next: {
@@ -90,8 +90,8 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
             },
           }),
         }),
-        readyToBuy: tx({
-          targets: ["billing/collect"] as const,
+        readyToBuy: transition({
+          targets: ["billing/collect"],
           handle: ({ output }) => ({
             next: {
               module: "billing",
@@ -109,8 +109,8 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
     plan: {
       choose: {
         allowBack: true,
-        choseStandard: tx({
-          targets: ["billing/collect"] as const,
+        choseStandard: transition({
+          targets: ["billing/collect"],
           handle: ({ output, state }) => ({
             state: { ...state, selectedPlan: output.plan },
             next: {
@@ -120,8 +120,8 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
             },
           }),
         }),
-        choseWithTrial: tx({
-          targets: ["billing/startTrial"] as const,
+        choseWithTrial: transition({
+          targets: ["billing/startTrial"],
           handle: ({ output, state }) => ({
             state: { ...state, selectedPlan: output.plan },
             next: {

@@ -97,9 +97,11 @@ export interface TypedTransitionBinder<TModules extends ModuleTypeMap, TState, T
  *
  * ```ts
  * // Curried (recommended): bind the journey's generics once, get full
- * // contextual typing on every wrapped handler. Mirrors `defineJourney`.
- * const tx = defineTransition<OnboardingModules, OnboardingState>();
- * profileComplete: tx({
+ * // contextual typing on every wrapped handler. Naming convention mirrors
+ * // `selectModule` (a descriptive verb for the binder, not an
+ * // abbreviation — `tx` reads as "transaction" in most codebases).
+ * const transition = defineTransition<OnboardingModules, OnboardingState>();
+ * profileComplete: transition({
  *   targets: ["plan/choose"],
  *   handle: ({ output, state }) => ({
  *     state: { ...state, hint: output.hint },
