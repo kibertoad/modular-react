@@ -391,6 +391,7 @@ function buildExitUsage(
         readonly nexts: readonly { readonly module: string; readonly entry?: string }[];
         readonly aborts: boolean;
         readonly completes: boolean;
+        readonly targetsDeclared?: boolean;
       }
     | undefined,
 ): ModuleExitUsage {
@@ -401,6 +402,7 @@ function buildExitUsage(
     destinations?: readonly TransitionDestination[];
     aborts?: boolean;
     completes?: boolean;
+    targetsDeclared?: boolean;
   } = { journeyId, fromEntry };
   if (outcome.nexts.length > 0) {
     out.destinations = outcome.nexts.map((n) =>
@@ -409,5 +411,6 @@ function buildExitUsage(
   }
   if (outcome.aborts) out.aborts = true;
   if (outcome.completes) out.completes = true;
+  if (outcome.targetsDeclared) out.targetsDeclared = true;
   return out;
 }

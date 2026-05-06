@@ -188,6 +188,158 @@ describe("extractTransitionDestinations", () => {
     expect(Object.keys(map.a!.x!)).toEqual(["ok"]);
   });
 
+  it("unwraps a `defineTransition({ targets, handle })`-wrapped handler", async () => {
+    // The runtime supports a wrapped form that attaches `targets` metadata
+    // for the auto-preloader. The harvester must descend into the inner
+    // `handle:` function to recover the destination — the wrapper is
+    // otherwise transparent.
+    const path = writeTmp(
+      "wrapped.ts",
+      `export default {
+         id: "wrapped",
+         version: "1.0.0",
+         initialState: () => ({}),
+         start: () => ({ module: "a", entry: "x" }),
+         transitions: {
+           a: {
+             x: {
+               ok: defineTransition({
+                 targets: ["b/y"],
+                 handle: () => ({ next: { module: "b", entry: "y", input: {} } }),
+               }),
+               cancel: defineTransition({
+                 targets: [],
+                 handle: () => ({ abort: { reason: "user" } }),
+               }),
+             },
+           },
+         },
+       };`,
+    );
+
+    const map = await extractTransitionDestinations(path, "wrapped");
+    expect(map.a?.x?.ok).toEqual({
+      nexts: [{ module: "b", entry: "y" }],
+      aborts: false,
+      completes: false,
+      // `targets:` was present, so `nexts` is authoritative (declared).
+      targetsDeclared: true,
+    });
+    expect(map.a?.x?.cancel).toEqual({
+      nexts: [],
+      // Inner handler returns `{ abort }`, which we still report.
+      aborts: true,
+      completes: false,
+      // Empty `targets:` array is still a declaration — authoritative.
+      targetsDeclared: true,
+    });
+  });
+
+  it("unwraps a curried-binder call (`const t = defineTransition<...>(); t({...})`)", async () => {
+    // Same as above but the binder is a local variable — the harvester
+    // doesn't care about the callee identifier, only the spec object shape.
+    const path = writeTmp(
+      "curried.ts",
+      `const transition = defineTransition();
+       export default {
+         id: "curried",
+         version: "1.0.0",
+         initialState: () => ({}),
+         start: () => ({ module: "a", entry: "x" }),
+         transitions: {
+           a: {
+             x: {
+               ok: transition({
+                 targets: ["b/y"],
+                 handle: () => ({ next: { module: "b", entry: "y", input: {} } }),
+               }),
+             },
+           },
+         },
+       };`,
+    );
+
+    const map = await extractTransitionDestinations(path, "curried");
+    expect(map.a?.x?.ok).toEqual({
+      nexts: [{ module: "b", entry: "y" }],
+      aborts: false,
+      completes: false,
+      targetsDeclared: true,
+    });
+  });
+
+  it("prefers declared `targets` over AST inference (catches dynamic-return branches)", async () => {
+    // The inner handler returns `next` from a ternary the AST can't reduce
+    // — without `targets:` we would extract zero destinations. With
+    // declared targets the catalog gets the FULL static destination set.
+    const path = writeTmp(
+      "dynamic-with-targets.ts",
+      `export default {
+         id: "dyn-decl",
+         version: "1.0.0",
+         initialState: () => ({}),
+         start: () => ({ module: "a", entry: "x" }),
+         transitions: {
+           a: {
+             x: {
+               branch: defineTransition({
+                 targets: ["b/y", "c/z"],
+                 handle: ({ output }) => ({
+                   next:
+                     output.kind === "y"
+                       ? { module: "b", entry: "y", input: {} }
+                       : { module: "c", entry: "z", input: {} },
+                 }),
+               }),
+             },
+           },
+         },
+       };`,
+    );
+
+    const map = await extractTransitionDestinations(path, "dyn-decl");
+    expect(map.a?.x?.branch).toEqual({
+      nexts: [
+        { module: "b", entry: "y" },
+        { module: "c", entry: "z" },
+      ],
+      aborts: false,
+      completes: false,
+      targetsDeclared: true,
+    });
+  });
+
+  it("falls back to AST inference when targets is absent (bare handle wrapper)", async () => {
+    // A wrapper without `targets:` (or any unrelated call expression) still
+    // gets unwrapped — the inner handler is analyzed normally and the
+    // `targetsDeclared` flag stays absent.
+    const path = writeTmp(
+      "no-targets.ts",
+      `export default {
+         id: "no-decl",
+         version: "1.0.0",
+         initialState: () => ({}),
+         start: () => ({ module: "a", entry: "x" }),
+         transitions: {
+           a: {
+             x: {
+               ok: someOtherWrapper({
+                 handle: () => ({ next: { module: "b", entry: "y", input: {} } }),
+               }),
+             },
+           },
+         },
+       };`,
+    );
+    const map = await extractTransitionDestinations(path, "no-decl");
+    expect(map.a?.x?.ok).toEqual({
+      nexts: [{ module: "b", entry: "y" }],
+      aborts: false,
+      completes: false,
+    });
+    expect(map.a?.x?.ok).not.toHaveProperty("targetsDeclared");
+  });
+
   it("returns empty when no journey object matches the id", async () => {
     const path = writeTmp(
       "wrongid.ts",

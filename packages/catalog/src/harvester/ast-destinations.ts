@@ -140,11 +140,74 @@ interface HandlerOutcome {
   nexts: { module: string; entry?: string }[];
   aborts: boolean;
   completes: boolean;
+  /**
+   * True when `nexts` came from a `defineTransition({ targets })` declaration
+   * — i.e. the destination set is authoritative, not inferred from handler
+   * branches. The catalog UI can surface this as a "declared" badge so
+   * authors know the listing is complete (vs the AST best-effort, which can
+   * miss branches behind dynamic returns).
+   */
+  targetsDeclared?: boolean;
+}
+
+/**
+ * Parse a `targets` literal — `["moduleId/entryName", ...]` — into the
+ * `{ module, entry }` shape `nexts` uses. Non-string elements / strings
+ * without a `/` separator / strings whose `/` is at either end are skipped
+ * (defensive: a hand-rolled call site might pass garbage). Returns `null`
+ * when the value is not an array literal at all so callers can distinguish
+ * "no targets declared" from "empty targets declared".
+ */
+function readDeclaredTargets(node: AstNode): { module: string; entry?: string }[] | null {
+  if (!node || node.type !== "ArrayExpression" || !Array.isArray(node.elements)) return null;
+  const out: { module: string; entry?: string }[] = [];
+  for (const el of node.elements) {
+    if (!el || el.type !== "Literal" || typeof el.value !== "string") continue;
+    // Split on the LAST slash to round-trip scoped module ids ("@scope/foo/entry").
+    const slash = el.value.lastIndexOf("/");
+    if (slash <= 0 || slash === el.value.length - 1) continue;
+    out.push({ module: el.value.slice(0, slash), entry: el.value.slice(slash + 1) });
+  }
+  return out;
 }
 
 function analyzeHandler(value: AstNode): HandlerOutcome | null {
   // Only function expressions / arrows count; literal `{}` etc. are inert.
   if (!value) return null;
+
+  // Unwrap a `defineTransition({ targets, handle })` (or any equivalent
+  // curried binder, e.g. `const transition = defineTransition<...>(); transition({...})`).
+  //
+  // When the wrapper declares `targets`, treat that array as the
+  // authoritative `next`-destinations: the whole point of the declaration
+  // is to enumerate the possible next steps statically, including the ones
+  // hidden behind dynamic `output`-driven ternaries that the AST walk
+  // cannot resolve. The inner `handle:` function is still scanned so that
+  // `aborts` / `completes` flags reflect any non-`next` outcomes.
+  //
+  // Bare `defineTransition({ handle })` without `targets` (or an unrelated
+  // call expression that happens to take an object argument) falls through
+  // to the inner-handle path, preserving the existing AST behavior.
+  if (value.type === "CallExpression") {
+    const spec = value.arguments?.[0];
+    if (spec?.type === "ObjectExpression") {
+      const targetsProp = findProperty(spec, "targets");
+      const handleProp = findProperty(spec, "handle");
+      const declared = targetsProp ? readDeclaredTargets(targetsProp.value) : null;
+      const inner = handleProp?.value ? analyzeHandler(handleProp.value) : null;
+      if (declared !== null) {
+        return {
+          nexts: declared,
+          aborts: inner?.aborts ?? false,
+          completes: inner?.completes ?? false,
+          targetsDeclared: true,
+        };
+      }
+      if (inner) return inner;
+    }
+    return null;
+  }
+
   const isFunction =
     value.type === "ArrowFunctionExpression" || value.type === "FunctionExpression";
   if (!isFunction) return null;

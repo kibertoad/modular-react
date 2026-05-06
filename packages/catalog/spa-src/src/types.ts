@@ -99,6 +99,12 @@ export interface ModuleExitUsage {
   readonly destinations?: readonly TransitionDestination[];
   readonly aborts?: boolean;
   readonly completes?: boolean;
+  /**
+   * True when `destinations` came from a `defineTransition({ targets })`
+   * declaration — the destination set is statically authoritative. False /
+   * absent means destinations were AST-inferred and may miss branches.
+   */
+  readonly targetsDeclared?: boolean;
 }
 
 export interface CatalogModel {
