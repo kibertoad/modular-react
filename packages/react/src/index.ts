@@ -73,3 +73,10 @@ export type { ModuleExitEvent, ModuleExitHandler, ModuleExitProviderProps } from
 // React-specific: router-mode module host (step 0 outside a workspace tab).
 export { ModuleRoute } from "./module-route.js";
 export type { ModuleRouteProps, ModuleRouteExitEvent } from "./module-route.js";
+
+// React-specific: lazy entry-point resolution. Hosts (JourneyOutlet,
+// ModuleTab) call `resolveEntryComponent` to obtain a renderable component
+// + idempotent `preload()` for both eager (`component:`) and lazy (`lazy:`)
+// entries. `preloadEntry` is the convenience prefetch helper.
+export { resolveEntryComponent, preloadEntry } from "./resolve-entry.js";
+export type { ResolvedEntry } from "./resolve-entry.js";

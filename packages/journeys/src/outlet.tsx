@@ -1,5 +1,6 @@
 import {
   Component,
+  Suspense,
   createElement,
   useEffect,
   useMemo,
@@ -8,11 +9,19 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { ComponentType, ReactNode } from "react";
-import type { ExitPointMap, ModuleDescriptor, ModuleEntryProps } from "@modular-react/core";
+import type { ModuleDescriptor, ModuleEntryPoint } from "@modular-react/core";
+import { resolveEntryComponent } from "@modular-react/react";
 
 import { getInternals } from "./runtime.js";
 import { useJourneyContext } from "./provider.js";
-import type { InstanceId, JourneyRuntime, JourneyStep, TerminalOutcome } from "./types.js";
+import { isAnnotatedTransition } from "./define-transition.js";
+import type {
+  AnyJourneyDefinition,
+  InstanceId,
+  JourneyRuntime,
+  JourneyStep,
+  TerminalOutcome,
+} from "./types.js";
 
 export type JourneyStepErrorPolicy = "abort" | "retry" | "ignore";
 
@@ -78,6 +87,28 @@ export interface JourneyOutletProps {
    * through their own reporting.
    */
   readonly errorComponent?: ComponentType<JourneyOutletErrorProps>;
+  /**
+   * Speculatively prefetch the chunks for entries reachable from the
+   * current step during idle time after mount, so the next click finds
+   * its bundle hot.
+   *
+   *   `"precise"` (default, alias `true`) — read declared `targets` from
+   *     `defineTransition({ targets, handle })`-annotated handlers on the
+   *     current step's transitions. Preload exactly those entries.
+   *     Bare-function handlers contribute nothing (this is the precise
+   *     mode's whole point — no guessing).
+   *
+   *   `"aggressive"` — preload every entry referenced anywhere in the
+   *     journey's `transitions` map. Useful when handlers are not
+   *     annotated and the journey is small enough that warming all
+   *     candidates is cheap.
+   *
+   *   `false` — opt out entirely.
+   *
+   * Has no effect for eager (`component:`) entries — their import is
+   * already resolved. Effects only fire in the browser; SSR is a no-op.
+   */
+  readonly preload?: boolean | "precise" | "aggressive";
 }
 
 /**
@@ -100,6 +131,7 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     notFoundComponent,
     errorComponent,
     leafOnly = true,
+    preload = "precise",
   } = props;
 
   const runtime = runtimeProp ?? context?.runtime;
@@ -174,6 +206,62 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     });
   }, [rootInstance, onFinished]);
 
+  // Speculative preload of reachable entries' chunks. Runs after the current
+  // step is settled in-DOM; cancels on step change so a fast advance does
+  // not race with the previous step's preload set.
+  const stepModuleId = instance?.step?.moduleId;
+  const stepEntryName = instance?.step?.entry;
+  const journeyId = instance?.journeyId;
+  useEffect(() => {
+    if (preload === false) return;
+    if (!instance || instance.status !== "active") return;
+    if (!stepModuleId || !stepEntryName || !journeyId) return;
+    const reg = internals.__getRegistered(journeyId);
+    if (!reg) return;
+    const mode = preload === "aggressive" ? "aggressive" : "precise";
+    const targets = collectPreloadTargets(
+      reg.definition,
+      modules,
+      stepModuleId,
+      stepEntryName,
+      mode,
+    );
+    if (targets.length === 0) return;
+
+    let cancelled = false;
+    const run = (): void => {
+      if (cancelled) return;
+      for (const entry of targets) {
+        try {
+          resolveEntryComponent(entry).preload();
+        } catch {
+          // Best-effort: a malformed entry would have failed validation
+          // upstream. Swallow here so one bad entry never hides the rest.
+        }
+      }
+    };
+
+    const ricFn = (
+      globalThis as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+      }
+    ).requestIdleCallback;
+    const cicFn = (globalThis as { cancelIdleCallback?: (handle: number) => void })
+      .cancelIdleCallback;
+    let idleHandle: number | undefined;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    if (typeof ricFn === "function") {
+      idleHandle = ricFn(run, { timeout: 2000 });
+    } else {
+      timeoutHandle = setTimeout(run, 0);
+    }
+    return () => {
+      cancelled = true;
+      if (idleHandle !== undefined && typeof cicFn === "function") cicFn(idleHandle);
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    };
+  }, [preload, instance, stepModuleId, stepEntryName, journeyId, internals, modules]);
+
   if (!instance) return null;
   if (instance.status === "loading") return loadingFallback ?? null;
   if (instance.status === "completed" || instance.status === "aborted") return null;
@@ -229,13 +317,14 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     // 'ignore' — leave the boundary UI in place until the user navigates away
   };
 
-  // The step's declared input/exit contract is erased at the module-map
-  // boundary (the outlet holds ModuleDescriptor<any, any, any, any>).
-  // Narrow to the structural shape every entry component satisfies —
-  // `ModuleEntryProps<unknown, ExitPointMap>` — instead of `any`, so the
-  // cast site at least documents the prop bag the outlet hands in.
-  const StepComponent = entry.component as ComponentType<ModuleEntryProps<unknown, ExitPointMap>>;
+  // Resolve eager (`component:`) and lazy (`lazy:`) entries through the
+  // shared helper. Lazy entries get a memoized `React.lazy` wrapper plus an
+  // idempotent `preload()`; eager entries pass through as-is. Both render
+  // sites (here and `ModuleTab`) call this so the per-descriptor cache
+  // is shared.
+  const { Component: StepComponent } = resolveEntryComponent(entry);
   const stepKey = `${record.stepToken}:${retryKey}`;
+  const suspenseFallback = (entry as { fallback?: ReactNode }).fallback ?? loadingFallback ?? null;
 
   return createElement(
     StepErrorBoundary,
@@ -246,12 +335,69 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
       key: stepKey,
       children: null,
     },
-    createElement(StepComponent, {
-      input: step.input,
-      exit,
-      goBack,
-    }),
+    createElement(
+      Suspense,
+      { fallback: suspenseFallback },
+      createElement(StepComponent, {
+        input: step.input,
+        exit,
+        goBack,
+      }),
+    ),
   );
+}
+
+/**
+ * Walk `definition.transitions` to assemble the set of entry-point
+ * descriptors to preload. In `"precise"` mode we look at the current
+ * step's transitions only and read each handler's declared `targets`;
+ * in `"aggressive"` mode we walk every entry referenced anywhere in the
+ * map. Both skip the current step (it's already mounted).
+ */
+function collectPreloadTargets(
+  definition: AnyJourneyDefinition,
+  modules: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>,
+  currentModuleId: string,
+  currentEntry: string,
+  mode: "precise" | "aggressive",
+): readonly ModuleEntryPoint<any>[] {
+  const seen = new Set<string>();
+  const out: ModuleEntryPoint<any>[] = [];
+  const transitions = definition.transitions as
+    | Record<string, Record<string, Record<string, unknown>> | undefined>
+    | undefined;
+  if (!transitions) return out;
+
+  const collectRef = (ref: string): void => {
+    if (seen.has(ref)) return;
+    seen.add(ref);
+    const slash = ref.indexOf("/");
+    if (slash <= 0 || slash === ref.length - 1) return;
+    const moduleId = ref.slice(0, slash);
+    const entryName = ref.slice(slash + 1);
+    if (moduleId === currentModuleId && entryName === currentEntry) return;
+    const entry = modules[moduleId]?.entryPoints?.[entryName];
+    if (entry) out.push(entry);
+  };
+
+  if (mode === "precise") {
+    const perEntry = transitions[currentModuleId]?.[currentEntry];
+    if (!perEntry) return out;
+    for (const value of Object.values(perEntry)) {
+      if (!isAnnotatedTransition(value)) continue;
+      for (const ref of value.targets) collectRef(ref);
+    }
+    return out;
+  }
+
+  // Aggressive — every (module, entry) referenced as a transition source.
+  for (const [moduleId, perModule] of Object.entries(transitions)) {
+    if (!perModule) continue;
+    for (const entryName of Object.keys(perModule)) {
+      collectRef(`${moduleId}/${entryName}`);
+    }
+  }
+  return out;
 }
 
 function DefaultNotFound({ moduleId, entry }: JourneyOutletNotFoundProps): ReactNode {

@@ -26,6 +26,17 @@ describe("defineEntry", () => {
     });
     expect(entry.allowBack).toBe("rollback");
   });
+
+  it("accepts a lazy importer in place of a component", () => {
+    const importer = (): Promise<{ default: typeof DummyComponent }> =>
+      Promise.resolve({ default: DummyComponent });
+    const entry = defineEntry({
+      lazy: importer,
+      input: schema<{ id: string }>(),
+    });
+    expect(entry.lazy).toBe(importer);
+    expect((entry as { component?: unknown }).component).toBeUndefined();
+  });
 });
 
 describe("defineExit", () => {
@@ -58,13 +69,35 @@ describe("validateModuleEntryExit", () => {
     expect(validateModuleEntryExit(m)).toEqual([]);
   });
 
-  it("flags a non-function component", () => {
+  it("flags an entry that has neither component nor lazy", () => {
     const m = mod({
       entryPoints: { broken: { component: "not-a-component" as any } },
     });
     const issues = validateModuleEntryExit(m);
     expect(issues).toHaveLength(1);
-    expect(issues[0]).toMatch(/broken.*React component/);
+    expect(issues[0]).toMatch(/broken.*React component or a lazy importer/);
+  });
+
+  it("accepts an entry with only a lazy importer", () => {
+    const importer = (): Promise<{ default: typeof DummyComponent }> =>
+      Promise.resolve({ default: DummyComponent });
+    const m = mod({
+      entryPoints: { ok: { lazy: importer } as any },
+    });
+    expect(validateModuleEntryExit(m)).toEqual([]);
+  });
+
+  it("flags an entry that declares both component and lazy", () => {
+    const importer = (): Promise<{ default: typeof DummyComponent }> =>
+      Promise.resolve({ default: DummyComponent });
+    const m = mod({
+      entryPoints: {
+        both: { component: DummyComponent, lazy: importer } as any,
+      },
+    });
+    const issues = validateModuleEntryExit(m);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatch(/both.*mutually exclusive/);
   });
 
   it("flags an invalid allowBack value", () => {
