@@ -142,6 +142,11 @@ jobs:
             example_path: examples/tanstack-router/customer-onboarding-journey
             runtime_path: packages/tanstack-router-runtime
             core_path: packages/tanstack-router-core
+          - shell: "@example-tsr-remote-capabilities/shell"
+            shell_artifact: "example-tsr-remote-capabilities-shell"
+            example_path: examples/tanstack-router/remote-capabilities
+            runtime_path: packages/tanstack-router-runtime
+            core_path: packages/tanstack-router-core
     steps:
       - uses: actions/checkout@v6
 
@@ -202,7 +207,11 @@ jobs:
         if: failure() && steps.changes.outputs.any_changed == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.shell }}
+          # `actions/upload-artifact` rejects `/` in artifact names, so the
+          # matrix may set `shell_artifact` to a slash-free fallback (the
+          # default `matrix.shell` is already valid for shells that use a
+          # bare package name).
+          name: playwright-report-${{ matrix.shell_artifact || matrix.shell }}
           path: ${{ matrix.example_path }}/shell/playwright-report/
           retention-days: 7
 

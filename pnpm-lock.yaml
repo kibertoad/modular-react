@@ -1610,6 +1610,217 @@ importers:
         specifier: ^8.0.3
         version: 8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)
 
+  examples/tanstack-router/remote-capabilities/app-shared:
+    dependencies:
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@tanstack-react-modules/core':
+        specifier: workspace:*
+        version: link:../../../../packages/tanstack-router-core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      zustand:
+        specifier: ^5.0.0
+        version: 5.0.12(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
+
+  examples/tanstack-router/remote-capabilities/journeys/integration-setup:
+    dependencies:
+      '@example-tsr-remote-capabilities/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@example-tsr-remote-capabilities/generic-integration':
+        specifier: workspace:*
+        version: link:../../modules/generic-integration
+      '@example-tsr-remote-capabilities/hubspot':
+        specifier: workspace:*
+        version: link:../../modules/hubspot
+      '@example-tsr-remote-capabilities/salesforce':
+        specifier: workspace:*
+        version: link:../../modules/salesforce
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../../../../../packages/journeys
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/remote-capabilities/modules/generic-integration:
+    dependencies:
+      '@example-tsr-remote-capabilities/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/remote-capabilities/modules/hubspot:
+    dependencies:
+      '@example-tsr-remote-capabilities/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/remote-capabilities/modules/integration-catalog:
+    dependencies:
+      '@example-tsr-remote-capabilities/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@example-tsr-remote-capabilities/integration-setup-journey':
+        specifier: workspace:*
+        version: link:../../journeys/integration-setup
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../../../../../packages/journeys
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../../packages/react
+      '@tanstack-react-modules/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/tanstack-router-core
+      '@tanstack-react-modules/runtime':
+        specifier: workspace:*
+        version: link:../../../../../packages/tanstack-router-runtime
+      '@tanstack/react-router':
+        specifier: ^1.168.8
+        version: 1.169.1(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+    devDependencies:
+      '@modular-react/testing':
+        specifier: workspace:*
+        version: link:../../../../../packages/testing
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.5(@types/node@25.6.0)(happy-dom@20.9.0)(msw@2.14.2(@types/node@25.6.0)(typescript@6.0.3))(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1))
+
+  examples/tanstack-router/remote-capabilities/modules/salesforce:
+    dependencies:
+      '@example-tsr-remote-capabilities/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/remote-capabilities/shell:
+    dependencies:
+      '@example-tsr-remote-capabilities/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-tsr-remote-capabilities/generic-integration':
+        specifier: workspace:*
+        version: link:../modules/generic-integration
+      '@example-tsr-remote-capabilities/hubspot':
+        specifier: workspace:*
+        version: link:../modules/hubspot
+      '@example-tsr-remote-capabilities/integration-catalog':
+        specifier: workspace:*
+        version: link:../modules/integration-catalog
+      '@example-tsr-remote-capabilities/integration-setup-journey':
+        specifier: workspace:*
+        version: link:../journeys/integration-setup
+      '@example-tsr-remote-capabilities/salesforce':
+        specifier: workspace:*
+        version: link:../modules/salesforce
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@modular-react/journeys':
+        specifier: workspace:*
+        version: link:../../../../packages/journeys
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../packages/react
+      '@tanstack-react-modules/core':
+        specifier: workspace:*
+        version: link:../../../../packages/tanstack-router-core
+      '@tanstack-react-modules/runtime':
+        specifier: workspace:*
+        version: link:../../../../packages/tanstack-router-runtime
+      '@tanstack/react-router':
+        specifier: ^1.168.8
+        version: 1.169.1(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.5(react@19.2.5)
+      zustand:
+        specifier: ^5.0.0
+        version: 5.0.12(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.1(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.3
+        version: 8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)
+
   packages/catalog:
     dependencies:
       '@clack/prompts':
