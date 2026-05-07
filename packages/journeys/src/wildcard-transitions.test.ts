@@ -729,6 +729,49 @@ describe("validateJourneyContracts — wildcardTransitions", () => {
     ).toThrowError(/non-function/);
   });
 
+  it("rejects a non-object wildcardTransitions value", () => {
+    const def: any = {
+      id: "malformed-root",
+      version: "1.0.0",
+      initialState: () => ({}),
+      start: () => ({ module: "profile", entry: "review", input: { customerId: "x" } }),
+      transitions: {
+        profile: { review: { approved: () => ({ complete: { ok: true } }) } },
+      },
+      wildcardTransitions: 42,
+    };
+    expect(() =>
+      validateJourneyContracts(
+        [{ definition: def, options: undefined } as RegisteredJourney],
+        [profileModule, billingModule],
+      ),
+    ).toThrowError(/malformed wildcardTransitions \(expected an object/);
+  });
+
+  it("rejects a non-object byExit / byEntryAndExit container", () => {
+    const def: any = {
+      id: "malformed-slots",
+      version: "1.0.0",
+      initialState: () => ({}),
+      start: () => ({ module: "profile", entry: "review", input: { customerId: "x" } }),
+      transitions: {
+        profile: { review: { approved: () => ({ complete: { ok: true } }) } },
+      },
+      wildcardTransitions: {
+        byEntryAndExit: 7,
+        byExit: "nope",
+      },
+    };
+    expect(() =>
+      validateJourneyContracts(
+        [{ definition: def, options: undefined } as RegisteredJourney],
+        [profileModule, billingModule],
+      ),
+    ).toThrowError(
+      /malformed wildcardTransitions\.byEntryAndExit.*malformed wildcardTransitions\.byExit/s,
+    );
+  });
+
   it("rejects a malformed inner shape under byEntryAndExit", () => {
     const def: any = {
       id: "malformed",
@@ -924,6 +967,54 @@ describe("wildcardTransitions — state propagation and observability", () => {
     const inst = rt.getInstance(id)!;
     expect(inst.status).toBe("aborted");
     expect((inst.terminalPayload as { reason: string }).reason).toBe("from-step-2");
+  });
+});
+
+describe("ExitContract — debug warning when modules are omitted", () => {
+  it("warns once per missing module, not once per exit", () => {
+    const definition = defineJourney<Modules, State>()({
+      id: "no-modules",
+      version: "1.0.0",
+      initialState: ({ customerId }: { customerId: string }) => ({
+        customerId,
+        trail: [] as ReadonlyArray<string>,
+      }),
+      start: (s) => ({
+        module: "profile",
+        entry: "review",
+        input: { customerId: s.customerId },
+      }),
+      transitions: {
+        profile: {
+          review: {
+            approved: () => ({ complete: { ok: true } }),
+            // Two contract-based exits on the same module; same warning
+            // dedupes so total warn count stays at 1.
+            cancelled: () => ({ abort: { reason: "cancelled" } }),
+            error: () => ({ abort: { reason: "error" } }),
+          },
+        },
+      },
+    });
+    // No modules option — schema validation has nothing to resolve.
+    const rt = createJourneyRuntime([{ definition, options: undefined } as RegisteredJourney], {
+      debug: true,
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const id = rt.start("no-modules", { customerId: "C-warn" });
+      fireExit(rt, id, "cancelled", { reason: "user" });
+      // Subsequent exit on same module from a different start shouldn't double-warn.
+      const id2 = rt.start("no-modules", { customerId: "C-warn-2" });
+      fireExit(rt, id2, "error", { code: "X" });
+      const missingModuleWarns = warn.mock.calls.filter((args) =>
+        String(args[0] ?? "").includes("No descriptor for module"),
+      );
+      expect(missingModuleWarns).toHaveLength(1);
+      expect(String(missingModuleWarns[0]?.[0])).toContain("profile");
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

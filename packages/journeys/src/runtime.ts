@@ -164,6 +164,13 @@ export function createJourneyRuntime(
 ): JourneyRuntime {
   const debug = options.debug ?? isDevEnv();
   const moduleMap = options.modules ?? {};
+  /**
+   * Module ids we've already warned about for missing-module dispatch.
+   * Without this dedupe a long-running runtime would spam an identical
+   * warning on every exit fired from the same step. Scoped to the
+   * runtime closure so reset semantics fall out naturally with disposal.
+   */
+  const warnedMissingModule = new Set<string>();
   const definitions = new Map<string, RegisteredJourney>();
   for (const entry of registered) definitions.set(entry.definition.id, entry);
   const instances = new Map<InstanceId, InstanceRecord>();
@@ -1352,6 +1359,14 @@ export function createJourneyRuntime(
     // swallowed (mirrors the same rule applied to transition handlers).
     let validatedOutput = output;
     const stepModule = moduleMap[step.moduleId];
+    if (!stepModule && debug && !warnedMissingModule.has(step.moduleId)) {
+      warnedMissingModule.add(step.moduleId);
+      console.warn(
+        `[@modular-react/journeys] No descriptor for module "${step.moduleId}" in the runtime's module map. ` +
+          `ExitContract payload validation is skipped for any contract-based exit on this step. ` +
+          `Pass it via createJourneyRuntime({ modules: ... }) to enable schema validation.`,
+      );
+    }
     const exitSchema = stepModule?.exitPoints?.[exitName];
     if (exitSchema && isExitContract(exitSchema) && (exitSchema as ExitContract<unknown>).schema) {
       const contract = exitSchema as ExitContract<unknown>;

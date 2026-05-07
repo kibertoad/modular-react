@@ -138,14 +138,16 @@ export function validateJourneyContracts(
     // when contracts are in play), and tier-overlap (warning only —
     // declaring both a `byEntryAndExit[E][X]` and a `byExit[X]` shadows
     // the latter for entry E).
-    const wildcardTransitions = (def as { wildcardTransitions?: unknown }).wildcardTransitions as
-      | {
-          byEntryAndExit?: Record<string, Record<string, unknown>>;
-          byExit?: Record<string, unknown>;
-        }
-      | undefined;
-
-    if (wildcardTransitions && typeof wildcardTransitions === "object") {
+    const rawWildcardTransitions = (def as { wildcardTransitions?: unknown }).wildcardTransitions;
+    if (rawWildcardTransitions !== undefined && typeof rawWildcardTransitions !== "object") {
+      issues.push(
+        `journey "${def.id}" has malformed wildcardTransitions (expected an object, got ${typeof rawWildcardTransitions})`,
+      );
+    } else if (rawWildcardTransitions !== null && rawWildcardTransitions !== undefined) {
+      const wildcardTransitions = rawWildcardTransitions as {
+        byEntryAndExit?: unknown;
+        byExit?: unknown;
+      };
       // The "reachable" set for a wildcard's live-key check is every
       // registered module — not just modules keyed under `transitions`.
       // A journey's `transitions` block declares per-step *handlers*; the
@@ -157,8 +159,18 @@ export function validateJourneyContracts(
       // emits anywhere).
       const reachableModules = modules;
 
-      const byEntryAndExit = wildcardTransitions.byEntryAndExit;
-      if (byEntryAndExit && typeof byEntryAndExit === "object") {
+      const rawByEntryAndExit = wildcardTransitions.byEntryAndExit;
+      let byEntryAndExit: Record<string, Record<string, unknown>> | undefined;
+      if (rawByEntryAndExit !== undefined && rawByEntryAndExit !== null) {
+        if (typeof rawByEntryAndExit !== "object") {
+          issues.push(
+            `journey "${def.id}" has malformed wildcardTransitions.byEntryAndExit (expected an object, got ${typeof rawByEntryAndExit})`,
+          );
+        } else {
+          byEntryAndExit = rawByEntryAndExit as Record<string, Record<string, unknown>>;
+        }
+      }
+      if (byEntryAndExit) {
         for (const [entryName, perEntry] of Object.entries(byEntryAndExit)) {
           if (!perEntry || typeof perEntry !== "object") {
             issues.push(
@@ -198,8 +210,18 @@ export function validateJourneyContracts(
         }
       }
 
-      const byExit = wildcardTransitions.byExit;
-      if (byExit && typeof byExit === "object") {
+      const rawByExit = wildcardTransitions.byExit;
+      let byExit: Record<string, unknown> | undefined;
+      if (rawByExit !== undefined && rawByExit !== null) {
+        if (typeof rawByExit !== "object") {
+          issues.push(
+            `journey "${def.id}" has malformed wildcardTransitions.byExit (expected an object, got ${typeof rawByExit})`,
+          );
+        } else {
+          byExit = rawByExit as Record<string, unknown>;
+        }
+      }
+      if (byExit) {
         for (const [exitName, handler] of Object.entries(byExit)) {
           if (typeof handler !== "function") {
             issues.push(
