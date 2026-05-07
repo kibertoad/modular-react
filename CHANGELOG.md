@@ -4,6 +4,12 @@ This repo releases via the `release-same-version` label (see `.github/workflows/
 
 Per-package detail lives in the GitHub release tagged `<npm-name>@<version>`.
 
+## Unreleased
+
+### Behavior changes
+
+- **`@modular-react/core`** — `buildNavigationManifest` (and therefore `useNavigation`) now breaks ties on `order` by preserving insertion order instead of label string comparison. Items declared first render first when `order` is unset or equal: modules in registration order, items in the order declared in each module's `navigation` array, plugin-contributed items last. Labels are no longer a tiebreaker — the previous fallback sorted by i18n-key name (e.g. `appShell.nav.assets` < `appShell.nav.projects`), which produced surprising orderings unrelated to translated text. Apps that relied (intentionally or not) on alphabetical-by-key fallback should set explicit `order` values to lock in the desired sequence.
+
 ## 2026-04-19 — `@modular-react/*@1.2.0`, `@*-modules/*@2.3.0`
 
 Released alongside PR adjustments to PR #14 (Lokalise PoC gaps follow-up).

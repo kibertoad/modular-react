@@ -62,24 +62,58 @@ describe("buildNavigationManifest", () => {
   });
 
   describe("sorting", () => {
-    it("sorts by order first, then label alphabetically", () => {
+    it("sorts by order ascending, then preserves insertion order on ties", () => {
       const m = mod([
         { label: "Zebra", to: "/z", order: 1 },
         { label: "Apple", to: "/a", order: 2 },
         { label: "Banana", to: "/b", order: 1 },
       ]);
       const result = buildNavigationManifest([m]);
-      expect(result.items.map((i) => i.label)).toEqual(["Banana", "Zebra", "Apple"]);
+      // order 1: Zebra then Banana (insertion order — Zebra was declared first).
+      // order 2: Apple.
+      expect(result.items.map((i) => i.label)).toEqual(["Zebra", "Banana", "Apple"]);
     });
 
-    it("items without order sort after items with order, alphabetically among themselves", () => {
+    it("items without order sort after items with order, preserving insertion order among themselves", () => {
       const m = mod([
         { label: "Cherry", to: "/c" },
         { label: "Apple", to: "/a" },
         { label: "Banana", to: "/b", order: 5 },
       ]);
       const result = buildNavigationManifest([m]);
-      expect(result.items.map((i) => i.label)).toEqual(["Banana", "Apple", "Cherry"]);
+      expect(result.items.map((i) => i.label)).toEqual(["Banana", "Cherry", "Apple"]);
+    });
+
+    it("ties on order fall back to module registration order across modules", () => {
+      // Regression: with i18n-key labels, the previous label tiebreaker would
+      // put "appShell.nav.assets" before "appShell.nav.projects" purely
+      // because of key naming. Insertion order keeps the registration intent.
+      const m1 = mod([{ label: "appShell.nav.projects", to: "/p" }]);
+      const m2 = mod([{ label: "appShell.nav.assets", to: "/a" }]);
+      const result = buildNavigationManifest([m1, m2]);
+      expect(result.items.map((i) => i.label)).toEqual([
+        "appShell.nav.projects",
+        "appShell.nav.assets",
+      ]);
+    });
+
+    it("explicit order values larger than any sentinel still sort before unordered items", () => {
+      // Pins the contract: missing order always sorts last, regardless of
+      // how large an explicit order value is. Guards against reintroducing a
+      // numeric sentinel (e.g. `?? 999`) that would silently flip the order
+      // of any item using order >= the sentinel.
+      const m = mod([
+        { label: "Unordered", to: "/u" },
+        { label: "Huge", to: "/h", order: 100_000 },
+      ]);
+      const result = buildNavigationManifest([m]);
+      expect(result.items.map((i) => i.label)).toEqual(["Huge", "Unordered"]);
+    });
+
+    it("plugin extraItems land after module items when ties on order", () => {
+      const m = mod([{ label: "ModuleA", to: "/a" }]);
+      const result = buildNavigationManifest([m], [{ label: "PluginA", to: "/pa" }]);
+      expect(result.items.map((i) => i.label)).toEqual(["ModuleA", "PluginA"]);
     });
   });
 
