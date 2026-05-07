@@ -103,11 +103,13 @@ export interface JourneyOutletProps {
    *     journey's `transitions` map. The destination-side pass catches
    *     terminal-only steps that have no outbound transitions of their
    *     own (e.g. a freshly-added receipt screen reachable from `next:`
-   *     but not yet wired with its own exits). Entries reachable only
-   *     via `definition.start` are not enumerated — the start function
-   *     can't be run speculatively. Useful when handlers are not
-   *     annotated and the journey is small enough that warming all
-   *     candidates is cheap.
+   *     but not yet wired with its own exits). A step reachable only
+   *     via `definition.start` AND with no outbound transitions of its
+   *     own is the one remaining static gap — but such a step can only
+   *     be the current step on first mount (no exits → no advance), and
+   *     the skip-current logic already excludes it. Useful when handlers
+   *     are not annotated and the journey is small enough that warming
+   *     all candidates is cheap.
    *
    *   `false` — opt out entirely.
    *
@@ -416,11 +418,12 @@ function collectPreloadTargets(
   // entries reachable from a `next:` arm that themselves have no outbound
   // transitions yet, e.g. a freshly-added receipt screen).
   //
-  // The static enumeration can't cover entries reachable only via
-  // `definition.start` (it's a function we won't run speculatively). Authors
-  // who care about preloading the start step typically annotate the
-  // exit that lands on it from a previous step, which the destinations-side
-  // pass picks up.
+  // The remaining static gap — a step reachable only via `definition.start`
+  // AND with no outbound transitions of its own — is left uncovered. Such a
+  // step can only be the current step on first mount (you can't advance
+  // away from a step with no exits), in which case the skip-current logic
+  // excludes it anyway. `definition.start` is a function and we
+  // deliberately don't run it speculatively.
   for (const [moduleId, perModule] of Object.entries(transitions)) {
     if (!perModule) continue;
     for (const [entryName, perExit] of Object.entries(perModule)) {
