@@ -46,7 +46,12 @@ export function buildNavigationManifest<TNavItem extends NavigationItemBase = Na
   // apps (`TLabel` defaults to `string` but narrows to `ParseKeys`), so
   // lexicographic comparison would sort by translation-system artifact
   // rather than anything meaningful.
-  const sorted = [...allItems].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
+  const sorted = [...allItems].sort((a, b) => {
+    if (a.order === b.order) return 0; // both unset, or both same number — preserve insertion order
+    if (a.order === undefined) return 1;
+    if (b.order === undefined) return -1;
+    return a.order - b.order;
+  });
 
   // Group items
   const groupMap = new Map<string, TNavItem[]>();
