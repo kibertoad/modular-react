@@ -312,10 +312,12 @@ describe("extractTransitionDestinations", () => {
     });
   });
 
-  it("falls back to AST inference when targets is absent (bare handle wrapper)", async () => {
-    // A wrapper without `targets:` (or any unrelated call expression) still
-    // gets unwrapped — the inner handler is analyzed normally and the
-    // `targetsDeclared` flag stays absent.
+  it("treats a CallExpression without `targets:` as opaque", async () => {
+    // `targets` is mandatory on every `defineTransition` call, so its
+    // absence here means this is some unrelated helper (or a malformed
+    // call) the harvester has no contract with. Don't recurse into the
+    // inner `handle:` function — that would falsely surface destinations
+    // for a wrapper that may not even forward the handler verbatim.
     const path = writeTmp(
       "no-targets.ts",
       `export default {
@@ -335,12 +337,7 @@ describe("extractTransitionDestinations", () => {
        };`,
     );
     const map = await extractTransitionDestinations(path, "no-decl");
-    expect(map.a?.x?.ok).toEqual({
-      nexts: [{ module: "b", entry: "y" }],
-      aborts: false,
-      completes: false,
-    });
-    expect(map.a?.x?.ok).not.toHaveProperty("targetsDeclared");
+    expect(map.a?.x?.ok).toBeUndefined();
   });
 
   it("derives `aborts` / `completes` flags from terminal sentinels in `targets`", async () => {

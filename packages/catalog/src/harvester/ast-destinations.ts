@@ -214,37 +214,27 @@ function analyzeHandler(value: AstNode): HandlerOutcome | null {
   // Only function expressions / arrows count; literal `{}` etc. are inert.
   if (!value) return null;
 
-  // Unwrap a `defineTransition({ targets, handle })` (or any equivalent
-  // curried binder, e.g. `const transition = defineTransition<...>(); transition({...})`).
-  //
-  // When the wrapper declares `targets`, treat that array as the
-  // authoritative source for ALL outcomes — both `nexts` (object refs)
-  // and the terminal `aborts` / `completes` flags (string sentinels). The
-  // declaration is the documented contract: the runtime narrows the
-  // handler return to the declared arms, so the AST walk over the body
-  // can only confirm what targets already says (and would miss branches
-  // hidden behind dynamic returns).
-  //
-  // Bare `defineTransition({ handle })` without `targets` (or an unrelated
-  // call expression that happens to take an object argument) falls through
-  // to the inner-handle path, preserving the existing AST behavior.
+  // Unwrap a `defineTransition({ targets, handle })` call (or its curried
+  // sibling, e.g. `const transition = defineTransition<...>(); transition({...})`).
+  // `targets` is mandatory on every `defineTransition` invocation in the
+  // runtime, so its absence here means this is some other CallExpression
+  // we can't classify — leave it opaque rather than guessing at the inner
+  // function. Declared targets are the authoritative source for all
+  // outcomes (next refs + terminal `aborts` / `completes` from sentinels);
+  // the runtime narrows the handler return to those arms, so an AST walk
+  // over the body can only confirm what `targets` already says.
   if (value.type === "CallExpression") {
     const spec = value.arguments?.[0];
-    if (spec?.type === "ObjectExpression") {
-      const targetsProp = findProperty(spec, "targets");
-      const handleProp = findProperty(spec, "handle");
-      const declared = targetsProp ? readDeclaredTargets(targetsProp.value) : null;
-      if (declared !== null) {
-        return {
-          nexts: declared.nexts,
-          aborts: declared.aborts,
-          completes: declared.completes,
-          targetsDeclared: true,
-        };
-      }
-      if (handleProp?.value) return analyzeHandler(handleProp.value);
-    }
-    return null;
+    if (!spec || spec.type !== "ObjectExpression") return null;
+    const targetsProp = findProperty(spec, "targets");
+    const declared = targetsProp ? readDeclaredTargets(targetsProp.value) : null;
+    if (declared === null) return null;
+    return {
+      nexts: declared.nexts,
+      aborts: declared.aborts,
+      completes: declared.completes,
+      targetsDeclared: true,
+    };
   }
 
   const isFunction =
