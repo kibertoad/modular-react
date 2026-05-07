@@ -16,7 +16,7 @@
   "dependencies": {
     "@example-rr-invoke/age-verify-module": "workspace:*",
     "@example-rr-invoke/app-shared": "workspace:*",
-    "@modular-react/journeys": "^1.0.0"
+    "@modular-react/journeys": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^6.0.2"

@@ -18,7 +18,7 @@
     "@example-tsr-onboarding/billing-module": "workspace:*",
     "@example-tsr-onboarding/plan-module": "workspace:*",
     "@example-tsr-onboarding/profile-module": "workspace:*",
-    "@modular-react/journeys": "^1.0.0"
+    "@modular-react/journeys": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^6.0.2"

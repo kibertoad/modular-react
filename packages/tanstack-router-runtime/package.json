@@ -29,10 +29,10 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@modular-react/core": "^1.2.0",
+    "@modular-react/core": "workspace:*",
     "@modular-react/journeys": "workspace:*",
-    "@modular-react/react": "^1.2.0",
-    "@tanstack-react-modules/core": "^2.3.0",
+    "@modular-react/react": "workspace:*",
+    "@tanstack-react-modules/core": "workspace:*",
     "@tanstack/react-router": "^1.168.8",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",

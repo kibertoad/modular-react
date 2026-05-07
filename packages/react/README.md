@@ -71,4 +71,6 @@ function PlanCard({ onClick }: { onClick: () => void }) {
 
 Calls are idempotent — the underlying `WeakMap` cache returns the same in-flight or resolved promise across hover, click, and any `<JourneyOutlet preload>` that picked the same entry.
 
+In tests, prefer `preloadEntries(modules)` from `@modular-react/testing` — it walks every `lazy:` entry on a module set in one call, so renders commit synchronously without a Suspense fallback flash. See [`@modular-react/testing`](../testing/README.md#eager-resolution-mode-for-lazy-entries).
+
 See the [main documentation](https://github.com/kibertoad/modular-react#readme) for the full guide.

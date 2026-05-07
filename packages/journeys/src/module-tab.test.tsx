@@ -2,6 +2,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import type { ModuleEntryProps } from "@modular-react/core";
+import { preloadEntries } from "@modular-react/testing";
 import { ModuleTab } from "./module-tab.js";
 
 afterEach(() => {
@@ -196,5 +197,39 @@ describe("ModuleTab", () => {
       await Promise.resolve();
     });
     expect(getByTestId("cid").textContent).toBe("C-9");
+  });
+
+  it("after preloadEntries, a lazy entry renders synchronously with no fallback flash", async () => {
+    // End-to-end proof of the eager-resolution mode: once preloadEntries
+    // settles, ModuleTab commits the resolved component on the first pass —
+    // no `await waitFor`, no `act`, and the Suspense fallback never mounts.
+    const lazyImporter = vi.fn(() => Promise.resolve({ default: Review }));
+    let fallbackMounts = 0;
+    const Fallback = () => {
+      fallbackMounts += 1;
+      return <span data-testid="lazy-fallback">loading…</span>;
+    };
+    const lazyMod = defineModule({
+      id: "review-lazy-eager",
+      version: "1.0.0",
+      exitPoints: exits,
+      entryPoints: {
+        review: defineEntry({
+          lazy: lazyImporter,
+          fallback: <Fallback />,
+          input: schema<{ customerId: string }>(),
+        }),
+      },
+    });
+
+    await preloadEntries([lazyMod]);
+
+    const { getByTestId } = render(
+      <ModuleTab module={lazyMod} entry="review" input={{ customerId: "C-42" }} />,
+    );
+    // Synchronous render — no waitFor, no act needed.
+    expect(getByTestId("cid").textContent).toBe("C-42");
+    expect(fallbackMounts).toBe(0);
+    expect(lazyImporter).toHaveBeenCalledTimes(1);
   });
 });
