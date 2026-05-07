@@ -1,4 +1,5 @@
-import type { ModuleDescriptor } from "@modular-react/core";
+import { isExitContract } from "@modular-react/core";
+import type { ExitContract, ModuleDescriptor } from "@modular-react/core";
 import type { AnyJourneyDefinition, RegisteredJourney } from "./types.js";
 import { parseRange, parseVersion, satisfiesParsed, SemverParseError } from "./semver.js";
 
@@ -124,6 +125,130 @@ export function validateJourneyContracts(
             issues.push(
               `journey "${def.id}" sets allowBack on "${moduleId}.${entryName}" but the module entry does not declare allowBack`,
             );
+          }
+        }
+      }
+    }
+
+    // Validate `wildcardTransitions`. Two slots — `byEntryAndExit`
+    // (module unknown, entry + exit known) and `byExit` (module + entry
+    // both unknown). Three checks per slot: live-key (some reachable
+    // module emits the named exit / entry+exit pair), contract
+    // consistency (modules sharing the slot use the same ExitContract
+    // when contracts are in play), and tier-overlap (warning only —
+    // declaring both a `byEntryAndExit[E][X]` and a `byExit[X]` shadows
+    // the latter for entry E).
+    const wildcardTransitions = (def as { wildcardTransitions?: unknown }).wildcardTransitions as
+      | {
+          byEntryAndExit?: Record<string, Record<string, unknown>>;
+          byExit?: Record<string, unknown>;
+        }
+      | undefined;
+
+    if (wildcardTransitions && typeof wildcardTransitions === "object") {
+      // The "reachable" set for a wildcard's live-key check is every
+      // registered module — not just modules keyed under `transitions`.
+      // A journey's `transitions` block declares per-step *handlers*; the
+      // modules a journey actually visits are determined dynamically by
+      // its `start` function and by `next` transitions whose targets we
+      // can't statically introspect. Using all registered modules
+      // guarantees no false-positive "dead key" rejection while still
+      // catching the common case (a typo in an exit name that no module
+      // emits anywhere).
+      const reachableModules = modules;
+
+      const byEntryAndExit = wildcardTransitions.byEntryAndExit;
+      if (byEntryAndExit && typeof byEntryAndExit === "object") {
+        for (const [entryName, perEntry] of Object.entries(byEntryAndExit)) {
+          if (!perEntry || typeof perEntry !== "object") {
+            issues.push(
+              `journey "${def.id}" has malformed wildcardTransitions.byEntryAndExit["${entryName}"] (expected an object)`,
+            );
+            continue;
+          }
+          for (const [exitName, handler] of Object.entries(perEntry)) {
+            if (typeof handler !== "function") {
+              issues.push(
+                `journey "${def.id}" has non-function wildcardTransitions.byEntryAndExit["${entryName}"]["${exitName}"]`,
+              );
+              continue;
+            }
+            // Live-key: at least one registered module must declare
+            // entry `entryName` AND exit `exitName`.
+            const matching = reachableModules.filter(
+              (m) =>
+                m.entryPoints?.[entryName] !== undefined &&
+                m.exitPoints !== undefined &&
+                exitName in m.exitPoints,
+            );
+            if (matching.length === 0) {
+              issues.push(
+                `journey "${def.id}" declares wildcardTransitions.byEntryAndExit["${entryName}"]["${exitName}"] but no registered module pairs that entry with that exit`,
+              );
+              continue;
+            }
+            validateContractConsistency(
+              issues,
+              def.id,
+              `wildcardTransitions.byEntryAndExit["${entryName}"]["${exitName}"]`,
+              exitName,
+              matching,
+            );
+          }
+        }
+      }
+
+      const byExit = wildcardTransitions.byExit;
+      if (byExit && typeof byExit === "object") {
+        for (const [exitName, handler] of Object.entries(byExit)) {
+          if (typeof handler !== "function") {
+            issues.push(
+              `journey "${def.id}" has non-function wildcardTransitions.byExit["${exitName}"]`,
+            );
+            continue;
+          }
+          const matching = reachableModules.filter(
+            (m) => m.exitPoints !== undefined && exitName in m.exitPoints,
+          );
+          if (matching.length === 0) {
+            issues.push(
+              `journey "${def.id}" declares wildcardTransitions.byExit["${exitName}"] but no registered module emits that exit`,
+            );
+            continue;
+          }
+          validateContractConsistency(
+            issues,
+            def.id,
+            `wildcardTransitions.byExit["${exitName}"]`,
+            exitName,
+            matching,
+          );
+
+          // Tier-overlap warning: if the same exit is also declared
+          // under any byEntryAndExit slot, the byExit handler is
+          // unreachable from those entries. Warn (not error — sometimes
+          // deliberate). Console-only because the validator's contract
+          // is to throw on hard issues; warnings sit beside them.
+          if (byEntryAndExit) {
+            const shadowingEntries: string[] = [];
+            for (const [entryName, perEntry] of Object.entries(byEntryAndExit)) {
+              if (
+                perEntry &&
+                typeof perEntry === "object" &&
+                typeof (perEntry as Record<string, unknown>)[exitName] === "function"
+              ) {
+                shadowingEntries.push(entryName);
+              }
+            }
+            if (shadowingEntries.length > 0) {
+              console.warn(
+                `[@modular-react/journeys] journey "${def.id}" declares both wildcardTransitions.byExit["${exitName}"] and wildcardTransitions.byEntryAndExit[${shadowingEntries
+                  .map((e) => `"${e}"`)
+                  .join(
+                    ",",
+                  )}]["${exitName}"]; the byExit handler is unreachable from those entries (the more specific one wins).`,
+              );
+            }
           }
         }
       }
@@ -388,6 +513,54 @@ function canonicalizeCycle(nodes: readonly string[]): string {
 
 function quote(id: string): string {
   return `"${id}"`;
+}
+
+/**
+ * Cross-module contract consistency check for a wildcard transition
+ * slot. When any of the matching modules declare the exit via an
+ * `ExitContract`, every other matching module must use the same
+ * contract instance — otherwise the wildcard handler's `output` shape
+ * silently differs between modules, which defeats the whole point of
+ * the wildcard. Modules that declare the exit as a plain
+ * `ExitPointSchema` (no contract) are tolerated alongside contract-
+ * using modules in the warning-only sense (no issue), because authors
+ * can opt into shape consistency incrementally.
+ *
+ * Issues are appended to the shared accumulator. The slot path
+ * (`label`) is included verbatim in the message so authors can locate
+ * the offending wildcard at a glance.
+ */
+function validateContractConsistency(
+  issues: string[],
+  journeyId: string,
+  label: string,
+  exitName: string,
+  matching: readonly ModuleDescriptor<any, any, any, any>[],
+): void {
+  // Find the first contract-using module; it sets the expected identity.
+  let expectedContract: ExitContract<unknown> | null = null;
+  let expectedFromModule: string | null = null;
+  for (const mod of matching) {
+    const schema = mod.exitPoints?.[exitName];
+    if (schema && isExitContract(schema)) {
+      expectedContract = schema as ExitContract<unknown>;
+      expectedFromModule = mod.id;
+      break;
+    }
+  }
+  if (!expectedContract) return;
+
+  for (const mod of matching) {
+    if (mod.id === expectedFromModule) continue;
+    const schema = mod.exitPoints?.[exitName];
+    if (!schema) continue;
+    if (!isExitContract(schema)) continue;
+    if (schema !== expectedContract) {
+      issues.push(
+        `journey "${journeyId}" ${label}: module "${mod.id}" declares exit "${exitName}" with a different ExitContract than module "${expectedFromModule}" (contract identity mismatch — share a single defineExitContract value across modules to make the wildcard's output shape uniform)`,
+      );
+    }
+  }
 }
 
 /**

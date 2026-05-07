@@ -13,10 +13,12 @@ import type { CatalogMeta } from "./catalog-meta.js";
 
 import type {
   EntryPointMap,
+  ExitContract,
   ExitPointMap,
   ExitPointSchema,
   ModuleDescriptor,
   ModuleEntryPoint,
+  StandardSchemaIssue,
 } from "./types.js";
 
 // -----------------------------------------------------------------------------
@@ -227,6 +229,131 @@ export type TransitionMap<TModules extends ModuleTypeMap, TState, TOutput = unkn
     >;
   };
 };
+
+// -----------------------------------------------------------------------------
+// Wildcard transitions — match by exit (and optionally entry) when the source
+// module isn't the dispatching key. Resolution precedence in `dispatchExit`:
+//
+//   1. transitions[mod][entry][exit]                       — exact
+//   2. wildcardTransitions.byEntryAndExit[entry][exit]     — module wildcard
+//   3. wildcardTransitions.byExit[exit]                    — module + entry wildcard
+//
+// More precise always wins because the lookup checks 1 → 2 → 3 in order; the
+// first hit fires. See `packages/journeys/src/runtime.ts` `dispatchExit`.
+// -----------------------------------------------------------------------------
+
+/** Union of every entry name declared by any module in the map. */
+export type WildcardEntryNamesOf<TModules extends ModuleTypeMap> = {
+  [M in keyof TModules]: EntryNamesOf<TModules[M]>;
+}[keyof TModules];
+
+/** Union of every exit name declared by any module in the map. */
+export type WildcardExitNamesOf<TModules extends ModuleTypeMap> = {
+  [M in keyof TModules]: ExitNamesOf<TModules[M]>;
+}[keyof TModules];
+
+/** Exit names emitted by modules that ALSO declare entry `E`. */
+export type ExitNamesPairedWithEntry<TModules extends ModuleTypeMap, E> = {
+  [M in keyof TModules]: E extends EntryNamesOf<TModules[M]> ? ExitNamesOf<TModules[M]> : never;
+}[keyof TModules];
+
+/**
+ * Output type for a wildcard handler keyed by `[entry, exit]` (tier 2).
+ * Intersection of the matching modules' `ExitOutputOf<TModules[M], X>` —
+ * the safest read when the source module isn't known. When every
+ * matching module uses the same `ExitContract`, this collapses to the
+ * contract's `T` because the contract object is referenced by identity.
+ */
+export type WildcardExitOutputForEntry<TModules extends ModuleTypeMap, E, X> = UnionToIntersection<
+  {
+    [M in keyof TModules]: E extends EntryNamesOf<TModules[M]>
+      ? X extends ExitNamesOf<TModules[M]>
+        ? ExitOutputOf<TModules[M], X>
+        : never
+      : never;
+  }[keyof TModules]
+>;
+
+/** Output type for a wildcard handler keyed by `[exit]` only (tier 3). */
+export type WildcardExitOutputOf<TModules extends ModuleTypeMap, X> = UnionToIntersection<
+  {
+    [M in keyof TModules]: X extends ExitNamesOf<TModules[M]>
+      ? ExitOutputOf<TModules[M], X>
+      : never;
+  }[keyof TModules]
+>;
+
+/**
+ * Input type passed to a tier-2 handler — intersection of
+ * `EntryInputOf<TModules[M], E>` across modules that declare entry `E`.
+ * Tier-3 handlers receive `unknown` instead (the entry is also unknown).
+ */
+export type WildcardEntryInputOf<TModules extends ModuleTypeMap, E> = UnionToIntersection<
+  {
+    [M in keyof TModules]: E extends EntryNamesOf<TModules[M]>
+      ? EntryInputOf<TModules[M], E>
+      : never;
+  }[keyof TModules]
+>;
+
+/**
+ * Tier-2 wildcard map: module unknown, entry name + exit name known.
+ * Keyed by entry first (the more stable axis at the call site), then by
+ * exit. Handlers receive a typed `output` and `input` derived from the
+ * matching modules.
+ */
+export type EntryExitWildcardMap<TModules extends ModuleTypeMap, TState, TOutput = unknown> = {
+  readonly [E in WildcardEntryNamesOf<TModules>]?: {
+    readonly [X in ExitNamesPairedWithEntry<TModules, E>]?: (
+      ctx: ExitCtx<
+        TState,
+        WildcardExitOutputForEntry<TModules, E, X>,
+        WildcardEntryInputOf<TModules, E>
+      >,
+    ) => TransitionResult<TModules, TState, TOutput>;
+  };
+};
+
+/**
+ * Tier-3 wildcard map: module + entry both unknown. Keyed by exit name
+ * only. Handlers receive `input: unknown` since the source entry is
+ * unknown.
+ */
+export type ExitOnlyWildcardMap<TModules extends ModuleTypeMap, TState, TOutput = unknown> = {
+  readonly [X in WildcardExitNamesOf<TModules>]?: (
+    ctx: ExitCtx<TState, WildcardExitOutputOf<TModules, X>, unknown>,
+  ) => TransitionResult<TModules, TState, TOutput>;
+};
+
+/**
+ * Sibling of `TransitionMap` for transitions that match without knowing
+ * the source module. Two precision tiers — `byEntryAndExit` (more
+ * specific) and `byExit` (catch-all). The runtime tries them in order
+ * after the exact `transitions` lookup misses, so a matching exact
+ * handler always wins.
+ *
+ * Kept separate from `TransitionMap` for the same TS-variance reason
+ * `ResumeMap` is split out (see `EntryTransitions`' doc above): nesting
+ * an index-signature value inside the existing intersection collapses
+ * mapped-type variance and breaks assignability to the registry's wide
+ * `AnyJourneyDefinition`.
+ */
+export type WildcardTransitionMap<TModules extends ModuleTypeMap, TState, TOutput = unknown> = {
+  readonly byEntryAndExit?: EntryExitWildcardMap<TModules, TState, TOutput>;
+  readonly byExit?: ExitOnlyWildcardMap<TModules, TState, TOutput>;
+};
+
+/**
+ * Distribute a union into an intersection. Used by the wildcard output
+ * types so a handler declared for an exit name multiple modules emit
+ * sees only fields every variant guarantees — the safest read when the
+ * source module is unknown.
+ */
+type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
+  k: infer I,
+) => void
+  ? I
+  : never;
 
 /**
  * Resume map — sibling of `TransitionMap` keyed identically by
@@ -598,7 +725,9 @@ export type JourneySystemAbortReasonCode =
   | "resume-returned-promise"
   | "resume-bounce-limit"
   | "transition-error"
-  | "transition-returned-promise";
+  | "transition-returned-promise"
+  | "exit-payload-invalid"
+  | "exit-payload-invalid-async";
 
 /**
  * Discriminated union of every abort payload the runtime emits. Each arm
@@ -702,7 +831,30 @@ export type JourneySystemAbortReason =
       readonly exit: string | null;
       readonly error: unknown;
     }
-  | { readonly reason: "transition-returned-promise"; readonly exit: string | null };
+  | { readonly reason: "transition-returned-promise"; readonly exit: string | null }
+  | {
+      /**
+       * The active step's exit point is declared via an `ExitContract`
+       * with a runtime schema, and the emitted payload failed validation.
+       * `issues` is the schema's reported issue list, verbatim from the
+       * Standard Schema result.
+       */
+      readonly reason: "exit-payload-invalid";
+      readonly exit: string;
+      readonly issues: ReadonlyArray<StandardSchemaIssue>;
+    }
+  | {
+      /**
+       * The exit's contract schema returned a Promise. Transitions and
+       * payload validation must be synchronous (mirrors the same rule
+       * applied to transition handlers — see
+       * `transition-returned-promise`); async schemas abort here so the
+       * authoring loop surfaces the misconfiguration instead of silently
+       * swallowing the validation result.
+       */
+      readonly reason: "exit-payload-invalid-async";
+      readonly exit: string;
+    };
 
 const JOURNEY_SYSTEM_ABORT_REASON_CODES: ReadonlySet<string> =
   new Set<JourneySystemAbortReasonCode>([
@@ -723,6 +875,8 @@ const JOURNEY_SYSTEM_ABORT_REASON_CODES: ReadonlySet<string> =
     "resume-bounce-limit",
     "transition-error",
     "transition-returned-promise",
+    "exit-payload-invalid",
+    "exit-payload-invalid-async",
   ]);
 
 /**

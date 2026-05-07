@@ -1,5 +1,11 @@
-import { isDevEnv } from "@modular-react/core";
-import type { JourneyHandleRef, ModuleDescriptor } from "@modular-react/core";
+import { isDevEnv, isExitContract } from "@modular-react/core";
+import type {
+  ExitContract,
+  JourneyHandleRef,
+  ModuleDescriptor,
+  StandardSchemaIssue,
+  StandardSchemaResult,
+} from "@modular-react/core";
 import type {
   AnyJourneyDefinition,
   ChildOutcome,
@@ -1335,17 +1341,118 @@ export function createJourneyRuntime(
     }
     const step = record.step;
     if (!step) return;
+
+    // Phase 1 — payload validation. When the active step's module declares
+    // this exit via an `ExitContract` carrying a Standard Schema, validate
+    // the payload before any handler runs. Validation is contract-driven
+    // (not transition-tier-driven) so exact and wildcard handlers see the
+    // same already-validated payload. Synchronous schemas only — async
+    // results abort with `exit-payload-invalid-async` so the misconfigured
+    // schema surfaces at the authoring loop instead of being silently
+    // swallowed (mirrors the same rule applied to transition handlers).
+    let validatedOutput = output;
+    const stepModule = moduleMap[step.moduleId];
+    const exitSchema = stepModule?.exitPoints?.[exitName];
+    if (exitSchema && isExitContract(exitSchema) && (exitSchema as ExitContract<unknown>).schema) {
+      const contract = exitSchema as ExitContract<unknown>;
+      let validateResult: StandardSchemaResult<unknown> | Promise<StandardSchemaResult<unknown>>;
+      try {
+        validateResult = contract.schema!["~standard"].validate(output);
+      } catch (err) {
+        if (debug) {
+          console.error(
+            `[@modular-react/journeys] Exit contract schema for "${step.moduleId}.${exitName}" threw during validation.`,
+            err,
+          );
+        }
+        fireOnError(reg, record, err, step);
+        applyTransition(
+          record,
+          reg,
+          { abort: { reason: "transition-error", exit: exitName, error: err } },
+          exitName,
+        );
+        return;
+      }
+      if (validateResult && typeof (validateResult as { then?: unknown }).then === "function") {
+        if (debug) {
+          console.error(
+            `[@modular-react/journeys] Exit contract schema for "${step.moduleId}.${exitName}" returned a Promise. Schemas attached to ExitContracts must be synchronous — async refinements run in a loading entry point instead.`,
+          );
+        }
+        applyTransition(
+          record,
+          reg,
+          { abort: { reason: "exit-payload-invalid-async", exit: exitName } },
+          exitName,
+        );
+        return;
+      }
+      const settled = validateResult as StandardSchemaResult<unknown>;
+      if (settled.issues) {
+        if (debug) {
+          console.warn(
+            `[@modular-react/journeys] Exit("${exitName}") on ${step.moduleId} failed contract validation:`,
+            settled.issues,
+          );
+        }
+        applyTransition(
+          record,
+          reg,
+          {
+            abort: {
+              reason: "exit-payload-invalid",
+              exit: exitName,
+              issues: settled.issues as ReadonlyArray<StandardSchemaIssue>,
+            },
+          },
+          exitName,
+        );
+        return;
+      }
+      // Hand the schema's parsed output to handlers — coerced /
+      // narrowed shape, not the raw emit payload.
+      validatedOutput = settled.value;
+    }
+
+    // Phase 2 — three-tier handler lookup. Order encodes precedence: the
+    // first hit wins, so an exact handler always preempts a wildcard, and
+    // a more-specific wildcard preempts a less-specific one.
     const perModule = (reg.definition.transitions as Record<string, any> | undefined)?.[
       step.moduleId
     ];
     const perEntry = perModule?.[step.entry];
-    const handler = perEntry?.[exitName] as
-      | ((ctx: {
-          state: unknown;
-          input: unknown;
-          output: unknown;
-        }) => TransitionResult<ModuleTypeMap, unknown>)
+    const exact = perEntry?.[exitName];
+    const wc = (reg.definition as { wildcardTransitions?: unknown }).wildcardTransitions as
+      | {
+          byEntryAndExit?: Record<string, Record<string, unknown>>;
+          byExit?: Record<string, unknown>;
+        }
       | undefined;
+    const byEntryAndExit = wc?.byEntryAndExit?.[step.entry]?.[exitName];
+    const byExit = wc?.byExit?.[exitName];
+
+    const handler =
+      typeof exact === "function"
+        ? (exact as (ctx: {
+            state: unknown;
+            input: unknown;
+            output: unknown;
+          }) => TransitionResult<ModuleTypeMap, unknown>)
+        : typeof byEntryAndExit === "function"
+          ? (byEntryAndExit as (ctx: {
+              state: unknown;
+              input: unknown;
+              output: unknown;
+            }) => TransitionResult<ModuleTypeMap, unknown>)
+          : typeof byExit === "function"
+            ? (byExit as (ctx: {
+                state: unknown;
+                input: unknown;
+                output: unknown;
+              }) => TransitionResult<ModuleTypeMap, unknown>)
+            : undefined;
+
     if (typeof handler !== "function") {
       if (debug) {
         console.warn(
@@ -1356,7 +1463,7 @@ export function createJourneyRuntime(
     }
     let result: TransitionResult<ModuleTypeMap, unknown>;
     try {
-      result = handler({ state: record.state, input: step.input, output });
+      result = handler({ state: record.state, input: step.input, output: validatedOutput });
     } catch (err) {
       if (debug) console.error("[@modular-react/journeys] transition handler threw", err);
       fireOnError(reg, record, err, step);

@@ -23,7 +23,7 @@ Routes, slots, navigation, workspaces - none of that changes. Journeys sit **on 
 - [Quickstart](#quickstart) - the 5-step path from zero to a running journey
 - [Core concepts](#core-concepts) - entries, exits, `allowBack`, lifecycle, statuses, keys
 - [Authoring patterns](#authoring-patterns) - module entries, exits, loading flows, `goBack` opt-in, **lazy entry-points (code-splitting)**
-- [Journey definition patterns](#journey-definition-patterns) - branching, `selectModule` dispatch, terminals, state rewrites, bounded history, module compatibility, **`defineTransition` (auto-preload + narrowed handler return)**
+- [Journey definition patterns](#journey-definition-patterns) - branching, `selectModule` dispatch, terminals, state rewrites, bounded history, module compatibility, **`defineTransition` (auto-preload + narrowed handler return)**, **wildcard transitions + shared exit contracts**
 - [Composing journeys (invoke / resume)](#composing-journeys-invoke--resume) - call out to a child journey mid-flow and resume on its outcome
   - [Cycle and recursion safety](#cycle-and-recursion-safety) - cycle / depth / undeclared-child / bounce-limit guards and how to tune them
 - [Runtime surface](#runtime-surface) - the `JourneyRuntime` you get back from `manifest.journeys`
@@ -799,6 +799,97 @@ It's a separate function, not a third argument on `selectModule`, so the _exhaus
 - The journey's `chosen` transition uses `selectModule(Or)` to dispatch on the picked id.
 
 Slots drive presentation (dynamic, discoverable); the journey owns dispatch (typed, statically declared). See [`examples/react-router/integration-setup-journey/`](../../examples/react-router/integration-setup-journey/) for an end-to-end example with both forms exercised by Playwright.
+
+### Pattern - wildcard transitions (`wildcardTransitions`)
+
+Cross-cutting outcomes - `cancelled`, `error`, `back`, `signedOut` - tend to be emitted by many modules and handled the same way. Rather than copy the same handler under every `transitions[mod][entry]` block, declare it once on `wildcardTransitions`. Two precision tiers:
+
+```ts
+defineJourney<Modules, State>()({
+  // …id, version, initialState, start…
+  transitions: {
+    // exact handlers — one per [module][entry][exit] triple.
+    profile:  { review:  { approved: ({ output }) => ({ next: ... }) } },
+    billing:  { confirm: { approved: ({ output }) => ({ complete: ... }) } },
+  },
+  wildcardTransitions: {
+    // tier 2 — module unknown, entry + exit known.
+    // Fires when no exact handler matches AND the active step's entry name is "review".
+    byEntryAndExit: {
+      review: {
+        cancelled: ({ output }) => ({ abort: { reason: "user-cancelled" } }),
+      },
+    },
+    // tier 3 — module + entry both unknown.
+    // Fires when no exact handler and no byEntryAndExit handler matches.
+    byExit: {
+      error: ({ output, state }) => ({
+        state: { ...state, lastError: output.code },
+        next: { module: "errorScreen", entry: "show", input: { code: output.code } },
+      }),
+    },
+  },
+});
+```
+
+**Resolution precedence.** The runtime tries three locations in this order, first hit wins:
+
+1. `transitions[currentMod][currentEntry][exit]` - exact, all three known.
+2. `wildcardTransitions.byEntryAndExit[currentEntry][exit]` - module wildcarded.
+3. `wildcardTransitions.byExit[exit]` - module + entry both wildcarded.
+
+So a more specific handler always preempts a less specific one. No flag, no merge step - just lookup order.
+
+**Type narrowing on the wildcard's `output`.** Because the source module is unknown at the wildcard call site, the handler's `output` type is the **intersection** of `ExitOutputOf` across the matching modules. If those modules' exits emit different shapes, `output` collapses to fields every variant guarantees (or `never`, if the shapes are incompatible). The fix is to share a single `defineExitContract` value across modules - see the next pattern.
+
+**`input` typing.** A `byEntryAndExit` handler's `input` is the intersection of `EntryInputOf<TModules[M], E>` across modules that declare entry `E` (the entry name is known, so this is sharper than tier 3). A `byExit` handler's `input` is `unknown` (entry is also unknown) - read step context via `onTransition` if you need it.
+
+**Validation at registration time.** Every wildcard slot is checked: a `byExit["nope"]` no module emits, or a `byEntryAndExit["review"]["typo"]` no module pairs, throws `JourneyValidationError`. Declaring both `byEntryAndExit[E][X]` and `byExit[X]` emits a `console.warn` (the `byExit` is unreachable from entry `E` - sometimes deliberate, but worth noticing).
+
+### Pattern - shared exit contracts (`defineExitContract`)
+
+Wildcard transitions read across modules - so when several modules emit the same kind of exit (`cancelled`, `error`, ...), the journey wants a _single_ output shape regardless of which module fired. A **shared exit contract** locks that shape in: define it once, reference the same value as the schema for every module's exit. Two effects:
+
+1. **Wildcard `output` narrows to a single typed shape** - the contract's `T`, not the intersection.
+2. **Cross-module shape consistency is enforced at registration** - if two modules emit `cancelled` with different contract instances, `validateJourneyContracts` throws.
+
+```ts
+// shared/exits.ts — shared across the modules that emit these
+import { defineExitContract } from "@modular-react/core";
+import { z } from "zod";
+
+// Type-only contract — declared TOutput, no runtime validation.
+export const errorContract = defineExitContract<{ code: string }>("error");
+
+// Schema-backed contract — TOutput inferred from the schema, runtime
+// validates payloads at every emit. Works with any StandardSchemaV1
+// implementation: Zod, Valibot, ArkType, ...
+export const cancelledContract = defineExitContract("cancelled", z.object({ reason: z.string() })); // ExitContract<{ reason: string }>
+```
+
+```ts
+// modules/profile/exits.ts and modules/billing/exits.ts — both reference
+// the same contract values. Identity is what makes consistency cheap.
+import { defineExit } from "@modular-react/core";
+import { cancelledContract, errorContract } from "../../shared/exits.js";
+
+export const profileExits = {
+  approved: defineExit<{ profileId: string }>(),
+  cancelled: cancelledContract, // shared
+  error: errorContract, // shared
+} as const;
+```
+
+**Runtime validation.** When the contract carries a schema, the runtime validates every payload at `exit()` emit - _before_ any handler runs - and aborts the journey with a typed system reason on issues:
+
+| Outcome                                     | System abort reason          | Payload                                                   |
+| ------------------------------------------- | ---------------------------- | --------------------------------------------------------- |
+| Payload fails schema                        | `exit-payload-invalid`       | `{ exit, issues: ReadonlyArray<StandardSchemaV1.Issue> }` |
+| Schema returns a Promise (async refinement) | `exit-payload-invalid-async` | `{ exit }`                                                |
+
+Both reasons flow through the existing `isJourneySystemAbort()` predicate. Async schemas are rejected because the journey runtime is intentionally synchronous - put async refinement work inside a loading entry point on a module instead. Schemas that throw during validation surface as a normal `transition-error` abort and fire `onError`.
+
+**Why Standard Schema, not Zod-direct.** `@standard-schema/spec` is a type-only package (~0 bytes runtime, single interface) that Zod, Valibot, ArkType, and others all implement. Consumers pick the schema lib that fits; this package stays library-agnostic. Same approach TanStack Router uses for search-param validation.
 
 ### Pattern - terminal with structured payload
 
@@ -2082,18 +2173,21 @@ Every export you're likely to call, grouped by role.
 
 ### From `@modular-react/core` (module authors)
 
-| Export                                           | Signature                                                                                                        | Purpose                                                                                                                                                                             |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `defineEntry`                                    | overloaded — `<T>(e: EagerModuleEntryPoint<T> \| LazyModuleEntryPoint<T>) => same`                               | Identity helper. Two forms: eager (`{ component, input?, allowBack? }`) or lazy (`{ lazy: () => import(…), fallback?, input?, allowBack? }`). Mutually exclusive at the type level. |
-| `defineExit`                                     | `<T = void>() => ExitPointSchema<T>`                                                                             | Identity helper for an exit-point literal. Zero runtime cost.                                                                                                                       |
-| `schema`                                         | `<T>() => InputSchema<T>`                                                                                        | Type-only brand used to carry an input/output shape. Zero runtime cost.                                                                                                             |
-| `ModuleEntryProps`                               | `<TInput, TExits extends ExitPointMap = {}>`                                                                     | Typed props for an entry component: `{ input, exit, goBack? }`.                                                                                                                     |
-| `ModuleEntryPoint`                               | `EagerModuleEntryPoint<T> \| LazyModuleEntryPoint<T>`                                                            | Discriminated union — eager (`component`) or lazy (`lazy`).                                                                                                                         |
-| `EagerModuleEntryPoint` / `LazyModuleEntryPoint` | `{ component, input?, allowBack?, lazy?: never }` / `{ lazy, fallback?, input?, allowBack?, component?: never }` | The two branches of the union, exported for callers that want to type a single variant explicitly.                                                                                  |
-| `LazyEntryComponent`                             | `() => Promise<{ default: ComponentType<…> } \| ComponentType<…>>`                                               | Importer signature accepted by `defineEntry({ lazy })`. Both default-export and direct-export module shapes are normalized at runtime.                                              |
-| `ExitPointSchema`                                | `{ output? }`                                                                                                    | Exit-point descriptor shape.                                                                                                                                                        |
-| `ExitFn`                                         | `<TExits>(name, output?) => void`                                                                                | The function signature `exit` gets on an entry component.                                                                                                                           |
-| `EntryPointMap` / `ExitPointMap`                 | `Record<string, ModuleEntryPoint<any>>` / `Record<string, ExitPointSchema<any>>`                                 | Map shapes on `ModuleDescriptor`.                                                                                                                                                   |
+| Export                                           | Signature                                                                                                                   | Purpose                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defineEntry`                                    | overloaded — `<T>(e: EagerModuleEntryPoint<T> \| LazyModuleEntryPoint<T>) => same`                                          | Identity helper. Two forms: eager (`{ component, input?, allowBack? }`) or lazy (`{ lazy: () => import(…), fallback?, input?, allowBack? }`). Mutually exclusive at the type level.                                                                                                                                                                                          |
+| `defineExit`                                     | `<T = void>() => ExitPointSchema<T>`                                                                                        | Identity helper for an exit-point literal. Zero runtime cost.                                                                                                                                                                                                                                                                                                                |
+| `defineExitContract`                             | overloaded — `<T>(kind) => ExitContract<T>` or `<S extends StandardSchemaV1>(kind, schema) => ExitContract<InferOutput<S>>` | Shared exit contract identity. Use the same returned value as the schema for an exit on every module that emits it - the journey's wildcard transitions then narrow `output` to the contract's `T` and (when a schema is provided) the runtime validates payloads at every emit. See [Pattern - shared exit contracts](#pattern---shared-exit-contracts-defineexitcontract). |
+| `isExitContract`                                 | `(schema: unknown) => schema is ExitContract<unknown>`                                                                      | Type predicate distinguishing a contract from a plain `ExitPointSchema`. Used by the journey runtime and validators; exported for custom hosts.                                                                                                                                                                                                                              |
+| `ExitContract`                                   | `{ kind: string; schema?: StandardSchemaV1; output? }`                                                                      | Shape of a shared contract. Extends `ExitPointSchema`; carries an identity (`kind`) and an optional Standard Schema for runtime validation.                                                                                                                                                                                                                                  |
+| `schema`                                         | `<T>() => InputSchema<T>`                                                                                                   | Type-only brand used to carry an input/output shape. Zero runtime cost.                                                                                                                                                                                                                                                                                                      |
+| `ModuleEntryProps`                               | `<TInput, TExits extends ExitPointMap = {}>`                                                                                | Typed props for an entry component: `{ input, exit, goBack? }`.                                                                                                                                                                                                                                                                                                              |
+| `ModuleEntryPoint`                               | `EagerModuleEntryPoint<T> \| LazyModuleEntryPoint<T>`                                                                       | Discriminated union — eager (`component`) or lazy (`lazy`).                                                                                                                                                                                                                                                                                                                  |
+| `EagerModuleEntryPoint` / `LazyModuleEntryPoint` | `{ component, input?, allowBack?, lazy?: never }` / `{ lazy, fallback?, input?, allowBack?, component?: never }`            | The two branches of the union, exported for callers that want to type a single variant explicitly.                                                                                                                                                                                                                                                                           |
+| `LazyEntryComponent`                             | `() => Promise<{ default: ComponentType<…> } \| ComponentType<…>>`                                                          | Importer signature accepted by `defineEntry({ lazy })`. Both default-export and direct-export module shapes are normalized at runtime.                                                                                                                                                                                                                                       |
+| `ExitPointSchema`                                | `{ output? }`                                                                                                               | Exit-point descriptor shape.                                                                                                                                                                                                                                                                                                                                                 |
+| `ExitFn`                                         | `<TExits>(name, output?) => void`                                                                                           | The function signature `exit` gets on an entry component.                                                                                                                                                                                                                                                                                                                    |
+| `EntryPointMap` / `ExitPointMap`                 | `Record<string, ModuleEntryPoint<any>>` / `Record<string, ExitPointSchema<any>>`                                            | Map shapes on `ModuleDescriptor`.                                                                                                                                                                                                                                                                                                                                            |
 
 ### Authoring (`@modular-react/journeys`)
 

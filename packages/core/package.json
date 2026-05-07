@@ -29,6 +29,9 @@
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@standard-schema/spec": "^1.0.0"
+  },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "oxfmt": "^0.46.0",

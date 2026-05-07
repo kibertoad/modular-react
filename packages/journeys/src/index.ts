@@ -79,11 +79,14 @@ export type {
   AbandonCtx,
   AnyJourneyDefinition,
   ChildOutcome,
+  EntryExitWildcardMap,
   EntryInputOf,
   EntryNamesOf,
   EntryTransitions,
   ExitCtx,
   ExitNamesOf,
+  ExitNamesPairedWithEntry,
+  ExitOnlyWildcardMap,
   ExitOutputOf,
   InstanceId,
   InvokeSpec,
@@ -113,6 +116,12 @@ export type {
   TransitionEvent,
   TransitionMap,
   TransitionResult,
+  WildcardEntryInputOf,
+  WildcardEntryNamesOf,
+  WildcardExitNamesOf,
+  WildcardExitOutputForEntry,
+  WildcardExitOutputOf,
+  WildcardTransitionMap,
 } from "./types.js";
 
 export { isJourneySystemAbort } from "@modular-react/core";
