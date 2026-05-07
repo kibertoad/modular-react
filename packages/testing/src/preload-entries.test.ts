@@ -11,6 +11,16 @@ import type {
 } from "@modular-react/core";
 import { preloadEntries, preloadEntry } from "./index.js";
 
+// Hoisted by vitest above every import in this file. `preloadEntries` walks
+// the lazy entry's importer, which calls `import("./preload-entries.fixture")`
+// at runtime; that resolution is intercepted here and returns the mock
+// factory's value instead of the real on-disk fixture.
+vi.mock("./preload-entries.fixture.js", () => {
+  const Mocked: { (): null; displayName: string } = () => null;
+  Mocked.displayName = "mocked";
+  return { default: Mocked };
+});
+
 const Stub = (() => null) as unknown as ComponentType<ModuleEntryProps<unknown, {}>>;
 
 function lazyEntry(importer: () => Promise<unknown>): LazyModuleEntryPoint<unknown> {
@@ -85,6 +95,30 @@ describe("preloadEntries", () => {
 
   it("re-exports `preloadEntry` from @modular-react/react verbatim", () => {
     expect(preloadEntry).toBe(preloadEntryFromReact);
+  });
+
+  it("honors vi.mock — the cached module is the mocked one, not the real fixture", async () => {
+    // vitest hoists `vi.mock(...)` above every import in this file, so the
+    // dynamic `import("./preload-entries.fixture.js")` triggered by
+    // preloadEntries() resolves to the mock factory's return value rather
+    // than the on-disk fixture (which exports `displayName: "real"`).
+    const importer = vi.fn(() => import("./preload-entries.fixture.js"));
+    const entry = lazyEntry(importer);
+    const mod = module_("m", { e: entry });
+
+    await preloadEntries([mod]);
+
+    // Read the cached resolved module via the synchronous-thenable fast path:
+    // after preload, .preload() returns a thenable that fires onFulfilled
+    // inline, so we can capture the cached value without await.
+    let captured: { default?: { displayName?: string } } | undefined;
+    resolveEntryComponent(entry)
+      .preload()
+      .then((m) => {
+        captured = m as typeof captured;
+      });
+    expect(importer).toHaveBeenCalledTimes(1);
+    expect(captured?.default?.displayName).toBe("mocked");
   });
 
   it("after preload, resolveEntryComponent(entry).preload() resolves SYNCHRONOUSLY", async () => {
