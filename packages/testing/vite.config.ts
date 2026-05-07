@@ -10,7 +10,13 @@ export default defineConfig({
       fileName: "index",
     },
     rollupOptions: {
-      external: ["react", "react/jsx-runtime", "react-dom", "@modular-react/core"],
+      external: [
+        "react",
+        "react/jsx-runtime",
+        "react-dom",
+        "@modular-react/core",
+        "@modular-react/react",
+      ],
     },
     sourcemap: true,
   },

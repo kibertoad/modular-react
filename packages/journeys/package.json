@@ -37,6 +37,7 @@
   "devDependencies": {
     "@modular-react/core": "workspace:*",
     "@modular-react/react": "workspace:*",
+    "@modular-react/testing": "workspace:*",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
