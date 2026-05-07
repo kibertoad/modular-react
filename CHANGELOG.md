@@ -10,6 +10,10 @@ Per-package detail lives in the GitHub release tagged `<npm-name>@<version>`.
 
 - **`@modular-react/core`** — `buildNavigationManifest` (and therefore `useNavigation`) now breaks ties on `order` by preserving insertion order instead of label string comparison. Items declared first render first when `order` is unset or equal: modules in registration order, items in the order declared in each module's `navigation` array, plugin-contributed items last. Labels are no longer a tiebreaker — the previous fallback sorted by i18n-key name (e.g. `appShell.nav.assets` < `appShell.nav.projects`), which produced surprising orderings unrelated to translated text. Apps that relied (intentionally or not) on alphabetical-by-key fallback should set explicit `order` values to lock in the desired sequence.
 
+### Peer-dep ranges
+
+- **`@modular-react/react`** and **`@modular-react/journeys`** — peer ranges for `@modular-react/core` (and, for journeys, `@modular-react/react`) bumped from `^1.2.0` to `^2.0.0` to match the packages' actual release lines. Drift went unnoticed when `@modular-react/react@2.0.0` and `@modular-react/journeys@1.0.0` shipped: both packages already require a 2.x core at runtime (lazy entry-point support, `EagerModuleEntryPoint | LazyModuleEntryPoint` discriminated union, `resolveEntryComponent` with sync-thenable fast path), but the peer descriptors still pointed at 1.x. Consumers installing `journeys@1.0.0` against `core@^2.0.0` get an `ERESOLVE` error from npm, and `--legacy-peer-deps` workarounds end up dual-installing core (one hoisted 2.x copy plus a nested 1.x copy under journeys), which fragments singletons (`registry`, `defineEntry` identity) at runtime. This is a peer-descriptor correction, not a behavior change.
+
 ## 2026-04-19 — `@modular-react/*@1.2.0`, `@*-modules/*@2.3.0`
 
 Released alongside PR adjustments to PR #14 (Lokalise PoC gaps follow-up).
