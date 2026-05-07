@@ -119,6 +119,61 @@ describe("resolveEntryComponent — lazy", () => {
     };
     expect(resolveEntryComponent(entry)).toBe(resolveEntryComponent(entry));
   });
+
+  it("does not flash the Suspense fallback after `preload()` has settled", async () => {
+    // After `preload()` resolves, the cached path returns a synchronous
+    // thenable — React.lazy's `_init` flips `_status` to `Resolved` inside
+    // the `.then(...)` call (no microtask deferral), so the first render
+    // skips the suspending throw entirely. Asserted by counting fallback
+    // mounts: zero means the component went straight to `Resolved`.
+    const entry: LazyModuleEntryPoint<{ value: string }> = {
+      lazy: () => Promise.resolve({ default: Lazy }),
+    };
+    const { Component, preload } = resolveEntryComponent(entry);
+    await preload(); // import resolves; cached slot is populated.
+
+    let fallbackMounts = 0;
+    const Fallback = () => {
+      fallbackMounts += 1;
+      return <span data-testid="fallback">loading</span>;
+    };
+    const { getByTestId } = render(
+      <Suspense fallback={<Fallback />}>
+        <Component input={{ value: "x" }} exit={(() => undefined) as never} goBack={undefined} />
+      </Suspense>,
+    );
+    // The component is the resolved `Lazy` from the very first commit —
+    // `getByTestId("lazy")` finds it without any waitFor, and the
+    // fallback was never mounted at all.
+    expect(getByTestId("lazy")).toBeTruthy();
+    expect(fallbackMounts).toBe(0);
+  });
+
+  it("dedupes concurrent loader calls so `preload()` and a render share one import", async () => {
+    // The cached/inflight pair guarantees `importer` is invoked once even
+    // when `preload()` and the component's render fire back-to-back. This
+    // matters for hover-prefetch UX: hovering primes preload and clicking
+    // mounts the component a moment later; both paths funnel through the
+    // same fetch.
+    const importer = vi.fn(() => Promise.resolve({ default: Lazy }));
+    const entry: LazyModuleEntryPoint<{ value: string }> = { lazy: importer };
+    const { Component, preload } = resolveEntryComponent(entry);
+    // Kick preload AND render in the same tick.
+    const preloading = preload();
+    let result: ReturnType<typeof render> | undefined;
+    await act(async () => {
+      result = render(
+        <Suspense fallback={<span data-testid="fallback">loading</span>}>
+          <Component input={{ value: "x" }} exit={(() => undefined) as never} goBack={undefined} />
+        </Suspense>,
+      );
+      await preloading;
+    });
+    await waitFor(() => {
+      expect(result?.getByTestId("lazy")).toBeTruthy();
+    });
+    expect(importer).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("resolveEntryComponent — invalid input", () => {
