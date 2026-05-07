@@ -14,8 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modular-react/core": "^1.0.0",
-    "@react-router-modules/core": "^2.0.0"
+    "@modular-react/core": "workspace:*",
+    "@react-router-modules/core": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

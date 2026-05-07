@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modular-react/core": "^1.0.0",
+    "@modular-react/core": "workspace:*",
     "@tanstack-react-modules/core": "workspace:*"
   },
   "devDependencies": {

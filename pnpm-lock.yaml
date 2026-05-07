@@ -40,10 +40,10 @@ importers:
   examples/react-router/active-project-manifest/app-shared:
     dependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-core
     devDependencies:
       '@types/react':
@@ -65,17 +65,17 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/react-router-core
       '@react-router-modules/runtime':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/react-router-runtime
     devDependencies:
       '@modular-react/testing':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/testing
       '@types/react':
         specifier: ^19.0.0
@@ -102,16 +102,16 @@ importers:
         specifier: workspace:*
         version: link:../modules/integrations
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@modular-react/react':
-        specifier: ^1.0.0
-        version: 1.4.0(@modular-react/core@1.8.1(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: workspace:*
+        version: link:../../../../packages/react
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-core
       '@react-router-modules/runtime':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-runtime
       react:
         specifier: ^19.0.0
@@ -145,10 +145,10 @@ importers:
   examples/react-router/customer-onboarding-journey/app-shared:
     dependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-core
     devDependencies:
       '@types/react':
@@ -179,7 +179,7 @@ importers:
         specifier: workspace:*
         version: link:../../modules/profile
       '@modular-react/journeys':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -192,8 +192,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -211,8 +211,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -230,8 +230,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -261,19 +261,19 @@ importers:
         specifier: workspace:*
         version: link:../modules/profile
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@modular-react/journeys':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../packages/journeys
       '@modular-react/react':
-        specifier: ^1.0.0
-        version: 1.4.0(@modular-react/core@1.8.1(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: workspace:*
+        version: link:../../../../packages/react
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-core
       '@react-router-modules/runtime':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-runtime
       react:
         specifier: ^19.0.0
@@ -650,10 +650,10 @@ importers:
   examples/react-router/journey-invoke/app-shared:
     dependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-core
     devDependencies:
       '@types/react':
@@ -681,7 +681,7 @@ importers:
         specifier: workspace:*
         version: link:../verify-identity
       '@modular-react/journeys':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -697,7 +697,7 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/journeys':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -710,8 +710,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -729,8 +729,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -748,8 +748,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -782,19 +782,19 @@ importers:
         specifier: workspace:*
         version: link:../journeys/verify-identity
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@modular-react/journeys':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../packages/journeys
       '@modular-react/react':
-        specifier: ^1.0.0
-        version: 1.4.0(@modular-react/core@1.8.1(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: workspace:*
+        version: link:../../../../packages/react
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-core
       '@react-router-modules/runtime':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-runtime
       react:
         specifier: ^19.0.0
@@ -825,10 +825,10 @@ importers:
   examples/react-router/remote-capabilities/app-shared:
     dependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-core
     devDependencies:
       '@types/react':
@@ -850,17 +850,17 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/react-router-core
       '@react-router-modules/runtime':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/react-router-runtime
     devDependencies:
       '@modular-react/testing':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/testing
       '@types/react':
         specifier: ^19.0.0
@@ -887,16 +887,16 @@ importers:
         specifier: workspace:*
         version: link:../modules/integrations
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@modular-react/react':
-        specifier: ^1.0.0
-        version: 1.4.0(@modular-react/core@1.8.1(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: workspace:*
+        version: link:../../../../packages/react
       '@react-router-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-core
       '@react-router-modules/runtime':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/react-router-runtime
       react:
         specifier: ^19.0.0
@@ -930,8 +930,8 @@ importers:
   examples/tanstack-router/customer-onboarding-journey/app-shared:
     dependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@tanstack-react-modules/core':
         specifier: workspace:*
         version: link:../../../../packages/tanstack-router-core
@@ -964,7 +964,7 @@ importers:
         specifier: workspace:*
         version: link:../../modules/profile
       '@modular-react/journeys':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -977,8 +977,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -996,8 +996,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -1015,8 +1015,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -1046,19 +1046,19 @@ importers:
         specifier: workspace:*
         version: link:../modules/profile
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@modular-react/journeys':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../packages/journeys
       '@modular-react/react':
-        specifier: ^1.0.0
-        version: 1.4.0(@modular-react/core@1.8.1(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: workspace:*
+        version: link:../../../../packages/react
       '@tanstack-react-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/tanstack-router-core
       '@tanstack-react-modules/runtime':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/tanstack-router-runtime
       '@tanstack/react-router':
         specifier: ^1.168.8
@@ -1438,10 +1438,10 @@ importers:
   examples/tanstack-router/journey-invoke/app-shared:
     dependencies:
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@tanstack-react-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/tanstack-router-core
     devDependencies:
       '@types/react':
@@ -1469,7 +1469,7 @@ importers:
         specifier: workspace:*
         version: link:../verify-identity
       '@modular-react/journeys':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -1485,7 +1485,7 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/journeys':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -1498,8 +1498,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -1517,8 +1517,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -1536,8 +1536,8 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../../packages/core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -1570,19 +1570,19 @@ importers:
         specifier: workspace:*
         version: link:../journeys/verify-identity
       '@modular-react/core':
-        specifier: ^1.0.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../../../../packages/core
       '@modular-react/journeys':
-        specifier: ^1.0.0
+        specifier: workspace:*
         version: link:../../../../packages/journeys
       '@modular-react/react':
-        specifier: ^1.0.0
-        version: 1.4.0(@modular-react/core@1.8.1(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: workspace:*
+        version: link:../../../../packages/react
       '@tanstack-react-modules/core':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/tanstack-router-core
       '@tanstack-react-modules/runtime':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../../../../packages/tanstack-router-runtime
       '@tanstack/react-router':
         specifier: ^1.168.8
@@ -2013,8 +2013,8 @@ importers:
   packages/react:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.2.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../core
       '@testing-library/react':
         specifier: ^16.3.2
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -2077,8 +2077,8 @@ importers:
   packages/react-router-core:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.2.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../core
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.14
@@ -2107,16 +2107,16 @@ importers:
   packages/react-router-runtime:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.2.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../core
       '@modular-react/journeys':
         specifier: workspace:*
         version: link:../journeys
       '@modular-react/react':
-        specifier: ^1.2.0
-        version: 1.4.0(@modular-react/core@1.8.1(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: workspace:*
+        version: link:../react
       '@react-router-modules/core':
-        specifier: ^2.3.0
+        specifier: workspace:*
         version: link:../react-router-core
       '@testing-library/react':
         specifier: ^16.0.0
@@ -2158,19 +2158,19 @@ importers:
   packages/react-router-testing:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.2.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../core
       '@modular-react/journeys':
         specifier: workspace:*
         version: link:../journeys
       '@modular-react/react':
-        specifier: ^1.2.0
-        version: 1.4.0(@modular-react/core@1.8.1(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: workspace:*
+        version: link:../react
       '@react-router-modules/core':
-        specifier: ^2.3.0
+        specifier: workspace:*
         version: link:../react-router-core
       '@react-router-modules/runtime':
-        specifier: ^2.3.0
+        specifier: workspace:*
         version: link:../react-router-runtime
       '@testing-library/react':
         specifier: ^16.0.0
@@ -2231,8 +2231,8 @@ importers:
   packages/tanstack-router-core:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.2.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../core
       '@tanstack/react-router':
         specifier: ^1.168.8
         version: 1.169.1(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -2261,16 +2261,16 @@ importers:
   packages/tanstack-router-runtime:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.2.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../core
       '@modular-react/journeys':
         specifier: workspace:*
         version: link:../journeys
       '@modular-react/react':
-        specifier: ^1.2.0
-        version: 1.4.0(@modular-react/core@1.8.1(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: workspace:*
+        version: link:../react
       '@tanstack-react-modules/core':
-        specifier: ^2.3.0
+        specifier: workspace:*
         version: link:../tanstack-router-core
       '@tanstack/react-router':
         specifier: ^1.168.8
@@ -2312,19 +2312,19 @@ importers:
   packages/tanstack-router-testing:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.2.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../core
       '@modular-react/journeys':
         specifier: workspace:*
         version: link:../journeys
       '@modular-react/react':
-        specifier: ^1.2.0
-        version: 1.4.0(@modular-react/core@1.8.1(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: workspace:*
+        version: link:../react
       '@tanstack-react-modules/core':
-        specifier: ^2.3.0
+        specifier: workspace:*
         version: link:../tanstack-router-core
       '@tanstack-react-modules/runtime':
-        specifier: ^2.3.0
+        specifier: workspace:*
         version: link:../tanstack-router-runtime
       '@tanstack/react-router':
         specifier: ^1.168.8
@@ -2363,10 +2363,10 @@ importers:
   packages/testing:
     devDependencies:
       '@modular-react/core':
-        specifier: ^1.2.0
-        version: 1.8.1(@types/react@19.2.14)
+        specifier: workspace:*
+        version: link:../core
       '@modular-react/react':
-        specifier: ^2.0.0
+        specifier: workspace:*
         version: link:../react
       '@types/react':
         specifier: ^19.0.0
@@ -3009,21 +3009,6 @@ packages:
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
-
-  '@modular-react/core@1.8.1':
-    resolution: {integrity: sha512-7DjxnPh7Sv697S4NHGRSoP7l5ZgEdhqWfSgPff01VNehg+ZzPdqpwR44fUjLLm6uqLrQauOo1CckDLhwmfGZ4w==}
-    peerDependencies:
-      '@types/react': ^19.0.0
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-
-  '@modular-react/react@1.4.0':
-    resolution: {integrity: sha512-C6zDG3A23iWIKu7bA40xonelVBN1BpgztDkK/wAUkLY6YJeqG/Ww4FEqejeBfhQ5+hnjgQyQXbkMHIrD4ce0pg==}
-    peerDependencies:
-      '@modular-react/core': ^1.2.0
-      react: ^19.0.0
-      react-dom: ^19.0.0
 
   '@mswjs/interceptors@0.41.7':
     resolution: {integrity: sha512-D0nkS5+sx87mYpxFqASImCineYoEl9wGlUPrzkuS0ohzG8wfophLpE+I76qGJ0slLAVI19do5SI9pWJNCVf4fg==}
@@ -6563,16 +6548,6 @@ snapshots:
       zod-to-json-schema: 3.25.2(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
-
-  '@modular-react/core@1.8.1(@types/react@19.2.14)':
-    optionalDependencies:
-      '@types/react': 19.2.14
-
-  '@modular-react/react@1.4.0(@modular-react/core@1.8.1(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
-    dependencies:
-      '@modular-react/core': 1.8.1(@types/react@19.2.14)
-      react: 19.2.5
-      react-dom: 19.2.5(react@19.2.5)
 
   '@mswjs/interceptors@0.41.7':
     dependencies:

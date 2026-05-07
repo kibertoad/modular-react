@@ -29,7 +29,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@modular-react/core": "^1.2.0",
+    "@modular-react/core": "workspace:*",
     "@tanstack/react-router": "^1.168.8",
     "@types/react": "^19.0.0",
     "react": "^19.0.0",
