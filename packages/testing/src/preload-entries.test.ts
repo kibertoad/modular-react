@@ -1,14 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ComponentType } from "react";
-import {
-  preloadEntry as preloadEntryFromReact,
-  resolveEntryComponent,
-} from "@modular-react/react";
-import type {
-  LazyModuleEntryPoint,
-  ModuleDescriptor,
-  ModuleEntryProps,
-} from "@modular-react/core";
+import { preloadEntry as preloadEntryFromReact, resolveEntryComponent } from "@modular-react/react";
+import type { LazyModuleEntryPoint, ModuleDescriptor, ModuleEntryProps } from "@modular-react/core";
 import { preloadEntries, preloadEntry } from "./index.js";
 
 // Hoisted by vitest above every import in this file. `preloadEntries` walks
