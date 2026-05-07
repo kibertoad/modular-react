@@ -175,6 +175,11 @@ test.describe("catalog SPA", () => {
       .first();
     await profileCompleteRow.locator("summary").click();
     await expect(profileCompleteRow.getByText("plan")).toBeVisible();
+    // The example journey wraps `profileComplete` with `defineTransition({ targets })`,
+    // so the harvester reports `targetsDeclared: true` and the UI shows a
+    // "declared" badge. Reassures the reader that the destination set is
+    // authoritative (not AST best-effort).
+    await expect(profileCompleteRow.getByTestId("declared-targets-badge")).toBeVisible();
     // The destination chip's module name is itself a link to the module page.
     await profileCompleteRow.getByRole("link", { name: "plan" }).click();
     await expect(page).toHaveURL(/\/modules\/plan$/);

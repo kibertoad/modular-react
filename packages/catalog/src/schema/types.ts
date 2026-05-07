@@ -169,6 +169,14 @@ export interface ModuleExitUsage {
   readonly aborts?: boolean;
   /** True when the handler returns `{ complete }` on at least one branch. */
   readonly completes?: boolean;
+  /**
+   * True when the handler is wrapped with `defineTransition({ targets, handle })`
+   * and `destinations` was sourced from the declared `targets` array — i.e.
+   * the destination set is statically authoritative. False / absent means
+   * `destinations` is the AST best-effort, which can miss branches behind
+   * dynamic `output`-driven returns. UIs can show this as a "declared" badge.
+   */
+  readonly targetsDeclared?: boolean;
 }
 
 /**

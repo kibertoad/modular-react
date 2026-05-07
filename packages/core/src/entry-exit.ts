@@ -1,8 +1,10 @@
 import type {
+  EagerModuleEntryPoint,
   EntryPointMap,
   ExitPointMap,
   ExitPointSchema,
   InputSchema,
+  LazyModuleEntryPoint,
   ModuleDescriptor,
   ModuleEntryPoint,
 } from "./types.js";
@@ -17,10 +19,18 @@ export const schema = <T>(): InputSchema<T> => ({}) as InputSchema<T>;
 /**
  * Identity helper used to preserve inference of `TInput` on a single
  * {@link ModuleEntryPoint}. The descriptor types only flow through correctly
- * when the entry is a typed const value.
+ * when the entry is a typed const value. Overloaded so eager and lazy entries
+ * keep their narrow union member through the call.
  */
-export const defineEntry = <TInput>(entry: ModuleEntryPoint<TInput>): ModuleEntryPoint<TInput> =>
-  entry;
+export function defineEntry<TInput>(
+  entry: EagerModuleEntryPoint<TInput>,
+): EagerModuleEntryPoint<TInput>;
+export function defineEntry<TInput>(
+  entry: LazyModuleEntryPoint<TInput>,
+): LazyModuleEntryPoint<TInput>;
+export function defineEntry<TInput>(entry: ModuleEntryPoint<TInput>): ModuleEntryPoint<TInput> {
+  return entry;
+}
 
 /**
  * Type-only brand that preserves inference of `TOutput` on a single
@@ -59,9 +69,15 @@ export function validateModuleEntryExit(
         issues.push(`entry "${name}" is not an object`);
         continue;
       }
-      if (typeof entry.component !== "function") {
+      const hasComponent = typeof (entry as { component?: unknown }).component === "function";
+      const hasLazy = typeof (entry as { lazy?: unknown }).lazy === "function";
+      if (!hasComponent && !hasLazy) {
         issues.push(
-          `entry "${name}" must declare a React component (got ${typeof entry.component})`,
+          `entry "${name}" must declare a React component or a lazy importer (got component: ${typeof (entry as { component?: unknown }).component}, lazy: ${typeof (entry as { lazy?: unknown }).lazy})`,
+        );
+      } else if (hasComponent && hasLazy) {
+        issues.push(
+          `entry "${name}" declares both \`component\` and \`lazy\` — these are mutually exclusive`,
         );
       }
       const allowBack = entry.allowBack;

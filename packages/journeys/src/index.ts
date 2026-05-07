@@ -65,6 +65,16 @@ export type { JourneyHandle } from "./handle.js";
 export { selectModule, selectModuleOrDefault } from "./select-module.js";
 export type { SelectModuleCases, SelectModuleCasesPartial } from "./select-module.js";
 
+// Authoring helpers — annotate a transition handler with the entry points it
+// can advance into. Read by `<JourneyOutlet preload="precise">` (the default)
+// to warm exactly those chunks during idle time.
+export {
+  defineTransition,
+  isAnnotatedTransition,
+  isTerminalSentinel,
+} from "./define-transition.js";
+export type { AnnotatedTransitionHandler, StepRef, TerminalSentinel } from "./define-transition.js";
+
 export type {
   AbandonCtx,
   AnyJourneyDefinition,

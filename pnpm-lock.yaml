@@ -179,7 +179,7 @@ importers:
         specifier: workspace:*
         version: link:../../modules/profile
       '@modular-react/journeys':
-        specifier: ^0.1.0
+        specifier: ^1.0.0
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -264,7 +264,7 @@ importers:
         specifier: ^1.0.0
         version: link:../../../../packages/core
       '@modular-react/journeys':
-        specifier: ^0.1.0
+        specifier: ^1.0.0
         version: link:../../../../packages/journeys
       '@modular-react/react':
         specifier: ^1.0.0
@@ -681,7 +681,7 @@ importers:
         specifier: workspace:*
         version: link:../verify-identity
       '@modular-react/journeys':
-        specifier: ^0.1.0
+        specifier: ^1.0.0
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -697,7 +697,7 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/journeys':
-        specifier: ^0.1.0
+        specifier: ^1.0.0
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -785,7 +785,7 @@ importers:
         specifier: ^1.0.0
         version: link:../../../../packages/core
       '@modular-react/journeys':
-        specifier: ^0.1.0
+        specifier: ^1.0.0
         version: link:../../../../packages/journeys
       '@modular-react/react':
         specifier: ^1.0.0
@@ -964,7 +964,7 @@ importers:
         specifier: workspace:*
         version: link:../../modules/profile
       '@modular-react/journeys':
-        specifier: ^0.1.0
+        specifier: ^1.0.0
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -1049,7 +1049,7 @@ importers:
         specifier: ^1.0.0
         version: link:../../../../packages/core
       '@modular-react/journeys':
-        specifier: ^0.1.0
+        specifier: ^1.0.0
         version: link:../../../../packages/journeys
       '@modular-react/react':
         specifier: ^1.0.0
@@ -1469,7 +1469,7 @@ importers:
         specifier: workspace:*
         version: link:../verify-identity
       '@modular-react/journeys':
-        specifier: ^0.1.0
+        specifier: ^1.0.0
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -1485,7 +1485,7 @@ importers:
         specifier: workspace:*
         version: link:../../app-shared
       '@modular-react/journeys':
-        specifier: ^0.1.0
+        specifier: ^1.0.0
         version: link:../../../../../packages/journeys
     devDependencies:
       typescript:
@@ -1573,7 +1573,7 @@ importers:
         specifier: ^1.0.0
         version: link:../../../../packages/core
       '@modular-react/journeys':
-        specifier: ^0.1.0
+        specifier: ^1.0.0
         version: link:../../../../packages/journeys
       '@modular-react/react':
         specifier: ^1.0.0

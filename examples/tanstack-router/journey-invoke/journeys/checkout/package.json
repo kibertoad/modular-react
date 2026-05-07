@@ -18,7 +18,7 @@
     "@example-tsr-invoke/checkout-confirm-module": "workspace:*",
     "@example-tsr-invoke/checkout-review-module": "workspace:*",
     "@example-tsr-invoke/verify-identity-journey": "workspace:*",
-    "@modular-react/journeys": "^0.1.0"
+    "@modular-react/journeys": "^1.0.0"
   },
   "devDependencies": {
     "typescript": "^6.0.2"

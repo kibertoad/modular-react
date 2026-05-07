@@ -140,11 +140,103 @@ interface HandlerOutcome {
   nexts: { module: string; entry?: string }[];
   aborts: boolean;
   completes: boolean;
+  /**
+   * True when `nexts` came from a `defineTransition({ targets })` declaration
+   * — i.e. the destination set is authoritative, not inferred from handler
+   * branches. The catalog UI can surface this as a "declared" badge so
+   * authors know the listing is complete (vs the AST best-effort, which can
+   * miss branches behind dynamic returns).
+   */
+  targetsDeclared?: boolean;
+}
+
+/**
+ * Outcome of parsing a `targets:` literal — both the next-step object refs
+ * and the terminal-arm sentinel flags. Returned as a single struct so the
+ * caller can stamp `nexts` / `aborts` / `completes` from one declaration.
+ */
+interface DeclaredTargets {
+  nexts: { module: string; entry: string }[];
+  aborts: boolean;
+  completes: boolean;
+}
+
+/**
+ * Parse a `targets` literal — `[{ module: "m", entry: "e" }, "abort", ...]`
+ * — into the next-step refs and terminal-arm flags. The shape mirrors the
+ * runtime `StepRef` union: object refs go to `nexts`, string sentinels
+ * (`"complete"` / `"abort"` / `"invoke"`) flip the corresponding flag.
+ *
+ * Non-object elements / objects missing either a literal `module` or `entry`
+ * string are skipped (defensive: a hand-rolled call site might pass garbage).
+ * Returns `null` when the value is not an array literal at all so callers
+ * can distinguish "no targets declared" from "empty targets declared".
+ */
+function readDeclaredTargets(node: AstNode): DeclaredTargets | null {
+  if (!node || node.type !== "ArrayExpression" || !Array.isArray(node.elements)) return null;
+  const out: DeclaredTargets = { nexts: [], aborts: false, completes: false };
+  for (const el of node.elements) {
+    if (!el) continue;
+    if (el.type === "Literal" && typeof el.value === "string") {
+      // Sentinel — flip the corresponding flag. `"invoke"` doesn't fan
+      // through to a separate flag today (the catalog's existing schema
+      // tracks only `aborts` / `completes`); it's accepted at parse time
+      // so handlers that may invoke a child journey aren't rejected.
+      if (el.value === "abort") out.aborts = true;
+      else if (el.value === "complete") out.completes = true;
+      continue;
+    }
+    if (el.type !== "ObjectExpression") continue;
+    let module: string | null = null;
+    let entry: string | null = null;
+    for (const prop of objectProperties(el)) {
+      const key = staticPropertyKey(prop);
+      if (
+        key === "module" &&
+        prop.value?.type === "Literal" &&
+        typeof prop.value.value === "string"
+      ) {
+        module = prop.value.value;
+      } else if (
+        key === "entry" &&
+        prop.value?.type === "Literal" &&
+        typeof prop.value.value === "string"
+      ) {
+        entry = prop.value.value;
+      }
+    }
+    if (module !== null && entry !== null) out.nexts.push({ module, entry });
+  }
+  return out;
 }
 
 function analyzeHandler(value: AstNode): HandlerOutcome | null {
   // Only function expressions / arrows count; literal `{}` etc. are inert.
   if (!value) return null;
+
+  // Unwrap a `defineTransition({ targets, handle })` call (or its curried
+  // sibling, e.g. `const transition = defineTransition<...>(); transition({...})`).
+  // `targets` is mandatory on every `defineTransition` invocation in the
+  // runtime, so its absence here means this is some other CallExpression
+  // we can't classify — leave it opaque rather than guessing at the inner
+  // function. Declared targets are the authoritative source for all
+  // outcomes (next refs + terminal `aborts` / `completes` from sentinels);
+  // the runtime narrows the handler return to those arms, so an AST walk
+  // over the body can only confirm what `targets` already says.
+  if (value.type === "CallExpression") {
+    const spec = value.arguments?.[0];
+    if (!spec || spec.type !== "ObjectExpression") return null;
+    const targetsProp = findProperty(spec, "targets");
+    const declared = targetsProp ? readDeclaredTargets(targetsProp.value) : null;
+    if (declared === null) return null;
+    return {
+      nexts: declared.nexts,
+      aborts: declared.aborts,
+      completes: declared.completes,
+      targetsDeclared: true,
+    };
+  }
+
   const isFunction =
     value.type === "ArrowFunctionExpression" || value.type === "FunctionExpression";
   if (!isFunction) return null;

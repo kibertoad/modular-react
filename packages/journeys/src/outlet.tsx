@@ -1,5 +1,6 @@
 import {
   Component,
+  Suspense,
   createElement,
   useEffect,
   useMemo,
@@ -8,11 +9,19 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { ComponentType, ReactNode } from "react";
-import type { ExitPointMap, ModuleDescriptor, ModuleEntryProps } from "@modular-react/core";
+import type { ModuleDescriptor, ModuleEntryPoint } from "@modular-react/core";
+import { resolveEntryComponent } from "@modular-react/react";
 
 import { getInternals } from "./runtime.js";
 import { useJourneyContext } from "./provider.js";
-import type { InstanceId, JourneyRuntime, JourneyStep, TerminalOutcome } from "./types.js";
+import { isAnnotatedTransition } from "./define-transition.js";
+import type {
+  AnyJourneyDefinition,
+  InstanceId,
+  JourneyRuntime,
+  JourneyStep,
+  TerminalOutcome,
+} from "./types.js";
 
 export type JourneyStepErrorPolicy = "abort" | "retry" | "ignore";
 
@@ -78,6 +87,36 @@ export interface JourneyOutletProps {
    * through their own reporting.
    */
   readonly errorComponent?: ComponentType<JourneyOutletErrorProps>;
+  /**
+   * Speculatively prefetch the chunks for entries reachable from the
+   * current step during idle time after mount, so the next click finds
+   * its bundle hot.
+   *
+   *   `"precise"` (default, alias `true`) — read declared `targets` from
+   *     `defineTransition({ targets, handle })`-annotated handlers on the
+   *     current step's transitions. Preload exactly those entries.
+   *     Bare-function handlers contribute nothing (this is the precise
+   *     mode's whole point — no guessing).
+   *
+   *   `"aggressive"` — preload every entry that appears as a transition
+   *     source OR as a declared `target` of any annotated handler in the
+   *     journey's `transitions` map. The destination-side pass catches
+   *     terminal-only steps that have no outbound transitions of their
+   *     own (e.g. a freshly-added receipt screen reachable from `next:`
+   *     but not yet wired with its own exits). A step reachable only
+   *     via `definition.start` AND with no outbound transitions of its
+   *     own is the one remaining static gap — but such a step can only
+   *     be the current step on first mount (no exits → no advance), and
+   *     the skip-current logic already excludes it. Useful when handlers
+   *     are not annotated and the journey is small enough that warming
+   *     all candidates is cheap.
+   *
+   *   `false` — opt out entirely.
+   *
+   * Has no effect for eager (`component:`) entries — their import is
+   * already resolved. Effects only fire in the browser; SSR is a no-op.
+   */
+  readonly preload?: boolean | "precise" | "aggressive";
 }
 
 /**
@@ -100,6 +139,7 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     notFoundComponent,
     errorComponent,
     leafOnly = true,
+    preload = "precise",
   } = props;
 
   const runtime = runtimeProp ?? context?.runtime;
@@ -174,6 +214,65 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     });
   }, [rootInstance, onFinished]);
 
+  // Speculative preload of reachable entries' chunks. Runs after the current
+  // step is settled in-DOM; cancels on step change so a fast advance does
+  // not race with the previous step's preload set. Deps are deliberately
+  // narrow — `instance` itself changes reference on every snapshot bump
+  // (timestamps, child-id shifts), and re-running preload on those is wasted
+  // work. We re-key the effect on (status, module, entry, journey) instead.
+  const isActive = instance?.status === "active";
+  const stepModuleId = instance?.step?.moduleId;
+  const stepEntryName = instance?.step?.entry;
+  const journeyId = instance?.journeyId;
+  useEffect(() => {
+    if (preload === false || !isActive) return;
+    if (!stepModuleId || !stepEntryName || !journeyId) return;
+    const reg = internals.__getRegistered(journeyId);
+    if (!reg) return;
+    const mode = preload === "aggressive" ? "aggressive" : "precise";
+    const targets = collectPreloadTargets(
+      reg.definition,
+      modules,
+      stepModuleId,
+      stepEntryName,
+      mode,
+    );
+    if (targets.length === 0) return;
+
+    let cancelled = false;
+    const run = (): void => {
+      if (cancelled) return;
+      for (const entry of targets) {
+        try {
+          resolveEntryComponent(entry).preload();
+        } catch {
+          // Best-effort: a malformed entry would have failed validation
+          // upstream. Swallow here so one bad entry never hides the rest.
+        }
+      }
+    };
+
+    const ricFn = (
+      globalThis as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+      }
+    ).requestIdleCallback;
+    const cicFn = (globalThis as { cancelIdleCallback?: (handle: number) => void })
+      .cancelIdleCallback;
+    let idleHandle: number | undefined;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    if (typeof ricFn === "function") {
+      idleHandle = ricFn(run, { timeout: 2000 });
+    } else {
+      timeoutHandle = setTimeout(run, 0);
+    }
+    return () => {
+      cancelled = true;
+      if (idleHandle !== undefined && typeof cicFn === "function") cicFn(idleHandle);
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    };
+  }, [preload, isActive, stepModuleId, stepEntryName, journeyId, internals, modules]);
+
   if (!instance) return null;
   if (instance.status === "loading") return loadingFallback ?? null;
   if (instance.status === "completed" || instance.status === "aborted") return null;
@@ -229,13 +328,17 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     // 'ignore' — leave the boundary UI in place until the user navigates away
   };
 
-  // The step's declared input/exit contract is erased at the module-map
-  // boundary (the outlet holds ModuleDescriptor<any, any, any, any>).
-  // Narrow to the structural shape every entry component satisfies —
-  // `ModuleEntryProps<unknown, ExitPointMap>` — instead of `any`, so the
-  // cast site at least documents the prop bag the outlet hands in.
-  const StepComponent = entry.component as ComponentType<ModuleEntryProps<unknown, ExitPointMap>>;
+  // Resolve eager (`component:`) and lazy (`lazy:`) entries through the
+  // shared helper. Lazy entries get a memoized `React.lazy` wrapper plus an
+  // idempotent `preload()`; eager entries pass through as-is. Both render
+  // sites (here and `ModuleTab`) call this so the per-descriptor cache
+  // is shared.
+  const { Component: StepComponent } = resolveEntryComponent(entry);
   const stepKey = `${record.stepToken}:${retryKey}`;
+  // For eager entries `entry.fallback` is typed `never` (and is always
+  // `undefined` at runtime); for lazy entries it's the optional Suspense
+  // fallback. Either way, fall through to the outlet-level `loadingFallback`.
+  const suspenseFallback = entry.fallback ?? loadingFallback ?? null;
 
   return createElement(
     StepErrorBoundary,
@@ -246,12 +349,96 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
       key: stepKey,
       children: null,
     },
-    createElement(StepComponent, {
-      input: step.input,
-      exit,
-      goBack,
-    }),
+    createElement(
+      Suspense,
+      { fallback: suspenseFallback },
+      createElement(StepComponent, {
+        input: step.input,
+        exit,
+        goBack,
+      }),
+    ),
   );
+}
+
+/**
+ * Walk `definition.transitions` to assemble the set of entry-point
+ * descriptors to preload. In `"precise"` mode we look at the current
+ * step's transitions only and read each handler's declared `targets`;
+ * in `"aggressive"` mode we walk every entry referenced anywhere in the
+ * map. Both skip the current step (it's already mounted).
+ */
+function collectPreloadTargets(
+  definition: AnyJourneyDefinition,
+  modules: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>,
+  currentModuleId: string,
+  currentEntry: string,
+  mode: "precise" | "aggressive",
+): readonly ModuleEntryPoint<any>[] {
+  const seen = new Set<string>();
+  const out: ModuleEntryPoint<any>[] = [];
+  const transitions = definition.transitions as
+    | Record<string, Record<string, Record<string, unknown>> | undefined>
+    | undefined;
+  if (!transitions) return out;
+
+  const collectPair = (moduleId: string, entryName: string): void => {
+    if (!moduleId || !entryName) return;
+    if (moduleId === currentModuleId && entryName === currentEntry) return;
+    // Composite key only used to dedupe. Using ` ` as the separator
+    // sidesteps any collision risk with module ids that legitimately
+    // contain `/` (npm-style scopes) or other punctuation.
+    const seenKey = `${moduleId} ${entryName}`;
+    if (seen.has(seenKey)) return;
+    seen.add(seenKey);
+    const entry = modules[moduleId]?.entryPoints?.[entryName];
+    if (entry) out.push(entry);
+  };
+
+  if (mode === "precise") {
+    const perEntry = transitions[currentModuleId]?.[currentEntry];
+    if (!perEntry) return out;
+    for (const value of Object.values(perEntry)) {
+      if (!isAnnotatedTransition(value)) continue;
+      for (const target of value.targets) {
+        // Sentinel targets (`"complete"` / `"abort"` / `"invoke"`) carry
+        // no chunk to preload — they're terminal-arm declarations for the
+        // type system and the catalog harvester. Skip them here.
+        if (typeof target === "string") continue;
+        collectPair(target.module, target.entry);
+      }
+    }
+    return out;
+  }
+
+  // Aggressive — every (module, entry) the journey could plausibly navigate
+  // to: source-side keys (covers bare-function handlers and every step that
+  // has outbound transitions wired) UNIONED with the destinations declared
+  // by every annotated handler (covers terminal-only destination steps —
+  // entries reachable from a `next:` arm that themselves have no outbound
+  // transitions yet, e.g. a freshly-added receipt screen).
+  //
+  // The remaining static gap — a step reachable only via `definition.start`
+  // AND with no outbound transitions of its own — is left uncovered. Such a
+  // step can only be the current step on first mount (you can't advance
+  // away from a step with no exits), in which case the skip-current logic
+  // excludes it anyway. `definition.start` is a function and we
+  // deliberately don't run it speculatively.
+  for (const [moduleId, perModule] of Object.entries(transitions)) {
+    if (!perModule) continue;
+    for (const [entryName, perExit] of Object.entries(perModule)) {
+      collectPair(moduleId, entryName);
+      if (!perExit) continue;
+      for (const value of Object.values(perExit)) {
+        if (!isAnnotatedTransition(value)) continue;
+        for (const target of value.targets) {
+          if (typeof target === "string") continue;
+          collectPair(target.module, target.entry);
+        }
+      }
+    }
+  }
+  return out;
 }
 
 function DefaultNotFound({ moduleId, entry }: JourneyOutletNotFoundProps): ReactNode {

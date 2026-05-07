@@ -22,8 +22,8 @@ Routes, slots, navigation, workspaces - none of that changes. Journeys sit **on 
 - [Quickstart shortcut: scaffold the journey package](#quickstart-shortcut-scaffold-the-journey-package) - `create journey` if you bootstrapped with the modular-react CLI
 - [Quickstart](#quickstart) - the 5-step path from zero to a running journey
 - [Core concepts](#core-concepts) - entries, exits, `allowBack`, lifecycle, statuses, keys
-- [Authoring patterns](#authoring-patterns) - module entries, exits, loading flows, `goBack` opt-in
-- [Journey definition patterns](#journey-definition-patterns) - branching, `selectModule` dispatch, terminals, state rewrites, bounded history, module compatibility
+- [Authoring patterns](#authoring-patterns) - module entries, exits, loading flows, `goBack` opt-in, **lazy entry-points (code-splitting)**
+- [Journey definition patterns](#journey-definition-patterns) - branching, `selectModule` dispatch, terminals, state rewrites, bounded history, module compatibility, **`defineTransition` (auto-preload + narrowed handler return)**
 - [Composing journeys (invoke / resume)](#composing-journeys-invoke--resume) - call out to a child journey mid-flow and resume on its outcome
   - [Cycle and recursion safety](#cycle-and-recursion-safety) - cycle / depth / undeclared-child / bounce-limit guards and how to tune them
 - [Runtime surface](#runtime-surface) - the `JourneyRuntime` you get back from `manifest.journeys`
@@ -360,10 +360,10 @@ See the [customer-onboarding-journey example](../../examples/react-router/custom
 
 Two additive (optional) fields on `ModuleDescriptor`:
 
-| Field         | Shape                                           | Purpose                                                     |
-| ------------- | ----------------------------------------------- | ----------------------------------------------------------- |
-| `entryPoints` | `{ [name]: { component, input?, allowBack? } }` | Typed ways to open the module. A module can expose several. |
-| `exitPoints`  | `{ [name]: { output? } }`                       | The module's full outcome vocabulary.                       |
+| Field         | Shape                                                                                                                            | Purpose                                                                                                                                                                                                                                           |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entryPoints` | `{ [name]: { component, input?, allowBack? } }`<br>or `{ [name]: { lazy: () => import("./X"), fallback?, input?, allowBack? } }` | Typed ways to open the module. A module can expose several. Each entry is either eager (a directly-bound component) or lazy (a dynamic-import factory — see [Pattern - lazy entry-points](#pattern---lazy-entry-points-code-splitting-per-step)). |
+| `exitPoints`  | `{ [name]: { output? } }`                                                                                                        | The module's full outcome vocabulary.                                                                                                                                                                                                             |
 
 `ModuleEntryProps<TInput, TExits>` typed props for the component - `{ input, exit, goBack? }`, with `exit(name, output)` cross-checked against `TExits` at compile time.
 
@@ -494,6 +494,39 @@ export default defineModule({
 
 The journey's transition map targets `{ module: 'billing', entry: 'collect' }` or `'startTrial'` - the discriminated `StepSpec` enforces that `input` matches the chosen entry.
 
+### Pattern - lazy entry-points (code-splitting per step)
+
+For heavy steps (rich editors, charting libraries, large vendor bundles) declare `lazy: () => import('./HeavyStep')` instead of `component:`. The runtime wraps the resolved component in `React.lazy` + `<Suspense>` for you and exposes an idempotent `preload()` that the outlet calls during idle time (see [auto-preload](#pattern---declared-targets-with-definetransition-auto-preload--narrowed-return-type)). This eliminates the per-entry `LazyXxxStep.tsx` wrapper consumers used to write to get past the descriptor's "must be a function" validation.
+
+```tsx
+// modules/billing/src/index.ts
+import { defineEntry, defineModule, schema } from "@modular-react/core";
+import { billingExits } from "./exits.js";
+
+export default defineModule({
+  id: "billing",
+  version: "1.0.0",
+  exitPoints: billingExits,
+  entryPoints: {
+    collect: defineEntry({
+      lazy: () => import("./CollectPayment.js"),
+      fallback: <PaymentSkeleton />, // optional <Suspense fallback>
+      input: schema<{ customerId: string; amount: number }>(),
+    }),
+  },
+});
+```
+
+Rules:
+
+- **Eager and lazy are mutually exclusive at the type level.** Declaring both `component` and `lazy` on the same entry is a TypeScript error (and a `validateModuleEntryExit` issue — defense in depth). Declaring neither is also flagged.
+- **`fallback` only on lazy entries.** Eager entries don't suspend, so the field is typed `never` on `EagerModuleEntryPoint`. Trying to pass it would be confusing — make the trap visible at the type level.
+- **Importer signature matches `React.lazy`.** Standard `() => import("./X")` works (default export). The runtime also normalizes a module that exports the component directly, so `() => Promise.resolve(MyComponent)` works in tests.
+- **The lazy import is memoized per entry-object identity** via a process-local `WeakMap` in `@modular-react/react`. A descriptor is fetched at most once across all renders, hot reloads producing fresh descriptor objects get fresh wrappers, and StrictMode's double-mount is safe.
+- **Manual prefetch** is exposed via `preloadEntry(entry)` from `@modular-react/react` — useful for hover-prefetch UIs (`onMouseEnter={() => preloadEntry(entry)}`), navigation gestures, or warming a chunk from a `useEffect` that knows the user is about to advance.
+- **Errors from the import** propagate through Suspense and are caught by the outlet's existing `StepErrorBoundary`, going through `onStepError` (`abort | retry | ignore`) just like a component throw. A permanently-failing import re-throws the cached rejection on retry; the existing `retryLimit` budget applies.
+- **SSR**: `React.lazy` resolution is server-renderable in React 19+; the auto-preload effect is browser-only (no `useEffect` on the server).
+
 ### Pattern - a loading entry point for async work
 
 Transitions are pure and synchronous. When a step needs to fetch data between user actions, put the fetch inside a **loading entry** on the next module; that module fires an exit with the loaded data, and the journey transitions from that exit as usual.
@@ -593,6 +626,95 @@ profile: {                                    // module id
   },
 },
 ```
+
+### Pattern - declared targets with `defineTransition` (auto-preload + narrowed return type)
+
+Wrap a handler with `defineTransition` to declare every outcome it may take — both next-step destinations and terminal arms. Two effects from one declaration:
+
+1. **Runtime — preload precision.** `<JourneyOutlet>`'s default `preload="precise"` mode reads `targets` and warms exactly the declared next-step chunks during idle time, so navigating Next finds the chunk already cached.
+2. **Type-level — the handler's return is constrained to the declared arms.** Returning an arm that wasn't declared (e.g. `abort` when only `next` was declared) is a compile error.
+
+`targets` accepts a mixed array of:
+
+- `{ module, entry }` — same shape as `next:` minus the runtime-computed `input`. One per next-step candidate.
+- `"complete"` / `"abort"` / `"invoke"` — string sentinels for the terminal arms. Declaring `"complete"` permits `{ complete: ... }` returns; `"abort"` permits `{ abort: ... }`; `"invoke"` permits `{ invoke: ... }` (the journey's `invokes:` field remains the closed-set declaration the runtime cycle-guards check against — the sentinel is just "this handler may invoke something").
+
+The helper has two call shapes:
+
+- **Curried (recommended)** — `defineTransition<TModules, TState>()` binds the journey's generics once. Handlers wrapped with the returned binder get `targets` autocompleted to valid step refs + sentinels and the handler's return narrowed to the declared arms.
+- **Bare** — `defineTransition({ targets, handle })` for one-off use. `targets` accepts any well-formed step-ref / sentinel without TModules-level checking; the handler's return is not contextually narrowed.
+
+`targets` is **mandatory on every `defineTransition` call** — the wrapper's whole point is to enumerate the possible outcomes, and an empty/missing array would silently sit out of precise-mode preload while looking annotated. If you don't want to declare outcomes, use a bare function — the runtime invocation path is identical.
+
+```ts
+import { defineJourney, defineTransition } from "@modular-react/journeys";
+
+// Bind the journey's generics once — every `transition({ ... })` call below
+// gets autocomplete on `targets` and contextual narrowing on `next`. Naming
+// mirrors `selectModule`: a descriptive verb for the binder, not an
+// abbreviation (`tx` reads as "transaction" in most codebases).
+const transition = defineTransition<OnboardingModules, OnboardingState>();
+
+export const onboardingJourney = defineJourney<OnboardingModules, OnboardingState>()({
+  // ...
+  transitions: {
+    profile: {
+      review: {
+        // Multi-target next: outlet preloads BOTH chunks during the idle
+        // window after profile/review mounts. Handler return is narrowed
+        // to `{ next: planChoose | billingCollect }` — returning `abort`
+        // here would be a compile error.
+        profileComplete: transition({
+          targets: [
+            { module: "plan", entry: "choose" },
+            { module: "billing", entry: "collect" },
+          ],
+          handle: ({ output, state }) => ({
+            state: { ...state, hint: output.hint },
+            next:
+              output.hint === "cheap"
+                ? {
+                    module: "plan",
+                    entry: "choose",
+                    input: { customerId: state.customerId, hint: output.hint },
+                  }
+                : {
+                    module: "billing",
+                    entry: "collect",
+                    input: { customerId: state.customerId, amount: 0 },
+                  },
+          }),
+        }),
+        // Mixed: handler may advance OR abort. Both arms are declared.
+        review: transition({
+          targets: [{ module: "plan", entry: "choose" }, "abort"],
+          handle: ({ output }) =>
+            output.ok
+              ? {
+                  next: {
+                    module: "plan",
+                    entry: "choose",
+                    input: { customerId: "c", hint: "cheap" },
+                  },
+                }
+              : { abort: { reason: "rejected" } },
+        }),
+        // Terminal-only: declaring `"abort"` lets the catalog harvester
+        // surface the abort flag without an AST walk over the handler body,
+        // and constrains the return to just the abort arm at compile time.
+        cancelled: transition({
+          targets: ["abort"],
+          handle: () => ({ abort: { reason: "user-cancelled" } }),
+        }),
+      },
+    },
+  },
+});
+```
+
+Why explicit declarations rather than inferring from the handler body? Handler bodies are dynamic (`next: cond ? A : B`) and may have side effects, so the runtime can't safely run them speculatively to enumerate destinations. One declarative line per wrapped transition is the trade-off — and it doubles as the catalog's authoritative outcome map (no AST walking for `aborts` / `completes` flags either).
+
+**Bare-function handlers still work.** The runtime invocation path is identical, and they sit out of precise-mode preload (`preload="aggressive"` is the fallback). Migrate handlers that fan out to heavy steps first; everything else stays as-is.
 
 ### Pattern - branching on state/output inside a handler
 
@@ -1464,6 +1586,23 @@ interface JourneyOutletProps {
    * error-reporting pipeline.
    */
   errorComponent?: ComponentType<JourneyOutletErrorProps>;
+  /**
+   * Speculatively prefetch chunks for entries reachable from the current
+   * step during idle time after mount, so navigating Next finds the
+   * bundle hot.
+   *
+   *   "precise" (default, alias `true`) — read declared `targets` from
+   *     `defineTransition({ targets, handle })`-annotated handlers on
+   *     the current step's transitions. Preload exactly those entries.
+   *     Bare handlers contribute nothing.
+   *   "aggressive" — preload every entry referenced anywhere in the
+   *     journey's `transitions` map. Useful for unmigrated journeys.
+   *   false — opt out entirely.
+   *
+   * No effect for eager (`component:`) entries — their import is
+   * already resolved. SSR is a no-op (the preload effect is browser-only).
+   */
+  preload?: boolean | "precise" | "aggressive";
 }
 
 interface JourneyOutletNotFoundProps {
@@ -1516,10 +1655,11 @@ What it does:
 
 1. Subscribes to the instance via `useSyncExternalStore`.
 2. Renders `loadingFallback` while the async persistence `load` is in flight.
-3. Resolves `step.module` + `step.entry` against the module map (prop, or the one the runtime was built with) and renders its component with a freshly bound `{ input, exit, goBack? }`.
-4. Wraps the step in an error boundary and applies `onStepError` policy. Retries count against `retryLimit` globally per instance (the counter does **not** reset when a retry advances the step), so a throwing component can't bypass the cap by bumping the step token.
+3. Resolves `step.module` + `step.entry` against the module map (prop, or the one the runtime was built with) and renders its component with a freshly bound `{ input, exit, goBack? }`. Lazy entries are wrapped in `React.lazy` + `<Suspense fallback={entry.fallback ?? loadingFallback ?? null}>` automatically — see [Pattern - lazy entry-points](#pattern---lazy-entry-points-code-splitting-per-step).
+4. Wraps the step in an error boundary and applies `onStepError` policy. Retries count against `retryLimit` globally per instance (the counter does **not** reset when a retry advances the step), so a throwing component can't bypass the cap by bumping the step token. Lazy import failures surface through this same boundary.
 5. Fires `onFinished` exactly once when the instance terminates; the outcome carries `{ status, payload, instanceId, journeyId }` so analytics can correlate without re-reading props.
 6. On unmount while still `active` **or** `loading`, abandons the instance via `runtime.end({ reason: 'unmounted' })`. Two defenses keep the instance alive when it should stay: StrictMode's simulated mount/unmount/remount cycle (same component, same `mountedRef`) and back-to-back independent outlets that hand off to each other (checked via `record.listeners.size`).
+7. After each step mounts, schedules a `requestIdleCallback` (with a `setTimeout(_, 0)` fallback) to call `preload()` on every entry reachable from the current step (per `preload` mode — see the prop docs above). Effect cancels on step change so a fast advance doesn't race with the previous step's preload set.
 
 ### Error policies in depth
 
@@ -1942,31 +2082,36 @@ Every export you're likely to call, grouped by role.
 
 ### From `@modular-react/core` (module authors)
 
-| Export                           | Signature                                                                        | Purpose                                                                 |
-| -------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `defineEntry`                    | `<T>(e: ModuleEntryPoint<T>) => ModuleEntryPoint<T>`                             | Identity helper for an entry-point literal. Zero runtime cost.          |
-| `defineExit`                     | `<T = void>(s?: ExitPointSchema<T>) => ExitPointSchema<T>`                       | Identity helper for an exit-point literal. Zero runtime cost.           |
-| `schema`                         | `<T>() => InputSchema<T>`                                                        | Type-only brand used to carry an input/output shape. Zero runtime cost. |
-| `ModuleEntryProps`               | `<TInput, TExits extends ExitPointMap = {}>`                                     | Typed props for an entry component: `{ input, exit, goBack? }`.         |
-| `ModuleEntryPoint`               | `{ component, input?, allowBack? }`                                              | Entry-point descriptor shape.                                           |
-| `ExitPointSchema`                | `{ output? }`                                                                    | Exit-point descriptor shape.                                            |
-| `ExitFn`                         | `<TExits>(name, output?) => void`                                                | The function signature `exit` gets on an entry component.               |
-| `EntryPointMap` / `ExitPointMap` | `Record<string, ModuleEntryPoint<any>>` / `Record<string, ExitPointSchema<any>>` | Map shapes on `ModuleDescriptor`.                                       |
+| Export                                           | Signature                                                                                                        | Purpose                                                                                                                                                                             |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defineEntry`                                    | overloaded — `<T>(e: EagerModuleEntryPoint<T> \| LazyModuleEntryPoint<T>) => same`                               | Identity helper. Two forms: eager (`{ component, input?, allowBack? }`) or lazy (`{ lazy: () => import(…), fallback?, input?, allowBack? }`). Mutually exclusive at the type level. |
+| `defineExit`                                     | `<T = void>() => ExitPointSchema<T>`                                                                             | Identity helper for an exit-point literal. Zero runtime cost.                                                                                                                       |
+| `schema`                                         | `<T>() => InputSchema<T>`                                                                                        | Type-only brand used to carry an input/output shape. Zero runtime cost.                                                                                                             |
+| `ModuleEntryProps`                               | `<TInput, TExits extends ExitPointMap = {}>`                                                                     | Typed props for an entry component: `{ input, exit, goBack? }`.                                                                                                                     |
+| `ModuleEntryPoint`                               | `EagerModuleEntryPoint<T> \| LazyModuleEntryPoint<T>`                                                            | Discriminated union — eager (`component`) or lazy (`lazy`).                                                                                                                         |
+| `EagerModuleEntryPoint` / `LazyModuleEntryPoint` | `{ component, input?, allowBack?, lazy?: never }` / `{ lazy, fallback?, input?, allowBack?, component?: never }` | The two branches of the union, exported for callers that want to type a single variant explicitly.                                                                                  |
+| `LazyEntryComponent`                             | `() => Promise<{ default: ComponentType<…> } \| ComponentType<…>>`                                               | Importer signature accepted by `defineEntry({ lazy })`. Both default-export and direct-export module shapes are normalized at runtime.                                              |
+| `ExitPointSchema`                                | `{ output? }`                                                                                                    | Exit-point descriptor shape.                                                                                                                                                        |
+| `ExitFn`                                         | `<TExits>(name, output?) => void`                                                                                | The function signature `exit` gets on an entry component.                                                                                                                           |
+| `EntryPointMap` / `ExitPointMap`                 | `Record<string, ModuleEntryPoint<any>>` / `Record<string, ExitPointSchema<any>>`                                 | Map shapes on `ModuleDescriptor`.                                                                                                                                                   |
 
 ### Authoring (`@modular-react/journeys`)
 
-| Export                        | Signature                                                                                                      | Purpose                                                                                                                                                                                                                                                                                                                                |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `defineJourney`               | `<TModules, TState, TOutput?>() => <TInput>(def: JourneyDefinition<TModules, TState, TInput, TOutput>) => def` | Identity helper with full inference on transitions and state. Curried so `TInput` infers from `initialState`. The optional third generic `TOutput` narrows `complete` payloads (and a parent's resume `outcome.payload` when invoked).                                                                                                 |
-| `defineJourneyHandle`         | `<TModules, TState, TInput, TOutput>(def) => JourneyHandle<string, TInput, TOutput>`                           | Builds a typed token from a journey definition so modules and shells can call `runtime.start(handle, input)` without importing the journey's runtime code. Carries `TOutput` so a parent's resume sees `outcome.payload` typed end-to-end.                                                                                             |
-| `invoke`                      | `<TInput, TOutput>({ handle, input, resume }) => { invoke: InvokeSpec<TInput, TOutput> }`                      | Typed builder for the `{ invoke }` arm of `TransitionResult`. Cross-checks `input` against the handle's `TInput` — a bare object literal won't. See [Composing journeys](#composing-journeys-invoke--resume).                                                                                                                          |
-| `validateJourneyGraph`        | `(journeys: readonly RegisteredJourney[]) => void`                                                             | Static cycle check over the directed graph derived from each journey's `invokes` field. Run automatically by `validateJourneyContracts`; exported separately for shells that compose registrations across plugin boundaries. See [Cycle and recursion safety](#cycle-and-recursion-safety).                                            |
-| `isJourneySystemAbort`        | `(payload: unknown) => payload is JourneySystemAbortReason`                                                    | Type guard that narrows an `unknown` abort payload to the runtime's discriminated `JourneySystemAbortReason` union. Returns `false` for author-supplied aborts so a `{ abort: { reason: "user-cancelled" } }` does not collide with the system codes. See [Cycle and recursion safety - Failure surface](#cycle-and-recursion-safety). |
-| `selectModule`                | `<TModules>() => <TKey>(key, cases) => StepSpec<TModules>`                                                     | Exhaustive state-driven dispatch helper for transition handlers - see [the pattern](#pattern---exhaustive-state-driven-module-dispatch-selectmodule). Missing branches are a compile error.                                                                                                                                            |
-| `selectModuleOrDefault`       | `<TModules>() => <TKey>(key, cases, fallback) => StepSpec<TModules>`                                           | Sibling of `selectModule` accepting a partial cases map plus an explicit fallback `StepSpec` - see [the pattern](#pattern---fallback-dispatch-selectmoduleordefault). Use when most discriminator values funnel through a generic module.                                                                                              |
-| `defineJourneyPersistence`    | `<TInput, TState>(adapter) => JourneyPersistence<TState, TInput>`                                              | Types `keyFor`'s `input` against `TInput`, `load`/`save` against `TState`.                                                                                                                                                                                                                                                             |
-| `createWebStoragePersistence` | `<TInput, TState>({ keyFor, storage? }) => JourneyPersistence<TState, TInput>`                                 | Stock `localStorage` / `sessionStorage` adapter. SSR-safe, auto-clears corrupt JSON entries. Pass `storage` to override the backing store.                                                                                                                                                                                             |
-| `createMemoryPersistence`     | `<TInput, TState>({ keyFor, initial?, clone? }) => MemoryPersistence<TInput, TState>`                          | `Map`-backed adapter for tests/SSR. Exposes `size()` / `entries()` / `clear()`. Deep-clones on `save` and `load` by default.                                                                                                                                                                                                           |
+| Export                        | Signature                                                                                                                                  | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defineJourney`               | `<TModules, TState, TOutput?>() => <TInput>(def: JourneyDefinition<TModules, TState, TInput, TOutput>) => def`                             | Identity helper with full inference on transitions and state. Curried so `TInput` infers from `initialState`. The optional third generic `TOutput` narrows `complete` payloads (and a parent's resume `outcome.payload` when invoked).                                                                                                                                                                                                                                                                                                            |
+| `defineJourneyHandle`         | `<TModules, TState, TInput, TOutput>(def) => JourneyHandle<string, TInput, TOutput>`                                                       | Builds a typed token from a journey definition so modules and shells can call `runtime.start(handle, input)` without importing the journey's runtime code. Carries `TOutput` so a parent's resume sees `outcome.payload` typed end-to-end.                                                                                                                                                                                                                                                                                                        |
+| `invoke`                      | `<TInput, TOutput>({ handle, input, resume }) => { invoke: InvokeSpec<TInput, TOutput> }`                                                  | Typed builder for the `{ invoke }` arm of `TransitionResult`. Cross-checks `input` against the handle's `TInput` — a bare object literal won't. See [Composing journeys](#composing-journeys-invoke--resume).                                                                                                                                                                                                                                                                                                                                     |
+| `validateJourneyGraph`        | `(journeys: readonly RegisteredJourney[]) => void`                                                                                         | Static cycle check over the directed graph derived from each journey's `invokes` field. Run automatically by `validateJourneyContracts`; exported separately for shells that compose registrations across plugin boundaries. See [Cycle and recursion safety](#cycle-and-recursion-safety).                                                                                                                                                                                                                                                       |
+| `isJourneySystemAbort`        | `(payload: unknown) => payload is JourneySystemAbortReason`                                                                                | Type guard that narrows an `unknown` abort payload to the runtime's discriminated `JourneySystemAbortReason` union. Returns `false` for author-supplied aborts so a `{ abort: { reason: "user-cancelled" } }` does not collide with the system codes. See [Cycle and recursion safety - Failure surface](#cycle-and-recursion-safety).                                                                                                                                                                                                            |
+| `selectModule`                | `<TModules>() => <TKey>(key, cases) => StepSpec<TModules>`                                                                                 | Exhaustive state-driven dispatch helper for transition handlers - see [the pattern](#pattern---exhaustive-state-driven-module-dispatch-selectmodule). Missing branches are a compile error.                                                                                                                                                                                                                                                                                                                                                       |
+| `selectModuleOrDefault`       | `<TModules>() => <TKey>(key, cases, fallback) => StepSpec<TModules>`                                                                       | Sibling of `selectModule` accepting a partial cases map plus an explicit fallback `StepSpec` - see [the pattern](#pattern---fallback-dispatch-selectmoduleordefault). Use when most discriminator values funnel through a generic module.                                                                                                                                                                                                                                                                                                         |
+| `defineTransition`            | curried: `<TModules, TState?, TOutput?>() => (spec) => handle & { targets }`<br>bare: `<THandler, TTargets>(spec) => handle & { targets }` | Wraps a transition handler with declared `targets` — a mixed array of `{ module, entry }` step refs and `"complete"` / `"abort"` / `"invoke"` sentinels. Required on every wrapped handler; narrows the handler's return to the declared arms (returning an undeclared arm is a compile error). The outlet's default `preload="precise"` mode reads the step refs to warm chunks during idle time; sentinels are skipped. See [Pattern - declared targets](#pattern---declared-targets-with-definetransition-auto-preload--narrowed-return-type). |
+| `isTerminalSentinel`          | `(value: unknown) => value is "complete" \| "abort" \| "invoke"`                                                                           | Type guard for the terminal sentinels accepted in `targets`. Exposed for hosts that introspect a wrapped handler's targets and want to separate step refs from terminal arms.                                                                                                                                                                                                                                                                                                                                                                     |
+| `isAnnotatedTransition`       | `(value: unknown) => boolean`                                                                                                              | Type guard for `defineTransition`-wrapped handlers. The outlet's preloader uses it; exported for custom hosts that walk a journey's `transitions` map.                                                                                                                                                                                                                                                                                                                                                                                            |
+| `defineJourneyPersistence`    | `<TInput, TState>(adapter) => JourneyPersistence<TState, TInput>`                                                                          | Types `keyFor`'s `input` against `TInput`, `load`/`save` against `TState`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `createWebStoragePersistence` | `<TInput, TState>({ keyFor, storage? }) => JourneyPersistence<TState, TInput>`                                                             | Stock `localStorage` / `sessionStorage` adapter. SSR-safe, auto-clears corrupt JSON entries. Pass `storage` to override the backing store.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `createMemoryPersistence`     | `<TInput, TState>({ keyFor, initial?, clone? }) => MemoryPersistence<TInput, TState>`                                                      | `Map`-backed adapter for tests/SSR. Exposes `size()` / `entries()` / `clear()`. Deep-clones on `save` and `load` by default.                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 ### Rendering + context (`@modular-react/journeys`)
 

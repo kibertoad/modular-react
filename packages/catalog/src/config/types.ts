@@ -243,6 +243,14 @@ export interface ExitOutcome {
   readonly nexts: readonly { readonly module: string; readonly entry?: string }[];
   readonly aborts: boolean;
   readonly completes: boolean;
+  /**
+   * True when `nexts` was sourced from a `defineTransition({ targets })`
+   * declaration on the handler — the destination set is statically
+   * authoritative, including branches a pure AST walk could not resolve.
+   * False / absent when destinations were AST-inferred from `next` literals
+   * inside the handler body.
+   */
+  readonly targetsDeclared?: boolean;
 }
 
 /** Discriminated union of every harvestable entry kind. */

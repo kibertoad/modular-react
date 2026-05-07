@@ -231,13 +231,17 @@ export interface InputSchema<T> {
 }
 
 /**
- * A single typed entry point on a module — the combination of a React
- * component, the input type it accepts, and an optional opt-in to "go back"
- * navigation.
+ * Lazy-importer signature for an entry-point component. Mirrors the shape
+ * `React.lazy` accepts (default-exported component) but is normalized at the
+ * runtime to also accept a module that exports the component directly.
  */
-export interface ModuleEntryPoint<TInput> {
-  /** Component to render when this entry is opened. Receives `ModuleEntryProps<TInput, …>`. */
-  readonly component: React.ComponentType<ModuleEntryProps<TInput, any>>;
+export type LazyEntryComponent<TInput> = () => Promise<
+  | { default: React.ComponentType<ModuleEntryProps<TInput, any>> }
+  | React.ComponentType<ModuleEntryProps<TInput, any>>
+>;
+
+/** Fields shared by both eager and lazy entry-point variants. */
+interface ModuleEntryPointBase<TInput> {
   /** Type-level declaration of the input shape. Pure inference aid. */
   readonly input?: InputSchema<TInput>;
   /**
@@ -249,6 +253,41 @@ export interface ModuleEntryPoint<TInput> {
    */
   readonly allowBack?: "preserve-state" | "rollback" | false;
 }
+
+/**
+ * Eager entry — a directly-bound React component. The historic shape; works
+ * unchanged for every existing consumer.
+ */
+export interface EagerModuleEntryPoint<TInput> extends ModuleEntryPointBase<TInput> {
+  /** Component to render when this entry is opened. Receives `ModuleEntryProps<TInput, …>`. */
+  readonly component: React.ComponentType<ModuleEntryProps<TInput, any>>;
+  readonly lazy?: never;
+  readonly fallback?: never;
+}
+
+/**
+ * Lazy entry — a dynamic-import factory. Hosts wrap the resolved component
+ * in `React.lazy` + `<Suspense>` and expose an idempotent `preload()` so
+ * speculative prefetching is one call, not a hand-written wrapper component.
+ */
+export interface LazyModuleEntryPoint<TInput> extends ModuleEntryPointBase<TInput> {
+  readonly component?: never;
+  /** Dynamic import of the entry's component. Called at most once per descriptor. */
+  readonly lazy: LazyEntryComponent<TInput>;
+  /**
+   * Suspense fallback rendered while the lazy chunk is loading. Hosts wrap
+   * the resolved component in `<Suspense fallback={fallback ?? null}>`. Only
+   * meaningful for lazy entries — eager entries don't suspend.
+   */
+  readonly fallback?: React.ReactNode;
+}
+
+/**
+ * A single typed entry point on a module — either eager (`component`) or
+ * lazy (`lazy`). The `?: never` idiom on each branch makes the two forms
+ * mutually exclusive at the type level.
+ */
+export type ModuleEntryPoint<TInput> = EagerModuleEntryPoint<TInput> | LazyModuleEntryPoint<TInput>;
 
 /**
  * Typed declaration of a single exit point — describes the output payload

@@ -18,6 +18,7 @@ npm install @modular-react/react
 - **Error boundary**: `ModuleErrorBoundary`
 - **Module-exit plumbing**: `ModuleExitProvider`, `useModuleExit`, `useModuleExitDispatcher`, `ModuleEvent`. The "step 0" pattern — a module entry fires an exit from outside any journey, the composition root decides what it means.
 - **Standalone hosts**: `ModuleRoute` renders a module entry as a route element (router-mode step 0). Pairs with `ModuleTab` from `@modular-react/journeys` for the workspace-mode variant.
+- **Lazy entry resolution**: `resolveEntryComponent(entry)` returns `{ Component, preload }` for either an eager (`{ component }`) or a lazy (`{ lazy: () => import(…) }`) `ModuleEntryPoint`. Memoized per entry-object identity via `WeakMap`. Used by both `JourneyOutlet` and `ModuleTab` so the lazy wrapper / import promise is shared across renders, hot reloads, and StrictMode double-mount. `preloadEntry(entry)` is the convenience wrapper for hover-prefetch UIs and other manual warm-up paths.
 - **Re-exported from `@modular-react/core`**: all types, `createStore`, `isStore`, `isStoreApi`, `isReactiveService`, `separateDeps`, `defineModule`, `defineSlots`, slot/navigation/validation functions, and runtime helpers
 
 ## Usage
@@ -50,5 +51,24 @@ function LaunchPage() {
 `<JourneyProvider>` from `@modular-react/journeys` composes over
 `ModuleExitProvider` automatically — apps that use the journeys plugin
 do not need to mount both.
+
+### Manual prefetch with `preloadEntry`
+
+`preloadEntry(entry)` triggers a lazy entry's dynamic import without rendering the component. Call it from a hover handler, an analytics-driven prediction, or a `useEffect` that knows the user is about to advance:
+
+```tsx
+import { preloadEntry } from "@modular-react/react";
+import { billingModule } from "./billing-module.js";
+
+function PlanCard({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} onMouseEnter={() => preloadEntry(billingModule.entryPoints.collect)}>
+      Continue to billing
+    </button>
+  );
+}
+```
+
+Calls are idempotent — the underlying `WeakMap` cache returns the same in-flight or resolved promise across hover, click, and any `<JourneyOutlet preload>` that picked the same entry.
 
 See the [main documentation](https://github.com/kibertoad/modular-react#readme) for the full guide.

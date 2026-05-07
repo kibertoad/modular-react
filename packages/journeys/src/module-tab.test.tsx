@@ -165,4 +165,36 @@ describe("ModuleTab", () => {
     const { getByTestId } = render(<ModuleTab module={voidMod} input={undefined} />);
     expect(getByTestId("void-marker")).toBeTruthy();
   });
+
+  it("renders a lazy entry — fallback first, resolved component after the chunk loads", async () => {
+    let resolveImport!: (mod: { default: typeof Review }) => void;
+    const lazyImporter = vi.fn(
+      () =>
+        new Promise<{ default: typeof Review }>((res) => {
+          resolveImport = res;
+        }),
+    );
+    const lazyMod = defineModule({
+      id: "review-lazy",
+      version: "1.0.0",
+      exitPoints: exits,
+      entryPoints: {
+        review: defineEntry({
+          lazy: lazyImporter,
+          fallback: <span data-testid="lazy-fallback">loading…</span>,
+          input: schema<{ customerId: string }>(),
+        }),
+      },
+    });
+    const { getByTestId } = render(
+      <ModuleTab module={lazyMod} entry="review" input={{ customerId: "C-9" }} />,
+    );
+    expect(getByTestId("lazy-fallback")).toBeTruthy();
+    expect(lazyImporter).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveImport({ default: Review });
+      await Promise.resolve();
+    });
+    expect(getByTestId("cid").textContent).toBe("C-9");
+  });
 });

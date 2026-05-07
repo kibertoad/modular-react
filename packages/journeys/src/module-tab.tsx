@@ -1,7 +1,12 @@
-import { createElement } from "react";
+import { Suspense, createElement } from "react";
 import type { ComponentType, ReactNode } from "react";
-import type { ExitPointMap, ModuleDescriptor, ModuleEntryProps } from "@modular-react/core";
-import { ModuleErrorBoundary, useModuleExit, type ModuleExitEvent } from "@modular-react/react";
+import type { ModuleDescriptor } from "@modular-react/core";
+import {
+  ModuleErrorBoundary,
+  resolveEntryComponent,
+  useModuleExit,
+  type ModuleExitEvent,
+} from "@modular-react/react";
 
 /**
  * Exit event fired by a module rendered inside a `<ModuleTab>`.
@@ -98,10 +103,15 @@ export function ModuleTab<TInput = unknown>(props: ModuleTabProps<TInput>): Reac
           `Pass \`input={undefined}\` explicitly if the entry accepts no input.`,
       );
     } else {
-      const Component = entryPoint.component as ComponentType<
-        ModuleEntryProps<TInput, ExitPointMap>
-      >;
-      content = createElement(Component, { input: input as TInput, exit });
+      const { Component } = resolveEntryComponent(entryPoint);
+      // `fallback` is typed `never` on eager entries (always `undefined` at
+      // runtime), `ReactNode | undefined` on lazy entries.
+      const fallback = entryPoint.fallback ?? null;
+      content = createElement(
+        Suspense,
+        { fallback },
+        createElement(Component, { input: input as TInput, exit }),
+      );
     }
   } else if (mod.component) {
     // Back-compat: render the legacy workspace component when the module

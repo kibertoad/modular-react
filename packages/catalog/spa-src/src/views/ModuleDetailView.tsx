@@ -366,6 +366,25 @@ function ExitOutcomes({ usage }: { usage: ModuleExitUsage }) {
     <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
       <span className="text-muted-foreground">→</span>
       {tags}
+      {usage.targetsDeclared && <DeclaredBadge />}
+    </span>
+  );
+}
+
+/**
+ * Marks an exit's destinations as authoritative — sourced from
+ * `defineTransition({ targets })` rather than AST-inferred. Reassures the
+ * reader that the listing is complete (vs the best-effort AST walk, which
+ * can miss branches behind dynamic `output`-driven returns).
+ */
+function DeclaredBadge() {
+  return (
+    <span
+      className="rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[0.65rem] text-emerald-700 dark:text-emerald-400"
+      title="Destinations declared via defineTransition({ targets }) — authoritative, no inference"
+      data-testid="declared-targets-badge"
+    >
+      declared
     </span>
   );
 }
