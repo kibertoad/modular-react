@@ -11,14 +11,26 @@ import { defineTransition } from "./define-transition.js";
 import { createJourneyRuntime } from "./runtime.js";
 import { JourneyOutlet } from "./outlet.js";
 
+// Capture once at import time so afterEach can restore whatever the host
+// environment set (most likely `undefined` under happy-dom, but a downstream
+// test runner could shim it). Without restoration, deleting the global here
+// would leak across test files on shared workers.
+const globalWithRic = globalThis as typeof globalThis & { requestIdleCallback?: unknown };
+const originalRequestIdleCallback = globalWithRic.requestIdleCallback;
+
 afterEach(() => {
   cleanup();
+  if (originalRequestIdleCallback === undefined) {
+    delete globalWithRic.requestIdleCallback;
+  } else {
+    globalWithRic.requestIdleCallback = originalRequestIdleCallback;
+  }
 });
 
 beforeEach(() => {
   // happy-dom doesn't ship requestIdleCallback. Force the setTimeout(_, 0)
   // fallback explicitly so the assertion is unambiguous.
-  delete (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback;
+  delete globalWithRic.requestIdleCallback;
 });
 
 // --- Per-test factory ---------------------------------------------------------
