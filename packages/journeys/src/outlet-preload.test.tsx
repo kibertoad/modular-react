@@ -428,6 +428,48 @@ describe("JourneyOutlet — auto-preload (aggressive)", () => {
     // anywhere in this journey → not preloaded even in aggressive mode.
     expect(fx.unrelatedImporter).not.toHaveBeenCalled();
   });
+
+  it("preloads destination-only entries reached via annotated `targets:` even when they have no outbound transitions", async () => {
+    // The shape this test guards against: an entry that's a destination of
+    // some annotated handler but is itself terminal (no outbound transitions
+    // wired). Source-keys-only enumeration would miss it; the
+    // destinations-side pass through annotated targets must close the gap.
+    const fx = makeFixtures();
+    type M = typeof fx.modules;
+    const destOnlyJourney = defineJourney<M, { _: true }>()({
+      id: "dest-only",
+      version: "1.0.0",
+      initialState: () => ({ _: true }) as const,
+      start: () => ({ module: "start", entry: "pick", input: undefined as never }),
+      transitions: {
+        start: {
+          pick: {
+            // `unrelated/show` is the destination — it has NO outbound
+            // transitions of its own, so source-keys enumeration would
+            // skip it. The annotated target must surface it.
+            toUnrelated: defineTransition({
+              targets: [{ module: "unrelated", entry: "show" }],
+              handle: () => ({
+                next: { module: "unrelated", entry: "show", input: undefined as never },
+              }),
+            }),
+          },
+        },
+      },
+    });
+    const rt = createJourneyRuntime([{ definition: destOnlyJourney, options: undefined }], {
+      modules: fx.modules,
+      debug: false,
+    });
+    const id = rt.start("dest-only", undefined as never);
+    render(
+      <Suspense fallback={null}>
+        <JourneyOutlet runtime={rt} instanceId={id} modules={fx.modules} preload="aggressive" />
+      </Suspense>,
+    );
+    await flushIdle();
+    expect(fx.unrelatedImporter).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("JourneyOutlet — auto-preload (off)", () => {

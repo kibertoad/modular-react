@@ -98,8 +98,14 @@ export interface JourneyOutletProps {
    *     Bare-function handlers contribute nothing (this is the precise
    *     mode's whole point — no guessing).
    *
-   *   `"aggressive"` — preload every entry referenced anywhere in the
-   *     journey's `transitions` map. Useful when handlers are not
+   *   `"aggressive"` — preload every entry that appears as a transition
+   *     source OR as a declared `target` of any annotated handler in the
+   *     journey's `transitions` map. The destination-side pass catches
+   *     terminal-only steps that have no outbound transitions of their
+   *     own (e.g. a freshly-added receipt screen reachable from `next:`
+   *     but not yet wired with its own exits). Entries reachable only
+   *     via `definition.start` are not enumerated — the start function
+   *     can't be run speculatively. Useful when handlers are not
    *     annotated and the journey is small enough that warming all
    *     candidates is cheap.
    *
@@ -403,10 +409,31 @@ function collectPreloadTargets(
     return out;
   }
 
-  // Aggressive — every (module, entry) referenced as a transition source.
+  // Aggressive — every (module, entry) the journey could plausibly navigate
+  // to: source-side keys (covers bare-function handlers and every step that
+  // has outbound transitions wired) UNIONED with the destinations declared
+  // by every annotated handler (covers terminal-only destination steps —
+  // entries reachable from a `next:` arm that themselves have no outbound
+  // transitions yet, e.g. a freshly-added receipt screen).
+  //
+  // The static enumeration can't cover entries reachable only via
+  // `definition.start` (it's a function we won't run speculatively). Authors
+  // who care about preloading the start step typically annotate the
+  // exit that lands on it from a previous step, which the destinations-side
+  // pass picks up.
   for (const [moduleId, perModule] of Object.entries(transitions)) {
     if (!perModule) continue;
-    for (const entryName of Object.keys(perModule)) collectPair(moduleId, entryName);
+    for (const [entryName, perExit] of Object.entries(perModule)) {
+      collectPair(moduleId, entryName);
+      if (!perExit) continue;
+      for (const value of Object.values(perExit)) {
+        if (!isAnnotatedTransition(value)) continue;
+        for (const target of value.targets) {
+          if (typeof target === "string") continue;
+          collectPair(target.module, target.entry);
+        }
+      }
+    }
   }
   return out;
 }
