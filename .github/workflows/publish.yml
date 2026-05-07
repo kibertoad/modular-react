@@ -87,6 +87,22 @@ jobs:
               - 'packages/testing/src/**'
               - 'packages/testing/package.json'
               - 'packages/testing/README.md'
+            pkg_journeys:
+              - 'packages/journeys/src/**'
+              - 'packages/journeys/package.json'
+              - 'packages/journeys/README.md'
+            pkg_catalog:
+              # Catalog ships a built TS library plus a Vite-built SPA bundle
+              # (dist + dist-spa, see packages/catalog/package.json's `files`),
+              # so the SPA source tree is part of the publish surface.
+              - 'packages/catalog/src/**'
+              - 'packages/catalog/spa-src/**'
+              - 'packages/catalog/package.json'
+              - 'packages/catalog/README.md'
+            pkg_cli_core:
+              - 'packages/cli-core/src/**'
+              - 'packages/cli-core/package.json'
+              - 'packages/cli-core/README.md'
             pkg_rr_cli:
               - 'packages/react-router-cli/src/**'
               - 'packages/react-router-cli/package.json'
@@ -128,6 +144,9 @@ jobs:
             ["pkg_core"]="core:@modular-react/core"
             ["pkg_react"]="react:@modular-react/react"
             ["pkg_testing"]="testing:@modular-react/testing"
+            ["pkg_journeys"]="journeys:@modular-react/journeys"
+            ["pkg_catalog"]="catalog:@modular-react/catalog"
+            ["pkg_cli_core"]="cli-core:@modular-react/cli-core"
             ["pkg_rr_cli"]="react-router-cli:@react-router-modules/cli"
             ["pkg_rr_core"]="react-router-core:@react-router-modules/core"
             ["pkg_rr_runtime"]="react-router-runtime:@react-router-modules/runtime"
