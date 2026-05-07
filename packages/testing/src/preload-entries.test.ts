@@ -78,12 +78,30 @@ describe("preloadEntries", () => {
     await expect(preloadEntries([])).resolves.toBeUndefined();
   });
 
-  it("propagates importer rejections", async () => {
+  it("propagates the first rejection without leaking unhandled rejections from sibling importers", async () => {
+    // Mixed resolve/reject lineup verifies the comment in preload-entries.ts:
+    // Promise.all attaches a handler to every iterated promise, so the
+    // resolving sibling never surfaces as an unhandledRejection. We back the
+    // structural guarantee with a process-level listener.
     const failure = new Error("chunk load failed");
-    const importer = vi.fn(() => Promise.reject(failure));
-    const mod = module_("m", { e: lazyEntry(importer) });
+    const success = vi.fn(() => Promise.resolve({ default: Stub }));
+    const reject = vi.fn(() => Promise.reject(failure));
+    const mod = module_("m", { ok: lazyEntry(success), bad: lazyEntry(reject) });
 
-    await expect(preloadEntries([mod])).rejects.toBe(failure);
+    const leaks: unknown[] = [];
+    const onUnhandled = (reason: unknown) => leaks.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      await expect(preloadEntries([mod])).rejects.toBe(failure);
+      // Drain microtasks so any pending unhandled-rejection notifications fire.
+      await new Promise((r) => setImmediate(r));
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+
+    expect(success).toHaveBeenCalledTimes(1);
+    expect(reject).toHaveBeenCalledTimes(1);
+    expect(leaks).toEqual([]);
   });
 
   it("re-exports `preloadEntry` from @modular-react/react verbatim", () => {
