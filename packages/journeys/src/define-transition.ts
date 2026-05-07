@@ -139,6 +139,17 @@ function attach<
   TTargets extends readonly (StepObjectRef | TerminalSentinel)[],
 >(spec: DefineTransitionSpec<THandler, TTargets>): AnnotatedTransitionHandler<THandler, TTargets> {
   const handler = spec.handle as AnnotatedTransitionHandler<THandler, TTargets>;
+  // Reusing the same function reference across two `defineTransition` calls
+  // would crash on the second `Object.defineProperty` with a cryptic
+  // `TypeError: Cannot redefine property: targets` (we set the property
+  // non-configurable so frozen targets can't be silently replaced). Detect
+  // the reuse explicitly and surface an actionable message instead.
+  if (Object.getOwnPropertyDescriptor(handler, "targets") !== undefined) {
+    throw new TypeError(
+      "[@modular-react/journeys] defineTransition: the same handler function was passed to defineTransition twice. " +
+        "Each transition needs its own handler — pass an inline arrow / function literal per `defineTransition({ ... })` call.",
+    );
+  }
   // Non-enumerable so structural iteration (Object.entries on the transitions
   // map, JSON serialization of journey snapshots) does not surface this field;
   // the preloader reads it via direct property access.

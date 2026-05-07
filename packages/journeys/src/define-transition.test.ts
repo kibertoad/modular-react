@@ -110,6 +110,19 @@ describe("defineTransition", () => {
     }).toThrow();
   });
 
+  it("throws an actionable error when the same handler is passed twice", () => {
+    // Reusing the handler reference would crash on the second
+    // `Object.defineProperty` call (the property is non-configurable so the
+    // first stamp can't be silently overwritten). The guard surfaces a
+    // clear message instead of the cryptic `Cannot redefine property` engine
+    // error — protects authors who accidentally factor a shared handler.
+    const shared = () => ({ abort: { reason: "x" } });
+    defineTransition({ targets: ["abort"] as const, handle: shared });
+    expect(() => defineTransition({ targets: ["abort"] as const, handle: shared })).toThrow(
+      /passed to defineTransition twice/,
+    );
+  });
+
   it("curried form binds the journey's generics and stamps targets identically", () => {
     // No-arg call returns the binder. The binder behaves like the bare form
     // at runtime — the journey's generics flow only through the type system.

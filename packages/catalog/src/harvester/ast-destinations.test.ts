@@ -194,7 +194,7 @@ describe("extractTransitionDestinations", () => {
     // `handle:` function to recover the destination — the wrapper is
     // otherwise transparent.
     const path = writeTmp(
-      "wrapped.ts",
+      "wrapped-define-transition.ts",
       `export default {
          id: "wrapped",
          version: "1.0.0",
