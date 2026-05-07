@@ -1,12 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ComponentType } from "react";
-import { resolveEntryComponent } from "@modular-react/react";
+import {
+  preloadEntry as preloadEntryFromReact,
+  resolveEntryComponent,
+} from "@modular-react/react";
 import type {
   LazyModuleEntryPoint,
   ModuleDescriptor,
   ModuleEntryProps,
 } from "@modular-react/core";
-import { preloadEntries } from "./preload-entries.js";
+import { preloadEntries, preloadEntry } from "./index.js";
 
 const Stub = (() => null) as unknown as ComponentType<ModuleEntryProps<unknown, {}>>;
 
@@ -78,6 +81,10 @@ describe("preloadEntries", () => {
     const mod = module_("m", { e: lazyEntry(importer) });
 
     await expect(preloadEntries([mod])).rejects.toBe(failure);
+  });
+
+  it("re-exports `preloadEntry` from @modular-react/react verbatim", () => {
+    expect(preloadEntry).toBe(preloadEntryFromReact);
   });
 
   it("after preload, resolveEntryComponent(entry).preload() resolves SYNCHRONOUSLY", async () => {

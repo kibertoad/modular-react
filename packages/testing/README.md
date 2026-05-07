@@ -63,7 +63,9 @@ it("renders the lazy review step", () => {
 ```
 
 For modules built ad-hoc inside a single test (or any case where enumerating
-modules upfront is awkward), call `preloadEntry` directly on the entry:
+modules upfront is awkward), call `preloadEntry` directly on the entry.
+`preloadEntry` is re-exported here so test code only needs a single import
+surface:
 
 ```typescript
 import { preloadEntry } from "@modular-react/testing";

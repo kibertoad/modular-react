@@ -1,5 +1,5 @@
 import { preloadEntry } from "@modular-react/react";
-import type { ModuleDescriptor, ModuleEntryPoint } from "@modular-react/core";
+import type { ModuleDescriptor } from "@modular-react/core";
 
 /**
  * Eagerly resolves every `lazy:` entry on the given modules so subsequent
@@ -26,9 +26,10 @@ import type { ModuleDescriptor, ModuleEntryPoint } from "@modular-react/core";
  * beforeAll(() => preloadEntries(allModules));
  * ```
  *
- * @example For modules built ad-hoc per test, call `preloadEntry` directly:
+ * @example For modules built ad-hoc per test, call `preloadEntry` directly
+ * (re-exported from this package for a single import surface):
  * ```ts
- * import { preloadEntry } from "@modular-react/react";
+ * import { preloadEntry } from "@modular-react/testing";
  *
  * await preloadEntry(myEntry);
  * render(<ModuleTab module={mod} entry="x" input={...} />);
@@ -38,10 +39,16 @@ export function preloadEntries(
   modules: readonly ModuleDescriptor<any, any, any, any>[],
 ): Promise<void> {
   const tasks: Promise<unknown>[] = [];
-  for (const module of modules) {
-    if (!module.entryPoints) continue;
-    for (const entry of Object.values(module.entryPoints) as ModuleEntryPoint<any>[]) {
-      if (typeof (entry as { lazy?: unknown }).lazy === "function") {
+  for (const mod of modules) {
+    if (!mod.entryPoints) continue;
+    for (const entry of Object.values(mod.entryPoints)) {
+      // `"lazy" in entry` narrows the EagerModuleEntryPoint | LazyModuleEntryPoint
+      // union to the lazy branch; the typeof check guards against malformed
+      // entries that survived validation.
+      if ("lazy" in entry && typeof entry.lazy === "function") {
+        // Promise.all attaches a handler to every promise it iterates, so a
+        // single rejection won't leave the other in-flight imports as
+        // unhandled-rejection warnings.
         tasks.push(preloadEntry(entry));
       }
     }
