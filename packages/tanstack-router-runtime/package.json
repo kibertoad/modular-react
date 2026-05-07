@@ -47,8 +47,8 @@
     "zustand": "^5.0.0"
   },
   "peerDependencies": {
-    "@modular-react/core": "^1.2.0",
-    "@modular-react/react": "^1.2.0",
+    "@modular-react/core": "^2.0.0",
+    "@modular-react/react": "^2.0.0",
     "@tanstack-react-modules/core": "^2.3.0",
     "@tanstack/react-router": "^1.168.8",
     "react": "^19.0.0",
