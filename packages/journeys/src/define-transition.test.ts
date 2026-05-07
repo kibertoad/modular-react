@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { defineTransition, isAnnotatedTransition } from "./define-transition.js";
+import {
+  defineTransition,
+  isAnnotatedTransition,
+  isTerminalSentinel,
+} from "./define-transition.js";
 
 describe("defineTransition", () => {
   it("returns a function callable with the same signature as the bare handler", () => {
@@ -55,30 +59,55 @@ describe("defineTransition", () => {
     expect(handler.targets).toEqual([{ module: "plan", entry: "choose" }]);
   });
 
-  it("supports handlers that return `complete` (terminal exit, no targets)", () => {
-    // A handler can declare empty targets if its only outcome is to complete
-    // the journey — preload skips it (no entries to fetch), but the
-    // annotation is preserved for symmetry with non-terminal handlers.
+  it('supports handlers that return `complete` via the `"complete"` sentinel', () => {
     const handler = defineTransition({
-      targets: [],
+      targets: ["complete"] as const,
       handle: ({ output }: { output: { id: string } }) => ({
         complete: { result: output.id },
       }),
     });
-    expect(handler.targets).toEqual([]);
+    expect(handler.targets).toEqual(["complete"]);
     expect(handler({ state: undefined, input: undefined, output: { id: "x" } })).toEqual({
       complete: { result: "x" },
     });
   });
 
-  it("supports handlers that return `abort`", () => {
+  it('supports handlers that return `abort` via the `"abort"` sentinel', () => {
     const handler = defineTransition({
-      targets: [],
+      targets: ["abort"] as const,
       handle: () => ({ abort: { reason: "user-cancelled" } }),
     });
+    expect(handler.targets).toEqual(["abort"]);
     expect(handler({ state: undefined, input: undefined, output: undefined })).toEqual({
       abort: { reason: "user-cancelled" },
     });
+  });
+
+  it("mixes step refs and terminal sentinels in the same `targets` array", () => {
+    const handler = defineTransition({
+      targets: [{ module: "plan", entry: "choose" }, "abort"] as const,
+      handle: ({ output }: { output: { kind: "ok" | "no" } }) =>
+        output.kind === "ok"
+          ? { next: { module: "plan", entry: "choose", input: {} } }
+          : { abort: { reason: "rejected" } },
+    });
+    expect(handler.targets).toEqual([{ module: "plan", entry: "choose" }, "abort"]);
+    expect(handler({ state: undefined, input: undefined, output: { kind: "ok" } })).toEqual({
+      next: { module: "plan", entry: "choose", input: {} },
+    });
+    expect(handler({ state: undefined, input: undefined, output: { kind: "no" } })).toEqual({
+      abort: { reason: "rejected" },
+    });
+  });
+
+  it("freezes string sentinels in place (they're already immutable, but the array stays frozen)", () => {
+    const handler = defineTransition({
+      targets: ["complete"] as const,
+      handle: () => ({ complete: undefined }),
+    });
+    expect(() => {
+      (handler.targets as unknown as string[]).push("abort");
+    }).toThrow();
   });
 
   it("curried form binds the journey's generics and stamps targets identically", () => {
@@ -132,9 +161,48 @@ describe("isAnnotatedTransition", () => {
     expect(isAnnotatedTransition(fake)).toBe(false);
   });
 
+  it("returns true when targets contain only terminal sentinels", () => {
+    const handler = defineTransition({
+      targets: ["abort"] as const,
+      handle: () => ({ abort: { reason: "x" } }),
+    });
+    expect(isAnnotatedTransition(handler)).toBe(true);
+  });
+
+  it("returns true for a mixed array of step refs and sentinels", () => {
+    const handler = defineTransition({
+      targets: [{ module: "plan", entry: "choose" }, "complete"] as const,
+      handle: () => ({ complete: undefined }),
+    });
+    expect(isAnnotatedTransition(handler)).toBe(true);
+  });
+
+  it("returns false for unknown sentinel strings", () => {
+    const fake = Object.assign(() => ({ abort: { reason: "noop" } }), {
+      targets: ["maybe"] as unknown as readonly ("complete" | "abort" | "invoke")[],
+    });
+    expect(isAnnotatedTransition(fake)).toBe(false);
+  });
+
   it("returns false for non-function values", () => {
     expect(isAnnotatedTransition({})).toBe(false);
     expect(isAnnotatedTransition(null)).toBe(false);
     expect(isAnnotatedTransition("plan/choose")).toBe(false);
+  });
+});
+
+describe("isTerminalSentinel", () => {
+  it("recognizes the three documented sentinels", () => {
+    expect(isTerminalSentinel("complete")).toBe(true);
+    expect(isTerminalSentinel("abort")).toBe(true);
+    expect(isTerminalSentinel("invoke")).toBe(true);
+  });
+
+  it("rejects unknown strings and non-strings", () => {
+    expect(isTerminalSentinel("done")).toBe(false);
+    expect(isTerminalSentinel("")).toBe(false);
+    expect(isTerminalSentinel({ module: "plan", entry: "choose" })).toBe(false);
+    expect(isTerminalSentinel(undefined)).toBe(false);
+    expect(isTerminalSentinel(null)).toBe(false);
   });
 });

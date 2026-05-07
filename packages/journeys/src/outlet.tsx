@@ -392,7 +392,13 @@ function collectPreloadTargets(
     if (!perEntry) return out;
     for (const value of Object.values(perEntry)) {
       if (!isAnnotatedTransition(value)) continue;
-      for (const target of value.targets) collectPair(target.module, target.entry);
+      for (const target of value.targets) {
+        // Sentinel targets (`"complete"` / `"abort"` / `"invoke"`) carry
+        // no chunk to preload — they're terminal-arm declarations for the
+        // type system and the catalog harvester. Skip them here.
+        if (typeof target === "string") continue;
+        collectPair(target.module, target.entry);
+      }
     }
     return out;
   }

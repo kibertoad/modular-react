@@ -81,11 +81,14 @@ const transition = defineTransition<Modules, State>();
 // the API consistent: authors don't flip between an object and a slash-string.
 // -----------------------------------------------------------------------------
 
-test("StepRef<TModules> resolves to the union of `{ module, entry }` literals", () => {
+test("StepRef<TModules> resolves to the union of `{ module, entry }` literals plus terminal sentinels", () => {
   expectTypeOf<StepRef<Modules>>().toEqualTypeOf<
     | { readonly module: "profile"; readonly entry: "review" }
     | { readonly module: "plan"; readonly entry: "choose" }
     | { readonly module: "billing"; readonly entry: "collect" }
+    | "complete"
+    | "abort"
+    | "invoke"
   >();
 });
 
@@ -96,7 +99,11 @@ test("StepRef<TModules> resolves to the union of `{ module, entry }` literals", 
 test("curried form: targets infer as a literal tuple without `as const`", () => {
   const handler = transition({
     targets: [{ module: "plan", entry: "choose" }],
-    handle: () => ({ abort: { reason: "noop" } }),
+    // Handler must return `{ next: ... }` because that's the only declared
+    // arm — the new return-narrowing rejects an undeclared `abort` here.
+    handle: () => ({
+      next: { module: "plan", entry: "choose", input: { customerId: "c", hint: "cheap" } },
+    }),
   });
   // The `const TTargets` modifier on the binder preserves the literal
   // tuple AND each target's literal property values, so callers never
@@ -192,12 +199,62 @@ test("curried form: handler `next.input` narrows against the entry's input schem
   });
 });
 
-test("curried form: empty `targets` are accepted (handler returns complete/abort)", () => {
+test('curried form: terminal-only handler declares `"complete"` sentinel', () => {
   const handler = transition({
-    targets: [],
-    handle: () => ({ complete: { ok: true } }),
+    targets: ["complete"],
+    handle: () => ({ complete: undefined }),
   });
-  expectTypeOf(handler.targets).toEqualTypeOf<readonly []>();
+  expectTypeOf(handler.targets).toEqualTypeOf<readonly ["complete"]>();
+});
+
+test('curried form: terminal-only handler declares `"abort"` sentinel', () => {
+  const handler = transition({
+    targets: ["abort"],
+    handle: () => ({ abort: { reason: "x" } }),
+  });
+  expectTypeOf(handler.targets).toEqualTypeOf<readonly ["abort"]>();
+});
+
+test("curried form: handler can mix step refs and sentinels", () => {
+  const handler = transition({
+    targets: [{ module: "plan", entry: "choose" }, "abort"],
+    handle: ({ output }) =>
+      (output as { kind: "ok" | "no" }).kind === "ok"
+        ? {
+            next: { module: "plan", entry: "choose", input: { customerId: "c", hint: "cheap" } },
+          }
+        : { abort: { reason: "rejected" } },
+  });
+  expectTypeOf(handler.targets).toEqualTypeOf<
+    readonly [{ readonly module: "plan"; readonly entry: "choose" }, "abort"]
+  >();
+});
+
+test("curried form: typo on a sentinel is a compile error", () => {
+  transition({
+    // @ts-expect-error — `"complte"` is not a valid TerminalSentinel.
+    targets: ["complte"],
+    handle: () => ({ abort: { reason: "x" } }),
+  });
+});
+
+test("curried form: returning an arm not declared in targets is a compile error (next-only)", () => {
+  // Declares only the `next` arm — handler may NOT return `abort` / `complete`.
+  // The directive sits on the `handle:` arrow expression where the error
+  // actually fires (the return literal doesn't satisfy the narrowed contract).
+  transition({
+    targets: [{ module: "plan", entry: "choose" }],
+    // @ts-expect-error — `abort` is not in the declared targets.
+    handle: () => ({ abort: { reason: "x" } }),
+  });
+});
+
+test("curried form: returning an arm not declared in targets is a compile error (terminal-only)", () => {
+  transition({
+    targets: ["abort"],
+    // @ts-expect-error — `complete` is not in the declared targets.
+    handle: () => ({ complete: undefined }),
+  });
 });
 
 // -----------------------------------------------------------------------------
@@ -252,23 +309,33 @@ test("bare form: returns AnnotatedTransitionHandler with intersection of handler
 
 test("both forms produce values assignable to AnnotatedTransitionHandler", () => {
   const curried = transition({
-    targets: [{ module: "plan", entry: "choose" }],
+    targets: ["abort"],
     handle: () => ({ abort: { reason: "x" } }),
   });
   const bare = defineTransition({
-    targets: [{ module: "plan", entry: "choose" }],
+    targets: ["abort"],
     handle: () => ({ abort: { reason: "x" } }),
   });
   expectTypeOf(curried).toMatchTypeOf<
     AnnotatedTransitionHandler<
       (ctx: any) => any,
-      readonly { readonly module: string; readonly entry: string }[]
+      readonly (
+        | { readonly module: string; readonly entry: string }
+        | "complete"
+        | "abort"
+        | "invoke"
+      )[]
     >
   >();
   expectTypeOf(bare).toMatchTypeOf<
     AnnotatedTransitionHandler<
       (ctx: any) => any,
-      readonly { readonly module: string; readonly entry: string }[]
+      readonly (
+        | { readonly module: string; readonly entry: string }
+        | "complete"
+        | "abort"
+        | "invoke"
+      )[]
     >
   >();
 });

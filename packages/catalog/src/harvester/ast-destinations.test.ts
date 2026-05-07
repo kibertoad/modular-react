@@ -208,7 +208,10 @@ describe("extractTransitionDestinations", () => {
                  handle: () => ({ next: { module: "b", entry: "y", input: {} } }),
                }),
                cancel: defineTransition({
-                 targets: [],
+                 // Terminal-only handler MUST declare the sentinel — the
+                 // harvester no longer walks the handler body when targets
+                 // is present (declaration is the source of truth).
+                 targets: ["abort"],
                  handle: () => ({ abort: { reason: "user" } }),
                }),
              },
@@ -227,10 +230,10 @@ describe("extractTransitionDestinations", () => {
     });
     expect(map.a?.x?.cancel).toEqual({
       nexts: [],
-      // Inner handler returns `{ abort }`, which we still report.
+      // `aborts: true` comes from the declared `"abort"` sentinel —
+      // not from walking the handler body.
       aborts: true,
       completes: false,
-      // Empty `targets:` array is still a declaration — authoritative.
       targetsDeclared: true,
     });
   });
@@ -338,6 +341,87 @@ describe("extractTransitionDestinations", () => {
       completes: false,
     });
     expect(map.a?.x?.ok).not.toHaveProperty("targetsDeclared");
+  });
+
+  it("derives `aborts` / `completes` flags from terminal sentinels in `targets`", async () => {
+    // With `defineTransition` the targets array is the source of truth for
+    // ALL outcomes — both next refs and the terminal arms. The harvester
+    // should set `aborts` / `completes` from the sentinels rather than
+    // walking the handler body.
+    const path = writeTmp(
+      "sentinels.ts",
+      `export default {
+         id: "sentinels",
+         version: "1.0.0",
+         initialState: () => ({}),
+         start: () => ({ module: "a", entry: "x" }),
+         transitions: {
+           a: {
+             x: {
+               cancel: defineTransition({
+                 targets: ["abort"],
+                 handle: () => ({ abort: { reason: "user" } }),
+               }),
+               finish: defineTransition({
+                 targets: ["complete"],
+                 handle: () => ({ complete: { ok: true } }),
+               }),
+               proceed: defineTransition({
+                 targets: [{ module: "b", entry: "y" }, "abort"],
+                 handle: ({ output }) =>
+                   output.ok
+                     ? { next: { module: "b", entry: "y", input: {} } }
+                     : { abort: { reason: "rejected" } },
+               }),
+             },
+           },
+         },
+       };`,
+    );
+
+    const map = await extractTransitionDestinations(path, "sentinels");
+    expect(map.a?.x?.cancel).toEqual({
+      nexts: [],
+      aborts: true,
+      completes: false,
+      targetsDeclared: true,
+    });
+    expect(map.a?.x?.finish).toEqual({
+      nexts: [],
+      aborts: false,
+      completes: true,
+      targetsDeclared: true,
+    });
+    expect(map.a?.x?.proceed).toEqual({
+      nexts: [{ module: "b", entry: "y" }],
+      aborts: true,
+      completes: false,
+      targetsDeclared: true,
+    });
+  });
+
+  it('accepts `"invoke"` sentinel without crashing (no schema slot today)', async () => {
+    // The catalog schema doesn't have an `invokes` flag yet; the parser
+    // accepts the sentinel so handlers that may invoke aren't rejected.
+    const path = writeTmp(
+      "invoke-sentinel.ts",
+      `export default {
+         id: "invoke-sent",
+         version: "1.0.0",
+         initialState: () => ({}),
+         start: () => ({ module: "a", entry: "x" }),
+         transitions: {
+           a: { x: { fanout: defineTransition({ targets: ["invoke"], handle: () => ({ invoke: {} }) }) } },
+         },
+       };`,
+    );
+    const map = await extractTransitionDestinations(path, "invoke-sent");
+    expect(map.a?.x?.fanout).toEqual({
+      nexts: [],
+      aborts: false,
+      completes: false,
+      targetsDeclared: true,
+    });
   });
 
   it("returns empty when no journey object matches the id", async () => {

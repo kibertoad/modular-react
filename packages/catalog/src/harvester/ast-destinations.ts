@@ -151,21 +151,42 @@ interface HandlerOutcome {
 }
 
 /**
- * Parse a `targets` literal — `[{ module: "m", entry: "e" }, ...]` — into the
- * `{ module, entry }` shape `nexts` uses. The shape mirrors the `next:`
- * field handlers return, so authors don't flip between an object and a
- * slash-string for the same idea.
+ * Outcome of parsing a `targets:` literal — both the next-step object refs
+ * and the terminal-arm sentinel flags. Returned as a single struct so the
+ * caller can stamp `nexts` / `aborts` / `completes` from one declaration.
+ */
+interface DeclaredTargets {
+  nexts: { module: string; entry: string }[];
+  aborts: boolean;
+  completes: boolean;
+}
+
+/**
+ * Parse a `targets` literal — `[{ module: "m", entry: "e" }, "abort", ...]`
+ * — into the next-step refs and terminal-arm flags. The shape mirrors the
+ * runtime `StepRef` union: object refs go to `nexts`, string sentinels
+ * (`"complete"` / `"abort"` / `"invoke"`) flip the corresponding flag.
  *
  * Non-object elements / objects missing either a literal `module` or `entry`
  * string are skipped (defensive: a hand-rolled call site might pass garbage).
  * Returns `null` when the value is not an array literal at all so callers
  * can distinguish "no targets declared" from "empty targets declared".
  */
-function readDeclaredTargets(node: AstNode): { module: string; entry: string }[] | null {
+function readDeclaredTargets(node: AstNode): DeclaredTargets | null {
   if (!node || node.type !== "ArrayExpression" || !Array.isArray(node.elements)) return null;
-  const out: { module: string; entry: string }[] = [];
+  const out: DeclaredTargets = { nexts: [], aborts: false, completes: false };
   for (const el of node.elements) {
-    if (!el || el.type !== "ObjectExpression") continue;
+    if (!el) continue;
+    if (el.type === "Literal" && typeof el.value === "string") {
+      // Sentinel — flip the corresponding flag. `"invoke"` doesn't fan
+      // through to a separate flag today (the catalog's existing schema
+      // tracks only `aborts` / `completes`); it's accepted at parse time
+      // so handlers that may invoke a child journey aren't rejected.
+      if (el.value === "abort") out.aborts = true;
+      else if (el.value === "complete") out.completes = true;
+      continue;
+    }
+    if (el.type !== "ObjectExpression") continue;
     let module: string | null = null;
     let entry: string | null = null;
     for (const prop of objectProperties(el)) {
@@ -184,7 +205,7 @@ function readDeclaredTargets(node: AstNode): { module: string; entry: string }[]
         entry = prop.value.value;
       }
     }
-    if (module !== null && entry !== null) out.push({ module, entry });
+    if (module !== null && entry !== null) out.nexts.push({ module, entry });
   }
   return out;
 }
@@ -197,11 +218,12 @@ function analyzeHandler(value: AstNode): HandlerOutcome | null {
   // curried binder, e.g. `const transition = defineTransition<...>(); transition({...})`).
   //
   // When the wrapper declares `targets`, treat that array as the
-  // authoritative `next`-destinations: the whole point of the declaration
-  // is to enumerate the possible next steps statically, including the ones
-  // hidden behind dynamic `output`-driven ternaries that the AST walk
-  // cannot resolve. The inner `handle:` function is still scanned so that
-  // `aborts` / `completes` flags reflect any non-`next` outcomes.
+  // authoritative source for ALL outcomes — both `nexts` (object refs)
+  // and the terminal `aborts` / `completes` flags (string sentinels). The
+  // declaration is the documented contract: the runtime narrows the
+  // handler return to the declared arms, so the AST walk over the body
+  // can only confirm what targets already says (and would miss branches
+  // hidden behind dynamic returns).
   //
   // Bare `defineTransition({ handle })` without `targets` (or an unrelated
   // call expression that happens to take an object argument) falls through
@@ -212,16 +234,15 @@ function analyzeHandler(value: AstNode): HandlerOutcome | null {
       const targetsProp = findProperty(spec, "targets");
       const handleProp = findProperty(spec, "handle");
       const declared = targetsProp ? readDeclaredTargets(targetsProp.value) : null;
-      const inner = handleProp?.value ? analyzeHandler(handleProp.value) : null;
       if (declared !== null) {
         return {
-          nexts: declared,
-          aborts: inner?.aborts ?? false,
-          completes: inner?.completes ?? false,
+          nexts: declared.nexts,
+          aborts: declared.aborts,
+          completes: declared.completes,
           targetsDeclared: true,
         };
       }
-      if (inner) return inner;
+      if (handleProp?.value) return analyzeHandler(handleProp.value);
     }
     return null;
   }

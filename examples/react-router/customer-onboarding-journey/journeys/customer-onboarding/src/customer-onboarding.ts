@@ -100,7 +100,14 @@ export const customerOnboardingJourney = defineJourney<OnboardingModules, Onboar
         needsMoreDetails: ({ output }) => ({
           abort: { reason: "profile-incomplete", missing: output.missing },
         }),
-        cancelled: () => ({ abort: { reason: "rep-cancelled" } }),
+        // Demonstrates a terminal-only annotation: `targets: ["abort"]`
+        // tells the catalog harvester this handler may abort (no AST walk
+        // needed) and constrains the handler return to just the abort arm
+        // at compile time.
+        cancelled: transition({
+          targets: ["abort"],
+          handle: () => ({ abort: { reason: "rep-cancelled" } }),
+        }),
       },
     },
     plan: {

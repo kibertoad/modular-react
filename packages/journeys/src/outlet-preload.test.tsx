@@ -211,6 +211,50 @@ describe("JourneyOutlet — auto-preload (precise, default)", () => {
     expect(fx.unrelatedImporter).not.toHaveBeenCalled();
   });
 
+  it("skips terminal sentinels when collecting preload candidates", async () => {
+    // A handler whose only declared outcome is a sentinel ("abort") has
+    // nothing to preload — the outlet must not interpret the string as a
+    // module/entry pair.
+    const fx = makeFixtures();
+    type M = typeof fx.modules;
+    const sentinelJourney = defineJourney<M, { _: true }>()({
+      id: "sentinel-only",
+      version: "1.0.0",
+      initialState: () => ({ _: true }) as const,
+      start: () => ({ module: "start", entry: "pick", input: undefined as never }),
+      transitions: {
+        start: {
+          pick: {
+            toCheap: defineTransition({
+              targets: ["abort"] as const,
+              handle: () => ({ abort: { reason: "user-cancelled" } }),
+            }),
+            toExpensive: defineTransition({
+              targets: [{ module: "expensive", entry: "show" }, "complete"] as const,
+              handle: () => ({ complete: undefined }),
+            }),
+          },
+        },
+      },
+    });
+    const rt = createJourneyRuntime([{ definition: sentinelJourney, options: undefined }], {
+      modules: fx.modules,
+      debug: false,
+    });
+    const id = rt.start("sentinel-only", undefined as never);
+    render(
+      <Suspense fallback={null}>
+        <JourneyOutlet runtime={rt} instanceId={id} modules={fx.modules} />
+      </Suspense>,
+    );
+    await flushIdle();
+    // `cheap` is never preloaded — `toCheap`'s only target is the abort sentinel.
+    expect(fx.cheapImporter).not.toHaveBeenCalled();
+    // `expensive/show` IS preloaded (the object ref); the `"complete"`
+    // sentinel sitting next to it is silently skipped, not crashed on.
+    expect(fx.expensiveImporter).toHaveBeenCalledTimes(1);
+  });
+
   it("does not preload anything when handlers are bare functions (no `targets`)", async () => {
     const fx = makeFixtures();
     const journey = makeBareJourney(fx.modules);
