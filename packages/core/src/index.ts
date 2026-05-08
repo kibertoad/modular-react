@@ -19,6 +19,10 @@ export type {
   LazyEntryComponent,
   ModuleEntryProps,
   ExitPointSchema,
+  ExitContract,
+  StandardSchemaLike,
+  StandardSchemaResult,
+  StandardSchemaIssue,
   EntryPointMap,
   ExitPointMap,
   ExitFn,
@@ -26,7 +30,14 @@ export type {
 } from "./types.js";
 
 // Entry / exit helpers
-export { defineEntry, defineExit, schema, validateModuleEntryExit } from "./entry-exit.js";
+export {
+  defineEntry,
+  defineExit,
+  defineExitContract,
+  isExitContract,
+  schema,
+  validateModuleEntryExit,
+} from "./entry-exit.js";
 
 // Store
 export { createStore } from "./store.js";
@@ -113,6 +124,15 @@ export type {
   TransitionResult,
   EntryTransitions,
   TransitionMap,
+  WildcardTransitionMap,
+  EntryExitWildcardMap,
+  ExitOnlyWildcardMap,
+  WildcardEntryNamesOf,
+  WildcardExitNamesOf,
+  ExitNamesPairedWithEntry,
+  WildcardExitOutputOf,
+  WildcardExitOutputForEntry,
+  WildcardEntryInputOf,
   TransitionEvent,
   AbandonCtx,
   TerminalCtx,

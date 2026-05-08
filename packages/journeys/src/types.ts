@@ -18,16 +18,20 @@ import type {
   TransitionEvent,
   TransitionMap,
   TransitionResult,
+  WildcardTransitionMap,
 } from "@modular-react/core";
 
 export type {
   AbandonCtx,
   ChildOutcome,
+  EntryExitWildcardMap,
   EntryInputOf,
   EntryNamesOf,
   EntryTransitions,
   ExitCtx,
   ExitNamesOf,
+  ExitNamesPairedWithEntry,
+  ExitOnlyWildcardMap,
   ExitOutputOf,
   InstanceId,
   InvokeSpec,
@@ -53,6 +57,12 @@ export type {
   TransitionEvent,
   TransitionMap,
   TransitionResult,
+  WildcardEntryInputOf,
+  WildcardEntryNamesOf,
+  WildcardExitNamesOf,
+  WildcardExitOutputForEntry,
+  WildcardExitOutputOf,
+  WildcardTransitionMap,
 } from "@modular-react/core";
 
 // -----------------------------------------------------------------------------
@@ -74,6 +84,29 @@ export interface JourneyDefinition<
   readonly start: (state: TState, input: TInput) => StepSpec<TModules>;
 
   readonly transitions: TransitionMap<TModules, TState, TOutput>;
+
+  /**
+   * Wildcard transitions — fall-through handlers matched by exit name
+   * (and optionally entry name) rather than by full `[mod][entry][exit]`
+   * triple. Two precision tiers:
+   *
+   *   - `byEntryAndExit[entry][exit]` — module unknown, entry + exit known.
+   *     Fires when no exact `transitions[mod][entry][exit]` matches but
+   *     the active step's `entry` and `exit` are both declared here.
+   *   - `byExit[exit]` — module + entry both unknown. Fires when neither
+   *     of the more specific tiers match.
+   *
+   * Resolution precedence at runtime is exact → byEntryAndExit → byExit;
+   * the more precise handler always wins because the lookup checks them
+   * in order and the first hit fires.
+   *
+   * Use cases: cross-cutting outcomes like `cancelled`, `error`, `back`,
+   * or `signedOut` that any module can emit — declare the handler once
+   * here instead of repeating it under every step. Pair with
+   * `defineExitContract` to enforce a uniform output shape across the
+   * modules that emit the exit.
+   */
+  readonly wildcardTransitions?: WildcardTransitionMap<TModules, TState, TOutput>;
 
   /**
    * Resume handlers fired when a child journey `invoke`d from a parent

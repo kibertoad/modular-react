@@ -297,6 +297,69 @@ export interface ExitPointSchema<TOutput> {
   readonly output?: InputSchema<TOutput>;
 }
 
+/**
+ * Shared exit contract — an `ExitPointSchema` with a stable identity
+ * (`kind`) and an optional `StandardSchemaV1` for runtime payload
+ * validation. Modules that emit semantically-equivalent exits across
+ * boundaries (e.g. multiple modules each fire `cancelled`) reference the
+ * same contract value as their exit's schema; the journey runtime then
+ * treats them uniformly:
+ *
+ *   1. **Wildcard transitions** keyed by exit name (`wildcardTransitions`)
+ *      receive a single typed `output` because the contract is the same
+ *      across modules — no per-module narrowing.
+ *   2. **Runtime validation**: when a contract carries a `schema`, the
+ *      runtime validates the payload at every `exit()` emit and aborts
+ *      with `exit-payload-invalid` on issues. Async schemas are rejected
+ *      at emit time with `exit-payload-invalid-async`.
+ *
+ * The contract object identity is what makes consistency checks cheap —
+ * the registry can verify two modules use the same exit contract by
+ * reference equality, not name matching.
+ */
+export interface ExitContract<TOutput> extends ExitPointSchema<TOutput> {
+  /**
+   * Stable identity, e.g. `"cancelled"`. Required (and absent on plain
+   * `ExitPointSchema`), so `kind` doubles as the structural
+   * discriminator `isExitContract` checks for.
+   */
+  readonly kind: string;
+  /**
+   * Optional Standard Schema (`StandardSchemaV1`-compatible — works with
+   * Zod, Valibot, ArkType, ...). When present, the runtime validates
+   * exit payloads at emit time. Synchronous validators only; async
+   * schemas abort the journey with reason `exit-payload-invalid-async`.
+   */
+  readonly schema?: StandardSchemaLike<TOutput>;
+}
+
+/**
+ * Structural-typed re-declaration of `StandardSchemaV1`'s `~standard`
+ * shape, narrowed to the slice the journey runtime actually calls. Lets
+ * us avoid a hard import of `@standard-schema/spec` at the type position
+ * (the spec package is a dep, but core re-exports `ExitContract` to
+ * runtime packages that may have stricter type-resolution settings).
+ */
+export interface StandardSchemaLike<TOutput> {
+  readonly "~standard": {
+    readonly version: 1;
+    readonly vendor: string;
+    readonly validate: (
+      value: unknown,
+    ) => StandardSchemaResult<TOutput> | Promise<StandardSchemaResult<TOutput>>;
+    readonly types?: { readonly input: unknown; readonly output: TOutput };
+  };
+}
+
+export type StandardSchemaResult<TOutput> =
+  | { readonly value: TOutput; readonly issues?: undefined }
+  | { readonly issues: ReadonlyArray<StandardSchemaIssue> };
+
+export interface StandardSchemaIssue {
+  readonly message: string;
+  readonly path?: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }>;
+}
+
 /** Mapping of entry name → {@link ModuleEntryPoint}. */
 export type EntryPointMap = Readonly<Record<string, ModuleEntryPoint<any>>>;
 

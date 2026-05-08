@@ -1,12 +1,15 @@
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type {
   EagerModuleEntryPoint,
   EntryPointMap,
+  ExitContract,
   ExitPointMap,
   ExitPointSchema,
   InputSchema,
   LazyModuleEntryPoint,
   ModuleDescriptor,
   ModuleEntryPoint,
+  StandardSchemaLike,
 } from "./types.js";
 
 /**
@@ -49,6 +52,68 @@ export function defineEntry<TInput>(entry: ModuleEntryPoint<TInput>): ModuleEntr
  */
 export function defineExit<TOutput = void>(): ExitPointSchema<TOutput> {
   return {} as ExitPointSchema<TOutput>;
+}
+
+/**
+ * Define a shared exit contract — an `ExitPointSchema` with a stable
+ * identity (`kind`) and an optional Standard Schema for runtime payload
+ * validation. Two modules that emit the same kind of exit can both
+ * reference the same contract value as their exit's schema; the journey
+ * runtime then treats them uniformly under wildcard transitions and
+ * (when a schema is supplied) validates payloads at every emit.
+ *
+ * Two call shapes:
+ *
+ * ```ts
+ * // Type-only — declared TOutput, zero runtime cost. Equivalent to
+ * // `defineExit<T>()` plus a stable identity for cross-module sharing.
+ * const errorContract = defineExitContract<{ code: string }>("error");
+ *
+ * // Schema form — TOutput inferred from the schema (any
+ * // StandardSchemaV1 implementation: Zod, Valibot, ArkType, ...).
+ * // Runtime validates payloads at emit time; bad payloads abort the
+ * // journey with reason `exit-payload-invalid`.
+ * const cancelledContract = defineExitContract(
+ *   "cancelled",
+ *   z.object({ reason: z.string() }),
+ * );
+ * ```
+ *
+ * Modules opt in by referencing the contract value as their exit's
+ * schema:
+ *
+ * ```ts
+ * const exits = {
+ *   cancelled: cancelledContract,    // shared
+ *   error: errorContract,            // shared
+ *   finished: defineExit<{ profileId: string }>(),
+ * } as const;
+ * ```
+ */
+export function defineExitContract<TOutput>(kind: string): ExitContract<TOutput>;
+export function defineExitContract<TSchema extends StandardSchemaV1>(
+  kind: string,
+  schema: TSchema,
+): ExitContract<StandardSchemaV1.InferOutput<TSchema>>;
+export function defineExitContract(kind: string, schema?: StandardSchemaV1): ExitContract<unknown> {
+  return schema ? { kind, schema: schema as StandardSchemaLike<unknown> } : { kind };
+}
+
+/**
+ * Type predicate distinguishing an `ExitContract` from a plain
+ * `ExitPointSchema`. Used by the journey runtime to decide whether to
+ * apply schema validation at emit time and by validators to enforce
+ * cross-module shape consistency under wildcard transitions.
+ *
+ * `kind: string` is the discriminator: `defineExit()` returns `{}` (no
+ * `kind`), so a string `kind` field reliably identifies a contract.
+ */
+export function isExitContract(schema: unknown): schema is ExitContract<unknown> {
+  return (
+    typeof schema === "object" &&
+    schema !== null &&
+    typeof (schema as { kind?: unknown }).kind === "string"
+  );
 }
 
 /**
