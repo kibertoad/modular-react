@@ -130,151 +130,7 @@ export function validateJourneyContracts(
       }
     }
 
-    // Validate `wildcardTransitions`. Two slots — `byEntryAndExit`
-    // (module unknown, entry + exit known) and `byExit` (module + entry
-    // both unknown). Three checks per slot: live-key (some reachable
-    // module emits the named exit / entry+exit pair), contract
-    // consistency (modules sharing the slot use the same ExitContract
-    // when contracts are in play), and tier-overlap (warning only —
-    // declaring both a `byEntryAndExit[E][X]` and a `byExit[X]` shadows
-    // the latter for entry E).
-    const rawWildcardTransitions = (def as { wildcardTransitions?: unknown }).wildcardTransitions;
-    if (rawWildcardTransitions !== undefined && typeof rawWildcardTransitions !== "object") {
-      issues.push(
-        `journey "${def.id}" has malformed wildcardTransitions (expected an object, got ${typeof rawWildcardTransitions})`,
-      );
-    } else if (rawWildcardTransitions !== null && rawWildcardTransitions !== undefined) {
-      const wildcardTransitions = rawWildcardTransitions as {
-        byEntryAndExit?: unknown;
-        byExit?: unknown;
-      };
-      // The "reachable" set for a wildcard's live-key check is every
-      // registered module — not just modules keyed under `transitions`.
-      // A journey's `transitions` block declares per-step *handlers*; the
-      // modules a journey actually visits are determined dynamically by
-      // its `start` function and by `next` transitions whose targets we
-      // can't statically introspect. Using all registered modules
-      // guarantees no false-positive "dead key" rejection while still
-      // catching the common case (a typo in an exit name that no module
-      // emits anywhere).
-      const reachableModules = modules;
-
-      const rawByEntryAndExit = wildcardTransitions.byEntryAndExit;
-      let byEntryAndExit: Record<string, Record<string, unknown>> | undefined;
-      if (rawByEntryAndExit !== undefined && rawByEntryAndExit !== null) {
-        if (typeof rawByEntryAndExit !== "object") {
-          issues.push(
-            `journey "${def.id}" has malformed wildcardTransitions.byEntryAndExit (expected an object, got ${typeof rawByEntryAndExit})`,
-          );
-        } else {
-          byEntryAndExit = rawByEntryAndExit as Record<string, Record<string, unknown>>;
-        }
-      }
-      if (byEntryAndExit) {
-        for (const [entryName, perEntry] of Object.entries(byEntryAndExit)) {
-          if (!perEntry || typeof perEntry !== "object") {
-            issues.push(
-              `journey "${def.id}" has malformed wildcardTransitions.byEntryAndExit["${entryName}"] (expected an object)`,
-            );
-            continue;
-          }
-          for (const [exitName, handler] of Object.entries(perEntry)) {
-            if (typeof handler !== "function") {
-              issues.push(
-                `journey "${def.id}" has non-function wildcardTransitions.byEntryAndExit["${entryName}"]["${exitName}"]`,
-              );
-              continue;
-            }
-            // Live-key: at least one registered module must declare
-            // entry `entryName` AND exit `exitName`.
-            const matching = reachableModules.filter(
-              (m) =>
-                m.entryPoints?.[entryName] !== undefined &&
-                m.exitPoints !== undefined &&
-                exitName in m.exitPoints,
-            );
-            if (matching.length === 0) {
-              issues.push(
-                `journey "${def.id}" declares wildcardTransitions.byEntryAndExit["${entryName}"]["${exitName}"] but no registered module pairs that entry with that exit`,
-              );
-              continue;
-            }
-            validateContractConsistency(
-              issues,
-              def.id,
-              `wildcardTransitions.byEntryAndExit["${entryName}"]["${exitName}"]`,
-              exitName,
-              matching,
-            );
-          }
-        }
-      }
-
-      const rawByExit = wildcardTransitions.byExit;
-      let byExit: Record<string, unknown> | undefined;
-      if (rawByExit !== undefined && rawByExit !== null) {
-        if (typeof rawByExit !== "object") {
-          issues.push(
-            `journey "${def.id}" has malformed wildcardTransitions.byExit (expected an object, got ${typeof rawByExit})`,
-          );
-        } else {
-          byExit = rawByExit as Record<string, unknown>;
-        }
-      }
-      if (byExit) {
-        for (const [exitName, handler] of Object.entries(byExit)) {
-          if (typeof handler !== "function") {
-            issues.push(
-              `journey "${def.id}" has non-function wildcardTransitions.byExit["${exitName}"]`,
-            );
-            continue;
-          }
-          const matching = reachableModules.filter(
-            (m) => m.exitPoints !== undefined && exitName in m.exitPoints,
-          );
-          if (matching.length === 0) {
-            issues.push(
-              `journey "${def.id}" declares wildcardTransitions.byExit["${exitName}"] but no registered module emits that exit`,
-            );
-            continue;
-          }
-          validateContractConsistency(
-            issues,
-            def.id,
-            `wildcardTransitions.byExit["${exitName}"]`,
-            exitName,
-            matching,
-          );
-
-          // Tier-overlap warning: if the same exit is also declared
-          // under any byEntryAndExit slot, the byExit handler is
-          // unreachable from those entries. Warn (not error — sometimes
-          // deliberate). Console-only because the validator's contract
-          // is to throw on hard issues; warnings sit beside them.
-          if (byEntryAndExit) {
-            const shadowingEntries: string[] = [];
-            for (const [entryName, perEntry] of Object.entries(byEntryAndExit)) {
-              if (
-                perEntry &&
-                typeof perEntry === "object" &&
-                typeof (perEntry as Record<string, unknown>)[exitName] === "function"
-              ) {
-                shadowingEntries.push(entryName);
-              }
-            }
-            if (shadowingEntries.length > 0) {
-              console.warn(
-                `[@modular-react/journeys] journey "${def.id}" declares both wildcardTransitions.byExit["${exitName}"] and wildcardTransitions.byEntryAndExit[${shadowingEntries
-                  .map((e) => `"${e}"`)
-                  .join(
-                    ",",
-                  )}]["${exitName}"]; the byExit handler is unreachable from those entries (the more specific one wins).`,
-              );
-            }
-          }
-        }
-      }
-    }
+    validateWildcardTransitions(def, modules, moduleById, issues);
 
     // Validate `moduleCompat`: each declared range must parse, the named
     // module must be registered, and the registered module's `version`
@@ -535,6 +391,228 @@ function canonicalizeCycle(nodes: readonly string[]): string {
 
 function quote(id: string): string {
   return `"${id}"`;
+}
+
+/**
+ * Plain-object guard. `typeof === "object"` alone admits `null` and
+ * arrays, both of which are common malformed-payload shapes for the
+ * wildcard transition map (`null` from a manual reset, arrays from
+ * accidental `[handler]` instead of `{ name: handler }`). Reject both
+ * here so the validator's branches don't have to repeat the check.
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Wildcard transition validator — kept separate from the main
+ * `validateJourneyContracts` body so the registration loop reads
+ * cleanly and the wildcard-specific branching (two slots, three
+ * checks per slot, shape guards at each level) lives in one place.
+ *
+ * Three checks per slot:
+ *   - **Live-key**: at least one *registered* module emits the named
+ *     exit (or entry+exit pair). Scoped to all registered modules
+ *     because a journey may legitimately reach a module via a `next`
+ *     transition we can't statically introspect — narrowing this to
+ *     `Object.keys(transitions)` would false-reject those wildcards.
+ *   - **Contract consistency**: scoped to the *journey's* own modules
+ *     (those keyed under `transitions`). The wildcard's typed `output`
+ *     is determined by the modules the journey actually navigates to;
+ *     unrelated modules in the registry that happen to share the exit
+ *     name with a different `ExitContract` instance must not produce a
+ *     spurious mismatch error.
+ *   - **Tier-overlap warning**: declaring the same exit under both
+ *     `byEntryAndExit[E][X]` and `byExit[X]` shadows the latter for
+ *     entry `E`. Console warning only — sometimes deliberate, but
+ *     worth surfacing.
+ *
+ * The two scopes (live-key = app-wide, consistency = journey-scoped)
+ * are deliberately different. The runtime spot-check in `runtime.ts`
+ * covers post-registration drift for both scopes by walking the
+ * runtime's own `moduleMap` lazily on first dispatch.
+ */
+function validateWildcardTransitions(
+  def: AnyJourneyDefinition,
+  modules: readonly ModuleDescriptor<any, any, any, any>[],
+  moduleById: ReadonlyMap<string, ModuleDescriptor<any, any, any, any>>,
+  issues: string[],
+): void {
+  const rawWildcardTransitions = (def as { wildcardTransitions?: unknown }).wildcardTransitions;
+  if (rawWildcardTransitions === undefined || rawWildcardTransitions === null) return;
+  if (!isPlainObject(rawWildcardTransitions)) {
+    issues.push(
+      `journey "${def.id}" has malformed wildcardTransitions (expected an object, got ${describeKind(rawWildcardTransitions)})`,
+    );
+    return;
+  }
+
+  const wildcardTransitions = rawWildcardTransitions;
+  const journeyModuleIds = new Set(Object.keys(def.transitions ?? {}));
+  // Modules the journey directly references via its `transitions` map.
+  // Used as the consistency scope so unrelated modules in the registry
+  // can't produce false-positive contract mismatches.
+  const journeyModules: ModuleDescriptor<any, any, any, any>[] = [];
+  for (const id of journeyModuleIds) {
+    const mod = moduleById.get(id);
+    if (mod) journeyModules.push(mod);
+  }
+
+  const byEntryAndExit = parseWildcardSlot(
+    wildcardTransitions.byEntryAndExit,
+    `journey "${def.id}" has malformed wildcardTransitions.byEntryAndExit`,
+    issues,
+  );
+  if (byEntryAndExit) {
+    validateByEntryAndExit(def.id, byEntryAndExit, modules, journeyModules, issues);
+  }
+
+  const byExit = parseWildcardSlot(
+    wildcardTransitions.byExit,
+    `journey "${def.id}" has malformed wildcardTransitions.byExit`,
+    issues,
+  );
+  if (byExit) {
+    validateByExit(def.id, byExit, byEntryAndExit, modules, journeyModules, issues);
+  }
+}
+
+/**
+ * Extract a wildcard slot (`byEntryAndExit` or `byExit`) from the raw
+ * map, accumulating a malformed-shape issue when the value is present
+ * but not a plain object. Returns `undefined` for both the absent and
+ * malformed cases so the caller can short-circuit uniformly.
+ */
+function parseWildcardSlot(
+  raw: unknown,
+  malformedPrefix: string,
+  issues: string[],
+): Record<string, unknown> | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!isPlainObject(raw)) {
+    issues.push(`${malformedPrefix} (expected an object, got ${describeKind(raw)})`);
+    return undefined;
+  }
+  return raw;
+}
+
+function describeKind(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
+function validateByEntryAndExit(
+  journeyId: string,
+  byEntryAndExit: Record<string, unknown>,
+  liveKeyModules: readonly ModuleDescriptor<any, any, any, any>[],
+  consistencyModules: readonly ModuleDescriptor<any, any, any, any>[],
+  issues: string[],
+): void {
+  for (const [entryName, perEntry] of Object.entries(byEntryAndExit)) {
+    if (!isPlainObject(perEntry)) {
+      issues.push(
+        `journey "${journeyId}" has malformed wildcardTransitions.byEntryAndExit["${entryName}"] (expected an object, got ${describeKind(perEntry)})`,
+      );
+      continue;
+    }
+    for (const [exitName, handler] of Object.entries(perEntry)) {
+      if (typeof handler !== "function") {
+        issues.push(
+          `journey "${journeyId}" has non-function wildcardTransitions.byEntryAndExit["${entryName}"]["${exitName}"]`,
+        );
+        continue;
+      }
+      const liveKeyMatch = liveKeyModules.filter(
+        (m) =>
+          m.entryPoints?.[entryName] !== undefined &&
+          m.exitPoints !== undefined &&
+          exitName in m.exitPoints,
+      );
+      if (liveKeyMatch.length === 0) {
+        issues.push(
+          `journey "${journeyId}" declares wildcardTransitions.byEntryAndExit["${entryName}"]["${exitName}"] but no registered module pairs that entry with that exit`,
+        );
+        continue;
+      }
+      // Consistency check scoped to journey-declared modules only.
+      const consistencyMatch = consistencyModules.filter(
+        (m) =>
+          m.entryPoints?.[entryName] !== undefined &&
+          m.exitPoints !== undefined &&
+          exitName in m.exitPoints,
+      );
+      validateContractConsistency(
+        issues,
+        journeyId,
+        `wildcardTransitions.byEntryAndExit["${entryName}"]["${exitName}"]`,
+        exitName,
+        consistencyMatch,
+      );
+    }
+  }
+}
+
+function validateByExit(
+  journeyId: string,
+  byExit: Record<string, unknown>,
+  byEntryAndExit: Record<string, unknown> | undefined,
+  liveKeyModules: readonly ModuleDescriptor<any, any, any, any>[],
+  consistencyModules: readonly ModuleDescriptor<any, any, any, any>[],
+  issues: string[],
+): void {
+  for (const [exitName, handler] of Object.entries(byExit)) {
+    if (typeof handler !== "function") {
+      issues.push(
+        `journey "${journeyId}" has non-function wildcardTransitions.byExit["${exitName}"]`,
+      );
+      continue;
+    }
+    const liveKeyMatch = liveKeyModules.filter(
+      (m) => m.exitPoints !== undefined && exitName in m.exitPoints,
+    );
+    if (liveKeyMatch.length === 0) {
+      issues.push(
+        `journey "${journeyId}" declares wildcardTransitions.byExit["${exitName}"] but no registered module emits that exit`,
+      );
+      continue;
+    }
+    const consistencyMatch = consistencyModules.filter(
+      (m) => m.exitPoints !== undefined && exitName in m.exitPoints,
+    );
+    validateContractConsistency(
+      issues,
+      journeyId,
+      `wildcardTransitions.byExit["${exitName}"]`,
+      exitName,
+      consistencyMatch,
+    );
+
+    // Tier-overlap warning: declaring the same exit under both slots
+    // shadows byExit for the matching entry. Console-only because the
+    // validator's contract is to throw on hard issues; warnings sit
+    // beside them.
+    if (byEntryAndExit) {
+      const shadowing: string[] = [];
+      for (const [entryName, perEntry] of Object.entries(byEntryAndExit)) {
+        if (
+          isPlainObject(perEntry) &&
+          typeof (perEntry as Record<string, unknown>)[exitName] === "function"
+        ) {
+          shadowing.push(entryName);
+        }
+      }
+      if (shadowing.length > 0) {
+        console.warn(
+          `[@modular-react/journeys] journey "${journeyId}" declares both wildcardTransitions.byExit["${exitName}"] and wildcardTransitions.byEntryAndExit[${shadowing
+            .map(quote)
+            .join(
+              ",",
+            )}]["${exitName}"]; the byExit handler is unreachable from those entries (the more specific one wins).`,
+        );
+      }
+    }
+  }
 }
 
 /**

@@ -189,13 +189,32 @@ describe("wildcardTransitions — runtime precedence (exact > byEntryAndExit > b
     expect((inst.terminalPayload as { reason: string }).reason).toBe("byExit");
   });
 
-  it("ignores the exit (warn) when no tier matches", () => {
+  it("leaves the instance active when no tier matches", () => {
     const { definition } = makeJourney({});
     const rt = freshRuntime(definition);
     const id = rt.start("tiers", { customerId: "C-4" });
     fireExit(rt, id, "cancelled", { reason: "user" });
     const inst = rt.getInstance(id)!;
     expect(inst.status).toBe("active");
+  });
+
+  it("emits a debug warning when no tier matches", () => {
+    const { definition } = makeJourney({});
+    const rt = createJourneyRuntime([{ definition, options: undefined } as RegisteredJourney], {
+      modules: moduleMap,
+      debug: true,
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const id = rt.start("tiers", { customerId: "C-warn" });
+      fireExit(rt, id, "cancelled", { reason: "user" });
+      const noTierWarns = warn.mock.calls.filter((args) =>
+        String(args[0] ?? "").includes('No transition for exit("cancelled")'),
+      );
+      expect(noTierWarns.length).toBeGreaterThan(0);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
@@ -280,6 +299,16 @@ function asyncSchema<T>(): StandardSchemaLike<T> {
       version: 1,
       vendor: "test-async",
       validate: () => Promise.resolve({ value: undefined as unknown as T }),
+    },
+  };
+}
+
+function rejectingAsyncSchema<T>(): StandardSchemaLike<T> {
+  return {
+    "~standard": {
+      version: 1,
+      vendor: "test-async-reject",
+      validate: () => Promise.reject(new Error("schema rejected")),
     },
   };
 }
@@ -422,6 +451,60 @@ describe("ExitContract — runtime payload validation", () => {
       expect(payload.exit).toBe("cancelled");
     } else {
       throw new Error(`expected exit-payload-invalid-async, got ${JSON.stringify(payload)}`);
+    }
+  });
+
+  it("does not surface unhandledRejection when the async schema rejects", async () => {
+    // Without the explicit .catch() on the dropped thenable, a rejecting
+    // schema would surface as `unhandledRejection` after dispatchExit
+    // returns. We're already aborting the journey synchronously; the
+    // rejection value is unwanted noise.
+    const rejectingContract = defineExitContract(
+      "cancelled",
+      rejectingAsyncSchema<{ reason: string }>(),
+    );
+    const profile = defineModule({
+      id: "profile",
+      version: "1.0.0",
+      exitPoints: { cancelled: rejectingContract } as const,
+      entryPoints: {
+        review: defineEntry({ component: (() => null) as any, input: schema<void>() }),
+      },
+    });
+    type Mods = { readonly profile: typeof profile };
+    const definition = defineJourney<Mods, Record<string, never>>()({
+      id: "schema-reject",
+      version: "1.0.0",
+      initialState: () => ({}),
+      start: () => ({ module: "profile" as const, entry: "review" as const, input: undefined }),
+      transitions: {
+        profile: { review: { cancelled: () => ({ abort: { reason: "x" } }) } },
+      },
+    });
+    const rt = createJourneyRuntime([{ definition, options: undefined } as RegisteredJourney], {
+      modules: { profile },
+      debug: false,
+    });
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: PromiseRejectionEvent) => {
+      unhandled.push(e.reason);
+      e.preventDefault();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("unhandledrejection", onUnhandled);
+    }
+    try {
+      const id = rt.start("schema-reject");
+      fireExit(rt, id, "cancelled", { reason: "user" });
+      // Same abort path as the resolving-async case.
+      expect(rt.getInstance(id)!.status).toBe("aborted");
+      // Drain the microtask queue so any unhandledrejection settles.
+      await new Promise((r) => setTimeout(r, 10));
+      expect(unhandled).toHaveLength(0);
+    } finally {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("unhandledrejection", onUnhandled);
+      }
     }
   });
 });
@@ -748,6 +831,49 @@ describe("validateJourneyContracts — wildcardTransitions", () => {
     ).toThrowError(/malformed wildcardTransitions \(expected an object/);
   });
 
+  it("rejects null and arrays for wildcardTransitions / byExit / byEntryAndExit (not just primitives)", () => {
+    // typeof null === "object" and typeof [] === "object"; neither is a
+    // valid container shape, so isPlainObject must reject both.
+    const defNull: any = {
+      id: "null-shape",
+      version: "1.0.0",
+      initialState: () => ({}),
+      start: () => ({ module: "profile", entry: "review", input: { customerId: "x" } }),
+      transitions: { profile: { review: { approved: () => ({ complete: { ok: true } }) } } },
+      wildcardTransitions: {
+        byExit: null,
+        byEntryAndExit: [],
+      },
+    };
+    expect(
+      () =>
+        validateJourneyContracts(
+          [{ definition: defNull, options: undefined } as RegisteredJourney],
+          [profileModule, billingModule],
+        ),
+      // Note: `byExit: null` is silently treated as absent (matches the
+      // outer `wildcardTransitions: undefined` semantics), but the array
+      // `byEntryAndExit: []` MUST be rejected.
+    ).toThrowError(
+      /malformed wildcardTransitions\.byEntryAndExit \(expected an object, got array\)/,
+    );
+
+    const defArrayRoot: any = {
+      id: "array-root",
+      version: "1.0.0",
+      initialState: () => ({}),
+      start: () => ({ module: "profile", entry: "review", input: { customerId: "x" } }),
+      transitions: { profile: { review: { approved: () => ({ complete: { ok: true } }) } } },
+      wildcardTransitions: [],
+    };
+    expect(() =>
+      validateJourneyContracts(
+        [{ definition: defArrayRoot, options: undefined } as RegisteredJourney],
+        [profileModule, billingModule],
+      ),
+    ).toThrowError(/malformed wildcardTransitions \(expected an object, got array\)/);
+  });
+
   it("rejects a non-object byExit / byEntryAndExit container", () => {
     const def: any = {
       id: "malformed-slots",
@@ -971,11 +1097,12 @@ describe("wildcardTransitions — state propagation and observability", () => {
 });
 
 describe("ExitContract — runtime spot-check for contract drift", () => {
-  it("warns when two modules in the runtime declare the same exit via different contracts", () => {
-    // Two modules emit "cancelled", but with *different* contract
-    // instances — the kind of drift the registration-time validator
-    // would catch, except here we hand a custom moduleMap straight to
-    // createJourneyRuntime to simulate a post-registration mismatch.
+  it("warns when two journey-scoped modules declare the same exit via different contracts", () => {
+    // Two modules the journey navigates to emit "cancelled" with
+    // *different* contract instances — exactly what the registration-
+    // time validator catches, except here we hand a custom moduleMap
+    // straight to createJourneyRuntime (bypassing the registry) so the
+    // spot-check is the only safety net.
     const altCancelled = defineExitContract<{ reason: string }>("cancelled");
     const drifted = defineModule({
       id: "drifted",
@@ -988,8 +1115,79 @@ describe("ExitContract — runtime spot-check for contract drift", () => {
         }),
       },
     });
-    const definition = defineJourney<Modules, State>()({
+    type DriftMods = { readonly profile: typeof profileModule; readonly drifted: typeof drifted };
+    const definition = defineJourney<DriftMods, { customerId: string }>()({
       id: "drift",
+      version: "1.0.0",
+      initialState: ({ customerId }: { customerId: string }) => ({ customerId }),
+      start: (s) => ({
+        module: "profile",
+        entry: "review",
+        input: { customerId: s.customerId },
+      }),
+      transitions: {
+        profile: {
+          review: {
+            approved: () => ({ complete: { ok: true } }),
+          },
+        },
+        // The journey navigates to both modules — drift between their
+        // contracts is in scope for this journey.
+        drifted: {
+          review: {
+            approved: () => ({ complete: { ok: true } }),
+          },
+        },
+      },
+      wildcardTransitions: {
+        byExit: {
+          cancelled: () => ({ abort: { reason: "wc" } }),
+        },
+      },
+    });
+    const rt = createJourneyRuntime([{ definition, options: undefined } as RegisteredJourney], {
+      modules: { profile: profileModule, drifted },
+      debug: true,
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const id = rt.start("drift", { customerId: "C-drift" });
+      // Dispatching `cancelled` triggers the drift spot-check.
+      fireExit(rt, id, "cancelled", { reason: "user" });
+      const driftWarns = warn.mock.calls.filter((args) =>
+        String(args[0] ?? "").includes("different ExitContract instances"),
+      );
+      expect(driftWarns).toHaveLength(1);
+      // Subsequent dispatches on the same [journeyId, exitName] pair don't re-warn.
+      const id2 = rt.start("drift", { customerId: "C-drift-2" });
+      fireExit(rt, id2, "cancelled", { reason: "user" });
+      const driftWarnsAfterSecond = warn.mock.calls.filter((args) =>
+        String(args[0] ?? "").includes("different ExitContract instances"),
+      );
+      expect(driftWarnsAfterSecond).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not warn when an unrelated module (not in the journey) has a different contract", () => {
+    // Journey only navigates to `profile`. An unrelated module exists
+    // in the runtime's moduleMap with a different `cancelled` contract,
+    // but the journey-scoped spot-check ignores it (semantics match
+    // validateJourneyContracts).
+    const unrelated = defineModule({
+      id: "unrelated",
+      version: "1.0.0",
+      exitPoints: { cancelled: defineExitContract<{ reason: string }>("cancelled") } as const,
+      entryPoints: {
+        review: defineEntry({
+          component: (() => null) as any,
+          input: schema<{ customerId: string }>(),
+        }),
+      },
+    });
+    const definition = defineJourney<Modules, State>()({
+      id: "scoped",
       version: "1.0.0",
       initialState: ({ customerId }: { customerId: string }) => ({
         customerId,
@@ -1002,9 +1200,7 @@ describe("ExitContract — runtime spot-check for contract drift", () => {
       }),
       transitions: {
         profile: {
-          review: {
-            approved: () => ({ complete: { ok: true } }),
-          },
+          review: { approved: () => ({ complete: { ok: true } }) },
         },
       },
       wildcardTransitions: {
@@ -1015,35 +1211,26 @@ describe("ExitContract — runtime spot-check for contract drift", () => {
     });
     const rt = createJourneyRuntime(
       [{ definition, options: undefined } as RegisteredJourney],
-      // profile uses cancelledContract; drifted uses altCancelled — the
-      // runtime's own snapshot has two contract instances for the same
-      // exit name, which the lazy spot-check should surface.
-      { modules: { profile: profileModule, drifted }, debug: true },
+      // `unrelated` is in the runtime's moduleMap but not in the
+      // journey's transitions — drift against it should be ignored.
+      { modules: { profile: profileModule, unrelated }, debug: true },
     );
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      const id = rt.start("drift", { customerId: "C-drift" });
-      // Dispatching `cancelled` triggers the drift spot-check.
+      const id = rt.start("scoped", { customerId: "C-scoped" });
       fireExit(rt, id, "cancelled", { reason: "user" });
       const driftWarns = warn.mock.calls.filter((args) =>
         String(args[0] ?? "").includes("different ExitContract instances"),
       );
-      expect(driftWarns).toHaveLength(1);
-      // Subsequent dispatches on the same exit name don't re-warn.
-      const id2 = rt.start("drift", { customerId: "C-drift-2" });
-      fireExit(rt, id2, "cancelled", { reason: "user" });
-      const driftWarnsAfterSecond = warn.mock.calls.filter((args) =>
-        String(args[0] ?? "").includes("different ExitContract instances"),
-      );
-      expect(driftWarnsAfterSecond).toHaveLength(1);
+      expect(driftWarns).toHaveLength(0);
     } finally {
       warn.mockRestore();
     }
   });
 
-  it("does not warn when all modules in the runtime share the same contract instance", () => {
-    // profileModule and billingModule both reference cancelledContract
-    // — no drift; spot-check stays silent.
+  it("does not warn when journey-scoped modules share the same contract instance", () => {
+    // profileModule and billingModule both reference cancelledContract.
+    // Journey navigates to both — same identity, no drift, spot-check silent.
     const definition = defineJourney<Modules, State>()({
       id: "consistent-runtime",
       version: "1.0.0",
@@ -1058,9 +1245,10 @@ describe("ExitContract — runtime spot-check for contract drift", () => {
       }),
       transitions: {
         profile: {
-          review: {
-            approved: () => ({ complete: { ok: true } }),
-          },
+          review: { approved: () => ({ complete: { ok: true } }) },
+        },
+        billing: {
+          review: { approved: () => ({ complete: { ok: true } }) },
         },
       },
       wildcardTransitions: {
