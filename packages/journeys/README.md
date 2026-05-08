@@ -891,6 +891,8 @@ Both reasons flow through the existing `isJourneySystemAbort()` predicate. Async
 
 **Why Standard Schema, not Zod-direct.** `@standard-schema/spec` is a type-only package (~0 bytes runtime, single interface) that Zod, Valibot, ArkType, and others all implement. Consumers pick the schema lib that fits; this package stays library-agnostic. Same approach TanStack Router uses for search-param validation.
 
+**Validation lifecycle.** `validateJourneyContracts` is a **registration-time snapshot** — it sees the modules registered with the registry at the moment `resolveManifest()` / `resolve()` runs, and the runtime is rebuilt with the same snapshot in the same tick. So in normal lifecycles (plugins, route-driven entry loading, HMR re-bundle, fresh test setup), every module change re-triggers `resolve()` which re-runs validation — coverage stays current. The runtime adds a **lazy belt-and-suspenders spot-check** for the bypass cases: at the first dispatch of each contract-based exit, it walks its own `moduleMap` once (cached for the runtime's lifetime) and emits a dev-mode warning if it finds two modules declaring the same exit via _different_ `ExitContract` instances. This catches drift introduced by direct `createJourneyRuntime` use, plugin composition that adds modules after validation, and test mocks that swap descriptors between resolves.
+
 ### Pattern - terminal with structured payload
 
 `complete` and `abort` both take `unknown` - pass any shape you want. Consumers read it via `instance.terminalPayload` or the `outcome.payload` arg to `onFinished`.

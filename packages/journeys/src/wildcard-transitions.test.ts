@@ -970,6 +970,123 @@ describe("wildcardTransitions — state propagation and observability", () => {
   });
 });
 
+describe("ExitContract — runtime spot-check for contract drift", () => {
+  it("warns when two modules in the runtime declare the same exit via different contracts", () => {
+    // Two modules emit "cancelled", but with *different* contract
+    // instances — the kind of drift the registration-time validator
+    // would catch, except here we hand a custom moduleMap straight to
+    // createJourneyRuntime to simulate a post-registration mismatch.
+    const altCancelled = defineExitContract<{ reason: string }>("cancelled");
+    const drifted = defineModule({
+      id: "drifted",
+      version: "1.0.0",
+      exitPoints: { cancelled: altCancelled } as const,
+      entryPoints: {
+        review: defineEntry({
+          component: (() => null) as any,
+          input: schema<{ customerId: string }>(),
+        }),
+      },
+    });
+    const definition = defineJourney<Modules, State>()({
+      id: "drift",
+      version: "1.0.0",
+      initialState: ({ customerId }: { customerId: string }) => ({
+        customerId,
+        trail: [] as ReadonlyArray<string>,
+      }),
+      start: (s) => ({
+        module: "profile",
+        entry: "review",
+        input: { customerId: s.customerId },
+      }),
+      transitions: {
+        profile: {
+          review: {
+            approved: () => ({ complete: { ok: true } }),
+          },
+        },
+      },
+      wildcardTransitions: {
+        byExit: {
+          cancelled: () => ({ abort: { reason: "wc" } }),
+        },
+      },
+    });
+    const rt = createJourneyRuntime(
+      [{ definition, options: undefined } as RegisteredJourney],
+      // profile uses cancelledContract; drifted uses altCancelled — the
+      // runtime's own snapshot has two contract instances for the same
+      // exit name, which the lazy spot-check should surface.
+      { modules: { profile: profileModule, drifted }, debug: true },
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const id = rt.start("drift", { customerId: "C-drift" });
+      // Dispatching `cancelled` triggers the drift spot-check.
+      fireExit(rt, id, "cancelled", { reason: "user" });
+      const driftWarns = warn.mock.calls.filter((args) =>
+        String(args[0] ?? "").includes("different ExitContract instances"),
+      );
+      expect(driftWarns).toHaveLength(1);
+      // Subsequent dispatches on the same exit name don't re-warn.
+      const id2 = rt.start("drift", { customerId: "C-drift-2" });
+      fireExit(rt, id2, "cancelled", { reason: "user" });
+      const driftWarnsAfterSecond = warn.mock.calls.filter((args) =>
+        String(args[0] ?? "").includes("different ExitContract instances"),
+      );
+      expect(driftWarnsAfterSecond).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not warn when all modules in the runtime share the same contract instance", () => {
+    // profileModule and billingModule both reference cancelledContract
+    // — no drift; spot-check stays silent.
+    const definition = defineJourney<Modules, State>()({
+      id: "consistent-runtime",
+      version: "1.0.0",
+      initialState: ({ customerId }: { customerId: string }) => ({
+        customerId,
+        trail: [] as ReadonlyArray<string>,
+      }),
+      start: (s) => ({
+        module: "profile",
+        entry: "review",
+        input: { customerId: s.customerId },
+      }),
+      transitions: {
+        profile: {
+          review: {
+            approved: () => ({ complete: { ok: true } }),
+          },
+        },
+      },
+      wildcardTransitions: {
+        byExit: {
+          cancelled: () => ({ abort: { reason: "wc" } }),
+        },
+      },
+    });
+    const rt = createJourneyRuntime([{ definition, options: undefined } as RegisteredJourney], {
+      modules: moduleMap,
+      debug: true,
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const id = rt.start("consistent-runtime", { customerId: "C-ok" });
+      fireExit(rt, id, "cancelled", { reason: "user" });
+      const driftWarns = warn.mock.calls.filter((args) =>
+        String(args[0] ?? "").includes("different ExitContract instances"),
+      );
+      expect(driftWarns).toHaveLength(0);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
 describe("ExitContract — debug warning when modules are omitted", () => {
   it("warns once per missing module, not once per exit", () => {
     const definition = defineJourney<Modules, State>()({

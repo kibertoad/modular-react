@@ -171,6 +171,18 @@ export function createJourneyRuntime(
    * runtime closure so reset semantics fall out naturally with disposal.
    */
   const warnedMissingModule = new Set<string>();
+  /**
+   * Exit names we've already spot-checked for cross-module ExitContract
+   * identity drift. `validateJourneyContracts` runs the equivalent check
+   * at registration time against the modules the registry resolved with,
+   * but the runtime can be built with a different module snapshot
+   * (direct `createJourneyRuntime` use, plugin composition that adds
+   * modules after the validator has already run, test mocks that swap
+   * descriptors without a fresh resolve). One-shot per exit name keeps
+   * the cost bounded — at most O(modules) once per unique exit fired,
+   * cached forever after.
+   */
+  const spotCheckedExits = new Set<string>();
   const definitions = new Map<string, RegisteredJourney>();
   for (const entry of registered) definitions.set(entry.definition.id, entry);
   const instances = new Map<InstanceId, InstanceRecord>();
@@ -1310,6 +1322,45 @@ export function createJourneyRuntime(
     return entryAllowBackMode(step);
   }
 
+  /**
+   * Belt-and-suspenders contract-identity check across the runtime's
+   * own module snapshot. `validateJourneyContracts` does the equivalent
+   * at registration time, but the runtime's `moduleMap` can drift from
+   * the validator's view: a direct `createJourneyRuntime` call, plugin
+   * composition that adds modules after the registry has resolved, or
+   * test mocks swapping descriptors all bypass the registration-time
+   * snapshot. Run the check lazily on first dispatch of each exit
+   * name (cached for the lifetime of the runtime), warn in dev mode if
+   * we find two modules that declare the same exit via *different*
+   * `ExitContract` instances. The cost is one walk of `moduleMap` per
+   * unique exit fired — bounded and amortized.
+   */
+  function spotCheckContractDrift(exitName: string) {
+    if (!debug) return;
+    if (spotCheckedExits.has(exitName)) return;
+    spotCheckedExits.add(exitName);
+    let canonical: { contract: ExitContract<unknown>; moduleId: string } | null = null;
+    for (const [moduleId, mod] of Object.entries(moduleMap)) {
+      const schema = mod.exitPoints?.[exitName];
+      if (!schema || !isExitContract(schema)) continue;
+      if (!canonical) {
+        canonical = { contract: schema as ExitContract<unknown>, moduleId };
+        continue;
+      }
+      if (schema !== canonical.contract) {
+        console.warn(
+          `[@modular-react/journeys] Modules "${canonical.moduleId}" and "${moduleId}" declare exit ` +
+            `"${exitName}" via different ExitContract instances. Wildcard handlers may receive a ` +
+            `non-uniform output shape. This drift was not caught at registration time — re-resolve ` +
+            `the registry, or call validateJourneyContracts(...) after registering new modules.`,
+        );
+        // First mismatch is enough to flag the drift; further mismatches
+        // on the same exit name would just repeat the warning.
+        return;
+      }
+    }
+  }
+
   function dispatchExit(
     record: InstanceRecord,
     reg: RegisteredJourney,
@@ -1368,6 +1419,11 @@ export function createJourneyRuntime(
       );
     }
     const exitSchema = stepModule?.exitPoints?.[exitName];
+    if (exitSchema && isExitContract(exitSchema)) {
+      // Drift check covers contracts with or without schemas — typed
+      // wildcard `output` narrowing applies to any contract identity.
+      spotCheckContractDrift(exitName);
+    }
     if (exitSchema && isExitContract(exitSchema) && (exitSchema as ExitContract<unknown>).schema) {
       const contract = exitSchema as ExitContract<unknown>;
       let validateResult: StandardSchemaResult<unknown> | Promise<StandardSchemaResult<unknown>>;
