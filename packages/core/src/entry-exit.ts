@@ -96,10 +96,7 @@ export function defineExitContract<TSchema extends StandardSchemaV1>(
   schema: TSchema,
 ): ExitContract<StandardSchemaV1.InferOutput<TSchema>>;
 export function defineExitContract(kind: string, schema?: StandardSchemaV1): ExitContract<unknown> {
-  const contract: ExitContract<unknown> = schema
-    ? { kind, __contract: true, schema: schema as StandardSchemaLike<unknown> }
-    : { kind, __contract: true };
-  return contract;
+  return schema ? { kind, schema: schema as StandardSchemaLike<unknown> } : { kind };
 }
 
 /**
@@ -107,12 +104,14 @@ export function defineExitContract(kind: string, schema?: StandardSchemaV1): Exi
  * `ExitPointSchema`. Used by the journey runtime to decide whether to
  * apply schema validation at emit time and by validators to enforce
  * cross-module shape consistency under wildcard transitions.
+ *
+ * `kind: string` is the discriminator: `defineExit()` returns `{}` (no
+ * `kind`), so a string `kind` field reliably identifies a contract.
  */
 export function isExitContract(schema: unknown): schema is ExitContract<unknown> {
   return (
     typeof schema === "object" &&
     schema !== null &&
-    (schema as { __contract?: unknown }).__contract === true &&
     typeof (schema as { kind?: unknown }).kind === "string"
   );
 }

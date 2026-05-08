@@ -318,15 +318,12 @@ export interface ExitPointSchema<TOutput> {
  * reference equality, not name matching.
  */
 export interface ExitContract<TOutput> extends ExitPointSchema<TOutput> {
-  /** Stable identity, e.g. `"cancelled"`. */
-  readonly kind: string;
   /**
-   * Sentinel field used by `isExitContract` to discriminate a contract
-   * from a plain `ExitPointSchema`. Always `true` on contracts created by
-   * `defineExitContract`. Phantom-typed as `TOutput` so `as` casts
-   * preserve the inferred output through structural narrowing.
+   * Stable identity, e.g. `"cancelled"`. Required (and absent on plain
+   * `ExitPointSchema`), so `kind` doubles as the structural
+   * discriminator `isExitContract` checks for.
    */
-  readonly __contract: true;
+  readonly kind: string;
   /**
    * Optional Standard Schema (`StandardSchemaV1`-compatible — works with
    * Zod, Valibot, ArkType, ...). When present, the runtime validates
