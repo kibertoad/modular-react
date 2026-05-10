@@ -312,22 +312,6 @@ function makeBouncyParent(opts: {
   });
 }
 
-function makeChild(id: string) {
-  return defineJourney<Modules, void, { kind: "pong" }>()({
-    id,
-    version: "1.0.0",
-    initialState: () => undefined,
-    start: () => ({ module: "m", entry: "step", input: undefined }),
-    transitions: {
-      m: {
-        step: {
-          pong: ({ output }) => ({ complete: output }),
-        },
-      },
-    },
-  });
-}
-
 // ---------------------------------------------------------------------------
 // invoke-cycle: same id already on the active chain.
 // ---------------------------------------------------------------------------
