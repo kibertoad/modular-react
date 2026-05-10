@@ -1,5 +1,5 @@
 # @modular-react/core
-
+ 
 Core primitives for building modular React applications. Provides types, slot/navigation builders, validation, and a lightweight store, all with zero React runtime dependency.
 
 This is the shared foundation that both `@react-router-modules/*` and `@tanstack-react-modules/*` build on.

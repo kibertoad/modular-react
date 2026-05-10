@@ -242,9 +242,11 @@ jobs:
             echo "Bumping version for $PKG_DIR..."
             cd "packages/$PKG_DIR"
             OLD_VERSION=$(node -p "require('./package.json').version")
-            # pnpm version delegates to npm version but respects the workspace
-            # layout; --no-git-tag-version matches the prior npm-based flow.
-            pnpm version "$BUMP" --no-git-tag-version
+            # --no-git-checks bypasses pnpm's clean-working-tree guard, which
+            # would fire on the second package once the first bump has dirtied
+            # package.json. --no-git-tag-version skips the commit/tag (we batch
+            # bumps into a single commit later, after publish succeeds).
+            pnpm version "$BUMP" --no-git-tag-version --no-git-checks
             NEW_VERSION=$(node -p "require('./package.json').version")
             echo "  $OLD_VERSION -> $NEW_VERSION"
             cd ../..
