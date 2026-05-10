@@ -1,5 +1,5 @@
 # @modular-react/journeys
- 
+
 Typed, serializable workflows that compose several modules. A journey declares how one module's exit feeds the next module's entry; the modules themselves stay journey-unaware - they just declare what input they accept and what outcomes they can emit.
 
 Use this package when a domain flow spans multiple modules with **shared state** (e.g. "confirm the customer's profile → branch into plan selection → collect a payment or activate a free trial"), and you want:
