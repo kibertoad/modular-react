@@ -1415,6 +1415,17 @@ interface JourneyRuntime {
   subscribe(id: InstanceId, listener: () => void): () => void;
 
   /**
+   * Pop the active step back to the previous one. Equivalent to the
+   * `goBack` prop the host hands the active step's component, but
+   * addressable by id so a shell that owns its own back button
+   * (browser `popstate`, hardware back, breadcrumb) can wire it
+   * directly. No-op when the id is unknown, the instance is terminal
+   * / loading, a child journey is in flight, the transition didn't
+   * opt into `allowBack: true`, or history is empty.
+   */
+  goBack(id: InstanceId): void;
+
+  /**
    * Force-terminate an instance. Fires `onAbandon` if still active;
    * no-op if already terminal or unknown.
    */

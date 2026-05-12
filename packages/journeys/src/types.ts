@@ -10,7 +10,6 @@ import type {
   JourneyHandleRef,
   JourneyPersistence,
   JourneyStep,
-  JourneyStepFor,
   ModuleTypeMap,
   ResumeMap,
   SerializedJourney,
