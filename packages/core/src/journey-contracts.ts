@@ -746,6 +746,13 @@ export function isTerminal(instance: JourneyInstance): boolean {
  * shells can narrow against this union when interpreting an abort
  * outcome — see {@link JourneySystemAbortReason} for the per-code
  * payload shape and {@link isJourneySystemAbort} for the type guard.
+ *
+ * **These string codes are reserved by the runtime.** An author-supplied
+ * `{ abort: { reason: "<one-of-these>" } }` payload will be
+ * misidentified as a system abort by {@link isJourneySystemAbort}. Pick
+ * a distinct `reason` for author aborts (e.g. namespace with your
+ * app slug: `"acme.user-cancelled"`) to keep the narrowing predicate
+ * accurate.
  */
 export type JourneySystemAbortReasonCode =
   | "invoke-cycle"

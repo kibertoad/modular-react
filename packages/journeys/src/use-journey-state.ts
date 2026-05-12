@@ -4,15 +4,12 @@ import { useInstanceSnapshot, useLeafId } from "./instance-hooks.js";
 import { useJourneyContext } from "./provider.js";
 
 /**
- * Subscribe to a journey instance and return its current `state`, or
- * `null` when no `<JourneyProvider>` is mounted or the id is unknown.
- * Tearing-free via `useSyncExternalStore`. `TState` is the journey's
- * state type — pass it explicitly from a typed call site.
+ * Sugar over {@link useJourneyInstance}: returns the instance's `state`
+ * (or `null` when the runtime / id / instance is unavailable).
+ * `TState` is the journey's state type — pass it at the call site.
  *
- * ```ts
- * const state = useJourneyState<MyState>(instanceId);
- * if (!state) return null;
- * ```
+ * Prefer {@link useJourneyInstance} when the host needs more than
+ * `state` (`step` / `status` / `terminalPayload`).
  */
 export function useJourneyState<TState>(instanceId: InstanceId | null): TState | null {
   const inst = useJourneyInstance(instanceId);
@@ -20,12 +17,12 @@ export function useJourneyState<TState>(instanceId: InstanceId | null): TState |
 }
 
 /**
- * Like {@link useJourneyState}, but returns the full `JourneyInstance`
- * (with `step`, `status`, `terminalPayload`, …) instead of just its
- * `state`. Use this when a host with a known id needs to read more than
- * `state` — for example, gating UI off the current step's `moduleId` /
- * `entry`, or off `status === "completed"`. Symmetric with
- * {@link useActiveLeafJourneyInstance} for the leaf-walking case.
+ * Subscribe to a journey instance and return its full snapshot
+ * (`status`, `step`, `state`, `terminalPayload`, …), or `null` when no
+ * `<JourneyProvider>` is mounted or the id is unknown. Tearing-free via
+ * `useSyncExternalStore`. The primitive of which {@link useJourneyState}
+ * is sugar; symmetric with {@link useActiveLeafJourneyInstance} for the
+ * leaf-walking case.
  */
 export function useJourneyInstance(instanceId: InstanceId | null): JourneyInstance | null {
   const ctx = useJourneyContext();
@@ -33,10 +30,14 @@ export function useJourneyInstance(instanceId: InstanceId | null): JourneyInstan
 }
 
 /**
- * Like {@link useJourneyState}, but follows `activeChildId` down the
- * chain and returns the *leaf* instance's state. Subscribes to every
- * instance along the way so a host rendering inside an invoked child
- * journey sees the child's state directly.
+ * Sugar over {@link useActiveLeafJourneyInstance}: returns the leaf
+ * instance's `state` as `TState`. Returns `null` when no provider, the
+ * root id is unknown, or the leaf has been forgotten.
+ *
+ * Prefer {@link useActiveLeafJourneyInstance} when the leaf can be any
+ * of several journeys — typing this hook as `<ParentState | ChildState>`
+ * leaves the caller without a discriminator, whereas the instance form
+ * gives a typed `inst.journeyId` to switch on.
  */
 export function useActiveLeafJourneyState<TState>(
   rootInstanceId: InstanceId | null,
@@ -46,16 +47,16 @@ export function useActiveLeafJourneyState<TState>(
 }
 
 /**
- * Like {@link useActiveLeafJourneyState}, but returns the full leaf
- * `JourneyInstance` (with `step`, `status`, `terminalPayload`, …) instead
- * of just its `state`. Use this when a host needs to read more than
- * `state` from the leaf — for example, the current step's `moduleId` /
- * `entry` to drive a breadcrumb, or `status` to gate UI off `completed`
- * / `aborted` — without pairing this hook with `useJourneyCallStack`
- * and a manual `runtime.getInstance(leafId)`.
+ * Walks `activeChildId` from `rootInstanceId` down to the deepest
+ * descendant and returns that leaf's full `JourneyInstance`. The
+ * recommended primitive when the host doesn't know the leaf's depth
+ * (a parent that may or may not be in an invoked sub-flow) — pair with
+ * `inst.journeyId` as a discriminator instead of typing the state hook
+ * as a union and asserting manually. Re-subscribes as the chain grows
+ * (parent invokes a child, grandchild starts) or shrinks (child
+ * terminates and parent resumes).
  *
- * Returns `null` under the same conditions as the other hooks
- * (no provider, unknown root id, forgotten instance).
+ * Returns `null` under the same conditions as {@link useJourneyInstance}.
  */
 export function useActiveLeafJourneyInstance(
   rootInstanceId: InstanceId | null,

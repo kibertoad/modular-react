@@ -124,7 +124,7 @@ describe("defineEntry({ buildInput })", () => {
     expect(sim.currentStep.input).toEqual({ previousName: "Ada" });
   });
 
-  it("warns in dev mode when the handler stamps an input that buildInput would override", () => {
+  it("does not warn when the handler-supplied input matches what buildInput derives", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const runtime = createJourneyRuntime([{ definition: journey, options: undefined }], {
       modules: { name: nameModule, email: emailModule },
@@ -132,11 +132,70 @@ describe("defineEntry({ buildInput })", () => {
     });
     const id = runtime.start(journey.id, undefined);
     createTestHarness(runtime).fireExit(id, "next", { name: "Ada" });
-    // The handler returns `next: { … input: { previousEmail: "" } }`, but
-    // the email module's `buildInput` would produce `{ previousEmail: "" }`
-    // from initial state too — so on this very first push they match and
-    // no warning is expected. Drive a second push that does diverge.
+    // Handler stamps `{ previousEmail: "" }`; on this first push the email
+    // module's `buildInput` also returns `{ previousEmail: "" }` (initial
+    // state). Shallow-equal → no drift warning.
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("warns in dev mode when the handler stamps an input that buildInput would override", () => {
+    interface DriftState {
+      readonly value: number;
+    }
+    const driftExits = { go: defineExit() } as const;
+    const driftSource = defineModule({
+      id: "drift-source",
+      version: "1.0.0",
+      exitPoints: driftExits,
+      entryPoints: {
+        view: defineEntry({ component: (() => null) as never, input: schema<void>() }),
+      },
+    });
+    const driftTarget = defineModule({
+      id: "drift-target",
+      version: "1.0.0",
+      exitPoints: driftExits,
+      entryPoints: {
+        view: defineEntry({
+          component: (() => null) as never,
+          input: schema<{ value: number }>(),
+          // Always derives `{ value: 99 }`, regardless of handler stamping.
+          buildInput: () => ({ value: 99 }),
+        }),
+      },
+    });
+    type DriftModules = {
+      readonly "drift-source": typeof driftSource;
+      readonly "drift-target": typeof driftTarget;
+    };
+    const driftJourney = defineJourney<DriftModules, DriftState>()({
+      id: "drift",
+      version: "1.0.0",
+      initialState: () => ({ value: 0 }),
+      start: () => ({ module: "drift-source", entry: "view", input: undefined }),
+      transitions: {
+        "drift-source": {
+          view: {
+            go: () => ({
+              // Handler stamps `value: 0` — buildInput will override to 99.
+              next: { module: "drift-target", entry: "view", input: { value: 0 } },
+            }),
+          },
+        },
+      },
+    });
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const runtime = createJourneyRuntime([{ definition: driftJourney, options: undefined }], {
+      modules: { "drift-source": driftSource, "drift-target": driftTarget },
+      debug: true,
+    });
+    const id = runtime.start(driftJourney.id, undefined);
+    createTestHarness(runtime).fireExit(id, "go");
+
+    expect(runtime.getInstance(id)?.step?.input).toEqual({ value: 99 });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toMatch(/buildInput.*input.*discarded/);
   });
 
   it("aborts the instance with `build-input-threw` when buildInput throws on initial start", () => {
