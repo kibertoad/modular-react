@@ -1,4 +1,4 @@
-import type { InstanceId } from "@modular-react/core";
+import type { InstanceId, JourneyInstance } from "@modular-react/core";
 
 import { useInstanceSnapshot, useLeafId } from "./instance-hooks.js";
 import { useJourneyContext } from "./provider.js";
@@ -29,9 +29,27 @@ export function useJourneyState<TState>(instanceId: InstanceId | null): TState |
 export function useActiveLeafJourneyState<TState>(
   rootInstanceId: InstanceId | null,
 ): TState | null {
+  const inst = useActiveLeafJourneyInstance(rootInstanceId);
+  return inst ? (inst.state as TState) : null;
+}
+
+/**
+ * Like {@link useActiveLeafJourneyState}, but returns the full leaf
+ * `JourneyInstance` (with `step`, `status`, `terminalPayload`, …) instead
+ * of just its `state`. Use this when a host needs to read more than
+ * `state` from the leaf — for example, the current step's `moduleId` /
+ * `entry` to drive a breadcrumb, or `status` to gate UI off `completed`
+ * / `aborted` — without pairing this hook with `useJourneyCallStack`
+ * and a manual `runtime.getInstance(leafId)`.
+ *
+ * Returns `null` under the same conditions as the other hooks
+ * (no provider, unknown root id, forgotten instance).
+ */
+export function useActiveLeafJourneyInstance(
+  rootInstanceId: InstanceId | null,
+): JourneyInstance | null {
   const ctx = useJourneyContext();
   const runtime = ctx?.runtime ?? null;
   const leafId = useLeafId(runtime, rootInstanceId, true);
-  const inst = useInstanceSnapshot(runtime, leafId);
-  return inst ? (inst.state as TState) : null;
+  return useInstanceSnapshot(runtime, leafId);
 }

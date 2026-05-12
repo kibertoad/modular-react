@@ -1,4 +1,4 @@
-import type { AnyModuleDescriptor } from "@modular-react/core";
+import type { ModuleDescriptor } from "@modular-react/core";
 
 import { createJourneyRuntime, getInternals } from "./runtime.js";
 import { createTestHarness } from "./testing.js";
@@ -116,14 +116,28 @@ export interface SimulateJourneyOptions {
    */
   readonly children?: readonly AnyJourneyDefinition[];
   /**
-   * Module descriptors the runtime should bind for `allowBack` resolution
-   * and `buildInput` recomputation at every step entry. Headless tests
-   * that exercise `defineEntry({ buildInput })` must pass the descriptors
-   * here — without them the runtime falls back to the cached
-   * handler-supplied input, exactly as it did before `buildInput` existed.
+   * Module descriptors the runtime should bind for `allowBack` mode
+   * resolution and `buildInput` recomputation. **Required for headless
+   * tests that exercise `defineEntry({ buildInput })`** — without it the
+   * runtime falls back to the cached handler-supplied input (and
+   * `validateJourneyContracts` warnings about unbound modules surface in
+   * test output even when the test itself never touches `buildInput`).
+   *
    * Keyed by module id; the same map shape `createJourneyRuntime` accepts.
+   * The value type uses `any` on every `ModuleDescriptor` generic so a
+   * heterogeneous map of `{ name: typeof nameModule, email:
+   * typeof emailModule }` passes structurally, including when the host
+   * app narrows `TNavItem` to a custom action shape (the bivariant `any`
+   * absorbs the difference — no `as unknown as` cast needed at the call
+   * site).
+   *
+   * ```ts
+   * simulateJourney(journey, undefined, {
+   *   modules: { name: nameModule, email: emailModule },
+   * });
+   * ```
    */
-  readonly modules?: Readonly<Record<string, AnyModuleDescriptor>>;
+  readonly modules?: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
 }
 
 /**

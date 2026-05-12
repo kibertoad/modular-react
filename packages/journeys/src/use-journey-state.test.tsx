@@ -7,7 +7,11 @@ import { defineJourneyHandle } from "./handle.js";
 import { JourneyProvider } from "./provider.js";
 import { createJourneyRuntime } from "./runtime.js";
 import { createTestHarness } from "./testing.js";
-import { useActiveLeafJourneyState, useJourneyState } from "./use-journey-state.js";
+import {
+  useActiveLeafJourneyInstance,
+  useActiveLeafJourneyState,
+  useJourneyState,
+} from "./use-journey-state.js";
 
 afterEach(() => {
   cleanup();
@@ -182,5 +186,36 @@ describe("useActiveLeafJourneyState", () => {
 
     // Child completed — leaf collapses back to the parent (now counter: 10).
     expect(seen.at(-1)).toEqual({ counter: 10 });
+  });
+});
+
+describe("useActiveLeafJourneyInstance", () => {
+  it("returns the full leaf JourneyInstance so callers can read step/status without pairing hooks", () => {
+    const runtime = setupRuntime();
+    const rootId = runtime.start(parentJourney.id, undefined);
+    const seen: { moduleId: string | undefined; journeyId: string | undefined }[] = [];
+
+    function Probe() {
+      const inst = useActiveLeafJourneyInstance(rootId);
+      seen.push({ moduleId: inst?.step?.moduleId, journeyId: inst?.journeyId });
+      return null;
+    }
+
+    render(
+      <JourneyProvider runtime={runtime}>
+        <Probe />
+      </JourneyProvider>,
+    );
+
+    // No child yet — leaf is the parent's "parent.home" step.
+    expect(seen.at(-1)).toEqual({ moduleId: "parent", journeyId: "parent" });
+
+    act(() => {
+      createTestHarness(runtime).fireExit(rootId, "start");
+    });
+
+    // After invoke — the hook returns the child instance, so callers can
+    // read `step.moduleId` directly without a separate `getInstance(leafId)`.
+    expect(seen.at(-1)).toEqual({ moduleId: "child", journeyId: "child" });
   });
 });

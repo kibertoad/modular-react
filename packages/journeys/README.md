@@ -657,7 +657,15 @@ transitions: {
 
 When the user back-navigates from a later step to this one, `buildInput(state)` runs again and the form sees the latest `draftName` — no React context, no `useEffect`-syncing local form state to journey state.
 
-`buildInput` must be pure and synchronous; it runs on the runtime's hot path. For headless tests, pass module descriptors via `simulateJourney(definition, input, { modules: { name: nameModule } })` so the runtime can resolve and invoke `buildInput` at every entry.
+`buildInput` must be pure and synchronous; it runs on the runtime's hot path.
+
+> **Testing tip — always pass `options.modules` for `simulateJourney`.** Without it the runtime can't resolve module descriptors, so `buildInput` falls back to the cached handler-supplied input (silently degrading the behaviour under test) and `validateJourneyContracts` warnings about unbound modules surface in test output. The `modules` option is typed as `Record<string, ModuleDescriptor<any, any, any, any>>` — the bivariant `any` on `TNavItem` means a heterogeneous map like `{ name: nameModule, email: emailModule }` passes structurally even when the host app narrows `TNavItem` to a custom action type. No `as unknown as` cast required.
+>
+> ```ts
+> simulateJourney(journey, input, {
+>   modules: { name: nameModule, email: emailModule },
+> });
+> ```
 
 ## Journey definition patterns
 
@@ -2285,15 +2293,16 @@ Every export you're likely to call, grouped by role.
 
 ### Rendering + context (`@modular-react/journeys`)
 
-| Export                      | Purpose                                                                                                                                                                                                                                                                                                     |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `JourneyProvider`           | Context provider for the runtime and optional `onModuleExit`. Mount once at the shell root.                                                                                                                                                                                                                 |
-| `useJourneyContext`         | Reads the current provider value, or `null`.                                                                                                                                                                                                                                                                |
-| `JourneyOutlet`             | Renders the current step of a journey instance. Handles loading, error boundary, terminal, and abandon-on-unmount. By default walks the active call chain and renders the leaf — pass `leafOnly={false}` for layered presentations.                                                                         |
-| `useJourneyCallStack`       | `(runtime, rootId) => readonly InstanceId[]` — returns the live root → … → leaf chain. Subscribes to every link so the array re-resolves when the chain shifts.                                                                                                                                             |
-| `useJourneyState`           | `<TState>(id: InstanceId \| null) => TState \| null` — subscribes to a single instance via `useSyncExternalStore` and returns its `state`. Reads the runtime from `<JourneyProvider>`; returns `null` for unknown ids or no provider. Tearing-free under concurrent React.                                  |
-| `useActiveLeafJourneyState` | `<TState>(rootId: InstanceId \| null) => TState \| null` — like `useJourneyState`, but follows `activeChildId` from the root to the active leaf and returns the leaf's state. Re-subscribes as the call chain grows / shrinks, so a host rendering inside an invoked child sees the child's state directly. |
-| `ModuleTab`                 | Renders a single module entry outside a route. Non-journey counterpart to `JourneyOutlet`.                                                                                                                                                                                                                  |
+| Export                         | Purpose                                                                                                                                                                                                                                                                                                     |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JourneyProvider`              | Context provider for the runtime and optional `onModuleExit`. Mount once at the shell root.                                                                                                                                                                                                                 |
+| `useJourneyContext`            | Reads the current provider value, or `null`.                                                                                                                                                                                                                                                                |
+| `JourneyOutlet`                | Renders the current step of a journey instance. Handles loading, error boundary, terminal, and abandon-on-unmount. By default walks the active call chain and renders the leaf — pass `leafOnly={false}` for layered presentations.                                                                         |
+| `useJourneyCallStack`          | `(runtime, rootId) => readonly InstanceId[]` — returns the live root → … → leaf chain. Subscribes to every link so the array re-resolves when the chain shifts.                                                                                                                                             |
+| `useJourneyState`              | `<TState>(id: InstanceId \| null) => TState \| null` — subscribes to a single instance via `useSyncExternalStore` and returns its `state`. Reads the runtime from `<JourneyProvider>`; returns `null` for unknown ids or no provider. Tearing-free under concurrent React.                                  |
+| `useActiveLeafJourneyState`    | `<TState>(rootId: InstanceId \| null) => TState \| null` — like `useJourneyState`, but follows `activeChildId` from the root to the active leaf and returns the leaf's state. Re-subscribes as the call chain grows / shrinks, so a host rendering inside an invoked child sees the child's state directly. |
+| `useActiveLeafJourneyInstance` | `(rootId: InstanceId \| null) => JourneyInstance \| null` — like `useActiveLeafJourneyState`, but returns the full leaf `JourneyInstance` so callers can read `step` / `status` / `terminalPayload` without pairing the state hook with `useJourneyCallStack` + a manual `runtime.getInstance(leafId)`.     |
+| `ModuleTab`                    | Renders a single module entry outside a route. Non-journey counterpart to `JourneyOutlet`.                                                                                                                                                                                                                  |
 
 ### Runtime + validation (`@modular-react/journeys`)
 
