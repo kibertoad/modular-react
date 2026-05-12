@@ -145,6 +145,30 @@ describe("defineEntry({ buildInput })", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it("does NOT warn on goBack when buildInput re-derives a value that differs from the cached frame", () => {
+    // Regression: an earlier version compared `step.input` (the value
+    // stored on the popped history frame, which is itself a prior
+    // `buildInput` derivation) against the freshly-derived one — so
+    // anytime state changed between visits, the goBack pop would
+    // false-positive as "handler stamped a different input." The fix
+    // pins the drift comparison to the handler's literal stamp, which
+    // doesn't exist on the goBack path.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const runtime = createJourneyRuntime([{ definition: journey, options: undefined }], {
+      modules: { name: nameModule, email: emailModule },
+      debug: true,
+    });
+    const id = runtime.start(journey.id, undefined);
+    const harness = createTestHarness(runtime);
+    // Drive forward — state.draftName becomes "Ada", emailModule pushed.
+    harness.fireExit(id, "next", { name: "Ada" });
+    // Pop back to name. buildInput now derives `{ previousName: "Ada" }`,
+    // but the frame stored `{ previousName: "" }` at first push. With
+    // the old comparison, this would fire the drift warning.
+    harness.goBack(id);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("warns in dev mode when the handler stamps an input that buildInput would override", () => {
     interface DriftState {
       readonly value: number;

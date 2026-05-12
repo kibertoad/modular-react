@@ -265,6 +265,13 @@ export function createJourneyRuntime(
    * matters for snapshot bail-out. When `buildInput` throws, returns a
    * sentinel object so callers can route the transition into an abort
    * instead of leaving the instance half-transitioned.
+   *
+   * This helper does NOT warn about handler-input drift; that check
+   * lives at the callsite where the handler-original is in scope
+   * (`warnIfHandlerInputDiffers`). Reason: `step.input` on a popped
+   * history frame is a prior `buildInput` derivation, not a handler
+   * stamp, and comparing it would false-positive whenever state
+   * changed between visits.
    */
   function withBuiltInput(
     step: JourneyStep,
@@ -278,17 +285,29 @@ export function createJourneyRuntime(
     } catch (err) {
       return { buildInputThrew: err };
     }
-    if (debug && step.input !== undefined && !shallowEqual(step.input, derived)) {
-      // The handler stamped a concrete `next.input` that `buildInput`
-      // then overwrote — almost always a sign the author forgot the
-      // transition handler's `input` is dead code once `buildInput` is
-      // declared. Warn once at dev time so the divergence is observable;
-      // strip the warning in production builds.
-      console.warn(
-        `[@modular-react/journeys] Entry "${step.moduleId}.${step.entry}" declared \`buildInput\` but the transition handler also supplied a different \`input\`. The handler's value is discarded — stamp \`input: undefined\` (or drop the field once the type allows it) to mark the override explicit.`,
-      );
-    }
     return { moduleId: step.moduleId, entry: step.entry, input: derived };
+  }
+
+  /**
+   * Dev-mode warning fired only when the *handler's* original `input`
+   * (literally `result.next.input` for the next arm, `def.start(...).input`
+   * for the initial start) differs from what `buildInput` derived.
+   * Skipped when the handler stamped `undefined` (the documented "I'm
+   * letting buildInput handle it" placeholder). Not called from
+   * `dispatchGoBack` / same-step rebuild — those have no handler-original
+   * to compare against.
+   */
+  function warnIfHandlerInputDiffers(
+    handlerInput: unknown,
+    derivedInput: unknown,
+    step: JourneyStep,
+  ) {
+    if (!debug) return;
+    if (handlerInput === undefined) return;
+    if (shallowEqual(handlerInput, derivedInput)) return;
+    console.warn(
+      `[@modular-react/journeys] Entry "${step.moduleId}.${step.entry}" declared \`buildInput\` but the transition handler also supplied a different \`input\`. The handler's value is discarded — stamp \`input: undefined\` (or drop the field once the type allows it) to mark the override explicit.`,
+    );
   }
 
   function isBuildInputThrow(
@@ -1271,6 +1290,11 @@ export function createJourneyRuntime(
         return;
       }
       const nextStep = built;
+      // `rawNext.input` is the handler's literal stamp from
+      // `result.next.input`; compare it against what `buildInput`
+      // actually derived. (No-op when no `buildInput` is declared:
+      // `built === rawNext` so the inputs are identical by reference.)
+      warnIfHandlerInputDiffers(rawNext.input, nextStep.input, nextStep);
       if (debug) {
         // Validation at resolveManifest() catches static misconfiguration,
         // but transition handlers branch at runtime and can return a
@@ -1934,6 +1958,9 @@ export function createJourneyRuntime(
       return record.id;
     }
     const startStep = builtStart;
+    // Same drift check as the next-arm site — `rawStart.input` is the
+    // literal `def.start(...)` stamp.
+    warnIfHandlerInputDiffers(rawStart.input, startStep.input, startStep);
     record.step = startStep;
     record.status = "active";
     record.stepToken += 1;
