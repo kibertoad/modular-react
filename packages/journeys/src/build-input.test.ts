@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
+import { buildInputFor, defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 
 import { defineJourney } from "./define-journey.js";
 import { defineJourneyHandle } from "./handle.js";
@@ -105,6 +105,44 @@ describe("defineEntry({ buildInput })", () => {
       entry: "enter",
       input: { previousName: "" },
     });
+  });
+
+  it("accepts a buildInputFor<TState>() wrapper that bakes TState at the declaration site", () => {
+    interface WrappedState {
+      readonly draftName: string;
+    }
+    interface WrappedInput {
+      readonly previousName: string;
+    }
+    const wrappedExits = { next: defineExit() } as const;
+    const wrappedModule = defineModule({
+      id: "wrapped",
+      version: "1.0.0",
+      exitPoints: wrappedExits,
+      entryPoints: {
+        view: defineEntry({
+          component: (() => null) as never,
+          input: schema<WrappedInput>(),
+          // The helper bakes WrappedState into `state`, then the inner
+          // function returns the WrappedInput shape — same wire format
+          // as the inline `(state: WrappedState) =>` annotation pattern.
+          buildInput: buildInputFor<WrappedState>()((state) => ({
+            previousName: state.draftName,
+          })),
+        }),
+      },
+    });
+    type WrappedModules = { readonly wrapped: typeof wrappedModule };
+    const wrappedJourney = defineJourney<WrappedModules, WrappedState>()({
+      id: "wrapped",
+      version: "1.0.0",
+      initialState: () => ({ draftName: "Ada" }),
+      start: () => ({ module: "wrapped", entry: "view", input: { previousName: "" } }),
+      transitions: {},
+    });
+
+    const sim = simulateJourney(wrappedJourney, undefined, { modules: { wrapped: wrappedModule } });
+    expect(sim.currentStep.input).toEqual({ previousName: "Ada" });
   });
 
   it("rebuilds input from state when navigating back", () => {

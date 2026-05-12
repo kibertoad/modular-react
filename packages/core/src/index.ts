@@ -31,6 +31,7 @@ export type {
 
 // Entry / exit helpers
 export {
+  buildInputFor,
   defineEntry,
   defineExit,
   defineExitContract,

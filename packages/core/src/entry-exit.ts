@@ -36,6 +36,47 @@ export function defineEntry<TInput>(entry: ModuleEntryPoint<TInput>): ModuleEntr
 }
 
 /**
+ * Typed wrapper for `defineEntry({ buildInput })` that bakes the
+ * hosting journey's `TState` into the factory's `state` parameter.
+ * Curried so callers spell `TState` explicitly while `TInput` infers
+ * from the function body — same shape `defineJourney` uses for its
+ * generics.
+ *
+ * ```ts
+ * defineEntry({
+ *   component: NameForm,
+ *   input: schema<{ previousName: string }>(),
+ *   buildInput: buildInputFor<ProjectState>()((state) => ({
+ *     previousName: state.draftName,
+ *   })),
+ * });
+ * ```
+ *
+ * **What this catches**: the inline-annotation alternative —
+ * `buildInput: (state: ProjectState) => …` — relies on TypeScript
+ * allowing a narrower-parameter function to assign to the entry's
+ * declared `(state: unknown) => TInput`. Under `strictFunctionTypes` (or
+ * stricter consumer configs) that assignment can fail; this helper
+ * does the unknown→TState cast inside its body, so the *outer* signature
+ * always matches the entry's declared shape regardless of consumer
+ * strictness.
+ *
+ * **What this does NOT catch**: a mismatch between the spelled `TState`
+ * and the host journey's actual state type. Modules are
+ * journey-agnostic — nothing at the module-declaration site knows which
+ * journey will run them. Annotate carefully; integration / harness
+ * tests are the safety net for the cross-cut.
+ *
+ * Zero runtime cost beyond the wrapping closure — the return type is the
+ * exact shape the entry expects.
+ */
+export const buildInputFor =
+  <TState>() =>
+  <TInput>(fn: (state: TState) => TInput): ((state: unknown) => TInput) =>
+  (state: unknown) =>
+    fn(state as TState);
+
+/**
  * Type-only brand that preserves inference of `TOutput` on a single
  * {@link ExitPointSchema}. Called with no arguments and no runtime cost —
  * the returned object is an empty placeholder tagged with the output type.
