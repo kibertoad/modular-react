@@ -39,8 +39,12 @@ export function defineEntry<TInput>(entry: ModuleEntryPoint<TInput>): ModuleEntr
  * Typed wrapper for `defineEntry({ buildInput })` that bakes the
  * hosting journey's `TState` into the factory's `state` parameter.
  * Curried so callers spell `TState` explicitly while `TInput` infers
- * from the function body — same shape `defineJourney` uses for its
- * generics.
+ * from the function body. The visual shape matches `defineJourney`'s
+ * curry — explicit generics in the outer call, inferred ones in the
+ * inner — though the motivation differs: `defineJourney` uses two
+ * calls to work around TypeScript's lack of partial inference, while
+ * `buildInputFor` uses them so `TInput` infers cleanly from the
+ * function body alone.
  *
  * ```ts
  * defineEntry({
@@ -66,9 +70,6 @@ export function defineEntry<TInput>(entry: ModuleEntryPoint<TInput>): ModuleEntr
  * journey-agnostic — nothing at the module-declaration site knows which
  * journey will run them. Annotate carefully; integration / harness
  * tests are the safety net for the cross-cut.
- *
- * Zero runtime cost beyond the wrapping closure — the return type is the
- * exact shape the entry expects.
  */
 export const buildInputFor =
   <TState>() =>

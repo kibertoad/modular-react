@@ -51,7 +51,14 @@ const emailModule = defineModule({
       component: (() => null) as never,
       input: schema<EmailInput>(),
       allowBack: "preserve-state",
-      buildInput: (state: FormState) => ({ previousEmail: state.draftEmail }),
+      // `nameModule` (above) uses the inline `(state: FormState) =>`
+      // annotation; this one uses the `buildInputFor<TState>()` wrapper.
+      // The "rebuilds input from state when navigating back" test
+      // exercises both — keeping the two patterns side by side pins
+      // their runtime equivalence.
+      buildInput: buildInputFor<FormState>()((state) => ({
+        previousEmail: state.draftEmail,
+      })),
     }),
   },
 });
@@ -105,44 +112,6 @@ describe("defineEntry({ buildInput })", () => {
       entry: "enter",
       input: { previousName: "" },
     });
-  });
-
-  it("accepts a buildInputFor<TState>() wrapper that bakes TState at the declaration site", () => {
-    interface WrappedState {
-      readonly draftName: string;
-    }
-    interface WrappedInput {
-      readonly previousName: string;
-    }
-    const wrappedExits = { next: defineExit() } as const;
-    const wrappedModule = defineModule({
-      id: "wrapped",
-      version: "1.0.0",
-      exitPoints: wrappedExits,
-      entryPoints: {
-        view: defineEntry({
-          component: (() => null) as never,
-          input: schema<WrappedInput>(),
-          // The helper bakes WrappedState into `state`, then the inner
-          // function returns the WrappedInput shape — same wire format
-          // as the inline `(state: WrappedState) =>` annotation pattern.
-          buildInput: buildInputFor<WrappedState>()((state) => ({
-            previousName: state.draftName,
-          })),
-        }),
-      },
-    });
-    type WrappedModules = { readonly wrapped: typeof wrappedModule };
-    const wrappedJourney = defineJourney<WrappedModules, WrappedState>()({
-      id: "wrapped",
-      version: "1.0.0",
-      initialState: () => ({ draftName: "Ada" }),
-      start: () => ({ module: "wrapped", entry: "view", input: { previousName: "" } }),
-      transitions: {},
-    });
-
-    const sim = simulateJourney(wrappedJourney, undefined, { modules: { wrapped: wrappedModule } });
-    expect(sim.currentStep.input).toEqual({ previousName: "Ada" });
   });
 
   it("rebuilds input from state when navigating back", () => {
