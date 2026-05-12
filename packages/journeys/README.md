@@ -362,7 +362,7 @@ Two additive (optional) fields on `ModuleDescriptor`:
 
 | Field         | Shape                                                                                                                            | Purpose                                                                                                                                                                                                                                           |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `entryPoints` | `{ [name]: { component, input?, allowBack? } }`<br>or `{ [name]: { lazy: () => import("./X"), fallback?, input?, allowBack? } }` | Typed ways to open the module. A module can expose several. Each entry is either eager (a directly-bound component) or lazy (a dynamic-import factory — see [Pattern - lazy entry-points](#pattern---lazy-entry-points-code-splitting-per-step)). |
+| `entryPoints` | `{ [name]: { component, input?, allowBack?, buildInput? } }`<br>or `{ [name]: { lazy: () => import("./X"), fallback?, input?, allowBack?, buildInput? } }` | Typed ways to open the module. A module can expose several. Each entry is either eager (a directly-bound component) or lazy (a dynamic-import factory — see [Pattern - lazy entry-points](#pattern---lazy-entry-points-code-splitting-per-step)). `buildInput?: (state) => TInput` derives the step's input from the host journey's state at every entry — see [Pattern - `buildInput` for re-entered forms](#pattern---buildinput-for-re-entered-forms). |
 | `exitPoints`  | `{ [name]: { output? } }`                                                                                                        | The module's full outcome vocabulary.                                                                                                                                                                                                             |
 
 `ModuleEntryProps<TInput, TExits>` typed props for the component - `{ input, exit, goBack? }`, with `exit(name, output)` cross-checked against `TExits` at compile time.
@@ -606,6 +606,58 @@ transitions: {
 ```
 
 Mismatched declarations are caught at `resolveManifest()` / `resolve()` time via `validateJourneyContracts` - the journey's `allowBack: true` with an entry that declared `allowBack: false` (or omitted it) is an aggregated validation error, not a runtime surprise.
+
+### Pattern - `buildInput` for re-entered forms
+
+Without `buildInput`, a step's `input` is captured at first push and reused on every later entry — so a back-navigated form re-renders against the snapshot it was opened with, not the values accumulated by the user's later edits. `buildInput` flips that default: the runtime calls it on every entry (initial start, forward push, `goBack` pop, resume-into-step) and uses the result as the live `input`.
+
+```ts
+interface ProjectState {
+  readonly draftName: string;
+  readonly draftSourceLang: string;
+}
+
+interface NameInput {
+  readonly previousName: string;
+}
+
+const nameModule = defineModule({
+  id: "name",
+  version: "1.0.0",
+  exitPoints: { next: defineExit<{ name: string }>() },
+  entryPoints: {
+    edit: defineEntry({
+      component: NameForm,
+      input: schema<NameInput>(),
+      allowBack: "preserve-state",
+      // Annotate `state` with the hosting journey's TState — the module
+      // surface itself stays journey-agnostic (typed `unknown`).
+      buildInput: (state: ProjectState) => ({ previousName: state.draftName }),
+    }),
+  },
+});
+```
+
+The transition handler still has to stamp some `input` value on `next` (the `StepSpec` shape requires it) — the runtime just ignores it whenever `buildInput` is declared. Treat the handler's `input` as a placeholder when you opt into `buildInput`.
+
+```ts
+transitions: {
+  source: {
+    pick: {
+      allowBack: true,
+      next: ({ state, output }) => ({
+        state: { ...state, draftSourceLang: output.lang },
+        // `previousName` will be overwritten by `buildInput` at entry time.
+        next: { module: "name", entry: "edit", input: { previousName: "" } },
+      }),
+    },
+  },
+},
+```
+
+When the user back-navigates from a later step to this one, `buildInput(state)` runs again and the form sees the latest `draftName` — no React context, no `useEffect`-syncing local form state to journey state.
+
+`buildInput` must be pure and synchronous; it runs on the runtime's hot path. For headless tests, pass module descriptors via `simulateJourney(definition, input, { modules: { name: nameModule } })` so the runtime can resolve and invoke `buildInput` at every entry.
 
 ## Journey definition patterns
 
@@ -2157,6 +2209,8 @@ All imports are `import type` - modules are **not** pulled into the journey's bu
 
 `StepSpec<TModules>` expands to `{ module: 'profile'; entry: 'review'; input: {…} } | { module: 'plan'; entry: 'choose'; input: {…} } | …`. Every transition result that returns `{ next: … }` narrows the `input` type against the target entry. You cannot type-check your way into passing a wrong-shaped input - but only if the modules in the type map expose narrow `entryPoints` / `exitPoints` literals (i.e. the module descriptor was typed via `const` + `as const` or via `defineModule` called without shell-level generics - the canonical authoring pattern in [Authoring patterns](#authoring-patterns)).
 
+`JourneyStepFor<TModules>` is the snapshot counterpart — same per-entry input narrowing, but keyed by `moduleId` / `entry` (matching the persisted `JourneyStep` shape) instead of `module` / `entry`. The simulator's `step` / `currentStep` / `history` use this typed form, so tests can assert on `step.input` without a `Record<string, unknown>` cast. The runtime itself stores history as the wide `JourneyStep<unknown>`; the narrow union surfaces at the simulator / harness boundary.
+
 ### `schema<T>()` is a type brand, not a validator
 
 ```ts
@@ -2220,13 +2274,15 @@ Every export you're likely to call, grouped by role.
 
 ### Rendering + context (`@modular-react/journeys`)
 
-| Export                | Purpose                                                                                                                                                                                                                             |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `JourneyProvider`     | Context provider for the runtime and optional `onModuleExit`. Mount once at the shell root.                                                                                                                                         |
-| `useJourneyContext`   | Reads the current provider value, or `null`.                                                                                                                                                                                        |
-| `JourneyOutlet`       | Renders the current step of a journey instance. Handles loading, error boundary, terminal, and abandon-on-unmount. By default walks the active call chain and renders the leaf — pass `leafOnly={false}` for layered presentations. |
-| `useJourneyCallStack` | `(runtime, rootId) => readonly InstanceId[]` — returns the live root → … → leaf chain. Subscribes to every link so the array re-resolves when the chain shifts.                                                                     |
-| `ModuleTab`           | Renders a single module entry outside a route. Non-journey counterpart to `JourneyOutlet`.                                                                                                                                          |
+| Export                       | Purpose                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JourneyProvider`            | Context provider for the runtime and optional `onModuleExit`. Mount once at the shell root.                                                                                                                                                                                                                                                                                              |
+| `useJourneyContext`          | Reads the current provider value, or `null`.                                                                                                                                                                                                                                                                                                                                             |
+| `JourneyOutlet`              | Renders the current step of a journey instance. Handles loading, error boundary, terminal, and abandon-on-unmount. By default walks the active call chain and renders the leaf — pass `leafOnly={false}` for layered presentations.                                                                                                                                                      |
+| `useJourneyCallStack`        | `(runtime, rootId) => readonly InstanceId[]` — returns the live root → … → leaf chain. Subscribes to every link so the array re-resolves when the chain shifts.                                                                                                                                                                                                                          |
+| `useJourneyState`            | `<TState>(id: InstanceId \| null) => TState \| null` — subscribes to a single instance via `useSyncExternalStore` and returns its `state`. Reads the runtime from `<JourneyProvider>`; returns `null` for unknown ids or no provider. Tearing-free under concurrent React.                                                                                                                |
+| `useActiveLeafJourneyState`  | `<TState>(rootId: InstanceId \| null) => TState \| null` — like `useJourneyState`, but follows `activeChildId` from the root to the active leaf and returns the leaf's state. Re-subscribes as the call chain grows / shrinks, so a host rendering inside an invoked child sees the child's state directly.                                                                              |
+| `ModuleTab`                  | Renders a single module entry outside a route. Non-journey counterpart to `JourneyOutlet`.                                                                                                                                                                                                                                                                                               |
 
 ### Runtime + validation (`@modular-react/journeys`)
 
@@ -2253,6 +2309,7 @@ Every export you're likely to call, grouped by role.
 | `listInstances()` / `listDefinitions()` | Enumerate. Useful for admin tooling.                                                                                                                           |
 | `isRegistered(journeyId)`               | Cheap "is this id known?" predicate. Use to filter persisted shell state before calling `start()` - keeps the expected-drop path out of the exception channel. |
 | `subscribe(id, listener)`               | Subscribe to change notifications for one instance. Returns unsubscribe.                                                                                       |
+| `goBack(id)`                            | Pop the active step back to the previous one. Equivalent to the `goBack` prop on `ModuleEntryProps`, but addressable by id so a shell wiring browser-Back / `popstate` / breadcrumb navigation doesn't have to capture the step component's closure through a context. No-op when the id is unknown, the instance is terminal / loading, a child is in flight, the transition didn't opt into `allowBack: true`, or history is empty. |
 | `end(id, reason?)`                      | Force-terminate. Fires `onAbandon` if active; treats `loading` as a direct abort without firing `onAbandon`.                                                   |
 | `forget(id)` / `forgetTerminal()`       | Drop terminal instances from memory. `forget` is a no-op on active/loading; `forgetTerminal` batches them all.                                                 |
 
@@ -2417,7 +2474,7 @@ interface SerializedJourney<TState> {
 
 | Export               | Purpose                                                                                                                                                                                       |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `simulateJourney`    | Headless simulator: fires exits / goBack, exposes `step` / `currentStep` (throws if terminal) / `state` / `history` / `status` / `transitions` / `terminalPayload` / `serialize()`, no React. |
+| `simulateJourney`    | Headless simulator: fires exits / goBack, exposes `step` / `currentStep` (throws if terminal) / `state` / `history` / `status` / `transitions` / `terminalPayload` / `serialize()`, no React. Generic over `<TModules, TState, TInput, TOutput = unknown>` so a journey with a typed terminal payload is assignable without `as unknown as Parameters<…>[0]`. `step` / `currentStep` / `history` are typed as `JourneyStepFor<TModules>`, so narrowing on `step.entry` surfaces the entry's `input` type. Pass `options.modules` to opt into `buildInput` resolution and `allowBack` mode lookup. |
 | `JourneySimulator`   | Type for the object returned by `simulateJourney`.                                                                                                                                            |
 | `createTestHarness`  | Wraps a live `JourneyRuntime` so tests can fire exits, call `goBack`, and inspect instance internals without mounting `<JourneyOutlet>`. Replaces reaching for `getInternals` directly.       |
 | `JourneyTestHarness` | Type returned by `createTestHarness`.                                                                                                                                                         |
