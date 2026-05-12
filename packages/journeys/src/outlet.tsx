@@ -1,13 +1,4 @@
-import {
-  Component,
-  Suspense,
-  createElement,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { Component, Suspense, createElement, useEffect, useRef, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import type { ModuleDescriptor, ModuleEntryPoint } from "@modular-react/core";
 import { resolveEntryComponent } from "@modular-react/react";
@@ -15,6 +6,7 @@ import { resolveEntryComponent } from "@modular-react/react";
 import { getInternals } from "./runtime.js";
 import { useJourneyContext } from "./provider.js";
 import { isAnnotatedTransition } from "./define-transition.js";
+import { useCallChain, useInstanceSnapshot, useLeafId } from "./instance-hooks.js";
 import type {
   AnyJourneyDefinition,
   InstanceId,
@@ -476,156 +468,18 @@ function DefaultError({ moduleId, error }: JourneyOutletErrorProps): ReactNode {
   );
 }
 
-function useInstanceSnapshot(runtime: JourneyRuntime, instanceId: InstanceId) {
-  const subscribe = useMemo(
-    () => (listener: () => void) => runtime.subscribe(instanceId, listener),
-    [runtime, instanceId],
-  );
-  const getSnapshot = () => runtime.getInstance(instanceId);
-  const getServerSnapshot = getSnapshot;
-  const instance = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  return instance;
-}
-
-/**
- * Walk the active call chain from a root instance down to the leaf. The
- * leaf is the first instance in the chain that does not itself have an
- * `activeChildId`. Walks `activeChildId` greedily; bounded by a sanity
- * cap so a corrupted cycle (which the runtime should prevent) cannot
- * loop forever.
- *
- * Subscribes to every instance along the chain — when any link changes
- * (parent invokes a child, child resumes the parent, grandchild starts),
- * the consumer re-renders with a fresh leaf id.
- */
-function useLeafId(runtime: JourneyRuntime, rootId: InstanceId, enabled: boolean): InstanceId {
-  // Chain of instance ids root → … → leaf. Recomputed on every render so
-  // changes to any link mid-chain take effect on the next snapshot read.
-  const chain = useCallChain(runtime, rootId, enabled);
-  return chain[chain.length - 1] ?? rootId;
-}
-
 /**
  * Returns the call stack for an outlet's instance — root at index 0, the
  * active leaf at the end, intermediate parents in between. Useful for
  * shells that render layered presentations (e.g. parent visible
  * underneath, child in a modal): mount the parent outlet with
  * `leafOnly={false}` and the child outlet against `chain[chain.length - 1]`.
- *
- * Subscribes to every instance in the chain so the array re-resolves
- * when the chain shifts. Length is at least 1 (the root) for any
- * registered instance.
  */
 export function useJourneyCallStack(
   runtime: JourneyRuntime,
   rootId: InstanceId,
 ): readonly InstanceId[] {
   return useCallChain(runtime, rootId, true);
-}
-
-/**
- * Shared chain-walker used by both `useLeafId` (which takes the last
- * element) and `useJourneyCallStack` (which takes the whole array).
- * Subscribes to every instance along the way and re-subscribes
- * whenever the chain shifts so deep transitions still trigger snapshot
- * reads.
- */
-// Sanity bound to break a corrupted cycle in the activeChild graph; legitimate
-// invoke nesting is not expected to approach this depth. If a real product
-// stacks deeper, surface this through `JourneyRuntimeOptions` rather than
-// raising the constant blindly.
-const MAX_CHAIN_DEPTH = 64;
-
-function useCallChain(
-  runtime: JourneyRuntime,
-  rootId: InstanceId,
-  enabled: boolean,
-): readonly InstanceId[] {
-  // useSyncExternalStore over a virtual "chain" store: subscribe to each
-  // instance the chain currently traverses, return a frozen-per-render
-  // array on snapshot read. The chain can shift while we're subscribed
-  // (a leaf invokes a grandchild, mid-chain instance terminates) — when
-  // that happens, `fire` re-walks the chain and tops up subscriptions
-  // for any newly-reachable instance, so deep transitions still surface.
-  const subscribe = useMemo(
-    () => (listener: () => void) => {
-      const unsubs = new Map<InstanceId, () => void>();
-      let stopped = false;
-      const fire = () => {
-        if (stopped) return;
-        // The chain may have grown — top up subscriptions before notifying.
-        // This keeps `useJourneyCallStack` correct for chains beyond depth
-        // 1 without paying for unnecessary work: only newly-reachable ids
-        // call into `runtime.subscribe`.
-        rewire();
-        listener();
-      };
-      const rewire = () => {
-        const seen = new Set<InstanceId>();
-        let id: InstanceId | null = rootId;
-        let depth = 0;
-        while (id && depth < MAX_CHAIN_DEPTH) {
-          if (seen.has(id)) break;
-          seen.add(id);
-          if (!unsubs.has(id)) {
-            unsubs.set(id, runtime.subscribe(id, fire));
-          }
-          const inst = runtime.getInstance(id);
-          id = enabled && inst ? inst.activeChildId : null;
-          depth += 1;
-        }
-        // Drop subscriptions for ids no longer in the chain.
-        for (const [subscribedId, unsub] of unsubs) {
-          if (!seen.has(subscribedId)) {
-            unsub();
-            unsubs.delete(subscribedId);
-          }
-        }
-      };
-      rewire();
-      return () => {
-        stopped = true;
-        for (const unsub of unsubs.values()) unsub();
-        unsubs.clear();
-      };
-    },
-    [runtime, rootId, enabled],
-  );
-  const getSnapshot = () => resolveChain(runtime, rootId, enabled);
-  // External-store snapshots must be referentially stable across reads
-  // when nothing has changed. `resolveChain` returns a fresh array every
-  // call, so we cache by rootId+enabled and re-issue when the joined-id
-  // signature changes — the same trick the runtime uses for instance
-  // snapshots via `revision`.
-  const cacheRef = useRef<{ key: string; chain: readonly InstanceId[] } | null>(null);
-  const getStableSnapshot = () => {
-    const fresh = getSnapshot();
-    const key = fresh.join(">");
-    if (cacheRef.current && cacheRef.current.key === key) return cacheRef.current.chain;
-    cacheRef.current = { key, chain: fresh };
-    return fresh;
-  };
-  return useSyncExternalStore(subscribe, getStableSnapshot, getStableSnapshot);
-}
-
-function resolveChain(
-  runtime: JourneyRuntime,
-  rootId: InstanceId,
-  enabled: boolean,
-): readonly InstanceId[] {
-  const chain: InstanceId[] = [];
-  let id: InstanceId | null = rootId;
-  let depth = 0;
-  const visited = new Set<InstanceId>();
-  while (id && depth < MAX_CHAIN_DEPTH) {
-    if (visited.has(id)) break; // Defensive: bail on cycle.
-    visited.add(id);
-    chain.push(id);
-    const inst = runtime.getInstance(id);
-    id = enabled && inst ? inst.activeChildId : null;
-    depth += 1;
-  }
-  return chain;
 }
 
 interface StepErrorBoundaryProps {

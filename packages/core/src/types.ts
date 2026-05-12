@@ -252,6 +252,26 @@ interface ModuleEntryPointBase<TInput> {
    *   false (default)  — no `goBack` prop is supplied to the component.
    */
   readonly allowBack?: "preserve-state" | "rollback" | false;
+  /**
+   * Optional factory that derives this entry's input from the current
+   * journey state every time the step is entered (push, pop / `goBack`,
+   * invoke return, initial start). When present, the runtime ignores the
+   * `input` value a transition handler placed on `next` and replaces it
+   * with `buildInput(state)`.
+   *
+   * Use this for steps that present data accumulated by earlier exits —
+   * back-navigating to a previous step then sees the up-to-date values
+   * the user already entered, instead of the stale snapshot the step was
+   * first pushed with.
+   *
+   * The `state` parameter is typed `unknown` at the module surface —
+   * modules don't know which journey hosts them, so authors annotate
+   * explicitly: `buildInput: (state) => { const s = state as MyState; … }`,
+   * or narrow via a parameter annotation when TS allows it. Pure,
+   * synchronous, called on the hot path; do not allocate work here that
+   * should run inside the component instead.
+   */
+  readonly buildInput?: (state: unknown) => TInput;
 }
 
 /**

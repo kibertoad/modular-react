@@ -31,6 +31,7 @@ export type {
 
 // Entry / exit helpers
 export {
+  buildInputFor,
   defineEntry,
   defineExit,
   defineExitContract,
@@ -120,6 +121,7 @@ export type {
   ExitOutputOf,
   StepSpec,
   JourneyStep,
+  JourneyStepFor,
   ExitCtx,
   TransitionResult,
   EntryTransitions,

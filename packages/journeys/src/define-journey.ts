@@ -33,6 +33,9 @@ import type { JourneyDefinition, ModuleTypeMap } from "./types.js";
  * ```
  *
  * Zero runtime cost — the definition is returned unchanged.
+ *
+ * @see `buildInputFor` in `@modular-react/core` — same visual two-call
+ * curry, used for the entry-side `buildInput` factory.
  */
 export const defineJourney =
   // `TOutput = unknown` keeps existing two-generic call sites compiling —

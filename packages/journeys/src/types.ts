@@ -41,6 +41,7 @@ export type {
   JourneyRuntime,
   JourneyStatus,
   JourneyStep,
+  JourneyStepFor,
   JourneySystemAbortReason,
   JourneySystemAbortReasonCode,
   MaybePromise,

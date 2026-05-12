@@ -256,6 +256,127 @@ export function createJourneyRuntime(
     return { moduleId: spec.module, entry: spec.entry, input: spec.input };
   }
 
+  /**
+   * Recompute `step.input` from `state` when the target entry declared
+   * `buildInput`. Re-entered forms (back-nav, resume-into-step,
+   * state-only resume) then render against accumulated state instead of
+   * the snapshot frozen at first push. Returns the original `step`
+   * reference when no factory is declared — caller-facing identity
+   * matters for snapshot bail-out. When `buildInput` throws, returns a
+   * sentinel object so callers can route the transition into an abort
+   * instead of leaving the instance half-transitioned.
+   *
+   * This helper does NOT warn about handler-input drift; that check
+   * lives at the callsite where the handler-original is in scope
+   * (`warnIfHandlerInputDiffers`). Reason: `step.input` on a popped
+   * history frame is a prior `buildInput` derivation, not a handler
+   * stamp, and comparing it would false-positive whenever state
+   * changed between visits.
+   */
+  function withBuiltInput(
+    step: JourneyStep,
+    state: unknown,
+  ): JourneyStep | { readonly buildInputThrew: unknown } {
+    const entry = moduleMap[step.moduleId]?.entryPoints?.[step.entry];
+    if (!entry?.buildInput) return step;
+    let derived: unknown;
+    try {
+      derived = entry.buildInput(state);
+    } catch (err) {
+      return { buildInputThrew: err };
+    }
+    return { moduleId: step.moduleId, entry: step.entry, input: derived };
+  }
+
+  /**
+   * Dev-mode warning fired only when the *handler's* original `input`
+   * (literally `result.next.input` for the next arm, `def.start(...).input`
+   * for the initial start) differs from what `buildInput` derived.
+   * Skipped when the handler stamped `undefined` (the documented "I'm
+   * letting buildInput handle it" placeholder). Not called from
+   * `dispatchGoBack` / same-step rebuild — those have no handler-original
+   * to compare against.
+   */
+  function warnIfHandlerInputDiffers(
+    handlerInput: unknown,
+    derivedInput: unknown,
+    step: JourneyStep,
+  ) {
+    if (!debug) return;
+    if (handlerInput === undefined) return;
+    if (shallowEqual(handlerInput, derivedInput)) return;
+    console.warn(
+      `[@modular-react/journeys] Entry "${step.moduleId}.${step.entry}" declared \`buildInput\` but the transition handler also supplied a different \`input\`. The handler's value is discarded — stamp \`input: undefined\` (or drop the field once the type allows it) to mark the override explicit.`,
+    );
+  }
+
+  function isBuildInputThrow(
+    result: JourneyStep | { readonly buildInputThrew: unknown },
+  ): result is { readonly buildInputThrew: unknown } {
+    return "buildInputThrew" in result;
+  }
+
+  /**
+   * Shared throw-handling for the four `withBuiltInput` callsites
+   * (initial start, next-arm push, goBack pop, same-step rebuild). Fires
+   * the registration's `onError` hook in the `"step"` phase and routes
+   * the failure through the standard abort machinery so persistence /
+   * onAbort / cascade-end logic all run as they would for a transition-
+   * handler throw. `where` is a one-line free-form label for the debug
+   * console.error so the next reader can trace which callsite tripped.
+   */
+  function abortFromBuildInputThrow(
+    record: InstanceRecord,
+    reg: RegisteredJourney,
+    step: JourneyStep,
+    thrown: unknown,
+    where: string,
+    exitName: string | null,
+  ) {
+    if (debug) {
+      console.error(
+        `[@modular-react/journeys] buildInput threw on "${step.moduleId}.${step.entry}" (${where})`,
+        thrown,
+      );
+    }
+    fireOnError(reg, record, thrown, step, "step");
+    applyTransition(
+      record,
+      reg,
+      {
+        abort: {
+          reason: "build-input-threw",
+          moduleId: step.moduleId,
+          entry: step.entry,
+          error: thrown,
+        },
+      },
+      exitName,
+    );
+  }
+
+  /**
+   * Shallow structural equality used only by the dev-mode `buildInput`
+   * drift warning. Compares top-level fields with `===`; nested-object
+   * inputs only register as equal when both sides happen to reference
+   * the same nested object. The warning is therefore best-effort:
+   * scalar-field drift is reliably surfaced, deeply-nested drift may go
+   * unreported. Acceptable for an observability log; not load-bearing
+   * for correctness.
+   */
+  function shallowEqual(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (a === null || b === null) return false;
+    if (typeof a !== "object" || typeof b !== "object") return false;
+    const ka = Object.keys(a as object);
+    const kb = Object.keys(b as object);
+    if (ka.length !== kb.length) return false;
+    for (const k of ka) {
+      if ((a as Record<string, unknown>)[k] !== (b as Record<string, unknown>)[k]) return false;
+    }
+    return true;
+  }
+
   function entryAllowBackMode(step: JourneyStep | null): "preserve-state" | "rollback" | false {
     if (!step) return false;
     const mod = moduleMap[step.moduleId];
@@ -1155,7 +1276,25 @@ export function createJourneyRuntime(
     }
 
     if ("next" in result) {
-      const nextStep = stepFromSpec(result.next);
+      const rawNext = stepFromSpec(result.next);
+      const built = withBuiltInput(rawNext, record.state);
+      if (isBuildInputThrow(built)) {
+        abortFromBuildInputThrow(
+          record,
+          reg,
+          rawNext,
+          built.buildInputThrew,
+          `next-arm from "${previousStep?.moduleId}.${previousStep?.entry}"`,
+          exitName,
+        );
+        return;
+      }
+      const nextStep = built;
+      // `rawNext.input` is the handler's literal stamp from
+      // `result.next.input`; compare it against what `buildInput`
+      // actually derived. (No-op when no `buildInput` is declared:
+      // `built === rawNext` so the inputs are identical by reference.)
+      warnIfHandlerInputDiffers(rawNext.input, nextStep.input, nextStep);
       if (debug) {
         // Validation at resolveManifest() catches static misconfiguration,
         // but transition handlers branch at runtime and can return a
@@ -1296,6 +1435,39 @@ export function createJourneyRuntime(
         kind: "invoke",
         child: { instanceId: childRecord.id, journeyId: childRecord.journeyId },
       });
+    }
+
+    // Step-unchanged + state-changed paths (a resume / state-only result
+    // that doesn't advance the step) still need to re-run `buildInput`
+    // so the parent's form re-renders against the accumulated state when
+    // the user lands back on it. Excludes the `invoke` arm — the parent
+    // is paused while a child runs, so rebuilding its hidden `step.input`
+    // is wasted work AND a throw here would abort the parent after
+    // `beginInvoke` already minted the child, orphaning it; the parent's
+    // buildInput re-fires naturally when the resume returns `{ next }`.
+    // Reference equality (`record.step === previousStep`, not just
+    // `!== null`) ensures the arm-replacement paths (next / complete /
+    // abort) — which already ran `withBuiltInput` — are skipped here.
+    if (
+      "state" in result &&
+      !("invoke" in result) &&
+      record.step !== null &&
+      previousStep !== null &&
+      record.step === previousStep
+    ) {
+      const rebuilt = withBuiltInput(record.step, record.state);
+      if (isBuildInputThrow(rebuilt)) {
+        abortFromBuildInputThrow(
+          record,
+          reg,
+          record.step,
+          rebuilt.buildInputThrew,
+          "same-step rebuild after state change",
+          null,
+        );
+        return;
+      }
+      record.step = rebuilt;
     }
 
     const persistence = reg.options?.persistence;
@@ -1609,7 +1781,22 @@ export function createJourneyRuntime(
       record.state = snapshot;
     }
     record.hasRollbackSnapshot = record.rollbackSnapshots.some((s) => s !== undefined);
-    record.step = previousStep;
+    // Re-run `buildInput` against the (possibly rolled-back) state so a
+    // back-navigated form re-renders against the accumulated journey state
+    // instead of the frozen first-push snapshot.
+    const builtBack = withBuiltInput(previousStep, record.state);
+    if (isBuildInputThrow(builtBack)) {
+      abortFromBuildInputThrow(
+        record,
+        reg,
+        previousStep,
+        builtBack.buildInputThrew,
+        "goBack pop",
+        null,
+      );
+      return;
+    }
+    record.step = builtBack;
     // Same per-step reset that applyTransition performs for next/complete/abort:
     // moving to a different step starts a fresh per-step bounce budget, and
     // leaving an old counter in place would let a serialize/hydrate cycle
@@ -1618,7 +1805,7 @@ export function createJourneyRuntime(
     record.stepToken += 1;
     record.updatedAt = nowIso();
     record.cachedCallbacks = null;
-    fireOnTransition(reg, record, step, previousStep, null);
+    fireOnTransition(reg, record, step, record.step, null);
     const persistence = reg.options?.persistence;
     if (persistence) schedulePersist(record, persistence);
     notify(record);
@@ -1754,7 +1941,26 @@ export function createJourneyRuntime(
       record.rollbackSnapshots = [];
       record.hasRollbackSnapshot = false;
     }
-    const startStep = stepFromSpec(def.start(record.state, input));
+    const rawStart = stepFromSpec(def.start(record.state, input));
+    const builtStart = withBuiltInput(rawStart, record.state);
+    if (isBuildInputThrow(builtStart)) {
+      // Routes through the standard abort machinery — populates
+      // terminalPayload, fires onAbort, persists, etc. — instead of
+      // leaking a half-built `loading` record.
+      abortFromBuildInputThrow(
+        record,
+        reg,
+        rawStart,
+        builtStart.buildInputThrew,
+        "initial start",
+        null,
+      );
+      return record.id;
+    }
+    const startStep = builtStart;
+    // Same drift check as the next-arm site — `rawStart.input` is the
+    // literal `def.start(...)` stamp.
+    warnIfHandlerInputDiffers(rawStart.input, startStep.input, startStep);
     record.step = startStep;
     record.status = "active";
     record.stepToken += 1;
@@ -2238,6 +2444,20 @@ export function createJourneyRuntime(
       return () => {
         record.listeners.delete(listener);
       };
+    },
+
+    goBack(id) {
+      const record = instances.get(id);
+      if (!record) return;
+      const reg = definitions.get(record.journeyId);
+      if (!reg) return;
+      // No captured token to go stale on this id-based path — the
+      // `record.stepToken !== stepToken` guard inside `dispatchGoBack` is
+      // a no-op here. Read live so the helper still gets a well-formed
+      // shape; all "unavailable" cases (terminal, child in flight, no
+      // history, transition didn't opt into `allowBack: true`) are
+      // handled by `dispatchGoBack`'s own guards.
+      dispatchGoBack(record, reg, record.stepToken);
     },
 
     end(id, reason) {

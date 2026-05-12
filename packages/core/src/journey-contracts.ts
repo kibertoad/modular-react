@@ -87,12 +87,35 @@ export type StepSpec<TModules extends ModuleTypeMap> = {
   }[EntryNamesOf<TModules[M]> & string];
 }[keyof TModules & string];
 
-/** Snapshot of a single step in a journey's history / current position. */
-export interface JourneyStep {
+/**
+ * Snapshot of a single step in a journey's history / current position.
+ * The runtime stores history as the wide `JourneyStep<unknown>` form;
+ * typed simulator / harness surfaces narrow at their boundary via
+ * {@link JourneyStepFor}.
+ *
+ * @see {@link JourneyStepFor} — discriminated-union counterpart that
+ * narrows `input` by `moduleId` + `entry`.
+ */
+export interface JourneyStep<TInput = unknown> {
   readonly moduleId: string;
   readonly entry: string;
-  readonly input: unknown;
+  readonly input: TInput;
 }
+
+/**
+ * Discriminated union of every concrete `JourneyStep` reachable in a
+ * journey's module map. Narrowing on `moduleId` + `entry` picks the
+ * correct `input` type.
+ */
+export type JourneyStepFor<TModules extends ModuleTypeMap> = {
+  [M in keyof TModules & string]: {
+    [E in EntryNamesOf<TModules[M]> & string]: {
+      readonly moduleId: M;
+      readonly entry: E;
+      readonly input: EntryInputOf<TModules[M], E>;
+    };
+  }[EntryNamesOf<TModules[M]> & string];
+}[keyof TModules & string];
 
 /** Context passed to a transition handler. */
 export interface ExitCtx<TState, TOutput, TEntryInput> {
@@ -665,6 +688,22 @@ export interface JourneyRuntime {
   /** Subscribe to changes for one instance. Returns unsubscribe. */
   subscribe(id: InstanceId, listener: () => void): () => void;
   /**
+   * Pop the current step and re-enter the previous one — equivalent to the
+   * `goBack` callback the host hands the active step's component via
+   * {@link ModuleEntryProps.goBack}, but addressable by `instanceId` so a
+   * shell that owns its own back button (browser `popstate`, hardware back
+   * key, breadcrumb navigation) doesn't have to thread the active step's
+   * callback through a React context.
+   *
+   * No-op when the id is unknown, the instance is terminal / loading,
+   * a child journey is in flight (parent steps are paused while a child
+   * runs), the journey's transition does not opt in via `allowBack: true`,
+   * or history is empty. Matches the closure form: the `goBack` prop is
+   * `undefined` under the same conditions, and shells should treat both
+   * forms as a hint that the call is presently a no-op.
+   */
+  goBack(id: InstanceId): void;
+  /**
    * Force-terminate an instance. Fires `onAbandon` if still active; no-op if
    * the instance is already terminal or unknown.
    */
@@ -707,6 +746,13 @@ export function isTerminal(instance: JourneyInstance): boolean {
  * shells can narrow against this union when interpreting an abort
  * outcome — see {@link JourneySystemAbortReason} for the per-code
  * payload shape and {@link isJourneySystemAbort} for the type guard.
+ *
+ * **These string codes are reserved by the runtime.** An author-supplied
+ * `{ abort: { reason: "<one-of-these>" } }` payload will be
+ * misidentified as a system abort by {@link isJourneySystemAbort}. Pick
+ * a distinct `reason` for author aborts (e.g. namespace with your
+ * app slug: `"acme.user-cancelled"`) to keep the narrowing predicate
+ * accurate.
  */
 export type JourneySystemAbortReasonCode =
   | "invoke-cycle"
@@ -727,7 +773,8 @@ export type JourneySystemAbortReasonCode =
   | "transition-error"
   | "transition-returned-promise"
   | "exit-payload-invalid"
-  | "exit-payload-invalid-async";
+  | "exit-payload-invalid-async"
+  | "build-input-threw";
 
 /**
  * Discriminated union of every abort payload the runtime emits. Each arm
@@ -854,6 +901,22 @@ export type JourneySystemAbortReason =
        */
       readonly reason: "exit-payload-invalid-async";
       readonly exit: string;
+    }
+  | {
+      /**
+       * An entry's `buildInput(state)` factory threw while the runtime
+       * was deriving the step's input at entry time (initial start,
+       * forward push, `goBack` pop, or rebuild after a state-changing
+       * resume / invoke). The instance is aborted rather than entered
+       * with a half-built / stale input — leaving the form mounted with
+       * the pre-throw cached input would silently mis-render against
+       * accumulated state, which is exactly the bug `buildInput` exists
+       * to fix.
+       */
+      readonly reason: "build-input-threw";
+      readonly moduleId: string;
+      readonly entry: string;
+      readonly error: unknown;
     };
 
 const JOURNEY_SYSTEM_ABORT_REASON_CODES: ReadonlySet<string> =
@@ -877,6 +940,7 @@ const JOURNEY_SYSTEM_ABORT_REASON_CODES: ReadonlySet<string> =
     "transition-returned-promise",
     "exit-payload-invalid",
     "exit-payload-invalid-async",
+    "build-input-threw",
   ]);
 
 /**
