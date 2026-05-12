@@ -609,7 +609,7 @@ Mismatched declarations are caught at `resolveManifest()` / `resolve()` time via
 
 ### Pattern - `buildInput` for re-entered forms
 
-Without `buildInput`, a step's `input` is captured at first push and reused on every later entry — so a back-navigated form re-renders against the snapshot it was opened with, not the values accumulated by the user's later edits. `buildInput` flips that default: the runtime calls it on every step entry (initial start, forward push, `goBack` pop, resume-into-step) AND on any same-step state change (an `{ invoke }` carrying `state`, or a resume that bumps state without advancing). The returned value becomes the live `input`.
+Without `buildInput`, a step's `input` is captured at first push and reused on every later entry — so a back-navigated form re-renders against the snapshot it was opened with, not the values accumulated by the user's later edits. `buildInput` flips that default: the runtime calls it on every step entry (initial start, forward push, `goBack` pop, resume-into-step) AND when a resume bumps state on the same step without advancing it. The returned value becomes the live `input`. (An `{ invoke }` arm carrying `state` is the one excluded case — the parent's form is paused while the child runs, so rebuilding the hidden input would be wasted work; `buildInput` re-fires naturally on the resume's `{ next }`.)
 
 ```ts
 interface ProjectState {
