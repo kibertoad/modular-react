@@ -45,6 +45,7 @@ export { ModuleTab } from "./module-tab.js";
 export type { ModuleTabProps, ModuleTabExitEvent } from "./module-tab.js";
 export { JourneyProvider, useJourneyContext } from "./provider.js";
 export type { JourneyProviderProps, JourneyProviderValue } from "./provider.js";
+export { useJourneyState, useActiveLeafJourneyState } from "./use-journey-state.js";
 
 // Plugin — pass `journeysPlugin()` to `createRegistry({ plugins: [...] })`
 // to enable journey registration and outlet rendering.
@@ -99,6 +100,7 @@ export type {
   JourneyRuntime,
   JourneyStatus,
   JourneyStep,
+  JourneyStepFor,
   JourneySystemAbortReason,
   JourneySystemAbortReasonCode,
   MaybePromise,

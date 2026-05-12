@@ -256,6 +256,19 @@ export function createJourneyRuntime(
     return { moduleId: spec.module, entry: spec.entry, input: spec.input };
   }
 
+  /**
+   * Recompute `step.input` from `state` when the target entry declared
+   * `buildInput`. Re-entered forms (back-nav, resume-into-step) then
+   * render against accumulated state instead of the snapshot frozen at
+   * first push. Returns the original `step` reference when no factory
+   * is declared — caller-facing identity matters for snapshot bail-out.
+   */
+  function withBuiltInput(step: JourneyStep, state: unknown): JourneyStep {
+    const entry = moduleMap[step.moduleId]?.entryPoints?.[step.entry];
+    if (!entry?.buildInput) return step;
+    return { moduleId: step.moduleId, entry: step.entry, input: entry.buildInput(state) };
+  }
+
   function entryAllowBackMode(step: JourneyStep | null): "preserve-state" | "rollback" | false {
     if (!step) return false;
     const mod = moduleMap[step.moduleId];
@@ -1155,7 +1168,7 @@ export function createJourneyRuntime(
     }
 
     if ("next" in result) {
-      const nextStep = stepFromSpec(result.next);
+      const nextStep = withBuiltInput(stepFromSpec(result.next), record.state);
       if (debug) {
         // Validation at resolveManifest() catches static misconfiguration,
         // but transition handlers branch at runtime and can return a
@@ -1609,7 +1622,10 @@ export function createJourneyRuntime(
       record.state = snapshot;
     }
     record.hasRollbackSnapshot = record.rollbackSnapshots.some((s) => s !== undefined);
-    record.step = previousStep;
+    // Re-run `buildInput` against the (possibly rolled-back) state so a
+    // back-navigated form re-renders against the accumulated journey state
+    // instead of the frozen first-push snapshot.
+    record.step = withBuiltInput(previousStep, record.state);
     // Same per-step reset that applyTransition performs for next/complete/abort:
     // moving to a different step starts a fresh per-step bounce budget, and
     // leaving an old counter in place would let a serialize/hydrate cycle
@@ -1618,7 +1634,7 @@ export function createJourneyRuntime(
     record.stepToken += 1;
     record.updatedAt = nowIso();
     record.cachedCallbacks = null;
-    fireOnTransition(reg, record, step, previousStep, null);
+    fireOnTransition(reg, record, step, record.step, null);
     const persistence = reg.options?.persistence;
     if (persistence) schedulePersist(record, persistence);
     notify(record);
@@ -1754,7 +1770,7 @@ export function createJourneyRuntime(
       record.rollbackSnapshots = [];
       record.hasRollbackSnapshot = false;
     }
-    const startStep = stepFromSpec(def.start(record.state, input));
+    const startStep = withBuiltInput(stepFromSpec(def.start(record.state, input)), record.state);
     record.step = startStep;
     record.status = "active";
     record.stepToken += 1;
@@ -2238,6 +2254,17 @@ export function createJourneyRuntime(
       return () => {
         record.listeners.delete(listener);
       };
+    },
+
+    goBack(id) {
+      const record = instances.get(id);
+      if (!record) return;
+      const reg = definitions.get(record.journeyId);
+      if (!reg) return;
+      // Read `stepToken` live so the same stale-closure protection the
+      // step component's `goBack` prop relies on still applies when a
+      // shell fires this after the step has already advanced.
+      dispatchGoBack(record, reg, record.stepToken);
     },
 
     end(id, reason) {

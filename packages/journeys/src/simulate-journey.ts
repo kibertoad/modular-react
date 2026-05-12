@@ -1,10 +1,12 @@
+import type { AnyModuleDescriptor } from "@modular-react/core";
+
 import { createJourneyRuntime, getInternals } from "./runtime.js";
 import { createTestHarness } from "./testing.js";
 import type {
   AnyJourneyDefinition,
   InstanceId,
   JourneyDefinition,
-  JourneyStep,
+  JourneyStepFor,
   ModuleTypeMap,
   SerializedJourney,
   TransitionEvent,
@@ -17,11 +19,17 @@ import type {
  *
  * Intended for pure-logic unit tests of transition graphs.
  */
-export interface JourneySimulator<_TModules extends ModuleTypeMap, TState> {
+export interface JourneySimulator<TModules extends ModuleTypeMap, TState> {
   readonly journeyId: string;
   readonly instanceId: string;
-  /** Current step — null once the journey completes or aborts. */
-  readonly step: JourneyStep | null;
+  /**
+   * Current step — `null` once the journey completes or aborts.
+   *
+   * Typed as the discriminated union of every concrete step in
+   * `TModules`, so narrowing on `step.entry` (or `step.moduleId`)
+   * surfaces the entry's typed `input` without a cast.
+   */
+  readonly step: JourneyStepFor<TModules> | null;
   /**
    * Same as `step`, but throws if the journey has terminated. Use this in
    * tests to skip optional chaining on the common "still running" path —
@@ -29,9 +37,9 @@ export interface JourneySimulator<_TModules extends ModuleTypeMap, TState> {
    * and is far easier to debug than a `Cannot read property 'moduleId' of
    * null` thrown by an assertion line.
    */
-  readonly currentStep: JourneyStep;
+  readonly currentStep: JourneyStepFor<TModules>;
   readonly state: TState;
-  readonly history: readonly JourneyStep[];
+  readonly history: readonly JourneyStepFor<TModules>[];
   readonly status: "loading" | "active" | "completed" | "aborted";
   /**
    * Every `TransitionEvent` the runtime has fired since the simulator
@@ -107,6 +115,15 @@ export interface SimulateJourneyOptions {
    * journeys all go in here.
    */
   readonly children?: readonly AnyJourneyDefinition[];
+  /**
+   * Module descriptors the runtime should bind for `allowBack` resolution
+   * and `buildInput` recomputation at every step entry. Headless tests
+   * that exercise `defineEntry({ buildInput })` must pass the descriptors
+   * here — without them the runtime falls back to the cached
+   * handler-supplied input, exactly as it did before `buildInput` existed.
+   * Keyed by module id; the same map shape `createJourneyRuntime` accepts.
+   */
+  readonly modules?: Readonly<Record<string, AnyModuleDescriptor>>;
 }
 
 /**
@@ -124,8 +141,8 @@ export interface SimulateJourneyOptions {
  * journeys — every reachable child must be registered or the parent
  * will abort with `invoke-unknown-journey`.
  */
-export function simulateJourney<TModules extends ModuleTypeMap, TState, TInput>(
-  definition: JourneyDefinition<TModules, TState, TInput>,
+export function simulateJourney<TModules extends ModuleTypeMap, TState, TInput, TOutput = unknown>(
+  definition: JourneyDefinition<TModules, TState, TInput, TOutput>,
   ...rest: [TInput] extends [void]
     ? [] | [input?: TInput] | [input: TInput, options: SimulateJourneyOptions]
     : [input: TInput] | [input: TInput, options: SimulateJourneyOptions]
@@ -149,7 +166,10 @@ export function simulateJourney<TModules extends ModuleTypeMap, TState, TInput>(
       options: { onTransition: recorder },
     })),
   ];
-  const runtime = createJourneyRuntime(registered);
+  const runtime = createJourneyRuntime(
+    registered,
+    options?.modules ? { modules: options.modules } : undefined,
+  );
   const instanceId = runtime.start(definition.id, input);
   const harness = createTestHarness(runtime);
   const internals = getInternals(runtime);
@@ -199,7 +219,11 @@ function wrapInstanceAsSim<TModules extends ModuleTypeMap, TState>(
     journeyId,
     instanceId,
     get step() {
-      return snapshot().step;
+      // The runtime stores history as the wide `JourneyStep<unknown>` form
+      // (it doesn't know the active entry at the type level). Cast through
+      // unknown to the typed simulator surface — module-map + entry
+      // narrowing on the consumer side recovers the per-entry input type.
+      return snapshot().step as JourneyStepFor<TModules> | null;
     },
     get currentStep() {
       const snap = snapshot();
@@ -208,13 +232,13 @@ function wrapInstanceAsSim<TModules extends ModuleTypeMap, TState>(
           `[simulateJourney] no current step (status=${snap.status}). Use \`step\` if a null step is expected.`,
         );
       }
-      return snap.step;
+      return snap.step as JourneyStepFor<TModules>;
     },
     get state() {
       return snapshot().state;
     },
     get history() {
-      return snapshot().history;
+      return snapshot().history as readonly JourneyStepFor<TModules>[];
     },
     get status() {
       return snapshot().status;

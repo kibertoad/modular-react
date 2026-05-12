@@ -120,6 +120,7 @@ export type {
   ExitOutputOf,
   StepSpec,
   JourneyStep,
+  JourneyStepFor,
   ExitCtx,
   TransitionResult,
   EntryTransitions,

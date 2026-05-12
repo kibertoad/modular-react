@@ -87,12 +87,32 @@ export type StepSpec<TModules extends ModuleTypeMap> = {
   }[EntryNamesOf<TModules[M]> & string];
 }[keyof TModules & string];
 
-/** Snapshot of a single step in a journey's history / current position. */
-export interface JourneyStep {
+/**
+ * Snapshot of a single step in a journey's history / current position.
+ * The runtime stores history as the wide `JourneyStep<unknown>` form;
+ * typed simulator / harness surfaces narrow at their boundary via
+ * {@link JourneyStepFor}.
+ */
+export interface JourneyStep<TInput = unknown> {
   readonly moduleId: string;
   readonly entry: string;
-  readonly input: unknown;
+  readonly input: TInput;
 }
+
+/**
+ * Discriminated union of every concrete `JourneyStep` reachable in a
+ * journey's module map. Narrowing on `moduleId` + `entry` picks the
+ * correct `input` type.
+ */
+export type JourneyStepFor<TModules extends ModuleTypeMap> = {
+  [M in keyof TModules & string]: {
+    [E in EntryNamesOf<TModules[M]> & string]: {
+      readonly moduleId: M;
+      readonly entry: E;
+      readonly input: EntryInputOf<TModules[M], E>;
+    };
+  }[EntryNamesOf<TModules[M]> & string];
+}[keyof TModules & string];
 
 /** Context passed to a transition handler. */
 export interface ExitCtx<TState, TOutput, TEntryInput> {
@@ -664,6 +684,22 @@ export interface JourneyRuntime {
   isRegistered(journeyId: string): boolean;
   /** Subscribe to changes for one instance. Returns unsubscribe. */
   subscribe(id: InstanceId, listener: () => void): () => void;
+  /**
+   * Pop the current step and re-enter the previous one — equivalent to the
+   * `goBack` callback the host hands the active step's component via
+   * {@link ModuleEntryProps.goBack}, but addressable by `instanceId` so a
+   * shell that owns its own back button (browser `popstate`, hardware back
+   * key, breadcrumb navigation) doesn't have to thread the active step's
+   * callback through a React context.
+   *
+   * No-op when the id is unknown, the instance is terminal / loading,
+   * a child journey is in flight (parent steps are paused while a child
+   * runs), the journey's transition does not opt in via `allowBack: true`,
+   * or history is empty. Matches the closure form: the `goBack` prop is
+   * `undefined` under the same conditions, and shells should treat both
+   * forms as a hint that the call is presently a no-op.
+   */
+  goBack(id: InstanceId): void;
   /**
    * Force-terminate an instance. Fires `onAbandon` if still active; no-op if
    * the instance is already terminal or unknown.
