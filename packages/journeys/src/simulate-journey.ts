@@ -1,4 +1,4 @@
-import type { ModuleDescriptor } from "@modular-react/core";
+import type { AnyModuleDescriptor } from "@modular-react/core";
 
 import { createJourneyRuntime, getInternals } from "./runtime.js";
 import { createTestHarness } from "./testing.js";
@@ -124,12 +124,12 @@ export interface SimulateJourneyOptions {
    * test output even when the test itself never touches `buildInput`).
    *
    * Keyed by module id; the same map shape `createJourneyRuntime` accepts.
-   * The value type uses `any` on every `ModuleDescriptor` generic so a
-   * heterogeneous map of `{ name: typeof nameModule, email:
-   * typeof emailModule }` passes structurally, including when the host
-   * app narrows `TNavItem` to a custom action shape (the bivariant `any`
-   * absorbs the difference — no `as unknown as` cast needed at the call
-   * site).
+   * Typed against {@link AnyModuleDescriptor} (with `TNavItem = any`) so
+   * a heterogeneous map of `{ name: typeof nameModule, email:
+   * typeof emailModule }` passes structurally — including when the host
+   * app narrows `TNavItem` to a custom action shape. The bivariance is
+   * localized to one definition site in `@modular-react/core` instead of
+   * being repeated at every call site.
    *
    * ```ts
    * simulateJourney(journey, undefined, {
@@ -137,7 +137,7 @@ export interface SimulateJourneyOptions {
    * });
    * ```
    */
-  readonly modules?: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
+  readonly modules?: Readonly<Record<string, AnyModuleDescriptor<any>>>;
 }
 
 /**

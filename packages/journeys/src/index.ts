@@ -48,6 +48,7 @@ export type { JourneyProviderProps, JourneyProviderValue } from "./provider.js";
 export {
   useActiveLeafJourneyInstance,
   useActiveLeafJourneyState,
+  useJourneyInstance,
   useJourneyState,
 } from "./use-journey-state.js";
 

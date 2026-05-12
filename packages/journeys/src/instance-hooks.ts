@@ -5,9 +5,10 @@ import type { InstanceId, JourneyInstance, JourneyRuntime } from "@modular-react
  * Sanity bound to break a corrupted cycle in the activeChild graph.
  * Legitimate invoke nesting is not expected to approach this depth — if a
  * real product stacks deeper, surface a knob via `JourneyRuntimeOptions`
- * rather than raising the constant blindly.
+ * rather than raising the constant blindly. Intentionally not exported:
+ * the cap is implementation detail, not a knob.
  */
-export const MAX_CHAIN_DEPTH = 64;
+const MAX_CHAIN_DEPTH = 64;
 
 /**
  * Subscribe to a single instance and return its current snapshot, or

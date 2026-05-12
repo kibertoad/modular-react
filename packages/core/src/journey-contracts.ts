@@ -92,6 +92,9 @@ export type StepSpec<TModules extends ModuleTypeMap> = {
  * The runtime stores history as the wide `JourneyStep<unknown>` form;
  * typed simulator / harness surfaces narrow at their boundary via
  * {@link JourneyStepFor}.
+ *
+ * @see {@link JourneyStepFor} — discriminated-union counterpart that
+ * narrows `input` by `moduleId` + `entry`.
  */
 export interface JourneyStep<TInput = unknown> {
   readonly moduleId: string;
@@ -763,7 +766,8 @@ export type JourneySystemAbortReasonCode =
   | "transition-error"
   | "transition-returned-promise"
   | "exit-payload-invalid"
-  | "exit-payload-invalid-async";
+  | "exit-payload-invalid-async"
+  | "build-input-threw";
 
 /**
  * Discriminated union of every abort payload the runtime emits. Each arm
@@ -890,6 +894,22 @@ export type JourneySystemAbortReason =
        */
       readonly reason: "exit-payload-invalid-async";
       readonly exit: string;
+    }
+  | {
+      /**
+       * An entry's `buildInput(state)` factory threw while the runtime
+       * was deriving the step's input at entry time (initial start,
+       * forward push, `goBack` pop, or rebuild after a state-changing
+       * resume / invoke). The instance is aborted rather than entered
+       * with a half-built / stale input — leaving the form mounted with
+       * the pre-throw cached input would silently mis-render against
+       * accumulated state, which is exactly the bug `buildInput` exists
+       * to fix.
+       */
+      readonly reason: "build-input-threw";
+      readonly moduleId: string;
+      readonly entry: string;
+      readonly error: unknown;
     };
 
 const JOURNEY_SYSTEM_ABORT_REASON_CODES: ReadonlySet<string> =
@@ -913,6 +933,7 @@ const JOURNEY_SYSTEM_ABORT_REASON_CODES: ReadonlySet<string> =
     "transition-returned-promise",
     "exit-payload-invalid",
     "exit-payload-invalid-async",
+    "build-input-threw",
   ]);
 
 /**

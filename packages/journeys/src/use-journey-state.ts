@@ -15,9 +15,21 @@ import { useJourneyContext } from "./provider.js";
  * ```
  */
 export function useJourneyState<TState>(instanceId: InstanceId | null): TState | null {
-  const ctx = useJourneyContext();
-  const inst = useInstanceSnapshot(ctx?.runtime ?? null, instanceId);
+  const inst = useJourneyInstance(instanceId);
   return inst ? (inst.state as TState) : null;
+}
+
+/**
+ * Like {@link useJourneyState}, but returns the full `JourneyInstance`
+ * (with `step`, `status`, `terminalPayload`, …) instead of just its
+ * `state`. Use this when a host with a known id needs to read more than
+ * `state` — for example, gating UI off the current step's `moduleId` /
+ * `entry`, or off `status === "completed"`. Symmetric with
+ * {@link useActiveLeafJourneyInstance} for the leaf-walking case.
+ */
+export function useJourneyInstance(instanceId: InstanceId | null): JourneyInstance | null {
+  const ctx = useJourneyContext();
+  return useInstanceSnapshot(ctx?.runtime ?? null, instanceId);
 }
 
 /**
