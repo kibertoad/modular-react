@@ -58,10 +58,9 @@ const journey = defineJourney<Modules, Record<string, never>>()({
 });
 
 function setup() {
-  const runtime = createJourneyRuntime(
-    [{ definition: journey, options: undefined }],
-    { modules: { a: stepA, b: stepB } },
-  );
+  const runtime = createJourneyRuntime([{ definition: journey, options: undefined }], {
+    modules: { a: stepA, b: stepB },
+  });
   const id = runtime.start(journey.id, undefined);
   const harness = createTestHarness(runtime);
   return { runtime, id, harness };

@@ -26,7 +26,9 @@ export function useJourneyState<TState>(instanceId: InstanceId | null): TState |
  * instance along the way so a host rendering inside an invoked child
  * journey sees the child's state directly.
  */
-export function useActiveLeafJourneyState<TState>(rootInstanceId: InstanceId | null): TState | null {
+export function useActiveLeafJourneyState<TState>(
+  rootInstanceId: InstanceId | null,
+): TState | null {
   const ctx = useJourneyContext();
   const runtime = ctx?.runtime ?? null;
   const leafId = useLeafId(runtime, rootInstanceId, true);

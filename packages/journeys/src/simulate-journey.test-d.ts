@@ -82,9 +82,7 @@ const typedOutputJourney = defineJourney<Modules, { visits: number }, CompletedO
     menu: {
       choose: {
         pick: ({ output }) =>
-          output.pick === "a"
-            ? { complete: { token: "alpha" } }
-            : { complete: { token: "bravo" } },
+          output.pick === "a" ? { complete: { token: "alpha" } } : { complete: { token: "bravo" } },
       },
     },
   },
