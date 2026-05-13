@@ -7,6 +7,8 @@ on:
     branches:
       - main
 
+permissions: {}
+
 # Prevent overlapping releases if multiple PRs merge close together
 concurrency:
   group: release-main
@@ -32,9 +34,10 @@ jobs:
       bump: ${{ steps.version.outputs.bump }}
       same_version: ${{ steps.version.outputs.same_version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Determine version strategy
         id: version
@@ -69,7 +72,7 @@ jobs:
           fi
 
       - id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
         with:
           filters: |
             pkg_core:
@@ -138,6 +141,8 @@ jobs:
 
       - name: Build dynamic matrix
         id: build-matrix
+        env:
+          CHANGED: ${{ steps.filter.outputs.changes }}
         run: |
           # Each entry: filter_key -> dir:npmName
           declare -A PKG_MAP=(
@@ -157,7 +162,6 @@ jobs:
             ["pkg_tr_testing"]="tanstack-router-testing:@tanstack-react-modules/testing"
           )
 
-          CHANGED='${{ steps.filter.outputs.changes }}'
           echo "Changed filters: $CHANGED"
 
           MATRIX="["
@@ -198,7 +202,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           token: ${{ github.token }}
@@ -213,7 +217,7 @@ jobs:
         run: git pull --ff-only origin main
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24.x
           registry-url: "https://registry.npmjs.org"
