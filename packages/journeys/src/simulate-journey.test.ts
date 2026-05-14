@@ -108,4 +108,66 @@ describe("simulateJourney", () => {
     sim.fireExit("pick", { pick: "b" });
     expect(secondEvent.history.length).toBe(historyLengthAtEmit);
   });
+
+  it("goForward is a no-op when the future stack is empty", () => {
+    // Matches the documented contract on JourneySimulator (and the
+    // public `runtime.goForward`). The harness throws in this case
+    // — the simulator must not propagate that.
+    const sim = simulateJourney(journey);
+    expect(() => sim.goForward()).not.toThrow();
+    expect(sim.currentStep).toEqual({ moduleId: "menu", entry: "choose", input: undefined });
+  });
+
+  it("goBack + goForward round-trips through the future stack", () => {
+    const exits2 = { next: defineExit() } as const;
+    const a = defineModule({
+      id: "a",
+      version: "1.0.0",
+      exitPoints: exits2,
+      entryPoints: {
+        show: defineEntry({
+          component: (() => null) as any,
+          input: schema<void>(),
+          allowBack: "preserve-state",
+        }),
+      },
+    });
+    const b = defineModule({
+      id: "b",
+      version: "1.0.0",
+      exitPoints: exits2,
+      entryPoints: {
+        show: defineEntry({
+          component: (() => null) as any,
+          input: schema<void>(),
+          allowBack: "preserve-state",
+        }),
+      },
+    });
+    type M = { readonly a: typeof a; readonly b: typeof b };
+    const twoStep = defineJourney<M, Record<string, never>>()({
+      id: "two-step-sim",
+      version: "1.0.0",
+      initialState: () => ({}),
+      start: () => ({ module: "a", entry: "show", input: undefined }),
+      transitions: {
+        a: {
+          show: {
+            next: () => ({ next: { module: "b", entry: "show", input: undefined } }),
+          },
+        },
+        b: { show: { allowBack: true, next: () => ({ complete: undefined }) } },
+      },
+    });
+
+    const sim = simulateJourney(twoStep);
+    sim.fireExit("next");
+    expect(sim.currentStep.moduleId).toBe("b");
+
+    sim.goBack();
+    expect(sim.currentStep.moduleId).toBe("a");
+
+    sim.goForward();
+    expect(sim.currentStep.moduleId).toBe("b");
+  });
 });

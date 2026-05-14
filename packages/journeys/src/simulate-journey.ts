@@ -55,6 +55,18 @@ export interface JourneySimulator<TModules extends ModuleTypeMap, TState> {
 
   fireExit(name: string, output?: unknown): void;
   goBack(): void;
+  /**
+   * Mirror of `runtime.goForward(id)` — re-apply the most recent
+   * rewind that `goBack` performed on this simulator's instance.
+   *
+   * **No-op when the future stack is empty** — matches the runtime's
+   * `goForward` semantics. This is asymmetric with `goBack`, which
+   * throws when invoked on an empty history (so misordered test
+   * setup fails loudly). A misordered `goForward` in a test will
+   * silently no-op, so assert the resulting `step` / `state` rather
+   * than relying on an exception to catch the mistake.
+   */
+  goForward(): void;
   end(reason?: unknown): void;
   /**
    * Serialize the simulator's current instance into the same blob shape
@@ -300,6 +312,13 @@ function wrapInstanceAsSim<TModules extends ModuleTypeMap, TState>(
     },
     goBack() {
       harness.goBack(instanceId);
+    },
+    goForward() {
+      // Delegate to the runtime directly, not `harness.goForward` —
+      // the harness throws when the future stack is empty (so test
+      // authors notice misordered setup), but the simulator's
+      // contract is the same no-op shape as `runtime.goForward`.
+      runtime.goForward(instanceId);
     },
     end(reason) {
       runtime.end(instanceId, reason);

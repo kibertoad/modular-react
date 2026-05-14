@@ -54,6 +54,16 @@ const DEFAULT_MAX_CALL_STACK_DEPTH = 16;
  */
 const DEFAULT_MAX_RESUME_BOUNCES_PER_STEP = 8;
 
+/**
+ * Redo target captured at `goBack` time: the step + state to restore
+ * and the snapshot to put back on `rollbackSnapshots`.
+ */
+interface FutureEntry<TState> {
+  readonly step: JourneyStep;
+  readonly state: TState;
+  readonly snapshot: TState | undefined;
+}
+
 export interface InstanceRecord<TState = unknown> {
   id: InstanceId;
   journeyId: string;
@@ -64,6 +74,8 @@ export interface InstanceRecord<TState = unknown> {
   rollbackSnapshots: (TState | undefined)[];
   /** True when any entry in `rollbackSnapshots` holds a real snapshot. */
   hasRollbackSnapshot: boolean;
+  /** Redo stack. See `JourneyRuntime.goForward`. */
+  future: FutureEntry<TState>[];
   state: TState;
   terminalPayload: unknown;
   startedAt: string;
@@ -111,11 +123,12 @@ export interface InstanceRecord<TState = unknown> {
   revision: number;
   /** Cached snapshot keyed by `revision`; rebuilt on the next read if stale. */
   cachedSnapshot: { revision: number; instance: JourneyInstance } | null;
-  /** Cached exit/goBack closures keyed by stepToken. */
+  /** Cached exit/goBack/goForward closures keyed by stepToken. */
   cachedCallbacks: {
     stepToken: number;
     exit: (name: string, output?: unknown) => void;
     goBack: (() => void) | undefined;
+    goForward: (() => void) | undefined;
   } | null;
   /**
    * Per-step bounce counter for the resume-bounce-limit guard. Set when
@@ -1273,6 +1286,9 @@ export function createJourneyRuntime(
     // the reset uniformly.
     if ("next" in result || "complete" in result || "abort" in result) {
       record.resumeBouncesAtStep = null;
+      // Any non-`invoke` arm invalidates the redo stack — matches
+      // browser back/forward, where a fresh navigation drops Forward.
+      if (record.future.length > 0) record.future = [];
     }
 
     if ("next" in result) {
@@ -1776,6 +1792,8 @@ export function createJourneyRuntime(
 
     const previousStep = record.history.pop()!;
     const snapshot = record.rollbackSnapshots.pop();
+    // Capture the redo target before we mutate `step` / `state`.
+    record.future.push({ step, state: record.state, snapshot });
     const mode = entryAllowBackMode(step);
     if (mode === "rollback" && snapshot !== undefined) {
       record.state = snapshot;
@@ -1806,6 +1824,44 @@ export function createJourneyRuntime(
     record.updatedAt = nowIso();
     record.cachedCallbacks = null;
     fireOnTransition(reg, record, step, record.step, null);
+    const persistence = reg.options?.persistence;
+    if (persistence) schedulePersist(record, persistence);
+    notify(record);
+  }
+
+  // Inverse of `dispatchGoBack`. See `JourneyRuntime.goForward` JSDoc
+  // for restoration semantics.
+  function dispatchGoForward(record: InstanceRecord, reg: RegisteredJourney, stepToken: number) {
+    if (record.status !== "active") return;
+    if (record.activeChildId) return;
+    if (record.stepToken !== stepToken) return;
+    if (record.future.length === 0) return;
+
+    const fromStep = record.step;
+    if (!fromStep) return;
+
+    const next = record.future.pop()!;
+    // Restore history symmetrically to goBack's pop. The step we're
+    // leaving (current) becomes the new top of history; the snapshot
+    // we popped earlier on goBack rejoins `rollbackSnapshots` so a
+    // subsequent goBack rewinds correctly.
+    record.history.push(fromStep);
+    record.rollbackSnapshots.push(next.snapshot);
+    // Push can only flip the flag to true, never to false (we never
+    // remove a real snapshot here) — avoid the O(n) rescan that
+    // `dispatchGoBack` needs after its pop.
+    if (next.snapshot !== undefined) record.hasRollbackSnapshot = true;
+    record.state = next.state;
+    // Trust the captured step's built input — re-running buildInput
+    // here would derive against the just-restored state and could
+    // diverge from what the original transition produced. Asymmetric
+    // with `dispatchGoBack`, which re-runs buildInput on re-entry.
+    record.step = next.step;
+    record.resumeBouncesAtStep = null;
+    record.stepToken += 1;
+    record.updatedAt = nowIso();
+    record.cachedCallbacks = null;
+    fireOnTransition(reg, record, fromStep, record.step, null);
     const persistence = reg.options?.persistence;
     if (persistence) schedulePersist(record, persistence);
     notify(record);
@@ -1842,7 +1898,18 @@ export function createJourneyRuntime(
           dispatchGoBack(record, reg, token);
         }
       : undefined;
-    record.cachedCallbacks = { stepToken: token, exit, goBack };
+    // Forward / redo closure — gated on the future stack having an
+    // entry to restore. Unlike `goBack` this does not check
+    // `journeyAllowsBack` / `entryAllowBackMode`: the future was only
+    // populated by a `goBack` that already passed those guards, so
+    // redoing the inverse is always valid by construction.
+    const canGoForward = record.future.length > 0;
+    const goForward = canGoForward
+      ? () => {
+          dispatchGoForward(record, reg, token);
+        }
+      : undefined;
+    record.cachedCallbacks = { stepToken: token, exit, goBack, goForward };
     return record.cachedCallbacks;
   }
 
@@ -1860,12 +1927,18 @@ export function createJourneyRuntime(
     // snapshot. Cheap — bounded by the history cap, and only rebuilt when
     // the revision bumps.
     const historySnapshot: readonly JourneyStep[] = [...record.history];
+    // Map the future stack to bare steps for the public snapshot — the
+    // full `FutureEntry` (with captured state + rollback snapshot) is
+    // an internal detail of how `goForward` restores. Consumers only
+    // need to know what step a redo would land on.
+    const futureSnapshot: readonly JourneyStep[] = record.future.map((f) => f.step);
     const instance: JourneyInstance = {
       id: record.id,
       journeyId: record.journeyId,
       status: record.status,
       step: record.step,
       history: historySnapshot,
+      future: futureSnapshot,
       state: record.state,
       terminalPayload:
         record.status === "completed" || record.status === "aborted"
@@ -1899,6 +1972,7 @@ export function createJourneyRuntime(
       history: [],
       rollbackSnapshots: [],
       hasRollbackSnapshot: false,
+      future: [],
       state: initialState,
       terminalPayload: undefined,
       startedAt,
@@ -1940,6 +2014,7 @@ export function createJourneyRuntime(
       record.history = [];
       record.rollbackSnapshots = [];
       record.hasRollbackSnapshot = false;
+      record.future = [];
     }
     const rawStart = stepFromSpec(def.start(record.state, input));
     const builtStart = withBuiltInput(rawStart, record.state);
@@ -1992,6 +2067,8 @@ export function createJourneyRuntime(
     record.state = blob.state;
     record.step = blob.step;
     record.history = [...blob.history];
+    // Redo stack is transient; hydration always starts empty.
+    record.future = [];
     if (blob.rollbackSnapshots) {
       record.rollbackSnapshots = blob.rollbackSnapshots.map((s) =>
         s === null ? undefined : s,
@@ -2460,6 +2537,17 @@ export function createJourneyRuntime(
       dispatchGoBack(record, reg, record.stepToken);
     },
 
+    goForward(id) {
+      const record = instances.get(id);
+      if (!record) return;
+      const reg = definitions.get(record.journeyId);
+      if (!reg) return;
+      // Same id-based stale-token argument as `goBack` above:
+      // `dispatchGoForward`'s own guards cover terminal / loading /
+      // active-child / empty-future cases.
+      dispatchGoForward(record, reg, record.stepToken);
+    },
+
     end(id, reason) {
       const record = instances.get(id);
       if (!record) return;
@@ -2651,6 +2739,7 @@ export interface JourneyRuntimeInternals {
   ): {
     exit: (name: string, output?: unknown) => void;
     goBack?: () => void;
+    goForward?: () => void;
     stepToken: number;
   };
   __getRecord(id: InstanceId): InstanceRecord | undefined;
