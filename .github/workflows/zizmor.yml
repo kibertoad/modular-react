@@ -6,9 +6,9 @@ on:
       - main
   pull_request:
     paths:
-      - '.github/workflows/**'
-      - '.github/actions/**'
-      - '.github/workflows/zizmor.yml'
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - ".github/workflows/zizmor.yml"
 
 permissions: {}
 

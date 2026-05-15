@@ -495,7 +495,7 @@ describe("runtime.goForward(id)", () => {
   it("canGoForward becomes true after a rewind, false again after the redo fires", () => {
     const { runtime, id, harness } = setup();
     harness.fireExit(id, "next"); // a → b
-    runtime.goBack(id);           // b → a, future has [b]
+    runtime.goBack(id); // b → a, future has [b]
     expect(runtime.canGoForward(id)).toBe(true);
     runtime.goForward(id);
     expect(runtime.canGoForward(id)).toBe(false);
@@ -538,10 +538,10 @@ describe("runtime.goForward(id)", () => {
     const harness = createTestHarness(rt);
 
     harness.fireExit(id, "next"); // a → b
-    rt.goBack(id);                // b → a, future has [b]
+    rt.goBack(id); // b → a, future has [b]
     persistence.save.mockClear();
 
-    rt.goForward(id);             // a → b again
+    rt.goForward(id); // a → b again
     // Let the scheduled persist micro-task flush.
     await Promise.resolve();
     await Promise.resolve();
