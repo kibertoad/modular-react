@@ -1614,11 +1614,52 @@ registry.registerJourney(journey, {
 
 A plain object matching `JourneyPersistence<TState>` still works if you'd rather not use the helper.
 
-### Sharing a persistence config across multiple journeys
+### Registering multiple journeys
 
-A shell registering more than one journey often wants a single persistence-setup expression reused across every `registerJourney` call - same backend, same `keyFor` shape, same SSR fallback. **Don't share a single adapter object**: the only `TState` that satisfies every journey is `unknown`, and `unknown` fails the variance check on `JourneyDefinition.start(state: TState, ...)`. The symptom is a `Type 'unknown' is not assignable to type 'YourJourneyState'` error pointing at the `persistence` arg of `registerJourney`.
+A shell registering more than one journey has two safe shapes for persistence and one tempting trap.
 
-Wrap the setup in a generic factory and invoke it per registration. Each call binds the calling journey's concrete `TInput`/`TState`, so the variance check passes without an `as` cast on either the definition or the adapter:
+**Safe — one typed adapter per journey.** Declare each `createWebStoragePersistence<TInput, TState>` (or `defineJourneyPersistence<TInput, TState>`) call against its own journey's types and pass it to that journey's `registerJourney`. This is what `examples/react-router/journey-invoke` and `examples/tanstack-router/journey-invoke` do — separate `checkoutPersistence` and `verifyIdentityPersistence` exports, each typed to its own journey's state. Use this shape when the setup expression is short and you don't mind repeating it.
+
+**Safe — a generic factory.** Wrap the setup in a `makeJourneyPersistence<TInput, TState>()` helper and invoke it per `registerJourney`. Use this shape when the setup expression is long (custom SSR guards, lazy `storage` getters, shared `keyFor` scheme) and you want a single source of truth without per-call repetition:
+
+```ts
+import {
+  createWebStoragePersistence,
+  type SyncJourneyPersistence,
+} from "@modular-react/journeys";
+
+interface AppJourneyKey {
+  readonly userId: string;
+  readonly tenantId: string;
+}
+
+const sessionStorageOrNull: Storage | null =
+  typeof window !== "undefined" && typeof window.sessionStorage !== "undefined"
+    ? window.sessionStorage
+    : null;
+
+function makeJourneyPersistence<
+  TInput extends AppJourneyKey,
+  TState,
+>(): SyncJourneyPersistence<TState, TInput> {
+  return createWebStoragePersistence<TInput, TState>({
+    keyFor: ({ journeyId, input }) =>
+      `journey:${journeyId}:${input.tenantId}:${input.userId}`,
+    storage: sessionStorageOrNull,
+  });
+}
+
+registry.registerJourney(onboardingJourney, {
+  persistence: makeJourneyPersistence<OnboardingInput, OnboardingState>(),
+});
+registry.registerJourney(checkoutJourney, {
+  persistence: makeJourneyPersistence<CheckoutInput, CheckoutState>(),
+});
+```
+
+Each factory call binds the calling journey's concrete `TInput`/`TState`, so the variance check passes without an `as` cast on either the definition or the adapter. The factory composes with `defineJourneyPersistence<TInput, TState>` for hand-rolled backends — same per-journey call shape, the helper just types `keyFor`/`load`/`save`/`remove` against the journey's types.
+
+**Trap — one shared adapter typed `<unknown, TInput>`.** The shape that DRY instinct lands on if you're not careful: one `persistence` object reused across every `registerJourney` call, declared once with `TState` widened to `unknown` so it "fits everywhere". It doesn't. `JourneyDefinition.start(state: TState, ...)` puts `TState` in a contravariant position; the variance check rejects `unknown` against any concrete state. The compiler surfaces this as `Type 'unknown' is not assignable to type 'YourJourneyState'` pointing at the `persistence` arg of `registerJourney`. Reach for one of the two safe shapes above instead — both are zero-cost at runtime.
 
 ```ts
 import {
