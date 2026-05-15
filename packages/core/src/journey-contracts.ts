@@ -483,6 +483,12 @@ export interface JourneyInstance<TState = unknown> {
   readonly status: JourneyStatus;
   readonly step: JourneyStep | null;
   readonly history: readonly JourneyStep[];
+  /**
+   * Redo stack — top (`future[future.length - 1]`) is the step a
+   * subsequent `runtime.goForward` would restore. Empty after any
+   * exit-driven transition. Not persisted.
+   */
+  readonly future: readonly JourneyStep[];
   readonly state: TState;
   /** Payload from the terminal transition; undefined until the journey ends. */
   readonly terminalPayload?: unknown;
@@ -703,6 +709,23 @@ export interface JourneyRuntime {
    * forms as a hint that the call is presently a no-op.
    */
   goBack(id: InstanceId): void;
+  /**
+   * Inverse of {@link goBack}: re-apply the most recent rewind by
+   * restoring the captured post-transition `state` + `step` so the
+   * runtime lands back where the user just rewound from. Lets shells
+   * wire browser Forward / a redo button to journey navigation.
+   *
+   * **Does NOT re-run the transition handler.** Side effects from the
+   * original handler (API calls, telemetry, etc.) are not re-invoked.
+   * For a `rollback`-mode entry, any edits the user made between the
+   * rewind and the redo are discarded — the captured state wins.
+   *
+   * No-op when the id is unknown, the instance is terminal / loading,
+   * a child journey is in flight, or the future stack is empty (any
+   * fresh `exit`-driven transition clears it, matching browser
+   * back/forward).
+   */
+  goForward(id: InstanceId): void;
   /**
    * Force-terminate an instance. Fires `onAbandon` if still active; no-op if
    * the instance is already terminal or unknown.

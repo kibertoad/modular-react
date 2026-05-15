@@ -400,6 +400,13 @@ export interface ModuleEntryProps<TInput, TExits extends ExitPointMap = {}> {
    * entry declared `allowBack` and the host has a prior step in history.
    */
   readonly goBack?: () => void;
+  /**
+   * Host-provided "redo" callback — inverse of `goBack`. Present
+   * only when the future stack has a redo target. Most shells wire
+   * Forward at the shell level (browser button); this is for steps
+   * that surface an in-page redo control.
+   */
+  readonly goForward?: () => void;
 }
 
 /**

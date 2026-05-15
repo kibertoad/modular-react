@@ -34,6 +34,7 @@ export interface InstanceSnapshot<TState = unknown> {
 export interface JourneyTestHarness {
   fireExit(id: InstanceId, name: string, output?: unknown): void;
   goBack(id: InstanceId): void;
+  goForward(id: InstanceId): void;
   inspect<TState = unknown>(id: InstanceId): InstanceSnapshot<TState>;
 }
 
@@ -106,6 +107,33 @@ export function createTestHarness(runtime: JourneyRuntime): JourneyTestHarness {
         );
       }
       callbacks.goBack();
+    },
+    goForward(id) {
+      const record = recordOrThrow(id);
+      const reg = internals.__getRegistered(record.journeyId);
+      if (!reg) {
+        throw new Error(
+          `[@modular-react/journeys/testing] Journey "${record.journeyId}" is not registered with this runtime.`,
+        );
+      }
+      if (record.status === "loading") {
+        throw new Error(
+          `[@modular-react/journeys/testing] goForward() called on instance "${id}" while status=loading. ` +
+            `Await the runtime's async load probe before dispatching.`,
+        );
+      }
+      const callbacks = internals.__bindStepCallbacks(record, reg);
+      if (!callbacks.goForward) {
+        // Empty future stack is the common case — fail loudly with a
+        // hint so the test author doesn't silently no-op past a
+        // missing `goBack` setup or a future-clearing exit between
+        // the rewind and the redo attempt.
+        throw new Error(
+          `[@modular-react/journeys/testing] goForward is unavailable on instance "${id}". ` +
+            `The runtime's future stack is empty — call goBack first, and don't fire a new exit between the rewind and the redo.`,
+        );
+      }
+      callbacks.goForward();
     },
     inspect<TState = unknown>(id: InstanceId): InstanceSnapshot<TState> {
       const record = recordOrThrow(id);

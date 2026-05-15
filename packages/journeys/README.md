@@ -365,7 +365,7 @@ Two additive (optional) fields on `ModuleDescriptor`:
 | `entryPoints` | `{ [name]: { component, input?, allowBack?, buildInput? } }`<br>or `{ [name]: { lazy: () => import("./X"), fallback?, input?, allowBack?, buildInput? } }` | Typed ways to open the module. A module can expose several. Each entry is either eager (a directly-bound component) or lazy (a dynamic-import factory — see [Pattern - lazy entry-points](#pattern---lazy-entry-points-code-splitting-per-step)). `buildInput?: (state) => TInput` derives the step's input from the host journey's state at every entry — see [Pattern - `buildInput` for re-entered forms](#pattern---buildinput-for-re-entered-forms). |
 | `exitPoints`  | `{ [name]: { output? } }`                                                                                                                                  | The module's full outcome vocabulary.                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
-`ModuleEntryProps<TInput, TExits>` typed props for the component - `{ input, exit, goBack? }`, with `exit(name, output)` cross-checked against `TExits` at compile time.
+`ModuleEntryProps<TInput, TExits>` typed props for the component - `{ input, exit, goBack?, goForward? }`, with `exit(name, output)` cross-checked against `TExits` at compile time. `goForward` is the inverse of `goBack` — present only when the future / redo stack has an entry to restore (i.e. the user just called `goBack` and no fresh exit has cleared the redo target). Most shells wire Forward at the shell level (browser button); the per-component prop is for steps that surface an in-page redo control.
 
 Exits are **module-level, not per-entry** - every entry on a module shares the same `exitPoints` vocabulary. The journey's transition map (not the module) decides which exits a given entry actually uses, so two entries on the same module can map the same exit name to entirely different next steps.
 
@@ -393,6 +393,19 @@ transitions: {
 ```
 
 A `resolveManifest()` error surfaces if the two sides disagree.
+
+### `goForward` — redoing a `goBack`
+
+Each `goBack` pushes the step it rewinds from (plus state + rollback snapshot) onto a per-instance **future stack**. `runtime.goForward(id)` (or `ModuleEntryProps.goForward?.()`) pops the top of that stack and restores the runtime to the rewound step. The captured *post-transition* state wins — for a `rollback`-mode entry, edits the user made between the rewind and the redo are discarded.
+
+Key points:
+
+- **Not gated by `allowBack`.** The future entry was created by a `goBack` that already passed both opt-ins; the inverse is always valid.
+- **Not the same as re-firing the exit.** Transition handlers don't re-run on `goForward`, so API calls / telemetry / persistence in the handler body fire once, not twice. If business logic needs to re-execute, the shell fires the exit itself.
+- **Not symmetric with `goBack` on `buildInput`.** `goBack` re-runs `buildInput` against the rolled-back state. `goForward` trusts the step's captured `input` verbatim (the input was already built against the same state being restored; re-running a non-pure `buildInput` would diverge from what the original transition produced).
+- **Cleared by any fresh exit.** A `{ next | complete | abort }` arm wipes the future stack (matches browsers — a new navigation drops Forward). `invoke` leaves it intact (parent step doesn't advance while a child runs).
+- **Transient.** Not persisted: reload always starts with an empty future stack, same as opening a new browser tab.
+- **Inspectable.** `JourneyInstance.future: readonly JourneyStep[]` exposes the stack so shells can gate a Forward button on `instance.future.length > 0` without reaching into runtime internals. Top of stack is the next step a redo would land on.
 
 ### Transition handlers are pure and synchronous
 
@@ -609,7 +622,7 @@ Mismatched declarations are caught at `resolveManifest()` / `resolve()` time via
 
 ### Pattern - `buildInput` for re-entered forms
 
-Without `buildInput`, a step's `input` is captured at first push and reused on every later entry — so a back-navigated form re-renders against the snapshot it was opened with, not the values accumulated by the user's later edits. `buildInput` flips that default: the runtime calls it on every step entry (initial start, forward push, `goBack` pop, resume-into-step) AND when a resume bumps state on the same step without advancing it. The returned value becomes the live `input`. (An `{ invoke }` arm carrying `state` is the one excluded case — the parent's form is paused while the child runs, so rebuilding the hidden input would be wasted work; `buildInput` re-fires naturally on the resume's `{ next }`.)
+Without `buildInput`, a step's `input` is captured at first push and reused on every later entry — so a back-navigated form re-renders against the snapshot it was opened with, not the values accumulated by the user's later edits. `buildInput` flips that default: the runtime calls it on every step entry (initial start, forward push, `goBack` pop, resume-into-step) AND when a resume bumps state on the same step without advancing it. The returned value becomes the live `input`. Two excluded cases: (1) an `{ invoke }` arm carrying `state` — the parent's form is paused while the child runs, so rebuilding the hidden input would be wasted work; `buildInput` re-fires naturally on the resume's `{ next }`. (2) `runtime.goForward` — the redo restores a captured step whose `input` was already built against the same state being restored, so re-deriving would diverge from what the original transition produced.
 
 ```ts
 interface ProjectState {
@@ -1454,6 +1467,19 @@ interface JourneyRuntime {
    * opt into `allowBack: true`, or history is empty.
    */
   goBack(id: InstanceId): void;
+
+  /**
+   * Redo the most recent `goBack` — restore the captured post-transition
+   * `state` + `step` so the runtime lands back where the user just
+   * rewound from. Lets shells wire browser Forward (or a redo button)
+   * to journey navigation instead of letting the URL drift ahead of
+   * the runtime. Does NOT re-run the transition handler; the captured
+   * state wins, so for `rollback`-mode entries any edits made between
+   * the rewind and the redo are discarded. No-op when the future
+   * stack is empty (any fresh exit clears it, matching browser
+   * back/forward semantics).
+   */
+  goForward(id: InstanceId): void;
 
   /**
    * Force-terminate an instance. Fires `onAbandon` if still active;

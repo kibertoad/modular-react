@@ -286,7 +286,7 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
   const record = internals.__getRecord(instance.id);
   const reg = internals.__getRegistered(instance.journeyId);
   if (!record || !reg) return null;
-  const { exit, goBack } = internals.__bindStepCallbacks(record, reg);
+  const { exit, goBack, goForward } = internals.__bindStepCallbacks(record, reg);
 
   const handleError = (err: unknown): void => {
     // Registration-level onError fires on every component throw — shell
@@ -348,6 +348,7 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
         input: step.input,
         exit,
         goBack,
+        goForward,
       }),
     ),
   );
