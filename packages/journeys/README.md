@@ -1614,6 +1614,49 @@ registry.registerJourney(journey, {
 
 A plain object matching `JourneyPersistence<TState>` still works if you'd rather not use the helper.
 
+### Sharing a persistence config across multiple journeys
+
+A shell registering more than one journey often wants a single persistence-setup expression reused across every `registerJourney` call - same backend, same `keyFor` shape, same SSR fallback. **Don't share a single adapter object**: the only `TState` that satisfies every journey is `unknown`, and `unknown` fails the variance check on `JourneyDefinition.start(state: TState, ...)`. The symptom is a `Type 'unknown' is not assignable to type 'YourJourneyState'` error pointing at the `persistence` arg of `registerJourney`.
+
+Wrap the setup in a generic factory and invoke it per registration. Each call binds the calling journey's concrete `TInput`/`TState`, so the variance check passes without an `as` cast on either the definition or the adapter:
+
+```ts
+import {
+  createWebStoragePersistence,
+  type SyncJourneyPersistence,
+} from "@modular-react/journeys";
+
+interface AppJourneyKey {
+  readonly userId: string;
+  readonly tenantId: string;
+}
+
+const sessionStorageOrNull: Storage | null =
+  typeof window !== "undefined" && typeof window.sessionStorage !== "undefined"
+    ? window.sessionStorage
+    : null;
+
+function makeJourneyPersistence<
+  TInput extends AppJourneyKey,
+  TState,
+>(): SyncJourneyPersistence<TState, TInput> {
+  return createWebStoragePersistence<TInput, TState>({
+    keyFor: ({ journeyId, input }) =>
+      `journey:${journeyId}:${input.tenantId}:${input.userId}`,
+    storage: sessionStorageOrNull,
+  });
+}
+
+registry.registerJourney(onboardingJourney, {
+  persistence: makeJourneyPersistence<OnboardingInput, OnboardingState>(),
+});
+registry.registerJourney(checkoutJourney, {
+  persistence: makeJourneyPersistence<CheckoutInput, CheckoutState>(),
+});
+```
+
+The factory pattern composes with `defineJourneyPersistence<TInput, TState>` for hand-rolled backends - same per-journey call shape, the helper just types `keyFor`/`load`/`save`/`remove` against the journey's `TInput`/`TState`.
+
 ### Stock adapters: `createWebStoragePersistence` and `createMemoryPersistence`
 
 Two factories ship with the package so common setups don't have to reimplement the same 20 lines of SSR guards and JSON handling. Both return values satisfying `JourneyPersistence<TState, TInput>` - pass them directly to `registerJourney({ persistence })`.
