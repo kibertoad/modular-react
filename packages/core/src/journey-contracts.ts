@@ -704,9 +704,11 @@ export interface JourneyRuntime {
    * No-op when the id is unknown, the instance is terminal / loading,
    * a child journey is in flight (parent steps are paused while a child
    * runs), the journey's transition does not opt in via `allowBack: true`,
-   * or history is empty. Matches the closure form: the `goBack` prop is
-   * `undefined` under the same conditions, and shells should treat both
-   * forms as a hint that the call is presently a no-op.
+   * the registered module entry declares `allowBack: false`, or history
+   * is empty. Matches the closure form: the `goBack` prop is `undefined`
+   * under the same conditions, and shells should treat both forms as a
+   * hint that the call is presently a no-op. Use {@link canGoBack} to
+   * gate UI affordances without duplicating these checks.
    */
   goBack(id: InstanceId): void;
   /**
@@ -726,6 +728,34 @@ export interface JourneyRuntime {
    * back/forward).
    */
   goForward(id: InstanceId): void;
+  /**
+   * Predicate that mirrors the guards in {@link goBack}. Returns `true`
+   * iff calling `goBack(id)` right now would actually rewind a step.
+   * Lets shells gate the visual state of a Back button without having to
+   * peek into module-entry `allowBack` declarations or duplicate the
+   * runtime's transition opt-in logic.
+   *
+   * Returns `false` when the id is unknown, the instance is terminal /
+   * loading, a child journey is in flight, history is empty, the
+   * current step's transition does not declare `allowBack: true`, or
+   * the registered module entry declares `allowBack: false`. Entries
+   * without a registered module descriptor (headless simulator, tests
+   * that don't pass `modules`) inherit the journey's transition opt-in
+   * — mirrors the documented fallback on
+   * {@link JourneyRuntimeOptions.modules}.
+   */
+  canGoBack(id: InstanceId): boolean;
+  /**
+   * Predicate that mirrors the guards in {@link goForward}. Returns
+   * `true` iff calling `goForward(id)` right now would actually restore
+   * a redo target. Useful for the symmetric Forward / redo affordance
+   * in a shell-owned toolbar.
+   *
+   * Returns `false` when the id is unknown, the instance is terminal /
+   * loading, a child journey is in flight, or the future stack is
+   * empty (any fresh exit-driven transition clears it).
+   */
+  canGoForward(id: InstanceId): boolean;
   /**
    * Force-terminate an instance. Fires `onAbandon` if still active; no-op if
    * the instance is already terminal or unknown.

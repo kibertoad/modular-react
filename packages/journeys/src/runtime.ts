@@ -406,6 +406,43 @@ export function createJourneyRuntime(
     return perEntry?.allowBack === true;
   }
 
+  // Single source of truth for "would goBack(id) actually rewind?". Used
+  // by `bindStepCallbacks` (gates the step-prop closure), `dispatchGoBack`
+  // (rejects calls that should be no-ops), and the `runtime.canGoBack`
+  // predicate. Keeping these three paths reading the same function
+  // prevents the id-based runtime call from drifting away from the
+  // step-prop form — the documented "Matches the closure form" promise
+  // on `JourneyRuntime.goBack`.
+  function canGoBackFor(record: InstanceRecord, reg: RegisteredJourney): boolean {
+    if (record.status !== "active") return false;
+    if (record.activeChildId) return false;
+    if (record.history.length === 0) return false;
+    const step = record.step;
+    if (!step) return false;
+    if (!journeyAllowsBack(reg.definition, step)) return false;
+    // When the runtime has a module descriptor for this step and the
+    // descriptor's entry explicitly opts out, the opt-out wins. When no
+    // descriptor is registered (headless simulator, tests that don't
+    // pass `modules`) we trust the journey's transition opt-in and
+    // treat the missing descriptor as 'preserve-state' — matches the
+    // documented fallback in `JourneyRuntimeOptions.modules`.
+    const mode = entryAllowBackMode(step);
+    if (mode === false && moduleMap[step.moduleId]) return false;
+    return true;
+  }
+
+  // Inverse predicate for `goForward`. The future stack is only
+  // populated by a `goBack` that already passed `canGoBackFor`, so no
+  // re-check of the journey transition / entry mode is needed here —
+  // a stale future would have been cleared by any exit-driven
+  // transition between the rewind and now.
+  function canGoForwardFor(record: InstanceRecord): boolean {
+    if (record.status !== "active") return false;
+    if (record.activeChildId) return false;
+    if (record.future.length === 0) return false;
+    return true;
+  }
+
   function cloneSnapshot(state: unknown): unknown {
     if (state === null || typeof state !== "object") return state;
     const cloned: unknown = Array.isArray(state) ? [...state] : { ...(state as object) };
@@ -1777,19 +1814,13 @@ export function createJourneyRuntime(
   }
 
   function dispatchGoBack(record: InstanceRecord, reg: RegisteredJourney, stepToken: number) {
-    if (record.status !== "active") return;
-    // Mirror dispatchExit: while a child journey is in flight the parent
-    // step is paused, so a stale `goBack` closure must not rewind the
-    // parent out from under it.
-    if (record.activeChildId) return;
+    // Stale closure: a step callback that survived a transition must
+    // not rewind the new step. Checked first because it's the only
+    // guard that depends on the call site, not on record state.
     if (record.stepToken !== stepToken) return;
-    if (record.history.length === 0) return;
+    if (!canGoBackFor(record, reg)) return;
 
-    const step = record.step;
-    if (!step) return;
-    // Journey-side opt-in
-    if (!journeyAllowsBack(reg.definition, step)) return;
-
+    const step = record.step!;
     const previousStep = record.history.pop()!;
     const snapshot = record.rollbackSnapshots.pop();
     // Capture the redo target before we mutate `step` / `state`.
@@ -1832,10 +1863,8 @@ export function createJourneyRuntime(
   // Inverse of `dispatchGoBack`. See `JourneyRuntime.goForward` JSDoc
   // for restoration semantics.
   function dispatchGoForward(record: InstanceRecord, reg: RegisteredJourney, stepToken: number) {
-    if (record.status !== "active") return;
-    if (record.activeChildId) return;
     if (record.stepToken !== stepToken) return;
-    if (record.future.length === 0) return;
+    if (!canGoForwardFor(record)) return;
 
     const fromStep = record.step;
     if (!fromStep) return;
@@ -1875,36 +1904,16 @@ export function createJourneyRuntime(
     const exit = (name: string, output?: unknown) => {
       dispatchExit(record, reg, token, name, output);
     };
-    let mode = entryAllowBackMode(record.step);
-    // Documented fallback (see `JourneyRuntimeOptions.modules`): when the
-    // runtime is built without a module descriptor for this step but the
-    // journey's transition opts in via `allowBack: true`, treat the mode as
-    // 'preserve-state' so `goBack` stays wired. Without this fallback the
-    // headless simulator (which never passes a moduleMap) and any runtime
-    // created without module descriptors would see `goBack` silently
-    // disappear, contradicting the documented behavior.
-    if (
-      mode === false &&
-      record.step &&
-      journeyAllowsBack(reg.definition, record.step) &&
-      !moduleMap[record.step.moduleId]
-    ) {
-      mode = "preserve-state";
-    }
-    const canGoBack =
-      mode !== false && journeyAllowsBack(reg.definition, record.step) && record.history.length > 0;
-    const goBack = canGoBack
+    // Read both gates from the same helpers `dispatchGoBack` /
+    // `dispatchGoForward` use, so the step-prop closure form and the
+    // id-based `runtime.goBack` / `runtime.goForward` calls can never
+    // disagree about whether navigation is currently allowed.
+    const goBack = canGoBackFor(record, reg)
       ? () => {
           dispatchGoBack(record, reg, token);
         }
       : undefined;
-    // Forward / redo closure — gated on the future stack having an
-    // entry to restore. Unlike `goBack` this does not check
-    // `journeyAllowsBack` / `entryAllowBackMode`: the future was only
-    // populated by a `goBack` that already passed those guards, so
-    // redoing the inverse is always valid by construction.
-    const canGoForward = record.future.length > 0;
-    const goForward = canGoForward
+    const goForward = canGoForwardFor(record)
       ? () => {
           dispatchGoForward(record, reg, token);
         }
@@ -2546,6 +2555,20 @@ export function createJourneyRuntime(
       // `dispatchGoForward`'s own guards cover terminal / loading /
       // active-child / empty-future cases.
       dispatchGoForward(record, reg, record.stepToken);
+    },
+
+    canGoBack(id) {
+      const record = instances.get(id);
+      if (!record) return false;
+      const reg = definitions.get(record.journeyId);
+      if (!reg) return false;
+      return canGoBackFor(record, reg);
+    },
+
+    canGoForward(id) {
+      const record = instances.get(id);
+      if (!record) return false;
+      return canGoForwardFor(record);
     },
 
     end(id, reason) {

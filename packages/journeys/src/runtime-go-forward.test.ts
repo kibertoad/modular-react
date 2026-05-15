@@ -485,6 +485,34 @@ describe("runtime.goForward(id)", () => {
     expect(notified).toBeGreaterThan(0);
   });
 
+  it("canGoForward mirrors the guards: empty future stack → false", () => {
+    const { runtime, id, harness } = setup();
+    expect(runtime.canGoForward(id)).toBe(false);
+    harness.fireExit(id, "next"); // a → b; future still empty (no rewind)
+    expect(runtime.canGoForward(id)).toBe(false);
+  });
+
+  it("canGoForward becomes true after a rewind, false again after the redo fires", () => {
+    const { runtime, id, harness } = setup();
+    harness.fireExit(id, "next"); // a → b
+    runtime.goBack(id); // b → a, future has [b]
+    expect(runtime.canGoForward(id)).toBe(true);
+    runtime.goForward(id);
+    expect(runtime.canGoForward(id)).toBe(false);
+  });
+
+  it("canGoForward returns false for unknown ids and terminal instances", () => {
+    const { runtime, id, harness } = setup();
+    expect(runtime.canGoForward("does-not-exist")).toBe(false);
+
+    harness.fireExit(id, "next");
+    runtime.goBack(id);
+    expect(runtime.canGoForward(id)).toBe(true);
+    runtime.end(id);
+    expect(runtime.getInstance(id)?.status).toBe("aborted");
+    expect(runtime.canGoForward(id)).toBe(false);
+  });
+
   it("persists the post-redo blob so a reload would restore the redone step", async () => {
     // The redo path isn't persistence-aware on its own — it relies on
     // the same `schedulePersist` call every other transition path
@@ -510,10 +538,10 @@ describe("runtime.goForward(id)", () => {
     const harness = createTestHarness(rt);
 
     harness.fireExit(id, "next"); // a → b
-    rt.goBack(id);                // b → a, future has [b]
+    rt.goBack(id); // b → a, future has [b]
     persistence.save.mockClear();
 
-    rt.goForward(id);             // a → b again
+    rt.goForward(id); // a → b again
     // Let the scheduled persist micro-task flush.
     await Promise.resolve();
     await Promise.resolve();
