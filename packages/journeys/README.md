@@ -1464,7 +1464,9 @@ interface JourneyRuntime {
    * (browser `popstate`, hardware back, breadcrumb) can wire it
    * directly. No-op when the id is unknown, the instance is terminal
    * / loading, a child journey is in flight, the transition didn't
-   * opt into `allowBack: true`, or history is empty.
+   * opt into `allowBack: true`, the registered module entry declares
+   * `allowBack: false`, or history is empty. Matches the closure form
+   * on `ModuleEntryProps.goBack`.
    */
   goBack(id: InstanceId): void;
 
@@ -1480,6 +1482,27 @@ interface JourneyRuntime {
    * back/forward semantics).
    */
   goForward(id: InstanceId): void;
+
+  /**
+   * Predicate that mirrors the guards in `goBack`. Returns `true` iff
+   * calling `goBack(id)` right now would actually rewind a step. Lets
+   * shells gate the visual state of a Back button authoritatively
+   * without duplicating the runtime's transition/entry opt-in logic.
+   * Returns `false` for unknown / terminal / loading instances, when a
+   * child journey is in flight, when history is empty, when the
+   * journey transition does not declare `allowBack: true`, or when the
+   * registered module entry declares `allowBack: false` (an entry
+   * without a registered descriptor inherits the journey's opt-in —
+   * matches the simulator fallback on `JourneyRuntimeOptions.modules`).
+   */
+  canGoBack(id: InstanceId): boolean;
+
+  /**
+   * Predicate that mirrors the guards in `goForward`. Returns `true`
+   * iff calling `goForward(id)` right now would actually restore a
+   * redo target.
+   */
+  canGoForward(id: InstanceId): boolean;
 
   /**
    * Force-terminate an instance. Fires `onAbandon` if still active;
@@ -2379,7 +2402,9 @@ Every export you're likely to call, grouped by role.
 | `listInstances()` / `listDefinitions()` | Enumerate. Useful for admin tooling.                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `isRegistered(journeyId)`               | Cheap "is this id known?" predicate. Use to filter persisted shell state before calling `start()` - keeps the expected-drop path out of the exception channel.                                                                                                                                                                                                                                                                        |
 | `subscribe(id, listener)`               | Subscribe to change notifications for one instance. Returns unsubscribe.                                                                                                                                                                                                                                                                                                                                                              |
-| `goBack(id)`                            | Pop the active step back to the previous one. Equivalent to the `goBack` prop on `ModuleEntryProps`, but addressable by id so a shell wiring browser-Back / `popstate` / breadcrumb navigation doesn't have to capture the step component's closure through a context. No-op when the id is unknown, the instance is terminal / loading, a child is in flight, the transition didn't opt into `allowBack: true`, or history is empty. |
+| `goBack(id)`                            | Pop the active step back to the previous one. Equivalent to the `goBack` prop on `ModuleEntryProps`, but addressable by id so a shell wiring browser-Back / `popstate` / breadcrumb navigation doesn't have to capture the step component's closure through a context. No-op when the id is unknown, the instance is terminal / loading, a child is in flight, the transition didn't opt into `allowBack: true`, the registered module entry declares `allowBack: false`, or history is empty. |
+| `goForward(id)`                         | Inverse of `goBack` — re-applies the most recent rewind by restoring the captured post-transition state + step. No-op when the id is unknown, terminal / loading, a child is in flight, or the future stack is empty. Does NOT re-run transition handlers; the captured state wins.                                                                                                                                                  |
+| `canGoBack(id)` / `canGoForward(id)`    | Read-only predicates that mirror the guards in `goBack` / `goForward` — returns `true` iff the corresponding call would actually move. Lets a shell-owned Back / Forward toolbar gate enable-state authoritatively without duplicating the runtime's transition/entry opt-in logic.                                                                                                                                                  |
 | `end(id, reason?)`                      | Force-terminate. Fires `onAbandon` if active; treats `loading` as a direct abort without firing `onAbandon`.                                                                                                                                                                                                                                                                                                                          |
 | `forget(id)` / `forgetTerminal()`       | Drop terminal instances from memory. `forget` is a no-op on active/loading; `forgetTerminal` batches them all.                                                                                                                                                                                                                                                                                                                        |
 
