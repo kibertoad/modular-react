@@ -1623,10 +1623,7 @@ A shell registering more than one journey has two safe shapes for persistence an
 **Safe — a generic factory.** Wrap the setup in a `makeJourneyPersistence<TInput, TState>()` helper and invoke it per `registerJourney`. Use this shape when the setup expression is long (custom SSR guards, lazy `storage` getters, shared `keyFor` scheme) and you want a single source of truth without per-call repetition:
 
 ```ts
-import {
-  createWebStoragePersistence,
-  type SyncJourneyPersistence,
-} from "@modular-react/journeys";
+import { createWebStoragePersistence, type SyncJourneyPersistence } from "@modular-react/journeys";
 
 interface AppJourneyKey {
   readonly userId: string;
@@ -1638,13 +1635,12 @@ const sessionStorageOrNull: Storage | null =
     ? window.sessionStorage
     : null;
 
-function makeJourneyPersistence<
-  TInput extends AppJourneyKey,
+function makeJourneyPersistence<TInput extends AppJourneyKey, TState>(): SyncJourneyPersistence<
   TState,
->(): SyncJourneyPersistence<TState, TInput> {
+  TInput
+> {
   return createWebStoragePersistence<TInput, TState>({
-    keyFor: ({ journeyId, input }) =>
-      `journey:${journeyId}:${input.tenantId}:${input.userId}`,
+    keyFor: ({ journeyId, input }) => `journey:${journeyId}:${input.tenantId}:${input.userId}`,
     storage: sessionStorageOrNull,
   });
 }
@@ -1662,41 +1658,25 @@ Each factory call binds the calling journey's concrete `TInput`/`TState`, so the
 **Trap — one shared adapter typed `<unknown, TInput>`.** The shape that DRY instinct lands on if you're not careful: one `persistence` object reused across every `registerJourney` call, declared once with `TState` widened to `unknown` so it "fits everywhere". It doesn't. `JourneyDefinition.start(state: TState, ...)` puts `TState` in a contravariant position; the variance check rejects `unknown` against any concrete state. The compiler surfaces this as `Type 'unknown' is not assignable to type 'YourJourneyState'` pointing at the `persistence` arg of `registerJourney`. Reach for one of the two safe shapes above instead — both are zero-cost at runtime.
 
 ```ts
-import {
-  createWebStoragePersistence,
-  type SyncJourneyPersistence,
-} from "@modular-react/journeys";
+import { createWebStoragePersistence, type SyncJourneyPersistence } from "@modular-react/journeys";
 
-interface AppJourneyKey {
-  readonly userId: string;
-  readonly tenantId: string;
-}
-
-const sessionStorageOrNull: Storage | null =
-  typeof window !== "undefined" && typeof window.sessionStorage !== "undefined"
-    ? window.sessionStorage
-    : null;
-
-function makeJourneyPersistence<
-  TInput extends AppJourneyKey,
-  TState,
->(): SyncJourneyPersistence<TState, TInput> {
-  return createWebStoragePersistence<TInput, TState>({
-    keyFor: ({ journeyId, input }) =>
-      `journey:${journeyId}:${input.tenantId}:${input.userId}`,
-    storage: sessionStorageOrNull,
+// One persistence to rule them all... or so you think.
+export const sharedJourneyPersistence: SyncJourneyPersistence<unknown, AppJourneyKey> =
+  createWebStoragePersistence<AppJourneyKey, unknown>({
+    keyFor: ({ journeyId, input }) => `journey:${journeyId}:${input.tenantId}:${input.userId}`,
   });
-}
 
+// Both calls fail at the `persistence` arg, not at the declaration above:
+// the variance check rejects `unknown` against the journey's concrete TState.
 registry.registerJourney(onboardingJourney, {
-  persistence: makeJourneyPersistence<OnboardingInput, OnboardingState>(),
+  persistence: sharedJourneyPersistence,
+  // Error: Type 'unknown' is not assignable to type 'OnboardingState'.
 });
 registry.registerJourney(checkoutJourney, {
-  persistence: makeJourneyPersistence<CheckoutInput, CheckoutState>(),
+  persistence: sharedJourneyPersistence,
+  // Error: Type 'unknown' is not assignable to type 'CheckoutState'.
 });
 ```
-
-The factory pattern composes with `defineJourneyPersistence<TInput, TState>` for hand-rolled backends - same per-journey call shape, the helper just types `keyFor`/`load`/`save`/`remove` against the journey's `TInput`/`TState`.
 
 ### Stock adapters: `createWebStoragePersistence` and `createMemoryPersistence`
 
