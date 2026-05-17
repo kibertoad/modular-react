@@ -8,33 +8,36 @@ on:
     paths:
       - ".github/workflows/**"
       - ".github/actions/**"
-      - ".github/workflows/zizmor.yml"
+      - ".github/zizmor.yml"
 
 permissions: {}
+
+# One audit per ref is plenty; cancel superseded PR runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   zizmor:
     name: Static analysis of GitHub Actions workflows
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      security-events: write
+      contents: read # checkout reads the repo
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
-
       - name: Run zizmor
-        run: uvx zizmor --format=sarif . > results.sarif
+        # Official action from zizmorcore. `advanced-security: false` is
+        # required to enable `annotations: true` — the two output modes are
+        # mutually exclusive. The action exits non-zero on any findings, so
+        # CI fails when zizmor reports anything at or above `min-severity`.
+        uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d # v0.5.6
+        with:
+          persona: pedantic
+          advanced-security: "false"
+          annotations: "true"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@439137e1b50c27ba9e2f9befc93e43091b449c34 # v3.32.0
-        with:
-          sarif_file: results.sarif
-          category: zizmor

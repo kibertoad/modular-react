@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   detect-changes:
+    name: Detect changed packages
     # Publish runs when the PR carries any of: major / minor / patch (auto-bump
     # paths) OR release-same-version (publish the versions already committed).
     if: >-
@@ -27,7 +28,7 @@ jobs:
       )
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read # checkout + dorny/paths-filter read the repo and PR file list
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
       has_changes: ${{ steps.build-matrix.outputs.has_changes }}
@@ -193,12 +194,13 @@ jobs:
           fi
 
   release:
+    name: Release to npm
     needs: detect-changes
     if: needs.detect-changes.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      id-token: write
+      contents: write # push the version-bump commit and tags back to main
+      id-token: write # mint the OIDC token used by `pnpm publish --provenance`
 
     steps:
       - name: Checkout Repository

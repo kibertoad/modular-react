@@ -8,6 +8,12 @@ on:
 
 permissions: {}
 
+# Cancel in-flight runs on the same PR when new commits land; for pushes to
+# main keep every run so each main commit gets fully validated.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   changed-files-job:
     name: Get changed packages
@@ -84,9 +90,10 @@ jobs:
       package_name: ${{ matrix.package-name }}
 
   lint:
+    name: Lint
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read # checkout reads the repo
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -306,12 +313,13 @@ jobs:
           retention-days: 7
 
   automerge:
+    name: Auto-merge dependabot PRs
     needs: [build, lint, examples, examples-e2e, catalog-e2e]
     if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.lint.result == 'success') && (needs.examples.result == 'success') && (needs.examples-e2e.result == 'success' || needs.examples-e2e.result == 'skipped') && (needs.catalog-e2e.result == 'success' || needs.catalog-e2e.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write
-      contents: write
+      pull-requests: write # fastify/github-action-merge-dependabot approves the dependabot PR
+      contents: write # fastify/github-action-merge-dependabot performs the merge
     steps:
       - uses: fastify/github-action-merge-dependabot@e820d631adb1d8ab16c3b93e5afe713450884a4a # v3.11.1
         with:
