@@ -757,6 +757,66 @@ export interface JourneyRuntime {
    */
   canGoForward(id: InstanceId): boolean;
   /**
+   * Rewind to a specific historical frame in one transactional call.
+   * `historyIndex` is a 0-based index into `JourneyInstance.history` —
+   * the step to land on after the rewind. Equivalent in effect to
+   * `history.length - historyIndex` successive `goBack` calls, but
+   * atomic: if any frame the rewind would leave fails the back opt-in
+   * (transition's `allowBack: true` + entry's `allowBack !== false`),
+   * the whole call is a no-op.
+   *
+   * After success:
+   * - `step` is the frame previously at `history[historyIndex]`
+   *   (with `buildInput` re-run once against the final state).
+   * - `history` is truncated to `history.slice(0, historyIndex)`.
+   * - `future` accumulates every popped frame in pop order, so a
+   *   subsequent `goForward` redoes one step at a time exactly as N
+   *   successive `goBack` calls would have. `goForward` semantics are
+   *   unchanged — a user who clicked a breadcrumb by mistake can
+   *   `goForward` once to back out one step at a time.
+   * - State follows the same rule as a chain of single-step rewinds:
+   *   each frame whose entry declares `allowBack: "rollback"`
+   *   restores its captured pre-transition snapshot;
+   *   `"preserve-state"` frames leave state untouched. The final
+   *   state is what a chain of N `goBack` calls would have produced.
+   *
+   * Designed for shell-owned breadcrumb navigation: render
+   * `instance.history.map((frame, i) => ...)`, attach
+   * `onClick={() => runtime.rewindTo(id, i)}`, and gate the
+   * affordance with {@link canRewindTo}. After rewinding, let the
+   * user walk forward via the normal `Next` flow so each
+   * intermediate step revalidates against any upstream edits — see
+   * the "Breadcrumb / edit-and-revisit wizards" pattern in
+   * `@modular-react/journeys` docs.
+   *
+   * No-op when the id is unknown, the instance is terminal / loading,
+   * a child is in flight, `historyIndex` is not an integer in
+   * `[0, history.length)`, or any frame the rewind would leave fails
+   * the back opt-in.
+   *
+   * The one non-no-op failure is `buildInput` throwing on the
+   * destination — same path `goBack` takes. The journey aborts with
+   * `{ reason: "build-input-threw", moduleId, entry, error }` and
+   * fires `onError` (phase `"step"`). By the time the throw is
+   * caught, state / history / future have already been mutated to
+   * their post-rewind shape, so this is not atomic with the rewind;
+   * the abort takes over.
+   */
+  rewindTo(id: InstanceId, historyIndex: number): void;
+  /**
+   * Predicate companion to {@link rewindTo}. Returns `true` iff
+   * `rewindTo(id, historyIndex)` would actually rewind. Lets shells
+   * gate the visual state of breadcrumb affordances without
+   * duplicating the back-opt-in walk.
+   *
+   * Returns `false` when the id is unknown, the instance is
+   * terminal / loading, a child is in flight, `historyIndex` is out
+   * of `[0, history.length)` (negative, `>= history.length`, or not
+   * an integer), or any frame the rewind would leave fails the back
+   * opt-in (transition `allowBack: true` + entry `allowBack !== false`).
+   */
+  canRewindTo(id: InstanceId, historyIndex: number): boolean;
+  /**
    * Force-terminate an instance. Fires `onAbandon` if still active; no-op if
    * the instance is already terminal or unknown.
    */
