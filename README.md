@@ -187,15 +187,15 @@ See [`examples/README.md`](examples/README.md) for how to run them and how to ad
 
 ### Shared foundation (router-agnostic)
 
-| Package                                        | Description                                                                                               |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| [`@modular-react/core`](packages/core)         | Types, slots, navigation, validation, and a lightweight store. No React runtime dependency.               |
-| [`@modular-react/react`](packages/react)       | React bindings: context providers, hooks (`useStore`, `useSlots`, `useNavigation`, etc.), error boundary. |
-| [`@modular-react/testing`](packages/testing)   | Test utilities for resolving modules without rendering.                                                   |
-| [`@modular-react/journeys`](packages/journeys) | Typed, serializable multi-module workflows with entry/exit contracts and a pluggable persistence adapter. |
+| Package                                                | Description                                                                                                                               |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@modular-react/core`](packages/core)                 | Types, slots, navigation, validation, and a lightweight store. No React runtime dependency.                                               |
+| [`@modular-react/react`](packages/react)               | React bindings: context providers, hooks (`useStore`, `useSlots`, `useNavigation`, etc.), error boundary.                                 |
+| [`@modular-react/testing`](packages/testing)           | Test utilities for resolving modules without rendering.                                                                                   |
+| [`@modular-react/journeys`](packages/journeys)         | Typed, serializable multi-module workflows with entry/exit contracts and a pluggable persistence adapter.                                 |
 | [`@modular-react/compositions`](packages/compositions) | Multi-module screen layout: arrange several modules (and journeys) into named zones on one screen, driven by a per-instance scoped store. |
-| [`@modular-react/catalog`](packages/catalog)   | Build-time harvester + static SPA: scans for descriptors and emits a deployable discovery portal.         |
-| [`@modular-react/cli-core`](packages/cli-core) | Shared command implementations and templates for the router-specific CLI binaries.                        |
+| [`@modular-react/catalog`](packages/catalog)           | Build-time harvester + static SPA: scans for descriptors and emits a deployable discovery portal.                                         |
+| [`@modular-react/cli-core`](packages/cli-core)         | Shared command implementations and templates for the router-specific CLI binaries.                                                        |
 
 ### React Router integration
 

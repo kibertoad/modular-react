@@ -39,7 +39,7 @@ pnpm add @modular-react/compositions
 
 Peer deps: `@modular-react/core`, `@modular-react/react`, `@modular-react/journeys`, `react`, `react-dom`.
 
-`@modular-react/journeys` is a peer dependency because composition zones can host journey instances and the validator reuses the journey package's semver implementation. If you never declare a `kind: "journey"` resolution and never use `moduleCompat`, the journey runtime is still linked but unused.
+`@modular-react/journeys` is a peer dependency because composition zones can host journey instances (`kind: "journey"` resolutions render through `<JourneyOutlet>`). If you never declare a `kind: "journey"` resolution, the journey runtime is still linked but unused — the validator's `moduleCompat` semver check is sourced from `@modular-react/core` and does not depend on journeys.
 
 ## Mental model
 
@@ -703,7 +703,7 @@ Throws `CompositionValidationError` (with `issues: readonly string[]`) aggregati
 Cross-references the composition against the resolved module map:
 
 - **Duplicate composition ids** — `"composition X is registered more than once"`.
-- **`moduleCompat`** — every entry naming a registered module is checked with the semver subset shared with `@modular-react/journeys` (caret, tilde, x-range, bounded, hyphen, AND, OR). Empty/non-string ranges and parse errors are reported. Modules not registered in the assembly are silently skipped (typed-module catalogs may include environment-specific modules).
+- **`moduleCompat`** — every entry naming a registered module is checked with the shared semver subset from `@modular-react/core` (caret, tilde, x-range, bounded, hyphen, AND, OR). Empty/non-string ranges and parse errors are reported. Modules not registered in the assembly are silently skipped (typed-module catalogs may include environment-specific modules).
 - **Zone contracts** — for every zone with a declared `contract`, the validator spot-checks that at least one registered module declares the same `ExitContract` (by reference identity) as an exit point. If none does, the registration fails.
 
 The contract check is intentionally weak ("at least one"). Selectors are dynamic, so we cannot statically enumerate every reachable `module-entry` resolution. Pair contracts with `moduleCompat` to also enforce version-range agreement on each candidate module.

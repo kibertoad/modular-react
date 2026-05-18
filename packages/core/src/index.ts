@@ -159,3 +159,18 @@ export type {
   JourneySystemAbortReasonCode,
 } from "./journey-contracts.js";
 export { isTerminal, isJourneySystemAbort } from "./journey-contracts.js";
+
+// Semver subset — used by both @modular-react/journeys (range checks on
+// module-compat declarations) and @modular-react/compositions
+// (`moduleCompat` validation). Lives here so neither plugin has to depend
+// on the other for a piece of shared, dependency-free logic.
+export {
+  satisfies,
+  satisfiesParsed,
+  parseRange,
+  parseVersion,
+  compareVersions,
+  compareTriples,
+  SemverParseError,
+} from "./semver.js";
+export type { ParsedRange, SemverTriple } from "./semver.js";

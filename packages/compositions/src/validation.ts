@@ -1,6 +1,5 @@
-import { isExitContract } from "@modular-react/core";
+import { isExitContract, satisfies, SemverParseError } from "@modular-react/core";
 import type { ExitContract, ModuleDescriptor } from "@modular-react/core";
-import { satisfies, SemverParseError } from "@modular-react/journeys";
 import type { AnyCompositionDefinition, RegisteredComposition } from "./types.js";
 
 /**
@@ -111,7 +110,7 @@ export function validateCompositionDefinition(def: AnyCompositionDefinition): re
  *
  * `moduleCompat` is checked here too: every entry whose key matches a
  * registered module is compared against that module's `version` using
- * the semver subset shared with `@modular-react/journeys`.
+ * the shared semver subset exported from `@modular-react/core`.
  */
 export function validateCompositionContracts(
   compositions: readonly RegisteredComposition[],
@@ -129,10 +128,11 @@ export function validateCompositionContracts(
     }
     seenIds.add(def.id);
 
-    // moduleCompat range check — semver via the journeys-owned helper.
-    // Entries naming a module that isn't registered in this assembly are
-    // silently skipped (typed-module catalogs may include modules whose
-    // registration is environment-specific).
+    // moduleCompat range check — semver via the shared helper in
+    // `@modular-react/core`. Entries naming a module that isn't
+    // registered in this assembly are silently skipped (typed-module
+    // catalogs may include modules whose registration is
+    // environment-specific).
     const compat = def.moduleCompat;
     if (compat && typeof compat === "object") {
       for (const [moduleId, range] of Object.entries(compat as Record<string, string>)) {
