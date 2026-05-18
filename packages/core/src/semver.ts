@@ -1,6 +1,12 @@
 /**
  * Minimal semver subset for module-compatibility checks.
  *
+ * Lives in `@modular-react/core` because multiple plugin packages
+ * (`@modular-react/journeys`, `@modular-react/compositions`) need to
+ * range-check module versions against author-declared compat ranges, and
+ * pulling either plugin in as a dependency of the other purely for semver
+ * would couple unrelated runtimes.
+ *
  * Why not the `semver` package?
  * -----------------------------
  * `semver` is the canonical JavaScript implementation of the full semver-2.0
@@ -11,16 +17,16 @@
  *   1. **Parse cost.** `new SemVer(v)` and `new Range(r)` allocate several
  *      objects per call — a `SemVer` for each comparator, regex matches over
  *      a hot path. For a startup-time validation that runs once per
- *      registered journey × module, the parse cost is fine; for long-running
- *      checks (test suites that resolve hundreds of manifests, hot-reload
- *      cycles in dev) it adds up.
+ *      registered module × declared range, the parse cost is fine; for
+ *      long-running checks (test suites that resolve hundreds of manifests,
+ *      hot-reload cycles in dev) it adds up.
  *   2. **Range expansion.** `^1.2.3` parses into a `Range` with two
  *      `Comparator` objects wrapping two `SemVer` objects; satisfaction is
  *      then checked by walking comparator sets. It works, but for the
  *      narrow set of ranges this codebase actually uses (caret/tilde/exact
- *      from `package.json` and authoring sugar on journey declarations) the
- *      math collapses into "is `[major, minor, patch]` in `[lo, hi)`?" — a
- *      handful of integer comparisons.
+ *      from `package.json` and authoring sugar on module-compat
+ *      declarations) the math collapses into "is `[major, minor, patch]` in
+ *      `[lo, hi)`?" — a handful of integer comparisons.
  *
  * What this implementation supports
  * ---------------------------------
@@ -76,7 +82,7 @@ export interface ParsedRange {
 
 export class SemverParseError extends Error {
   constructor(message: string) {
-    super(`[@modular-react/journeys] ${message}`);
+    super(`[@modular-react/core] semver: ${message}`);
     this.name = "SemverParseError";
   }
 }

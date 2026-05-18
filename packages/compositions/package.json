@@ -1,11 +1,11 @@
 {
-  "name": "@modular-react/journeys",
-  "version": "1.4.0",
-  "description": "Typed, serializable workflows that compose multiple modules. A journey declares entry/exit transitions between modules and owns shared state; modules stay journey-unaware.",
+  "name": "@modular-react/compositions",
+  "version": "0.1.0",
+  "description": "Multi-module screen composition for modular-react. Arrange foreign module entries (and journeys) into named zones on a single screen, driven by a per-instance scoped store.",
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
-    "directory": "packages/journeys"
+    "directory": "packages/compositions"
   },
   "files": [
     "dist"
@@ -17,10 +17,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./testing": {
-      "types": "./dist/testing.d.ts",
-      "import": "./dist/testing.js"
     }
   },
   "publishConfig": {
@@ -30,22 +26,19 @@
     "build": "vite build",
     "dev": "vite build --watch",
     "test": "vitest run",
-    "bench": "vitest bench --run bench",
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@modular-react/core": "workspace:*",
+    "@modular-react/journeys": "workspace:*",
     "@modular-react/react": "workspace:*",
-    "@modular-react/testing": "workspace:*",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.9.0",
-    "oxfmt": "^0.48.0",
-    "oxlint": "^1.63.0",
     "react": "^19.2.6",
-    "react-dom": "^19.0.0",
+    "react-dom": "^19.2.6",
     "typescript": "^6.0.3",
     "vite": "^8.0.11",
     "vite-plugin-dts": "^4.5.4",

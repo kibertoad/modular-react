@@ -28,12 +28,17 @@ export {
   validateJourneyDefinition,
   validateJourneyGraph,
 } from "./validation.js";
-// Public semver surface. The full set of primitives lives in
-// `./semver.js` for the package's own tests and bench, but only the
-// minimal "match" + "order" + error class are part of the public API
-// — the parsed-range / triple types and their producers are
-// implementation detail and we don't want them to ossify.
-export { satisfies, compareVersions, SemverParseError } from "./semver.js";
+// Public semver surface. The implementation now lives in
+// `@modular-react/core` so both journeys and compositions can share it
+// without one depending on the other; the journeys package re-exports
+// the minimal "match" + "order" + error class for back-compat. New
+// callers should import these from `@modular-react/core` directly.
+export { satisfies, compareVersions, SemverParseError } from "@modular-react/core";
+
+// Mount adapter — lets other packages (today: `@modular-react/compositions`)
+// embed a journey runtime via the generic `RuntimeMountAdapter` shape
+// without depending on this package's React surface directly.
+export { createJourneyMountAdapter } from "./mount-adapter.js";
 export { JourneyOutlet, useJourneyCallStack } from "./outlet.js";
 export type {
   JourneyOutletProps,

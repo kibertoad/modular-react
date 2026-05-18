@@ -1,6 +1,6 @@
 {
   "name": "@modular-react/core",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Core primitives for modular React applications: types, slots, navigation, validation, and a lightweight store. No runtime React dependency — pure logic with React type declarations.",
   "repository": {
     "type": "git",

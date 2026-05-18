@@ -294,7 +294,7 @@ If the command palette should include per-integration entries only while that in
 ## When not to use this pattern
 
 - Integrations with fundamentally different UIs (a visual editor vs. a tabular browser). Then they're different screens and should be separate components owned by separate modules — not siblings of the same screen.
-- Integrations that need to share state across each other. Then a shared store in `app-shared` (or an owning integration-manager module) is the right home; sibling modules sharing a stateless screen doesn't fit.
+- Integrations that need to share state across each other. Then a shared store in `app-shared` (or an owning integration-manager module) is the right home; sibling modules sharing a stateless screen doesn't fit. When that shared state is also the **orchestration bus** between modules — e.g. a left panel and a main canvas need to agree on a selection, with each panel free to dispatch into and read from the same state — graduate to [`@modular-react/compositions`](../packages/compositions/README.md). It gives you a per-instance scoped store, named layout zones, and typed selectors over the same module map.
 - Cases where the set of integrations is not known at build time. Then you're in plugin territory — use `registerLazy` or a runtime registration layer; the config-passed-as-props pattern still applies per-plugin.
 
 ## When to use this vs. Remote Capability Manifests
@@ -320,6 +320,7 @@ If the set is known today but may grow unbounded tomorrow, start here. When grow
 - **[Navigation](navigation.md)** — each integration module owns its own nav item. Consider typing `group` (e.g. `"integrations"`) so the sidebar groups them visually.
 - **[Workspace Patterns](workspace-patterns.md)** — if the integrations are opened as tabs rather than routes, swap `handle` / `staticData` for `useActiveZones(activeModuleId)`; the rest of the pattern is the same.
 - **[Remote Capability Manifests](remote-capability-manifests.md)** — the runtime, backend-driven counterpart. Same "one shared renderer, per-item variance" idea, but the items are JSON rows instead of modules. See the comparison table above for how to pick.
+- **[`@modular-react/compositions`](../packages/compositions/README.md)** — the framework-level "one screen, several modules sharing state" primitive. Reach for it when the sibling modules need a real orchestration bus (typed selectors over a scoped store, named zones, persistence) instead of plain per-route config.
 
 ## Example
 
