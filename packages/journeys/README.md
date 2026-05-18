@@ -1614,6 +1614,81 @@ registry.registerJourney(journey, {
 
 A plain object matching `JourneyPersistence<TState>` still works if you'd rather not use the helper.
 
+### Registering multiple journeys
+
+A shell registering more than one journey has two safe shapes for persistence and one tempting trap.
+
+**Safe — one typed adapter per journey.** Declare each `createWebStoragePersistence<TInput, TState>` (or `defineJourneyPersistence<TInput, TState>`) call against its own journey's types and pass it to that journey's `registerJourney`. This is what `examples/react-router/journey-invoke` and `examples/tanstack-router/journey-invoke` do — separate `checkoutPersistence` and `verifyIdentityPersistence` exports, each typed to its own journey's state. Use this shape when the setup expression is short and you don't mind repeating it.
+
+**Safe — a generic factory.** Wrap the setup in a `makeJourneyPersistence<TInput, TState>()` helper and invoke it per `registerJourney`. Use this shape when the setup expression is long (custom SSR guards, lazy `storage` getters, shared `keyFor` scheme) and you want a single source of truth without per-call repetition:
+
+```ts
+import { createWebStoragePersistence, type SyncJourneyPersistence } from "@modular-react/journeys";
+
+interface AppJourneyKey {
+  readonly userId: string;
+  readonly tenantId: string;
+}
+
+const sessionStorageOrNull: Storage | null =
+  typeof window !== "undefined" && typeof window.sessionStorage !== "undefined"
+    ? window.sessionStorage
+    : null;
+
+function makeJourneyPersistence<TInput extends AppJourneyKey, TState>(): SyncJourneyPersistence<
+  TState,
+  TInput
+> {
+  return createWebStoragePersistence<TInput, TState>({
+    keyFor: ({ journeyId, input }) => `journey:${journeyId}:${input.tenantId}:${input.userId}`,
+    storage: sessionStorageOrNull,
+  });
+}
+
+registry.registerJourney(onboardingJourney, {
+  persistence: makeJourneyPersistence<OnboardingInput, OnboardingState>(),
+});
+registry.registerJourney(checkoutJourney, {
+  persistence: makeJourneyPersistence<CheckoutInput, CheckoutState>(),
+});
+```
+
+Each factory call binds the calling journey's concrete `TInput`/`TState`, so the variance check passes without an `as` cast on either the definition or the adapter. The factory composes with `defineJourneyPersistence<TInput, TState>` for hand-rolled backends — same per-journey call shape, the helper just types `keyFor`/`load`/`save`/`remove` against the journey's types.
+
+**Trap — one shared adapter typed `<unknown, TInput>`.** The shape that DRY instinct lands on if you're not careful: one `persistence` object reused across every `registerJourney` call, declared once with `TState` widened to `unknown` so it "fits everywhere". It doesn't. `JourneyDefinition.start(state: TState, ...)` puts `TState` in a contravariant position; the variance check rejects `unknown` against any concrete state. TypeScript infers `TState = unknown` from the `persistence` arg, then reports the mismatch against the journey-definition arg (the first arg) — not against `persistence` itself — surfacing as:
+
+```
+Argument of type 'JourneyDefinition<OnboardingState, AppJourneyKey>' is not assignable
+to parameter of type 'JourneyDefinition<unknown, AppJourneyKey>'.
+  Types of property 'start' are incompatible.
+    ...
+    Type 'unknown' is not assignable to type 'OnboardingState'.
+```
+
+Reach for one of the two safe shapes above instead — both are zero-cost at runtime.
+
+```ts
+import { createWebStoragePersistence, type SyncJourneyPersistence } from "@modular-react/journeys";
+
+// One persistence to rule them all... or so you think.
+export const sharedJourneyPersistence: SyncJourneyPersistence<unknown, AppJourneyKey> =
+  createWebStoragePersistence<AppJourneyKey, unknown>({
+    keyFor: ({ journeyId, input }) => `journey:${journeyId}:${input.tenantId}:${input.userId}`,
+  });
+
+// Both calls fail at the journey-definition arg (first arg), not at the declaration above:
+// TS infers TState=unknown from `persistence`, then rejects the typed
+// `JourneyDefinition<…, OnboardingState>` because its `start(state)` is contravariant in TState.
+registry.registerJourney(onboardingJourney, {
+  // Error reported on `onboardingJourney`: 'unknown' is not assignable to 'OnboardingState'.
+  persistence: sharedJourneyPersistence,
+});
+registry.registerJourney(checkoutJourney, {
+  // Error reported on `checkoutJourney`: 'unknown' is not assignable to 'CheckoutState'.
+  persistence: sharedJourneyPersistence,
+});
+```
+
 ### Stock adapters: `createWebStoragePersistence` and `createMemoryPersistence`
 
 Two factories ship with the package so common setups don't have to reimplement the same 20 lines of SSR guards and JSON handling. Both return values satisfying `JourneyPersistence<TState, TInput>` - pass them directly to `registerJourney({ persistence })`.
