@@ -46,6 +46,7 @@ Once a workspace has accumulated more modules than any one team can keep in thei
 - `@react-router-modules/*`: **v2.x**, considered stable for the APIs documented in the guides below.
 - `@tanstack-react-modules/*`: **v1.x**, considered stable for the APIs documented in the guides below.
 - `@modular-react/{core,react,testing}`: the shared foundation, stable at `1.x`. The router-integration packages depend on these and version independently.
+- `@modular-react/compositions`: **v0.1.x**, the surface and behavior are documented in [its README](packages/compositions/README.md) but breaking changes between 0.x minor versions are still possible.
 
 All packages target **React 19** and **Node 22+**. The docs and CLI scaffolder assume **pnpm workspaces**, but nothing in the runtime or CLI is pnpm-specific; any local package resolution that understands the `workspace:*` protocol (Yarn Berry, Bun) will work after scaffolding with a few script edits. See each getting-started guide for the full pinned version set.
 
@@ -85,6 +86,7 @@ Conceptual documentation for building apps with the framework. Start with a gett
 | [Workspace Patterns](docs/workspace-patterns.md)                                   | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                                                                                   |
 | [Sibling modules sharing a screen](docs/sibling-modules-shared-screen.md)          | One generic screen (e.g. an integration manager) rendered by several sibling modules with per-module config flowing through typed handle (React Router) or staticData (TanStack Router).  |
 | [Journeys](packages/journeys/README.md)                                            | Typed multi-module workflows with serializable shared state — entry/exit contracts, branch/complete/abort transitions, pluggable persistence.                                             |
+| [Compositions](packages/compositions/README.md)                                    | Multi-module screen layout — arrange modules (and journeys) into named zones on a single screen, with a per-instance scoped store as the orchestration bus.                               |
 | [Catalog](packages/catalog/README.md)                                              | Build-time discovery portal: harvest every `defineModule` / `defineJourney`, surface owner/domain/tags facets, pre-compute the journey↔module cross-reference graph, ship as static HTML. |
 | [Remote Capability Manifests](docs/remote-capability-manifests.md)                 | Drive slots/navigation from backend JSON — `RemoteModuleManifest`, `mergeRemoteManifests`, validation, SSR, and the single-module pattern.                                                |
 
@@ -191,6 +193,7 @@ See [`examples/README.md`](examples/README.md) for how to run them and how to ad
 | [`@modular-react/react`](packages/react)       | React bindings: context providers, hooks (`useStore`, `useSlots`, `useNavigation`, etc.), error boundary. |
 | [`@modular-react/testing`](packages/testing)   | Test utilities for resolving modules without rendering.                                                   |
 | [`@modular-react/journeys`](packages/journeys) | Typed, serializable multi-module workflows with entry/exit contracts and a pluggable persistence adapter. |
+| [`@modular-react/compositions`](packages/compositions) | Multi-module screen layout: arrange several modules (and journeys) into named zones on one screen, driven by a per-instance scoped store. |
 | [`@modular-react/catalog`](packages/catalog)   | Build-time harvester + static SPA: scans for descriptors and emits a deployable discovery portal.         |
 | [`@modular-react/cli-core`](packages/cli-core) | Shared command implementations and templates for the router-specific CLI binaries.                        |
 
@@ -222,9 +225,11 @@ Shared layer (router-agnostic):
        |
   @modular-react/testing    (resolveModule without rendering)
        |
-  @modular-react/journeys   (typed multi-module workflows, optional)
+  @modular-react/journeys      (typed multi-module workflows, optional)
        |
-  @modular-react/catalog    (static discovery portal, build-time only, optional)
+  @modular-react/compositions  (multi-module screen layout + scoped store, optional)
+       |
+  @modular-react/catalog       (static discovery portal, build-time only, optional)
        |
   @modular-react/cli-core   (shared CLI commands + templates)
 

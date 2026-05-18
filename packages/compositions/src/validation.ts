@@ -1,5 +1,6 @@
 import { isExitContract } from "@modular-react/core";
 import type { ExitContract, ModuleDescriptor } from "@modular-react/core";
+import { satisfies, SemverParseError } from "@modular-react/journeys";
 import type { AnyCompositionDefinition, RegisteredComposition } from "./types.js";
 
 /**
@@ -108,8 +109,9 @@ export function validateCompositionDefinition(def: AnyCompositionDefinition): re
  * accidentally drop the contract surface immediately as a registry
  * failure rather than at first render.
  *
- * For full per-resolution checking, authors can pair a contract with
- * `moduleCompat` so module version drift fails assembly too.
+ * `moduleCompat` is checked here too: every entry whose key matches a
+ * registered module is compared against that module's `version` using
+ * the semver subset shared with `@modular-react/journeys`.
  */
 export function validateCompositionContracts(
   compositions: readonly RegisteredComposition[],
@@ -127,28 +129,38 @@ export function validateCompositionContracts(
     }
     seenIds.add(def.id);
 
-    // moduleCompat range check — only entries naming registered modules
-    // are checked; unknown ids are silently allowed because typed-module
-    // catalogs may include modules whose registration is environment-
-    // specific.
+    // moduleCompat range check — semver via the journeys-owned helper.
+    // Entries naming a module that isn't registered in this assembly are
+    // silently skipped (typed-module catalogs may include modules whose
+    // registration is environment-specific).
     const compat = def.moduleCompat;
     if (compat && typeof compat === "object") {
       for (const [moduleId, range] of Object.entries(compat as Record<string, string>)) {
         const mod = moduleById.get(moduleId);
-        if (!mod) continue; // not registered in this assembly — skip
-        // The journeys package owns the semver implementation; we do a
-        // simple string check here rather than importing semver to keep
-        // this package free of the dependency. The journeys plugin's
-        // `validateJourneyContracts` already does the full check for any
-        // shared module, which is sufficient for the editor-composition
-        // use case (modules appear in both).
+        if (!mod) continue;
         if (typeof range !== "string" || range.length === 0) {
           issues.push(
             `composition "${def.id}" moduleCompat["${moduleId}"] is empty or not a string`,
           );
+          continue;
         }
-        if (typeof mod.version !== "string") {
+        if (typeof mod.version !== "string" || mod.version.length === 0) {
           issues.push(`module "${moduleId}" has no version, cannot check moduleCompat`);
+          continue;
+        }
+        try {
+          if (!satisfies(mod.version, range)) {
+            issues.push(
+              `composition "${def.id}" requires module "${moduleId}" to satisfy "${range}", but the registered module is version "${mod.version}"`,
+            );
+          }
+        } catch (err) {
+          // Malformed range — surface a useful message including the
+          // composition id so authors know where to fix it.
+          const reason = err instanceof SemverParseError ? err.message : String(err);
+          issues.push(
+            `composition "${def.id}" moduleCompat["${moduleId}"] = "${range}" is not parseable: ${reason}`,
+          );
         }
       }
     }

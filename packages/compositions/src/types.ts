@@ -26,9 +26,12 @@ export type CompositionStatus = "loading" | "active" | "disposed";
  *     looks the entry up in the registry-supplied module map and feeds
  *     `input` into the component via `ModuleEntryProps.input`.
  *   - `journey`: mount a `<JourneyOutlet>` for the referenced journey
- *     handle. The composition runtime lazily mints a child journey
- *     instance keyed on `(handle.id, input)` unless `instanceId` is
- *     supplied (caller-owned journey lifetime).
+ *     handle. The composition outlet caches the minted journey instance
+ *     id per ZoneRenderer keyed on `(handle.id, structural hash of input)`
+ *     so a state change that produces the same resolution does not
+ *     re-mint. Pass `instanceId` explicitly if you want caller-owned
+ *     journey lifetime (the outlet then skips the cache and uses your id
+ *     directly).
  *   - `empty`: render the zone's `fallback` (or nothing).
  *
  * `TModules` keeps `module` constrained to ids that participate in the
@@ -77,9 +80,13 @@ export type ZoneSelector<TModules extends ModuleTypeMap, TState> = (
  *     registry resolve time by `validateCompositionContracts` for every
  *     reachable `module-entry` resolution.
  *   - `fallback` — rendered when the selector returns `"empty"`.
- *   - `preload` — controls whether sibling-zone entries are prefetched at
- *     idle time. Defaults to `"lazy"`; pass `"eager"` to warm all
- *     candidates up-front (only meaningful for lazy entries).
+ *   - `preload` — controls whether THIS zone's currently-resolved
+ *     module-entry is prefetched at idle time after the outlet mounts.
+ *     Defaults to `"lazy"` (no extra prefetch — the chunk loads when
+ *     the panel first renders). Pass `"eager"` to warm the entry's
+ *     chunk during browser idle so the first paint of the zone is
+ *     synchronous. Only meaningful for lazy entries; eager entries
+ *     are already resolved.
  */
 export interface ZoneDescriptor<
   TModules extends ModuleTypeMap,
@@ -103,16 +110,36 @@ export type ZoneMap<TModules extends ModuleTypeMap, TState> = Readonly<
 
 /**
  * Lifecycle hooks fired by the composition runtime around an instance's
- * lifetime. Symmetric with `ModuleLifecycle` from core — `onMount` runs
- * once when the first outlet attaches; `onUnmount` runs when the last
- * outlet detaches and the disposal microtask fires.
+ * lifetime. Symmetric with `ModuleLifecycle` from core:
+ *
+ *   - `onMount` runs once when the instance transitions to `"active"` —
+ *     synchronously inside `runtime.start()` for memory-only compositions,
+ *     and after the persistence `load()` resolves for persistence-backed
+ *     ones. It can fire before any outlet has attached.
+ *   - `onUnmount` runs once when the instance is disposed — either by
+ *     an explicit `runtime.end(id)` or by the last outlet detaching
+ *     (after a disposal microtask that survives StrictMode mount cycles).
+ *
+ * Both hooks receive the current state and the runtime's `deps` snapshot.
+ * Throws in either hook are caught and routed to `options.onError` with
+ * `phase: "lifecycle"`.
  */
 export interface CompositionLifecycle<TState> {
   onMount?(state: TState, deps: Readonly<Record<string, unknown>>): void;
   onUnmount?(state: TState, deps: Readonly<Record<string, unknown>>): void;
 }
 
-/** Per-zone error boundary policy — mirrors `JourneyStepErrorPolicy`. */
+/**
+ * Per-zone error boundary policy:
+ *
+ *   - `retry` — bump the per-zone retry counter (capped by the outlet's
+ *     `retryLimit`) and remount the boundary. On exhaustion, falls
+ *     through to `fallback`.
+ *   - `fallback` — keep the boundary's fallback UI rendered.
+ *   - `ignore` — render `null` in place of the zone. Useful for a panel
+ *     that's optional UI sugar (e.g. a recommendation strip) whose
+ *     failure shouldn't show any error chrome to the user.
+ */
 export type CompositionZoneErrorPolicy = "retry" | "fallback" | "ignore";
 
 /**
@@ -163,10 +190,9 @@ export interface CompositionDefinition<
   readonly lifecycle?: CompositionLifecycle<TState>;
 
   /**
-   * Per-zone error boundary fallback policy. Receives the throw and the
-   * zone context; returns `"retry"` to bump a retry counter (capped by
-   * the outlet's `retryLimit`), `"fallback"` to keep the boundary's
-   * fallback UI mounted, or `"ignore"` to blank the zone.
+   * Per-zone error boundary fallback policy. See
+   * {@link CompositionZoneErrorPolicy} for the three options. Defaults
+   * to `"fallback"` when omitted.
    */
   readonly onZoneError?: (
     err: unknown,
@@ -188,6 +214,17 @@ export interface CompositionDefinition<
     readonly state: TState;
     readonly reason: unknown;
   }) => void;
+
+  /**
+   * Definition-level migration hook. Runs over a loaded blob whenever
+   * its `version` does not match `definition.version`. Returning a
+   * migrated blob lets the runtime continue; throwing — or returning a
+   * value the runtime can't reconcile — surfaces as a
+   * {@link CompositionHydrationError}. Mirrors `JourneyDefinition.onHydrate`.
+   */
+  readonly onHydrate?: (
+    blob: SerializedComposition<unknown>,
+  ) => SerializedComposition<TState>;
 }
 
 /**
@@ -214,20 +251,47 @@ export interface CompositionRegisterOptions<TState = unknown, TInput = unknown> 
     ctx: { readonly zone: string; readonly phase: "select" | "render" | "lifecycle" },
   ) => void;
   /**
-   * Layered on top of the definition-level `onMount` — fires when a new
-   * instance becomes active (after persistence load, before first render).
+   * Layered on top of the definition-level `lifecycle.onMount` — fires
+   * exactly once when the instance transitions to `"active"` (after the
+   * persistence load resolves, or immediately for memory-only
+   * compositions). Useful for shell telemetry that doesn't belong in
+   * composition-author code.
    */
   onMount?: (ctx: {
     readonly compositionId: string;
     readonly instanceId: CompositionInstanceId;
     readonly state: TState;
   }) => void;
-  /** Layered on top of the definition-level `onDispose`. */
+  /**
+   * Layered on top of the definition-level `lifecycle.onUnmount` — fires
+   * exactly once at disposal. Receives the final state.
+   */
   onUnmount?: (ctx: {
     readonly compositionId: string;
     readonly instanceId: CompositionInstanceId;
     readonly state: TState;
   }) => void;
+  /**
+   * Registration-level migration hook. Runs AFTER the definition's own
+   * `onHydrate` — shells can layer environment-specific upgrades on top
+   * of the composition author's. Same contract: produce a blob whose
+   * `version` matches the active definition, or throw.
+   */
+  onHydrate?: (
+    blob: SerializedComposition<unknown>,
+  ) => SerializedComposition<TState>;
+  /**
+   * Debounce window (in milliseconds) between persistence writes for
+   * this composition. When set, `dispatch` mutations within the window
+   * coalesce into a single trailing-edge save. Defaults to `0` —
+   * every mutation triggers a save (matching {@link JourneyPersistence}'s
+   * semantics).
+   *
+   * High-frequency interactions (drag, controlled inputs) should set
+   * this to ~150ms; durability-critical state should leave it at 0.
+   * Disposal always flushes any pending save before clearing the blob.
+   */
+  saveDebounceMs?: number;
 }
 
 export interface RegisteredComposition<TState = unknown, TInput = unknown> {
@@ -342,15 +406,32 @@ export interface CompositionRuntime {
    * object (shallow-merged) or an updater function. Panels and the host
    * usually go through {@link CompositionContextValue.dispatch} via
    * `useCompositionDispatch`; this is the lower-level entry point.
+   *
+   * Behavior across statuses:
+   *   - `"loading"` — the updater is buffered and replayed in arrival
+   *     order once the persistence load resolves and the instance flips
+   *     to `"active"`. Callers do not lose writes issued right after
+   *     `start()`.
+   *   - `"active"` — applied synchronously to the underlying store.
+   *   - `"disposed"` — silently dropped.
    */
   dispatch<TState>(
     id: CompositionInstanceId,
     updater: Partial<TState> | ((prev: TState) => Partial<TState> | TState),
   ): void;
   /**
-   * Tear down an instance. Cleans listeners, fires `onUnmount`, removes
-   * persisted blob. Idempotent — calling on an already-disposed instance
-   * is a no-op.
+   * Tear down an instance. Cancels any pending debounced save, fires
+   * `lifecycle.onUnmount` and the registration-level `onUnmount`, fires
+   * `onDispose(ctx)`, unsubscribes the store, removes the persisted blob
+   * (successor-aware — if another instance already claimed the same
+   * persistence key, the remove is suppressed), notifies subscribers one
+   * last time with `status: "disposed"`, then deletes the record.
+   * Idempotent — calling on an already-disposed instance is a no-op.
+   *
+   * Callers usually do not invoke this directly; the outlet disposes
+   * automatically when it unmounts and no other listeners remain.
+   * Reach for `end()` for programmatic teardown (e.g. a Cmd-K palette
+   * killing a stale instance, or test cleanup).
    */
   end(id: CompositionInstanceId, ctx?: { readonly reason: unknown }): void;
 }

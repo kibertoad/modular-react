@@ -2,6 +2,7 @@ import {
   Component,
   Suspense,
   createElement,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -95,6 +96,22 @@ function useInstanceSnapshot(
 }
 
 /**
+ * Stable input hash used to dedupe lazy journey-zone instance ids.
+ * Tolerates non-JSON-serializable input (cycles, functions) by falling
+ * back to a stringified type tag — duplicates of unhashable input land
+ * in the same bucket, which is the conservative choice (one journey
+ * instance instead of N).
+ */
+function hashInput(input: unknown): string {
+  if (input === undefined) return "u";
+  try {
+    return JSON.stringify(input);
+  } catch {
+    return `<${typeof input}>`;
+  }
+}
+
+/**
  * Renders a composition instance. Host-agnostic — works in a route
  * Component, a tab, a modal, or any plain container. On unmount while
  * the instance has no other listeners, the instance is disposed
@@ -147,6 +164,71 @@ export function CompositionOutlet<TZones extends string = string>(
     if (!reg) return [];
     return Object.keys(reg.definition.zones);
   }, [reg]);
+
+  // Eager preload: when a zone declares `preload: "eager"`, warm the
+  // chunk of whatever module-entry its selector returns RIGHT NOW. The
+  // effect re-runs as state changes; we cancel any in-flight idle
+  // callback when state moves before we got around to firing it. Has no
+  // effect server-side or on eager (non-lazy) entries.
+  const stateSignature = instance?.state;
+  useEffect(() => {
+    if (!reg || !instance || instance.status !== "active") return;
+    const eagerZones: Array<{ zoneName: string; descriptor: ZoneDescriptor<any, any> }> = [];
+    const zones = reg.definition.zones as Record<string, ZoneDescriptor<any, any>>;
+    for (const zoneName of zoneNames) {
+      const descriptor = zones[zoneName];
+      if (descriptor?.preload === "eager") {
+        eagerZones.push({ zoneName, descriptor });
+      }
+    }
+    if (eagerZones.length === 0) return;
+
+    let cancelled = false;
+    const run = (): void => {
+      if (cancelled) return;
+      for (const { zoneName, descriptor } of eagerZones) {
+        let selection: ZoneResolution<any>;
+        try {
+          selection = descriptor.select({ state: instance.state, deps: internals.__deps });
+        } catch {
+          // Selector errors are surfaced at render time; preload is
+          // best-effort, so we swallow here.
+          continue;
+        }
+        if (selection.kind !== "module-entry") continue;
+        const mod = modules[selection.module];
+        const entry = mod?.entryPoints?.[selection.entry];
+        if (!mod || !entry) continue;
+        try {
+          resolveEntryComponent(entry).preload();
+        } catch {
+          // Best-effort: a malformed entry would have failed validation
+          // upstream. Don't let one bad zone block the rest.
+          void zoneName; // explicit no-op marker for the lint-rule
+        }
+      }
+    };
+
+    const ricFn = (
+      globalThis as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+      }
+    ).requestIdleCallback;
+    const cicFn = (globalThis as { cancelIdleCallback?: (handle: number) => void })
+      .cancelIdleCallback;
+    let idleHandle: number | undefined;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    if (typeof ricFn === "function") {
+      idleHandle = ricFn(run, { timeout: 2000 });
+    } else {
+      timeoutHandle = setTimeout(run, 0);
+    }
+    return () => {
+      cancelled = true;
+      if (idleHandle !== undefined && typeof cicFn === "function") cicFn(idleHandle);
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    };
+  }, [reg, instance, stateSignature, zoneNames, modules, internals]);
 
   if (!instance) return null;
   if (instance.status === "loading") return loadingFallback ?? null;
@@ -215,61 +297,118 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
   const internals = getInternals(runtime);
   const journeyContext = useJourneyContext();
   const [retryKey, setRetryKey] = useState(0);
+  // Sentinel that flips when handleError decides to render `null` instead
+  // of the error fallback (policy === "ignore"). Keyed by selectionKey so
+  // a later resolution that errors gets its own decision.
+  const [ignoredSelectionKey, setIgnoredSelectionKey] = useState<string | null>(null);
 
   // Subscribe to the composition's store so the zone re-runs its selector
-  // on every state change. The store lives on the instance record.
+  // on every state change. The store lives on the instance record. The
+  // getSnapshot result is null-tolerant — if the record disappears
+  // mid-disposal, the null short-circuits the selector path below.
   const record = internals.__getRecord(instanceId);
   const store = record?.store;
   const state = useSyncExternalStore(
     (cb) => (store ? store.subscribe(cb) : () => {}),
-    () => store?.getState(),
-    () => store?.getState(),
+    () => (store ? store.getState() : null),
+    () => (store ? store.getState() : null),
   );
 
-  if (!record || !store) return null;
+  // Per-resolution journey instance cache. Without this, the JourneyOutlet
+  // path mints a fresh `ji_*` on every state change because the selector
+  // re-runs and we call `journeyRuntime.start(handle, input)` inline. The
+  // cache is keyed on the entire handle+input pair so two zones (or two
+  // selectors returning different inputs to the same handle) get
+  // independent instances.
+  const journeyInstanceCache = useRef<Map<string, CompositionInstanceId>>(new Map());
 
-  // Run the selector. Catch throws so a bad selector aborts the zone, not
-  // the whole composition.
-  let selection: ZoneResolution<any> = { kind: "empty" };
-  try {
-    selection = descriptor.select({ state, deps: internals.__deps });
-  } catch (err) {
-    internals.__fireOnError(instanceId, err, { zone, phase: "select" });
-    return renderError(zone, err, errorComponent);
-  }
-
-  // Build the context value once per render. Foreign panels read it via
-  // useCompositionState / useCompositionDispatch / useCompositionEmit.
-  const contextValue: CompositionContextValue = {
-    runtime,
-    compositionId,
-    instanceId,
-    zone,
-    store,
-    dispatch: (updater) => {
+  // Stable callbacks so foreign panels reading useCompositionDispatch /
+  // useCompositionEmit don't re-render on every parent re-render.
+  const dispatch = useCallback(
+    (updater: unknown) => {
       runtime.dispatch(instanceId, updater as never);
     },
-    emit: (event) => {
+    [runtime, instanceId],
+  );
+  const emit = useCallback(
+    (event: CompositionZoneEvent) => {
       try {
         onZoneEvent?.(event, { zone });
       } catch (err) {
         internals.__fireOnError(instanceId, err, { zone, phase: "render" });
       }
     },
-  };
+    [internals, instanceId, onZoneEvent, zone],
+  );
+
+  // Build the context value with a stable identity so panels using
+  // useCompositionDispatch / useCompositionEmit don't re-render on every
+  // composition-state change. The state itself is read separately via
+  // `useCompositionState(selector)`.
+  const contextValue = useMemo<CompositionContextValue>(
+    () => ({
+      runtime,
+      compositionId,
+      instanceId,
+      zone,
+      // Cast: the context type erases TState to unknown so the same
+      // context can carry stores of different shapes. Panels narrow via
+      // their useCompositionState selector.
+      store: store as unknown as CompositionContextValue["store"],
+      dispatch: dispatch as CompositionContextValue["dispatch"],
+      emit,
+    }),
+    [runtime, compositionId, instanceId, zone, store, dispatch, emit],
+  );
+
+  // Track previous selectionKey across renders so we can clear the
+  // per-zone retry counter once a fresh (working) resolution lands. Without
+  // this, a zone that exhausts its retry budget can never recover even after
+  // the upstream issue is fixed.
+  const previousSelectionKeyRef = useRef<string | null>(null);
+
+  if (!record || !store) return null;
+  // After the early-return above, `state` is guaranteed to be the store
+  // snapshot (not the null sentinel). Cast it locally to make the contract
+  // explicit at the call sites below.
+  const currentState = state as unknown;
+
+  // Run the selector. Catch throws so a bad selector aborts the zone, not
+  // the whole composition.
+  let selection: ZoneResolution<any> = { kind: "empty" };
+  try {
+    selection = descriptor.select({ state: currentState, deps: internals.__deps });
+  } catch (err) {
+    internals.__fireOnError(instanceId, err, { zone, phase: "select" });
+    return renderError(zone, err, errorComponent);
+  }
+
+  // Captured by reference inside the boundary's componentDidCatch.
+  // Re-built every render so it always sees the freshest selectionKey
+  // (computed lower in the render) and currentState.
+  const selectionKeyForErrorRef = useRef<string>("empty");
 
   const handleError = (err: unknown): void => {
     internals.__fireOnError(instanceId, err, { zone, phase: "render" });
     const reg = internals.__getRegistered(compositionId);
-    const policy = reg?.definition.onZoneError?.(err, { zone, instanceId, state }) ?? "fallback";
+    const policy =
+      reg?.definition.onZoneError?.(err, { zone, instanceId, state: currentState }) ?? "fallback";
     if (policy === "retry") {
       if (internals.__consumeRetry(instanceId, zone, retryLimit)) {
         setRetryKey((k) => k + 1);
       }
       // budget exhausted — fall through to the boundary's fallback UI
+      return;
     }
-    // "fallback" and "ignore" both leave the boundary fallback rendered;
-    // the difference is observability only (fireOnError already fired).
+    if (policy === "ignore") {
+      // Record the selectionKey that should render null. Once the
+      // selector returns a different resolution, the new selectionKey
+      // mismatches the ignored one and the boundary renders normally
+      // (the next-resolution case is handled in the JSX below).
+      setIgnoredSelectionKey(selectionKeyForErrorRef.current);
+      return;
+    }
+    // "fallback" — keep the default error UI rendered.
   };
 
   // Build the renderable content for this resolution.
@@ -307,8 +446,10 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
     }
   } else if (selection.kind === "journey") {
     // Mount a JourneyOutlet for the referenced journey handle. If the
-    // selector did not supply an instanceId, mint one lazily via the
-    // journey runtime (which must be available via <JourneyProvider>).
+    // selector did not supply an instanceId, look one up in the per-
+    // ZoneRenderer cache (or mint+cache on first miss). This makes the
+    // journey-zone idempotent on (handle.id, input) regardless of whether
+    // the journey runtime has persistence wired.
     const journeyRuntime = journeyContext?.runtime;
     if (!journeyRuntime) {
       content = renderError(
@@ -320,12 +461,20 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
       );
       selectionKey = `journey-err:${selection.handle.id}`;
     } else {
-      // Idempotent on (handle.id, input) — the journey runtime's persistence
-      // key (if any) handles deduping; otherwise we mint each time and rely
-      // on JourneyOutlet's listener-count semantics for cleanup.
-      const journeyInstanceId =
-        selection.instanceId ??
-        journeyRuntime.start(selection.handle, selection.input as never);
+      let journeyInstanceId = selection.instanceId;
+      if (!journeyInstanceId) {
+        const cacheKey = `${selection.handle.id}:${hashInput(selection.input)}`;
+        const cached = journeyInstanceCache.current.get(cacheKey);
+        if (cached) {
+          journeyInstanceId = cached;
+        } else {
+          journeyInstanceId = journeyRuntime.start(
+            selection.handle,
+            selection.input as never,
+          );
+          journeyInstanceCache.current.set(cacheKey, journeyInstanceId);
+        }
+      }
       selectionKey = `journey:${selection.handle.id}:${journeyInstanceId}`;
       content = (
         <JourneyOutlet
@@ -335,6 +484,17 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
       );
     }
   }
+
+  // Reset the per-zone retry counter when the resolution successfully
+  // changes to a different selectionKey (the next render commits with
+  // new content). This is purely behavioral — the counter cap continues
+  // to protect against infinite retry loops within a single resolution.
+  const previousSelectionKey = previousSelectionKeyRef.current;
+  if (previousSelectionKey !== null && previousSelectionKey !== selectionKey) {
+    internals.__resetRetry(instanceId, zone);
+  }
+  previousSelectionKeyRef.current = selectionKey;
+  selectionKeyForErrorRef.current = selectionKey;
 
   // Per-zone error boundary. Keyed by selectionKey + retryKey so a
   // selector change cleanly remounts a fresh boundary.
@@ -347,6 +507,7 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
         zone={zone}
         onError={handleError}
         errorComponent={errorComponent}
+        renderNullOnError={ignoredSelectionKey === selectionKey}
       >
         {content}
       </ZoneErrorBoundary>
@@ -412,6 +573,13 @@ interface ZoneErrorBoundaryProps {
   readonly onError: (err: unknown) => void;
   readonly errorComponent?: ComponentType<CompositionOutletErrorProps>;
   readonly children: ReactNode;
+  /**
+   * When the parent has decided the current resolution's error should
+   * render `null` (policy `"ignore"`), it sets this prop. The boundary
+   * still catches the throw and reports via `onError`, but the visible
+   * output is suppressed.
+   */
+  readonly renderNullOnError: boolean;
 }
 
 interface ZoneErrorBoundaryState {
@@ -431,6 +599,7 @@ class ZoneErrorBoundary extends Component<ZoneErrorBoundaryProps, ZoneErrorBound
 
   override render(): ReactNode {
     if (this.state.error) {
+      if (this.props.renderNullOnError) return null;
       const Fallback = this.props.errorComponent ?? DefaultError;
       return createElement(Fallback, {
         zone: this.props.zone,

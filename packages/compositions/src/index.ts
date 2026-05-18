@@ -54,9 +54,10 @@ export {
   useCompositionDispatch,
   useCompositionEmit,
   useCompositionZone,
+  createCompositionContext,
   CompositionInstanceContext,
 } from "./hooks.js";
-export type { CompositionContextValue } from "./hooks.js";
+export type { CompositionContextValue, TypedCompositionHooks } from "./hooks.js";
 
 export type {
   AnyCompositionDefinition,

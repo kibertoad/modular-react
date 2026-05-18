@@ -28,7 +28,12 @@ export interface CompositionContextValue<TState = unknown> {
 
 export const CompositionInstanceContext = createContext<CompositionContextValue | null>(null);
 
-function getRequiredContext(): CompositionContextValue {
+/**
+ * Internal helper that reads the active context. The `use` prefix
+ * matches React's hook naming convention so the `react-hooks` ESLint
+ * rule traces through it.
+ */
+function useRequiredContext(): CompositionContextValue {
   const ctx = useContext(CompositionInstanceContext);
   if (!ctx) {
     throw new Error(
@@ -47,11 +52,15 @@ function getRequiredContext(): CompositionContextValue {
  * ```ts
  * const docId = useCompositionState((s: EditorState) => s.documentId);
  * ```
+ *
+ * Note: TypeScript can't infer `TState` when this hook is called without
+ * a selector — explicit `useCompositionState<EditorState>()` is required.
+ * For a fully-typed API per-composition, use {@link createCompositionContext}.
  */
 export function useCompositionState<TState>(): TState;
 export function useCompositionState<TState, U>(selector: (state: TState) => U): U;
 export function useCompositionState<TState, U>(selector?: (state: TState) => U): TState | U {
-  const ctx = getRequiredContext();
+  const ctx = useRequiredContext();
   const store = ctx.store as Store<TState>;
   const getSnapshot = selector
     ? () => selector(store.getState())
@@ -66,7 +75,7 @@ export function useCompositionState<TState, U>(selector?: (state: TState) => U):
 export function useCompositionDispatch<TState>(): (
   updater: Partial<TState> | ((prev: TState) => Partial<TState> | TState),
 ) => void {
-  return getRequiredContext().dispatch as (
+  return useRequiredContext().dispatch as (
     updater: Partial<TState> | ((prev: TState) => Partial<TState> | TState),
   ) => void;
 }
@@ -77,7 +86,7 @@ export function useCompositionDispatch<TState>(): (
  * expressed through state alone (e.g. "open the diff modal").
  */
 export function useCompositionEmit(): (event: CompositionZoneEvent) => void {
-  return getRequiredContext().emit;
+  return useRequiredContext().emit;
 }
 
 /**
@@ -90,10 +99,56 @@ export function useCompositionZone(): {
   readonly instanceId: CompositionInstanceId;
   readonly zone: string;
 } {
-  const ctx = getRequiredContext();
+  const ctx = useRequiredContext();
   return {
     compositionId: ctx.compositionId,
     instanceId: ctx.instanceId,
     zone: ctx.zone,
+  };
+}
+
+/**
+ * Per-composition typed hook bundle returned by
+ * {@link createCompositionContext}.
+ */
+export interface TypedCompositionHooks<TState> {
+  readonly useState: <U>(selector?: (state: TState) => U) => U | TState;
+  readonly useDispatch: () => (
+    updater: Partial<TState> | ((prev: TState) => Partial<TState> | TState),
+  ) => void;
+  readonly useEmit: () => (event: CompositionZoneEvent) => void;
+  readonly useZone: () => {
+    readonly compositionId: string;
+    readonly instanceId: CompositionInstanceId;
+    readonly zone: string;
+  };
+}
+
+/**
+ * Build a pre-typed bundle of composition hooks for a single
+ * composition's state shape. Composition authors call this once and
+ * export the result so panels don't have to spell `<TState>` at every
+ * call site:
+ *
+ * ```ts
+ * // editor-composition/hooks.ts
+ * export const { useState, useDispatch } = createCompositionContext<EditorState>();
+ *
+ * // some-panel.tsx
+ * const docId = useState(s => s.documentId);
+ * ```
+ *
+ * Zero runtime cost — each method is a thin pass-through to the
+ * underlying generic hook.
+ */
+export function createCompositionContext<TState>(): TypedCompositionHooks<TState> {
+  return {
+    useState: <U,>(selector?: (state: TState) => U) =>
+      selector
+        ? (useCompositionState<TState, U>(selector) as U)
+        : (useCompositionState<TState>() as TState),
+    useDispatch: () => useCompositionDispatch<TState>(),
+    useEmit: () => useCompositionEmit(),
+    useZone: () => useCompositionZone(),
   };
 }
