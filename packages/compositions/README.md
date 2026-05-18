@@ -51,7 +51,7 @@ Three roles, strictly separated:
 
 The composition's store is the **orchestration bus**. Panels mutate it via `useCompositionDispatch`; sibling panels read the resulting state via `useCompositionState`. There is no other coupling between panels.
 
-```
+```text
 ┌──────────────────── Host (route / tab / modal) ─────────────────┐
 │                                                                  │
 │   ┌───────── <CompositionOutlet instanceId={ci_…}> ──────────┐   │
@@ -300,7 +300,7 @@ Explicit `runtime.end(id, { reason })` short-circuits the auto-disposal and is t
 
 For every instance, the runtime guarantees this sequence:
 
-```
+```text
 start(handle, input)
   ├── initialState(input) → state
   ├── lifecycle.onMount(state, deps)
@@ -315,7 +315,7 @@ end(id) | last outlet detaches
   └── definition.onDispose({ compositionId, instanceId, state, reason })
 ```
 
-`onError` is fired observation-only on throws from selectors, panel renders, lifecycle hooks, hydration migrations, and `onZoneEvent` callbacks.
+`onError` is fired observation-only on throws from selectors, panel renders, lifecycle hooks, and `onZoneEvent` callbacks.
 
 ### Idempotency: `start()` semantics
 

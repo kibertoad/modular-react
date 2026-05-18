@@ -3,6 +3,19 @@ import type { ModuleTypeMap, RegistryPlugin } from "@modular-react/core";
 
 import { createCompositionRuntime } from "./runtime.js";
 import { CompositionsProvider } from "./provider.js";
+
+/**
+ * Stable component definition so re-invoking `providers({ runtime })` does
+ * not produce a new ComponentType identity each call — repeated identities
+ * would force React to unmount and remount the provider subtree.
+ */
+const BoundProvider: ComponentType<{
+  runtime: CompositionRuntime;
+  children: ReactNode;
+}> = ({ runtime, children }) => (
+  <CompositionsProvider runtime={runtime}>{children}</CompositionsProvider>
+);
+BoundProvider.displayName = "CompositionsPluginProvider";
 import {
   CompositionValidationError,
   validateCompositionContracts,
