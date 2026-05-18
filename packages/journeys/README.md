@@ -1655,7 +1655,17 @@ registry.registerJourney(checkoutJourney, {
 
 Each factory call binds the calling journey's concrete `TInput`/`TState`, so the variance check passes without an `as` cast on either the definition or the adapter. The factory composes with `defineJourneyPersistence<TInput, TState>` for hand-rolled backends — same per-journey call shape, the helper just types `keyFor`/`load`/`save`/`remove` against the journey's types.
 
-**Trap — one shared adapter typed `<unknown, TInput>`.** The shape that DRY instinct lands on if you're not careful: one `persistence` object reused across every `registerJourney` call, declared once with `TState` widened to `unknown` so it "fits everywhere". It doesn't. `JourneyDefinition.start(state: TState, ...)` puts `TState` in a contravariant position; the variance check rejects `unknown` against any concrete state. The compiler surfaces this as `Type 'unknown' is not assignable to type 'YourJourneyState'` pointing at the `persistence` arg of `registerJourney`. Reach for one of the two safe shapes above instead — both are zero-cost at runtime.
+**Trap — one shared adapter typed `<unknown, TInput>`.** The shape that DRY instinct lands on if you're not careful: one `persistence` object reused across every `registerJourney` call, declared once with `TState` widened to `unknown` so it "fits everywhere". It doesn't. `JourneyDefinition.start(state: TState, ...)` puts `TState` in a contravariant position; the variance check rejects `unknown` against any concrete state. TypeScript infers `TState = unknown` from the `persistence` arg, then reports the mismatch against the journey-definition arg (the first arg) — not against `persistence` itself — surfacing as:
+
+```
+Argument of type 'JourneyDefinition<OnboardingState, AppJourneyKey>' is not assignable
+to parameter of type 'JourneyDefinition<unknown, AppJourneyKey>'.
+  Types of property 'start' are incompatible.
+    ...
+    Type 'unknown' is not assignable to type 'OnboardingState'.
+```
+
+Reach for one of the two safe shapes above instead — both are zero-cost at runtime.
 
 ```ts
 import { createWebStoragePersistence, type SyncJourneyPersistence } from "@modular-react/journeys";
@@ -1666,15 +1676,16 @@ export const sharedJourneyPersistence: SyncJourneyPersistence<unknown, AppJourne
     keyFor: ({ journeyId, input }) => `journey:${journeyId}:${input.tenantId}:${input.userId}`,
   });
 
-// Both calls fail at the `persistence` arg, not at the declaration above:
-// the variance check rejects `unknown` against the journey's concrete TState.
+// Both calls fail at the journey-definition arg (first arg), not at the declaration above:
+// TS infers TState=unknown from `persistence`, then rejects the typed
+// `JourneyDefinition<…, OnboardingState>` because its `start(state)` is contravariant in TState.
 registry.registerJourney(onboardingJourney, {
+  // Error reported on `onboardingJourney`: 'unknown' is not assignable to 'OnboardingState'.
   persistence: sharedJourneyPersistence,
-  // Error: Type 'unknown' is not assignable to type 'OnboardingState'.
 });
 registry.registerJourney(checkoutJourney, {
+  // Error reported on `checkoutJourney`: 'unknown' is not assignable to 'CheckoutState'.
   persistence: sharedJourneyPersistence,
-  // Error: Type 'unknown' is not assignable to type 'CheckoutState'.
 });
 ```
 
