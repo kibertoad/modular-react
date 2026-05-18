@@ -1,6 +1,12 @@
-import { createContext, useContext, useSyncExternalStore } from "react";
+import { createContext, useContext, useRef, useSyncExternalStore } from "react";
 import type { Store } from "@modular-react/core";
-import type { CompositionInstanceId, CompositionRuntime, CompositionZoneEvent } from "./types.js";
+import type {
+  CompositionHandleRef,
+  CompositionInstanceId,
+  CompositionRuntime,
+  CompositionZoneEvent,
+} from "./types.js";
+import { useCompositionsContext } from "./provider.js";
 
 /**
  * Per-mount context value the `<CompositionOutlet>` installs above each
@@ -162,4 +168,108 @@ export function createCompositionContext<TState>(): TypedCompositionHooks<TState
     useEmit: () => useCompositionEmit(),
     useZone: () => useCompositionZone(),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Host-side: mint an instance for a composition the host wants to render.
+// ---------------------------------------------------------------------------
+
+export interface UseCompositionOptions {
+  /**
+   * Runtime to mint the instance against. Optional when a
+   * `<CompositionsProvider>` is mounted above — the hook reads the
+   * runtime from context in that case (parallel to `<CompositionOutlet>`).
+   */
+  readonly runtime?: CompositionRuntime;
+}
+
+/**
+ * Mint a composition instance once for the lifetime of the calling
+ * component, returning its id. Use the returned id to drive
+ * `<CompositionOutlet instanceId={id}>` in the same render path.
+ *
+ * Disposal is handled automatically by the outlet's attach/detach
+ * refcount: when the outlet unmounts and no other listeners remain, the
+ * runtime disposes the instance after a microtask (which also keeps
+ * StrictMode's simulated mount/unmount/mount dance from tearing the
+ * instance down on first visit). Hosts that need imperative teardown
+ * earlier (a Cmd-K palette closing a stale instance, an "abort" button)
+ * should call `runtime.end(id)` directly.
+ *
+ * Implementation note: the hook stores the id in a `useRef` and
+ * lazy-initializes on first render via `runtime.start()` — there is no
+ * `useEffect` and no setState round-trip. The "do it once on mount"
+ * pattern with `useEffect` is the React-docs anti-pattern this hook
+ * replaces (see "You Might Not Need an Effect").
+ */
+export function useComposition<TId extends string, TInput>(
+  handle: CompositionHandleRef<TId, TInput>,
+  ...rest: [TInput] extends [void]
+    ? [options?: UseCompositionOptions]
+    : [input: TInput, options?: UseCompositionOptions]
+): CompositionInstanceId;
+export function useComposition(
+  compositionId: string,
+  input: unknown,
+  options?: UseCompositionOptions,
+): CompositionInstanceId;
+export function useComposition(
+  handleOrId: CompositionHandleRef<string, unknown> | string,
+  ...rest: unknown[]
+): CompositionInstanceId {
+  // Disambiguate the overloads: when the first arg is a handle and TInput
+  // is `void`, callers may omit `input` entirely; for the string-id form
+  // `input` is always positional. The last argument is the optional
+  // `UseCompositionOptions`. We tease them apart by shape so the same
+  // implementation backs every overload.
+  let input: unknown = undefined;
+  let options: UseCompositionOptions | undefined;
+  if (rest.length > 0) {
+    const last = rest[rest.length - 1];
+    if (
+      typeof last === "object" &&
+      last !== null &&
+      "runtime" in (last as Record<string, unknown>) &&
+      rest.length > 1
+    ) {
+      options = last as UseCompositionOptions;
+      input = rest[0];
+    } else {
+      // Either a single `input`-shaped arg, or a single options-shaped
+      // arg (handle form with void input). Treat an object that ONLY
+      // has a `runtime` field as options; anything else as input.
+      if (
+        rest.length === 1 &&
+        typeof last === "object" &&
+        last !== null &&
+        Object.keys(last as Record<string, unknown>).length === 1 &&
+        "runtime" in (last as Record<string, unknown>)
+      ) {
+        options = last as UseCompositionOptions;
+      } else {
+        input = rest[0];
+      }
+    }
+  }
+
+  const context = useCompositionsContext();
+  const runtime = options?.runtime ?? context?.runtime;
+  if (!runtime) {
+    throw new Error(
+      "[@modular-react/compositions] useComposition() needs a runtime. Pass `options.runtime` or mount a <CompositionsProvider>.",
+    );
+  }
+
+  // Lazy ref init: the start() call runs exactly once per component
+  // instance, during the first render's reconciliation. StrictMode's
+  // double-render uses the SAME ref on the second pass, so start() is
+  // not double-invoked. On a real unmount/remount cycle (route change,
+  // key change), React tears down the component and a fresh ref is
+  // allocated on the next mount — the outlet's detach microtask has
+  // already disposed the previous instance by then.
+  const ref = useRef<CompositionInstanceId | null>(null);
+  if (ref.current === null) {
+    ref.current = runtime.start(handleOrId as never, input as never);
+  }
+  return ref.current;
 }

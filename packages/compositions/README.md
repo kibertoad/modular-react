@@ -23,6 +23,7 @@ If you instead need a stepped flow ("complete A → branch into B or C → final
 - [Composition handles](#composition-handles) — typed tokens for `runtime.start(handle, input)`
 - [`CompositionsProvider` + context](#compositionsprovider--context)
 - [Rendering — `CompositionOutlet`](#rendering--compositionoutlet) — props, render-prop, error policies, preload
+- [Host hook — `useComposition`](#host-hook--usecomposition) — mint an instance for the route / tab / modal that mounts the outlet
 - [Hooks for foreign panels](#hooks-for-foreign-panels) — `useCompositionState` / `Dispatch` / `Emit` / `Zone`, typed-bundle factory
 - [Validation](#validation) — definition-time + resolve-time checks
 - [Hydration](#hydration) — attaching an SSR or debug-dump blob
@@ -181,17 +182,25 @@ export const manifest = registry.resolve();
 
 ```typescript
 // shell/src/routes/editor.tsx
-import { CompositionOutlet, CompositionsProvider } from "@modular-react/compositions";
+import {
+  CompositionOutlet,
+  CompositionsProvider,
+  useComposition,
+} from "@modular-react/compositions";
 import { editorHandle, type EditorState } from "@myorg/editor-composition";
 import { manifest } from "../registry.js";
 
 export function EditorRoute({ documentId }: { documentId: string }) {
-  // Mint or resume the instance once per documentId. Wire to your route loader
-  // / useMemo / state-store however your shell does it.
-  const instanceId = useMemo(
-    () => manifest.extensions.compositions.start(editorHandle, { documentId }),
-    [documentId],
-  );
+  // `useComposition` mints the instance exactly once for the lifetime of
+  // this route component and returns its id. Disposal is automatic — when
+  // this component unmounts, `<CompositionOutlet>` releases its refcount
+  // and the runtime ends the instance after a microtask. **Do not** wrap
+  // `runtime.start()` in `useEffect` or `useMemo` yourself; `useEffect`
+  // is the "you might not need an effect" anti-pattern (it round-trips
+  // through setState before commit), and `useMemo` is documented as a
+  // pure optimization hint that React may re-invoke at will — a fresh
+  // start() call on every re-run would orphan the previous instance.
+  const instanceId = useComposition(editorHandle, { documentId });
 
   return (
     <CompositionsProvider runtime={manifest.extensions.compositions}>
@@ -212,6 +221,8 @@ export function EditorRoute({ documentId }: { documentId: string }) {
 ```
 
 The render-prop receives one `ReactNode` per zone, fully wrapped (`Suspense` + per-zone error boundary already applied). The host owns layout; the framework owns content.
+
+> `useComposition` reads its runtime from the surrounding `<CompositionsProvider>` — wired automatically when you use `compositionsPlugin()`. If you're mounting the outlet without the plugin, pass `useComposition(handle, input, { runtime })` to bypass the context lookup.
 
 ### 5. Drive the composition from inside a panel
 
@@ -666,6 +677,34 @@ Eager preload only affects `lazy: () => import(...)` entries — eager entries (
 - Render each zone exactly **once** per outlet. Mounting the same zone twice produces two distinct boundaries and two distinct panel instances — sibling panels reading the same composition state will work, but you'll pay double-render cost.
 - Do **not** mount the same `instanceId` in two outlets simultaneously unless you understand the listener-count semantics. The runtime tolerates it (both outlets attach via `outletRefCount`), but disposal only fires when both detach AND no other listeners remain.
 - The render-prop is allowed to skip zones (`{zones.editorMain}` without `{zones.integrationSource}`). The skipped zone's panel doesn't mount; its selector still runs (it's a pure function — no harm) but the result is discarded.
+
+## Host hook — `useComposition`
+
+The route / tab / modal that _mounts_ a composition uses one hook to mint its instance:
+
+```typescript
+import { useComposition } from "@modular-react/compositions";
+
+// Handle form — TS infers `TInput` and rejects mismatches.
+const instanceId = useComposition(editorHandle, { documentId: "doc-1" });
+
+// String-id form — same lifecycle, no input typing.
+const instanceId = useComposition("editor", { documentId: "doc-1" });
+
+// Explicit runtime — useful for standalone consumers not using the plugin.
+const instanceId = useComposition(editorHandle, { documentId: "doc-1" }, { runtime });
+```
+
+**What it does.** Lazy-ref initializer that calls `runtime.start(...)` exactly once per component mount and returns the minted id. No `useEffect`. No setState round-trip. Reads the runtime from `<CompositionsProvider>` context by default; pass `options.runtime` to bypass.
+
+**Disposal.** Automatic via `<CompositionOutlet>`'s attach/detach refcount: when the outlet unmounts and no other listeners remain, the runtime ends the instance after a microtask (the microtask defer keeps StrictMode's simulated mount/unmount/mount dance from tearing it down on first visit). For imperative teardown — a "close" button, a Cmd-K palette killing a stale instance — call `runtime.end(id)` directly.
+
+**Why not `useEffect` / `useMemo`?**
+
+- `useEffect(() => { setInstanceId(runtime.start(...)) }, [])` round-trips the id through React state before the outlet can attach. In StrictMode's dev double-mount it spawns a spurious instance the cleanup has to dispose, and the parent re-renders an extra time with `instanceId === null`. It's also the textbook ["You Might Not Need an Effect"](https://react.dev/learn/you-might-not-need-an-effect#initializing-the-application) case.
+- `useMemo(() => runtime.start(...), [])` looks tempting but the React docs explicitly say `useMemo` is **a pure optimization hint** — React may discard the memo cache and re-invoke the factory at any time, which would mint orphan instances every time it does so.
+
+`useComposition` uses a `useRef` initializer so the `start()` call is guaranteed to run exactly once per React mount, and lets the outlet's refcount handle disposal. Tests are in `third-pass-fixes.test.tsx` (`useComposition` describe block).
 
 ## Hooks for foreign panels
 

@@ -1,32 +1,15 @@
-import { useEffect, useState } from "react";
-import { CompositionOutlet, useCompositionsContext } from "@modular-react/compositions";
+import { CompositionOutlet, useComposition } from "@modular-react/compositions";
 
 const DOCUMENT_ID = "doc-1";
 
 /**
  * TanStack-Router-side mirror of the RR example's Home — same composition
- * lifecycle (mint on mount, end on cleanup) and same three-column zone
- * layout. The composition outlet is router-agnostic.
+ * lifecycle (instance minted by `useComposition`, disposal handled by the
+ * outlet's refcount) and same three-column zone layout. The composition
+ * outlet and the host-side hook are router-agnostic.
  */
 export function Home() {
-  const ctx = useCompositionsContext();
-  if (!ctx) {
-    throw new Error(
-      "<Home> expected a <CompositionsProvider> ancestor — wired by the compositionsPlugin().",
-    );
-  }
-  const runtime = ctx.runtime;
-
-  const [instanceId, setInstanceId] = useState<string | null>(null);
-  useEffect(() => {
-    const id = runtime.start("editor", { documentId: DOCUMENT_ID });
-    setInstanceId(id);
-    return () => {
-      runtime.end(id);
-    };
-  }, [runtime]);
-
-  if (!instanceId) return <p style={{ padding: "1rem" }}>Loading composition…</p>;
+  const instanceId = useComposition("editor", { documentId: DOCUMENT_ID });
 
   return (
     <CompositionOutlet compositionId="editor" instanceId={instanceId}>

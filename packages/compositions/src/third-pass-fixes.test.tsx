@@ -417,6 +417,87 @@ describe("CompositionsProvider value identity", () => {
 // Plugin reuse guard
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// useComposition — lazy ref start + outlet refcount disposal
+// ---------------------------------------------------------------------------
+
+describe("useComposition", () => {
+  it("starts an instance once per mount and exposes the id", async () => {
+    const { useComposition } = await import("./hooks.js");
+    const def = defineComposition<{}, { tick: number }>()({
+      id: "use-comp-once",
+      version: "1.0.0",
+      initialState: () => ({ tick: 0 }),
+      zones: { only: { select: () => ({ kind: "empty" }) as const } },
+    });
+    const runtime = createCompositionRuntime(
+      [{ definition: def, options: undefined } as RegisteredComposition],
+      { modules: {}, debug: false },
+    );
+    function Host() {
+      const id = useComposition("use-comp-once", undefined);
+      return <div data-testid="id">{id}</div>;
+    }
+    render(
+      <CompositionsProvider runtime={runtime}>
+        <Host />
+      </CompositionsProvider>,
+    );
+    const id = screen.getByTestId("id").textContent!;
+    expect(id).toMatch(/^ci_/);
+    expect(runtime.getInstance(id)).not.toBeNull();
+  });
+
+  it("relies on the outlet's refcount for disposal — instance survives until outlet unmounts", async () => {
+    const { useComposition } = await import("./hooks.js");
+    const def = defineComposition<{}, {}>()({
+      id: "use-comp-dispose",
+      version: "1.0.0",
+      initialState: () => ({}),
+      zones: { only: { select: () => ({ kind: "empty" }) as const } },
+    });
+    const runtime = createCompositionRuntime(
+      [{ definition: def, options: undefined } as RegisteredComposition],
+      { modules: {}, debug: false },
+    );
+    let captured: string = "";
+    function Host() {
+      const id = useComposition("use-comp-dispose", undefined);
+      captured = id;
+      return (
+        <CompositionOutlet compositionId="use-comp-dispose" instanceId={id}>
+          {(zones) => <div data-testid="root">{zones.only}</div>}
+        </CompositionOutlet>
+      );
+    }
+    const view = render(
+      <CompositionsProvider runtime={runtime}>
+        <Host />
+      </CompositionsProvider>,
+    );
+    // Alive while mounted.
+    expect(runtime.getInstance(captured)).not.toBeNull();
+    view.unmount();
+    await flushMicrotasks();
+    // Outlet's detach microtask disposed it.
+    expect(runtime.getInstance(captured)).toBeNull();
+  });
+
+  it("throws a clear error when used without a runtime / provider", async () => {
+    const { useComposition } = await import("./hooks.js");
+    function Host() {
+      useComposition("missing", undefined);
+      return null;
+    }
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(() => render(<Host />)).toThrow(/needs a runtime/);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+});
+
 describe("compositionsPlugin reuse guard", () => {
   it("throws when the same plugin instance is resolved twice", async () => {
     // The plugin guard fires on the second `onResolve`. We exercise the
