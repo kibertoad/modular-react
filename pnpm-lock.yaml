@@ -307,6 +307,149 @@ importers:
         specifier: ^8.0.3
         version: 8.0.11(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
 
+  examples/react-router/editor-composition/app-shared:
+    dependencies:
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../packages/compositions
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/editor-composition/modules/contentful:
+    dependencies:
+      '@example-rr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../../packages/compositions
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/editor-composition/modules/editor:
+    dependencies:
+      '@example-rr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../../packages/compositions
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/editor-composition/modules/strapi:
+    dependencies:
+      '@example-rr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../../packages/compositions
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/editor-composition/shell:
+    dependencies:
+      '@example-rr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-rr-editor-composition/contentful':
+        specifier: workspace:*
+        version: link:../modules/contentful
+      '@example-rr-editor-composition/editor':
+        specifier: workspace:*
+        version: link:../modules/editor
+      '@example-rr-editor-composition/strapi':
+        specifier: workspace:*
+        version: link:../modules/strapi
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../packages/compositions
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../packages/react
+      '@react-router-modules/core':
+        specifier: workspace:*
+        version: link:../../../../packages/react-router-core
+      '@react-router-modules/runtime':
+        specifier: workspace:*
+        version: link:../../../../packages/react-router-runtime
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.6(react@19.2.6)
+      react-router:
+        specifier: ^7.0.0
+        version: 7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^5.0.0
+        version: 5.2.0(vite@6.4.2(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.2(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)
+
   examples/react-router/integration-manager/app-shared:
     devDependencies:
       '@types/react':
@@ -1091,6 +1234,149 @@ importers:
       vite:
         specifier: ^8.0.3
         version: 8.0.11(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
+
+  examples/tanstack-router/editor-composition/app-shared:
+    dependencies:
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../packages/compositions
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/editor-composition/modules/contentful:
+    dependencies:
+      '@example-tsr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../../packages/compositions
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/editor-composition/modules/editor:
+    dependencies:
+      '@example-tsr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../../packages/compositions
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/editor-composition/modules/strapi:
+    dependencies:
+      '@example-tsr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../../packages/compositions
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/editor-composition/shell:
+    dependencies:
+      '@example-tsr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-tsr-editor-composition/contentful':
+        specifier: workspace:*
+        version: link:../modules/contentful
+      '@example-tsr-editor-composition/editor':
+        specifier: workspace:*
+        version: link:../modules/editor
+      '@example-tsr-editor-composition/strapi':
+        specifier: workspace:*
+        version: link:../modules/strapi
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../packages/compositions
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../packages/react
+      '@tanstack-react-modules/core':
+        specifier: workspace:*
+        version: link:../../../../packages/tanstack-router-core
+      '@tanstack-react-modules/runtime':
+        specifier: workspace:*
+        version: link:../../../../packages/tanstack-router-runtime
+      '@tanstack/react-router':
+        specifier: ^1.168.8
+        version: 1.169.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.6(react@19.2.6)
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^5.0.0
+        version: 5.2.0(vite@6.4.2(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.2(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)
 
   examples/tanstack-router/integration-manager/app-shared:
     devDependencies:
