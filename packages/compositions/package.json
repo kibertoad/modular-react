@@ -1,0 +1,54 @@
+{
+  "name": "@modular-react/compositions",
+  "version": "0.1.0",
+  "description": "Multi-module screen composition for modular-react. Arrange foreign module entries (and journeys) into named zones on a single screen, driven by a per-instance scoped store.",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kibertoad/modular-react.git",
+    "directory": "packages/compositions"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@modular-react/core": "workspace:*",
+    "@modular-react/journeys": "workspace:*",
+    "@modular-react/react": "workspace:*",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "happy-dom": "^20.9.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.0.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.11",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.1.5"
+  },
+  "peerDependencies": {
+    "@modular-react/core": "^2.0.0",
+    "@modular-react/journeys": "^1.0.0",
+    "@modular-react/react": "^2.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}
