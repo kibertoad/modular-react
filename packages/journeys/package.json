@@ -1,6 +1,6 @@
 {
   "name": "@modular-react/journeys",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Typed, serializable workflows that compose multiple modules. A journey declares entry/exit transitions between modules and owns shared state; modules stay journey-unaware.",
   "repository": {
     "type": "git",
@@ -52,7 +52,7 @@
     "vitest": "^4.1.5"
   },
   "peerDependencies": {
-    "@modular-react/core": "^2.0.0",
+    "@modular-react/core": "^2.4.0",
     "@modular-react/react": "^2.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

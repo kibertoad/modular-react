@@ -33,6 +33,13 @@ export function createJourneyMountAdapter(runtime: JourneyRuntime): RuntimeMount
       // `handle.id` before calling).
       return runtime.start(definitionId, input);
     },
+    end(instanceId) {
+      // Cooperative cleanup: when the composition's per-zone cache
+      // evicts a journey instance it minted, route through `end()` so
+      // the journey runtime cascades into its own teardown rather than
+      // leaking the record until the host process exits.
+      runtime.end(instanceId, { reason: "adapter-end" });
+    },
     Outlet: JourneyOutlet,
   };
 }

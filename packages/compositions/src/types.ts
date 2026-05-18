@@ -223,7 +223,10 @@ export interface CompositionRegisterOptions<TState = unknown> {
    */
   onError?: (
     err: unknown,
-    ctx: { readonly zone: string; readonly phase: "select" | "render" | "lifecycle" },
+    ctx: {
+      readonly zone: string;
+      readonly phase: "select" | "render" | "lifecycle" | "emit" | "notify";
+    },
   ) => void;
   /**
    * Layered on top of the definition-level `lifecycle.onMount` — fires

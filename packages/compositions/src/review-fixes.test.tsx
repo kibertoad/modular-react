@@ -340,7 +340,7 @@ describe("listener throws routed through options.onError", () => {
     }
     expect(onError).toHaveBeenCalledWith(
       expect.any(Error),
-      expect.objectContaining({ phase: "lifecycle" }),
+      expect.objectContaining({ phase: "notify" }),
     );
   });
 });

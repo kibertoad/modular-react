@@ -2,7 +2,6 @@ import {
   Component,
   Suspense,
   createContext,
-  createElement,
   useCallback,
   useContext,
   useEffect,
@@ -126,14 +125,34 @@ function useInstanceSnapshot(
  * back to a stringified type tag — duplicates of unhashable input land
  * in the same bucket, which is the conservative choice (one journey
  * instance instead of N).
+ *
+ * Object keys are sorted before stringification so two selectors that
+ * spell the same input with different key insertion order (`{a, b}`
+ * vs `{b, a}`) produce identical hashes — otherwise the cache would
+ * needlessly mint a fresh instance on every re-render that reordered
+ * the spread.
  */
 function hashInput(input: unknown): string {
   if (input === undefined) return "u";
   try {
-    return JSON.stringify(input);
+    return JSON.stringify(input, stableReplacer());
   } catch {
     return `<${typeof input}>`;
   }
+}
+
+function stableReplacer(): (key: string, value: unknown) => unknown {
+  const seen = new WeakSet<object>();
+  return (_key, value) => {
+    if (value === null || typeof value !== "object") return value;
+    if (Array.isArray(value)) return value;
+    if (seen.has(value as object)) return "<cycle>";
+    seen.add(value as object);
+    const keys = Object.keys(value as Record<string, unknown>).sort();
+    const out: Record<string, unknown> = {};
+    for (const k of keys) out[k] = (value as Record<string, unknown>)[k];
+    return out;
+  };
 }
 
 /**
@@ -201,13 +220,35 @@ export function CompositionOutlet<TZones extends string = string>(
   }, [reg]);
 
   // Eager preload: when a zone declares `preload: "eager"`, warm the
-  // chunk of whatever module-entry its selector returns RIGHT NOW. The
-  // effect re-runs as state changes; we cancel any in-flight idle
-  // callback when state moves before we got around to firing it. Has no
-  // effect server-side or on eager (non-lazy) entries.
-  const stateSignature = instance?.state;
+  // chunk of whatever module-entry its selector returns RIGHT NOW.
+  //
+  // Cheap reactivity gate: derive a single string that flips ONLY when
+  // an eager zone's resolution changes. State updates that don't alter
+  // any eager zone's resolution (e.g. an unrelated counter increment)
+  // produce an identical signature and the effect's identity-comparison
+  // short-circuits — no idle-callback churn for noisy state.
+  const eagerSignature = useMemo(() => {
+    if (!reg || !instance || instance.status !== "active") return "";
+    const zones = reg.definition.zones as Record<string, ZoneDescriptor<any, any>>;
+    const parts: string[] = [];
+    for (const zoneName of zoneNames) {
+      const descriptor = zones[zoneName];
+      if (descriptor?.preload !== "eager") continue;
+      let selection: ZoneResolution<any>;
+      try {
+        selection = descriptor.select({ state: instance.state, deps: internals.__deps });
+      } catch {
+        parts.push(`${zoneName}:err`);
+        continue;
+      }
+      parts.push(`${zoneName}:${computeSelectionKey(selection, null, modules)}`);
+    }
+    return parts.join("|");
+  }, [reg, instance, zoneNames, modules, internals]);
+
   useEffect(() => {
     if (!reg || !instance || instance.status !== "active") return;
+    if (eagerSignature === "") return;
     const eagerZones: Array<{ zoneName: string; descriptor: ZoneDescriptor<any, any> }> = [];
     const zones = reg.definition.zones as Record<string, ZoneDescriptor<any, any>>;
     for (const zoneName of zoneNames) {
@@ -263,7 +304,11 @@ export function CompositionOutlet<TZones extends string = string>(
       if (idleHandle !== undefined && typeof cicFn === "function") cicFn(idleHandle);
       if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
     };
-  }, [reg, instance, stateSignature, zoneNames, modules, internals]);
+    // `eagerSignature` is the only state-dependent identity that should
+    // trigger a re-run; the other deps are stable across the lifetime
+    // of an outlet and listed for ESLint hygiene only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reg, instance, eagerSignature, zoneNames, modules, internals]);
 
   if (cycleDetected) {
     return renderError(
@@ -279,11 +324,7 @@ export function CompositionOutlet<TZones extends string = string>(
   if (instance.status === "disposed") return null;
 
   if (!reg) {
-    return createElement(DefaultNotFound, {
-      zone: "<all>",
-      moduleId: compositionId,
-      entry: "(unknown composition)",
-    });
+    return <DefaultNotFound zone="<all>" moduleId={compositionId} entry="(unknown composition)" />;
   }
 
   // Build the zone map: each entry is a fully-wrapped renderable element.
@@ -362,13 +403,32 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
     () => (store ? store.getState() : null),
   );
 
-  // Per-resolution journey instance cache. Without this, the JourneyOutlet
+  // Per-resolution journey instance cache. Without it, the JourneyOutlet
   // path mints a fresh `ji_*` on every state change because the selector
-  // re-runs and we call `journeyRuntime.start(handle, input)` inline. The
-  // cache is keyed on the entire handle+input pair so two zones (or two
-  // selectors returning different inputs to the same handle) get
-  // independent instances.
-  const journeyInstanceCache = useRef<Map<string, CompositionInstanceId>>(new Map());
+  // re-runs and we call `adapter.start(handle, input)` inline. The
+  // cache holds a single entry — the *current* resolution's instance
+  // id, keyed on `(handle.id, hash(input))`. When the resolution
+  // changes we end the previously-minted instance via the adapter so a
+  // long-running composition that cycles through many distinct inputs
+  // doesn't accumulate orphan journey instances for the lifetime of
+  // the outlet.
+  const journeyInstanceCache = useRef<{
+    readonly key: string;
+    readonly id: CompositionInstanceId;
+  } | null>(null);
+
+  // End the cached journey instance when this ZoneRenderer unmounts.
+  // Otherwise the last cached entry would outlive the zone and the
+  // adapter has no way to know its outlet is gone.
+  useEffect(() => {
+    return () => {
+      const cached = journeyInstanceCache.current;
+      if (!cached) return;
+      const adapter = runtime.getMountAdapter("journey");
+      adapter?.end?.(cached.id);
+      journeyInstanceCache.current = null;
+    };
+  }, [runtime]);
 
   // Stable callbacks so foreign panels reading useCompositionDispatch /
   // useCompositionEmit don't re-render on every parent re-render.
@@ -383,7 +443,10 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
       try {
         onZoneEvent?.(event, { zone });
       } catch (err) {
-        internals.__fireOnError(instanceId, err, { zone, phase: "render" });
+        // Emit is invoked from event handlers, not render — label the
+        // phase accordingly so shell telemetry can split user-action
+        // failures from render/select ones.
+        internals.__fireOnError(instanceId, err, { zone, phase: "emit" });
       }
     },
     [internals, instanceId, onZoneEvent, zone],
@@ -535,12 +598,17 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
       let journeyInstanceId = selection.instanceId;
       if (!journeyInstanceId) {
         const cacheKey = `${selection.handle.id}:${hashInput(selection.input)}`;
-        const cached = journeyInstanceCache.current.get(cacheKey);
-        if (cached) {
-          journeyInstanceId = cached;
+        const cached = journeyInstanceCache.current;
+        if (cached && cached.key === cacheKey) {
+          journeyInstanceId = cached.id;
         } else {
+          // Roll over: end the previously-cached instance (if any) before
+          // minting a fresh one. The adapter's `end` is optional; when
+          // absent we let the embedded runtime handle teardown by its own
+          // rules (typically: its outlet unmounts on next commit).
+          if (cached) adapter.end?.(cached.id);
           journeyInstanceId = adapter.start(selection.handle.id, selection.input);
-          journeyInstanceCache.current.set(cacheKey, journeyInstanceId);
+          journeyInstanceCache.current = { key: cacheKey, id: journeyInstanceId };
         }
       }
       const AdapterOutlet = adapter.Outlet;
@@ -587,8 +655,13 @@ function computeSelectionKey(
   if (selection.kind === "module-entry") {
     const mod = modules[selection.module];
     const entry = mod?.entryPoints?.[selection.entry];
-    if (!mod || !entry) return `notfound:${selection.module}:${selection.entry}`;
-    return `entry:${selection.module}:${selection.entry}`;
+    // Include `input` in the key on equal terms with the journey path so
+    // that an input change resets the retry counter and remounts the
+    // boundary — a stale error from a previous input shouldn't survive
+    // a state change that produced a different input.
+    const inputSuffix = hashInput(selection.input);
+    if (!mod || !entry) return `notfound:${selection.module}:${selection.entry}:${inputSuffix}`;
+    return `entry:${selection.module}:${selection.entry}:${inputSuffix}`;
   }
   if (selection.kind === "journey") {
     const idSuffix = selection.instanceId ?? hashInput(selection.input);
@@ -612,41 +685,38 @@ function renderError(
   errorComponent?: ComponentType<CompositionOutletErrorProps>,
 ): ReactNode {
   const Fallback = errorComponent ?? DefaultError;
-  return createElement(Fallback, { zone, error });
+  return <Fallback zone={zone} error={error} />;
 }
 
 function DefaultNotFound({ zone, moduleId, entry }: CompositionOutletNotFoundProps): ReactNode {
-  return createElement(
-    "div",
-    { style: { padding: "1rem", color: "#c53030" }, role: "alert" },
-    `Composition zone "${zone}": no entry "${moduleId}.${entry}" on the registered modules.`,
+  return (
+    <div style={{ padding: "1rem", color: "#c53030" }} role="alert">
+      Composition zone &quot;{zone}&quot;: no entry &quot;{moduleId}.{entry}&quot; on the registered
+      modules.
+    </div>
   );
 }
 
 function DefaultError({ zone, error }: CompositionOutletErrorProps): ReactNode {
   const message = error instanceof Error ? error.message : String(error);
-  return createElement(
-    "div",
-    {
-      style: {
+  return (
+    <div
+      style={{
         padding: "1rem",
         border: "1px solid #e53e3e",
         borderRadius: "0.5rem",
         margin: "0.25rem",
-      },
-      role: "alert",
-      "data-composition-zone-error": zone,
-    },
-    createElement(
-      "h4",
-      { style: { color: "#e53e3e", margin: "0 0 0.5rem 0" } },
-      `Zone "${zone}" encountered an error`,
-    ),
-    createElement(
-      "pre",
-      { style: { fontSize: "0.875rem", color: "#718096", whiteSpace: "pre-wrap" } },
-      message,
-    ),
+      }}
+      role="alert"
+      data-composition-zone-error={zone}
+    >
+      <h4 style={{ color: "#e53e3e", margin: "0 0 0.5rem 0" }}>
+        Zone &quot;{zone}&quot; encountered an error
+      </h4>
+      <pre style={{ fontSize: "0.875rem", color: "#718096", whiteSpace: "pre-wrap" }}>
+        {message}
+      </pre>
+    </div>
   );
 }
 
@@ -683,10 +753,7 @@ class ZoneErrorBoundary extends Component<ZoneErrorBoundaryProps, ZoneErrorBound
     if (this.state.error) {
       if (this.props.renderNullOnError) return null;
       const Fallback = this.props.errorComponent ?? DefaultError;
-      return createElement(Fallback, {
-        zone: this.props.zone,
-        error: this.state.error,
-      });
+      return <Fallback zone={this.props.zone} error={this.state.error} />;
     }
     return this.props.children;
   }

@@ -35,4 +35,15 @@ export interface RuntimeMountAdapter<TInput = unknown> {
     instanceId: string;
     loadingFallback?: ReactNode;
   }>;
+
+  /**
+   * Optional teardown for an instance the host minted via `start`. The
+   * host calls this when it evicts an instance from its own cache (e.g.
+   * a composition's per-zone journey cache rolling over to a new
+   * resolution) so the embedded runtime can release its record. A
+   * missing `end` is treated as a no-op — the embedded runtime is then
+   * responsible for cleaning up by its own rules (typically, when its
+   * outlet unmounts).
+   */
+  end?(instanceId: string): void;
 }

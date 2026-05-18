@@ -3,19 +3,6 @@ import type { ModuleTypeMap, RegistryPlugin } from "@modular-react/core";
 
 import { createCompositionRuntime } from "./runtime.js";
 import { CompositionsProvider } from "./provider.js";
-
-/**
- * Stable component definition so re-invoking `providers({ runtime })` does
- * not produce a new ComponentType identity each call — repeated identities
- * would force React to unmount and remount the provider subtree.
- */
-const BoundProvider: ComponentType<{
-  runtime: CompositionRuntime;
-  children: ReactNode;
-}> = ({ runtime, children }) => (
-  <CompositionsProvider runtime={runtime}>{children}</CompositionsProvider>
-);
-BoundProvider.displayName = "CompositionsPluginProvider";
 import {
   CompositionValidationError,
   validateCompositionContracts,
@@ -54,10 +41,16 @@ export interface CompositionsPluginOptions {
    */
   readonly debug?: boolean;
   /**
-   * Shared dependency snapshot threaded into lifecycle hooks and zone
-   * selector context. Plugins can pass an opaque deps bag here so
-   * composition selectors can read shared state without re-importing
-   * stores at module scope.
+   * Opaque shared-dependency bag the shell hands to the plugin factory
+   * (not read from `PluginResolveCtx`). Threaded verbatim into every
+   * zone selector's `ctx.deps` and into composition lifecycle hooks,
+   * so selectors and `onMount`/`onUnmount` can read shared state
+   * without re-importing module-scoped stores.
+   *
+   * Pass this if your composition selectors need access to long-lived
+   * shells objects (auth, feature flags, telemetry sinks); leave it
+   * out for layout-only compositions whose state is fully self-
+   * contained.
    */
   readonly deps?: Readonly<Record<string, unknown>>;
 }
@@ -83,6 +76,13 @@ export function compositionsPlugin(
   options: CompositionsPluginOptions = {},
 ): RegistryPlugin<"compositions", CompositionsPluginExtension, CompositionRuntime> {
   const registered: RegisteredComposition[] = [];
+  // Hard guard against reusing the same plugin instance across two
+  // registries (or two `.resolve()` calls on the same registry rebuild
+  // path). The `registered` array is closed over by the instance, so a
+  // second pass would silently accumulate duplicates and the runtime's
+  // own duplicate-id error would fire with a message that doesn't
+  // point at the cause. Fail loudly the second time `onResolve` runs.
+  let resolved = false;
 
   return {
     name: "compositions",
@@ -98,6 +98,11 @@ export function compositionsPlugin(
           definition: CompositionDefinition<TModules, TZones, TState, TInput>,
           regOpts?: CompositionRegisterOptions<TState>,
         ): void {
+          if (resolved) {
+            throw new Error(
+              "[@modular-react/compositions] `registerComposition` called after the plugin already resolved — instantiate a fresh `compositionsPlugin()` per registry instead of reusing one.",
+            );
+          }
           const def = definition as AnyCompositionDefinition;
           const issues = validateCompositionDefinition(def);
           if (issues.length > 0) throw new CompositionValidationError(issues);
@@ -116,6 +121,12 @@ export function compositionsPlugin(
     },
 
     onResolve({ moduleDescriptors, debug }) {
+      if (resolved) {
+        throw new Error(
+          "[@modular-react/compositions] `compositionsPlugin()` was resolved twice — instantiate a fresh plugin per registry.",
+        );
+      }
+      resolved = true;
       return createCompositionRuntime(registered, {
         modules: moduleDescriptors,
         debug: options.debug ?? debug,

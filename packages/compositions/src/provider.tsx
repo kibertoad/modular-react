@@ -1,4 +1,4 @@
-import { createContext, createElement, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 import type { ReactNode } from "react";
 
 import type { CompositionRuntime } from "./types.js";
@@ -31,8 +31,12 @@ export interface CompositionsProviderProps {
  */
 export function CompositionsProvider(props: CompositionsProviderProps): ReactNode {
   const { runtime, children } = props;
-  const value: CompositionProviderValue = { runtime };
-  return createElement(CompositionsContext.Provider, { value }, children);
+  // Memoize on `runtime` so descendant `useCompositionsContext()` consumers
+  // don't re-render whenever the provider's parent re-renders. A fresh
+  // object on every render would force React to broadcast the context
+  // change even though `runtime` itself never changed.
+  const value = useMemo<CompositionProviderValue>(() => ({ runtime }), [runtime]);
+  return <CompositionsContext.Provider value={value}>{children}</CompositionsContext.Provider>;
 }
 
 /** Read the current provider value, or `null` when none is mounted. */

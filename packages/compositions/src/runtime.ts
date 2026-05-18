@@ -10,7 +10,11 @@ import type {
   RegisteredComposition,
   SerializedComposition,
 } from "./types.js";
-import { CompositionHydrationError, UnknownCompositionError } from "./validation.js";
+import {
+  CompositionHydrationError,
+  UnknownCompositionError,
+  validateCompositionContracts,
+} from "./validation.js";
 
 /**
  * Per-instance internal record. Trimmed analog of journeys'
@@ -46,9 +50,10 @@ export interface CompositionRuntimeOptions {
   readonly debug?: boolean;
   readonly modules?: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
   /**
-   * Shared dependency snapshot threaded to lifecycle hooks and zone
-   * selectors. Captured by the plugin at resolve time from the registry's
-   * resolved deps; the runtime treats it as opaque.
+   * Opaque shared-dependency bag threaded verbatim to lifecycle hooks
+   * and zone selectors. Originates from the plugin factory's `deps`
+   * option (or whatever a direct caller passes here) — not from
+   * `PluginResolveCtx`. The runtime never inspects its contents.
    */
   readonly deps?: Readonly<Record<string, unknown>>;
 }
@@ -70,7 +75,7 @@ export interface CompositionRuntimeInternals {
   readonly __fireOnError: (
     id: CompositionInstanceId,
     err: unknown,
-    ctx: { zone: string; phase: "select" | "render" | "lifecycle" },
+    ctx: { zone: string; phase: "select" | "render" | "lifecycle" | "emit" | "notify" },
   ) => void;
   /**
    * Direct-hydration escape hatch used by `hydrateComposition`. Bypasses
@@ -129,6 +134,16 @@ export function createCompositionRuntime(
     definitions.set(reg.definition.id, reg);
   }
 
+  // Cross-reference contract / moduleCompat validation. The plugin path
+  // calls this earlier (so the error fires during registry validation,
+  // before any React mounts), but direct callers — tests, library
+  // wrappers, the hydration story for SSR — would otherwise skip it
+  // and only see contract drift at first render. Run it here on the
+  // module map the runtime was constructed with so both paths converge.
+  if (registered.length > 0 && options.modules) {
+    validateCompositionContracts(registered, Object.values(options.modules));
+  }
+
   const instances = new Map<CompositionInstanceId, CompositionInstanceRecord>();
 
   // Mount adapters keyed by zone-resolution `kind`. Today the only kind
@@ -144,12 +159,8 @@ export function createCompositionRuntime(
   }
 
   function mintInstanceId(): CompositionInstanceId {
-    try {
-      const cryptoObj = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-      if (cryptoObj?.randomUUID) return `ci_${cryptoObj.randomUUID()}`;
-    } catch {
-      // Fall through to the Math.random fallback.
-    }
+    const cryptoObj = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+    if (cryptoObj?.randomUUID) return `ci_${cryptoObj.randomUUID()}`;
     const rand = Math.random().toString(36).slice(2, 10);
     return `ci_${Date.now().toString(36)}_${rand}`;
   }
@@ -177,10 +188,11 @@ export function createCompositionRuntime(
       } catch (err) {
         // Always log listener throws — a silent listener bug is hard to
         // diagnose without observability and `debug` is usually off in
-        // production. We also route to `options.onError` so shell
-        // telemetry sees it under a known channel.
+        // production. We also route to `options.onError` under a
+        // distinct `"notify"` phase so shell telemetry can split
+        // notify-time failures from selector/render/emit ones.
         console.error("[@modular-react/compositions] listener threw", err);
-        fireOnError(record.id, err, { zone: "", phase: "lifecycle" });
+        fireOnError(record.id, err, { zone: "<notify>", phase: "notify" });
       }
     }
   }
@@ -204,7 +216,7 @@ export function createCompositionRuntime(
   function fireOnError(
     id: CompositionInstanceId,
     err: unknown,
-    ctx: { zone: string; phase: "select" | "render" | "lifecycle" },
+    ctx: { zone: string; phase: "select" | "render" | "lifecycle" | "emit" | "notify" },
   ) {
     const record = instances.get(id);
     if (!record) return;
@@ -310,12 +322,19 @@ export function createCompositionRuntime(
     return record;
   }
 
+  const ending = new Set<CompositionInstanceId>();
   function endInstance(id: CompositionInstanceId, reason: unknown): void {
     const record = instances.get(id);
     if (!record) return;
     if (record.status === "disposed") return;
+    // Re-entrance guard: an `onUnmount`/`onDispose` hook that calls
+    // `runtime.end(id)` again would otherwise re-fire the hooks
+    // because `record.status` is still `"active"` at this point. The
+    // ordering invariant we want is: hooks see the live instance, then
+    // status flips and the terminal notify goes out.
+    if (ending.has(id)) return;
+    ending.add(id);
     const reg = definitions.get(record.compositionId);
-    record.status = "disposed";
     fireOnUnmount(reg as RegisteredComposition, record);
     try {
       reg?.definition.onDispose?.({
@@ -327,10 +346,16 @@ export function createCompositionRuntime(
     } catch (err) {
       if (debug) console.error("[@modular-react/compositions] onDispose threw", err);
     }
+    // Hooks have observed the still-active instance. Flip status now so
+    // the post-dispose notify broadcasts the terminal snapshot, and
+    // any listener that calls `getInstance(id)` in response reads
+    // `status: "disposed"`.
+    record.status = "disposed";
     record.storeUnsubscribe();
     notify(record);
     record.listeners.clear();
     instances.delete(id);
+    ending.delete(id);
   }
 
   // -------------------------------------------------------------------------
@@ -406,6 +431,16 @@ export function createCompositionRuntime(
       endInstance(id, ctx?.reason ?? "unspecified");
     },
     registerMountAdapter(kind, adapter) {
+      if (debug && mountAdapters.has(kind)) {
+        // Last-writer-wins is documented behavior, but a duplicate
+        // registration is almost always an accidental double-wire
+        // (HMR re-running the bootstrap, two `createJourneyMountAdapter`
+        // calls). Surface it in dev so the bug doesn't hide behind
+        // silent replacement.
+        console.warn(
+          `[@modular-react/compositions] registerMountAdapter("${kind}") replaced an existing adapter. Verify this is intentional.`,
+        );
+      }
       mountAdapters.set(kind, adapter);
     },
     getMountAdapter(kind) {
@@ -465,7 +500,17 @@ export function createCompositionRuntime(
             `expected "${reg.definition.version}". Migrate the blob upstream before calling hydrateComposition.`,
         );
       }
-      const instanceId = blob.instanceId ?? mintInstanceId();
+      // `SerializedComposition.instanceId` is required by the type — the
+      // SSR/dump producer always supplies it so cross-document references
+      // round-trip. If a caller bypasses TypeScript and hands us a blob
+      // with a missing id, surface a clean error rather than silently
+      // minting a new one (which would lose the round-trip guarantee).
+      const instanceId = blob.instanceId;
+      if (!instanceId) {
+        throw new CompositionHydrationError(
+          `Hydrate blob for "${reg.definition.id}" is missing \`instanceId\`. Producers must include the id used at serialization time.`,
+        );
+      }
       if (instances.has(instanceId)) {
         throw new CompositionHydrationError(
           `Cannot hydrate "${reg.definition.id}" into instanceId "${instanceId}" — ` +
