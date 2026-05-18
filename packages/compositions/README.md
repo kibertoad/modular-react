@@ -37,9 +37,9 @@ If you instead need a stepped flow ("complete A → branch into B or C → final
 pnpm add @modular-react/compositions
 ```
 
-Peer deps: `@modular-react/core`, `@modular-react/react`, `@modular-react/journeys`, `react`, `react-dom`.
+Peer deps: `@modular-react/core`, `@modular-react/react`, `react`, `react-dom`.
 
-`@modular-react/journeys` is a peer dependency because composition zones can host journey instances (`kind: "journey"` resolutions render through `<JourneyOutlet>`). If you never declare a `kind: "journey"` resolution, the journey runtime is still linked but unused — the validator's `moduleCompat` semver check is sourced from `@modular-react/core` and does not depend on journeys.
+`@modular-react/journeys` is **not** a peer dependency. Compositions stays journeys-agnostic at the package level — `kind: "journey"` zone resolutions are wired through a generic [`RuntimeMountAdapter`](#runtime-mount-adapters) the consumer registers explicitly. If your app uses journey-in-zone, install `@modular-react/journeys` and call `registerMountAdapter("journey", createJourneyMountAdapter(...))` once at startup. See [Composing journeys inside zones](#composing-journeys-inside-zones).
 
 ## Mental model
 
@@ -441,17 +441,30 @@ zones: {
 }
 ```
 
-The composition outlet renders `<JourneyOutlet instanceId={...}>` for journey-kind resolutions, reading the journey runtime from `<JourneyProvider>` above the composition. **Mount both providers** at the shell:
+`@modular-react/compositions` does **not** depend on `@modular-react/journeys` directly. Instead it talks to a generic [`RuntimeMountAdapter`](#runtime-mount-adapters) registered for `kind: "journey"`. The journeys package ships a one-line factory that builds the adapter; wire it once after the manifest resolves, before mounting React:
 
 ```tsx
+import { createJourneyMountAdapter } from "@modular-react/journeys";
+import { CompositionsProvider } from "@modular-react/compositions";
+import { JourneyProvider } from "@modular-react/journeys";
+
+const manifest = registry.resolve();
+manifest.extensions.compositions.registerMountAdapter(
+  "journey",
+  createJourneyMountAdapter(manifest.extensions.journeys),
+);
+
+// Mount both providers (the JourneyProvider is still needed for
+// stand-alone <JourneyOutlet> usage; the adapter only wires zone-hosted
+// journeys, not free-standing ones).
 <JourneyProvider runtime={manifest.extensions.journeys}>
   <CompositionsProvider runtime={manifest.extensions.compositions}>
     {/* …app routes… */}
   </CompositionsProvider>
-</JourneyProvider>
+</JourneyProvider>;
 ```
 
-Without `<JourneyProvider>`, a `journey`-kind resolution renders the zone's error fallback with a clear "no JourneyProvider" message.
+If a zone returns a `kind: "journey"` resolution and no adapter is registered for that kind, the zone renders its error fallback with a clear "no mount adapter is registered for kind \"journey\"" message. Compositions that never use `kind: "journey"` don't need any of this wiring and don't pay for the journeys package.
 
 ### Idempotency of journey-kind resolutions
 
@@ -492,20 +505,56 @@ interface CompositionRuntime {
 
   // Programmatic teardown. Idempotent on disposed/unknown ids.
   end(id: CompositionInstanceId, ctx?: { reason: unknown }): void;
+
+  // Wire an external runtime (journeys, future composition-in-zone, etc.)
+  // for zones that return `kind: "<name>"` resolutions. See
+  // "Runtime mount adapters" below.
+  registerMountAdapter(kind: string, adapter: RuntimeMountAdapter): void;
+  getMountAdapter(kind: string): RuntimeMountAdapter | undefined;
 }
 ```
 
 ### When to call which
 
-| API                       | When                                                                    |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `start(handle, input)`    | Open an instance from a route loader, tab activation, or a button click |
-| `getInstance(id)`         | Read state outside React (telemetry, analytics, command-handlers)       |
-| `subscribe(id, listener)` | External observers (Redux bridge, devtools)                             |
-| `dispatch(id, updater)`   | Imperative writes from outside a panel (URL sync, keyboard shortcuts)   |
-| `end(id)`                 | Programmatic teardown that doesn't fit the "outlet unmount" trigger     |
+| API                               | When                                                                    |
+| --------------------------------- | ----------------------------------------------------------------------- |
+| `start(handle, input)`            | Open an instance from a route loader, tab activation, or a button click |
+| `getInstance(id)`                 | Read state outside React (telemetry, analytics, command-handlers)       |
+| `subscribe(id, listener)`         | External observers (Redux bridge, devtools)                             |
+| `dispatch(id, updater)`           | Imperative writes from outside a panel (URL sync, keyboard shortcuts)   |
+| `end(id)`                         | Programmatic teardown that doesn't fit the "outlet unmount" trigger     |
+| `registerMountAdapter(kind, adt)` | Once at startup, to enable `kind: "journey"` (or future kinds) in zones |
+| `getMountAdapter(kind)`           | Tests / debug introspection of what is wired                            |
 
 Inside panel components, prefer the React hooks — they handle subscription, dispatch, and instance binding for you.
+
+## Runtime mount adapters
+
+Zones with `kind: "module-entry"` resolve modules directly through the runtime's module map. Zones with any other `kind` (today: `"journey"`) resolve through a `RuntimeMountAdapter` registered on the composition runtime — a small interface defined in `@modular-react/core`:
+
+```typescript
+import type { ComponentType, ReactNode } from "react";
+
+interface RuntimeMountAdapter<TInput = unknown> {
+  start(definitionId: string, input: TInput): string; // returns instanceId
+  Outlet: ComponentType<{ instanceId: string; loadingFallback?: ReactNode }>;
+}
+```
+
+The adapter is the _only_ compile-time seam between compositions and other orchestration runtimes. Compositions doesn't import journey types or components at runtime; the adapter is registered explicitly by the consumer:
+
+```typescript
+import { createJourneyMountAdapter } from "@modular-react/journeys";
+
+manifest.extensions.compositions.registerMountAdapter(
+  "journey",
+  createJourneyMountAdapter(manifest.extensions.journeys),
+);
+```
+
+Register adapters once after `registry.resolve()` and before mounting React. The outlet caches the minted instance id per `(handle.id, structural hash of input)` per `ZoneRenderer`, so state changes that re-run the selector with the same handle+input do not call `adapter.start` again.
+
+Future kinds (composition-in-zone, federated remote modules) plug into the same hole.
 
 ## Composition handles
 

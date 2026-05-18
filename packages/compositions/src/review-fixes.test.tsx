@@ -173,15 +173,16 @@ describe("notFoundComponent", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Journey-zone resolution without a JourneyProvider — should render the
-// error fallback with a clear message rather than crashing.
+// Journey-zone resolution without a registered "journey" mount adapter —
+// should render the error fallback with a clear message rather than
+// crashing.
 // ---------------------------------------------------------------------------
 
-describe("journey-kind resolution without JourneyProvider", () => {
-  it("renders the host's errorComponent when no JourneyProvider is mounted", () => {
+describe("journey-kind resolution without a registered adapter", () => {
+  it("renders the host's errorComponent when no journey mount adapter is registered", () => {
     type State = {};
     const def = defineComposition<{}, State>()({
-      id: "no-provider",
+      id: "no-adapter",
       version: "1.0.0",
       initialState: () => ({}),
       zones: {
@@ -199,18 +200,20 @@ describe("journey-kind resolution without JourneyProvider", () => {
       [{ definition: def, options: undefined } as RegisteredComposition],
       { modules: {}, debug: false },
     );
-    const id = runtime.start("no-provider", undefined);
+    const id = runtime.start("no-adapter", undefined);
     const ErrorView = ({ error }: { error: unknown }) => (
       <div data-testid="zone-err">{(error as Error).message}</div>
     );
     render(
       <CompositionsProvider runtime={runtime}>
-        <CompositionOutlet compositionId="no-provider" instanceId={id} errorComponent={ErrorView}>
+        <CompositionOutlet compositionId="no-adapter" instanceId={id} errorComponent={ErrorView}>
           {(zones) => <div>{zones.only}</div>}
         </CompositionOutlet>
       </CompositionsProvider>,
     );
-    expect(screen.getByTestId("zone-err").textContent).toMatch(/no <JourneyProvider>/);
+    expect(screen.getByTestId("zone-err").textContent).toMatch(
+      /no mount adapter is registered for kind "journey"/,
+    );
   });
 });
 
@@ -274,12 +277,12 @@ describe("two outlets on the same instanceId", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Outlet renders without a JourneyProvider when no zone declares a
-// journey resolution — the journey runtime is a peer dep but shouldn't
-// be required at runtime for non-journey zones.
+// Outlet renders fine without any journey wiring when no zone returns a
+// journey resolution — the journey runtime is no longer a peer dep, and
+// compositions stays usable for layout-only flows.
 // ---------------------------------------------------------------------------
 
-describe("no JourneyProvider required for non-journey zones", () => {
+describe("no journey adapter required for non-journey zones", () => {
   it("renders normally when zones don't return journey resolutions", () => {
     type State = {};
     const def = defineComposition<{}, State>()({

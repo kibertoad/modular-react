@@ -174,3 +174,11 @@ export {
   SemverParseError,
 } from "./semver.js";
 export type { ParsedRange, SemverTriple } from "./semver.js";
+
+// Cross-plugin runtime-mount seam — `compositions` reads adapters of
+// this shape so it can embed journeys (today) or other runtimes
+// (composition-in-zone, federated remotes) without compile-time
+// coupling to any of them. Implementers ship a small factory next to
+// their runtime (e.g. `createJourneyMountAdapter` in
+// `@modular-react/journeys`).
+export type { RuntimeMountAdapter } from "./runtime-mount.js";

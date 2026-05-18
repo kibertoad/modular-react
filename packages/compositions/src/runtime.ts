@@ -1,5 +1,5 @@
 import { createStore, isDevEnv } from "@modular-react/core";
-import type { ModuleDescriptor, Store } from "@modular-react/core";
+import type { ModuleDescriptor, RuntimeMountAdapter, Store } from "@modular-react/core";
 import type {
   CompositionDefinitionSummary,
   CompositionHandleRef,
@@ -130,6 +130,14 @@ export function createCompositionRuntime(
   }
 
   const instances = new Map<CompositionInstanceId, CompositionInstanceRecord>();
+
+  // Mount adapters keyed by zone-resolution `kind`. Today the only kind
+  // that uses this is `"journey"` (wired by the consumer with
+  // `createJourneyMountAdapter` from `@modular-react/journeys`). Future
+  // kinds (composition-in-zone, federated remote modules) reuse the
+  // same hole. Registering replaces the previous entry — last writer
+  // wins, matching `Map.set` semantics.
+  const mountAdapters = new Map<string, RuntimeMountAdapter>();
 
   function nowIso(): string {
     return new Date().toISOString();
@@ -396,6 +404,12 @@ export function createCompositionRuntime(
     },
     end(id, ctx) {
       endInstance(id, ctx?.reason ?? "unspecified");
+    },
+    registerMountAdapter(kind, adapter) {
+      mountAdapters.set(kind, adapter);
+    },
+    getMountAdapter(kind) {
+      return mountAdapters.get(kind);
     },
   };
 

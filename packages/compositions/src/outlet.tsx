@@ -14,7 +14,6 @@ import {
 import type { ComponentType, ReactNode } from "react";
 import type { ModuleDescriptor } from "@modular-react/core";
 import { resolveEntryComponent } from "@modular-react/react";
-import { JourneyOutlet, useJourneyContext } from "@modular-react/journeys";
 
 import { getInternals } from "./runtime.js";
 import { useCompositionsContext } from "./provider.js";
@@ -345,7 +344,6 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
     retryLimit,
   } = props;
   const internals = getInternals(runtime);
-  const journeyContext = useJourneyContext();
   const [retryKey, setRetryKey] = useState(0);
   // Sentinel that flips when handleError decides to render `null` instead
   // of the error fallback (policy === "ignore"). Keyed by selectionKey so
@@ -515,17 +513,21 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
       );
     }
   } else if (selection.kind === "journey") {
-    // Mount a JourneyOutlet for the referenced journey handle. If the
-    // selector did not supply an instanceId, look one up in the per-
-    // ZoneRenderer cache (or mint+cache on first miss). This makes the
-    // journey-zone idempotent on (handle.id, input) regardless of whether
-    // the journey runtime has persistence wired.
-    const journeyRuntime = journeyContext?.runtime;
-    if (!journeyRuntime) {
+    // Look up the registered "journey" mount adapter and mint (or reuse
+    // a cached) instance for the resolution's handle+input. If the
+    // selector did not supply an instanceId, fall back to the per-
+    // ZoneRenderer cache so the journey is idempotent on
+    // (handle.id, input) regardless of whether the journey runtime has
+    // persistence wired. The adapter abstracts away the journey
+    // runtime — compositions stays decoupled from
+    // `@modular-react/journeys` entirely.
+    const adapter = runtime.getMountAdapter("journey");
+    if (!adapter) {
       content = renderError(
         zone,
         new Error(
-          "[@modular-react/compositions] Zone returned a `journey` resolution but no <JourneyProvider> is mounted above the composition.",
+          '[@modular-react/compositions] Zone returned a `journey` resolution but no mount adapter is registered for kind "journey". ' +
+            'Call `runtime.registerMountAdapter("journey", createJourneyMountAdapter(journeyRuntime))` before mounting the composition.',
         ),
         errorComponent,
       );
@@ -537,11 +539,12 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
         if (cached) {
           journeyInstanceId = cached;
         } else {
-          journeyInstanceId = journeyRuntime.start(selection.handle, selection.input as never);
+          journeyInstanceId = adapter.start(selection.handle.id, selection.input);
           journeyInstanceCache.current.set(cacheKey, journeyInstanceId);
         }
       }
-      content = <JourneyOutlet instanceId={journeyInstanceId} loadingFallback={loadingFallback} />;
+      const AdapterOutlet = adapter.Outlet;
+      content = <AdapterOutlet instanceId={journeyInstanceId} loadingFallback={loadingFallback} />;
     }
   }
 

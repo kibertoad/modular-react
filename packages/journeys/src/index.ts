@@ -34,6 +34,11 @@ export {
 // the minimal "match" + "order" + error class for back-compat. New
 // callers should import these from `@modular-react/core` directly.
 export { satisfies, compareVersions, SemverParseError } from "@modular-react/core";
+
+// Mount adapter — lets other packages (today: `@modular-react/compositions`)
+// embed a journey runtime via the generic `RuntimeMountAdapter` shape
+// without depending on this package's React surface directly.
+export { createJourneyMountAdapter } from "./mount-adapter.js";
 export { JourneyOutlet, useJourneyCallStack } from "./outlet.js";
 export type {
   JourneyOutletProps,

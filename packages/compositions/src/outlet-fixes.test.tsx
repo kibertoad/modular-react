@@ -6,7 +6,7 @@ import { StrictMode, useContext } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
-import { JourneyProvider } from "@modular-react/journeys";
+import type { RuntimeMountAdapter } from "@modular-react/core";
 
 import { defineComposition } from "./define-composition.js";
 import { createCompositionRuntime } from "./runtime.js";
@@ -217,26 +217,16 @@ describe("journey-zone instance caching", () => {
     interface MockHandle {
       readonly id: string;
     }
-    const startSpy = vi.fn(() => "ji_mock");
-    // Stub enough of JourneyRuntime that JourneyOutlet's
-    // useSyncExternalStore mount path doesn't crash. We deliberately
-    // return `null` from getInstance so the outlet renders nothing —
-    // we only care about how many times `start` is called.
-    const fakeJourneyRuntime = {
+    const startSpy = vi.fn((_definitionId: string, _input: unknown) => "ji_mock");
+    // Minimal RuntimeMountAdapter — proves the outlet talks to whatever
+    // is registered for "journey", with no dependency on the journeys
+    // package itself. The Outlet component is a no-op div so the
+    // useSyncExternalStore wiring of the real JourneyOutlet isn't part
+    // of the test surface.
+    const fakeAdapter: RuntimeMountAdapter = {
       start: startSpy,
-      getInstance: () => null,
-      listInstances: () => [],
-      listDefinitions: () => [],
-      isRegistered: () => true,
-      subscribe: () => () => {},
-      dispatch: () => {},
-      end: () => {},
-      goBack: () => {},
-      goForward: () => {},
-      canGoBack: () => false,
-      canGoForward: () => false,
-      hydrate: () => "ji_noop",
-    } as unknown as Parameters<typeof JourneyProvider>[0]["runtime"];
+      Outlet: () => <div data-testid="journey-outlet" />,
+    };
 
     type State = { readonly tick: number };
     const def = defineComposition<{}, State>()({
@@ -258,14 +248,13 @@ describe("journey-zone instance caching", () => {
       [{ definition: def, options: undefined } as RegisteredComposition],
       { modules: {}, debug: false },
     );
+    runtime.registerMountAdapter("journey", fakeAdapter);
     const id = runtime.start("j-zone", undefined);
     render(
       <CompositionsProvider runtime={runtime}>
-        <JourneyProvider runtime={fakeJourneyRuntime}>
-          <CompositionOutlet compositionId="j-zone" instanceId={id}>
-            {(zones) => <div>{zones.only}</div>}
-          </CompositionOutlet>
-        </JourneyProvider>
+        <CompositionOutlet compositionId="j-zone" instanceId={id}>
+          {(zones) => <div>{zones.only}</div>}
+        </CompositionOutlet>
       </CompositionsProvider>,
     );
     const baselineCalls = startSpy.mock.calls.length;

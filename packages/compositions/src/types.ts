@@ -3,6 +3,7 @@ import type {
   ExitContract,
   JourneyHandleRef,
   ModuleTypeMap,
+  RuntimeMountAdapter,
 } from "@modular-react/core";
 
 /** Opaque id minted by the composition runtime. Prefixed `ci_` to disambiguate from `ji_`. */
@@ -361,4 +362,26 @@ export interface CompositionRuntime {
    * a stale instance, or test cleanup).
    */
   end(id: CompositionInstanceId, ctx?: { readonly reason: unknown }): void;
+
+  /**
+   * Register a {@link RuntimeMountAdapter} for a zone-resolution `kind`.
+   * The outlet looks up the adapter when it encounters a non-module
+   * resolution (e.g. `kind: "journey"`); if no adapter is registered
+   * for the kind the zone renders its error fallback with a clear
+   * message.
+   *
+   * Wire this once after the manifest resolves and before mounting the
+   * `<CompositionsProvider>` — e.g.
+   * `manifest.extensions.compositions.registerMountAdapter("journey",
+   * createJourneyMountAdapter(manifest.extensions.journeys))`.
+   * Registering twice for the same kind replaces the previous adapter.
+   */
+  registerMountAdapter(kind: string, adapter: RuntimeMountAdapter): void;
+
+  /**
+   * Read the adapter registered under `kind`, or `undefined` if none is
+   * registered. Used internally by the outlet; exposed so tests and
+   * external observers can introspect the wiring.
+   */
+  getMountAdapter(kind: string): RuntimeMountAdapter | undefined;
 }

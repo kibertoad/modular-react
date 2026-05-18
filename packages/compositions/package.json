@@ -46,7 +46,6 @@
   },
   "peerDependencies": {
     "@modular-react/core": "^2.0.0",
-    "@modular-react/journeys": "^1.0.0",
     "@modular-react/react": "^2.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
