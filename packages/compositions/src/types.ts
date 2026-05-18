@@ -2,17 +2,18 @@ import type {
   CatalogMeta,
   ExitContract,
   JourneyHandleRef,
-  JourneyPersistence,
-  MaybePromise,
   ModuleTypeMap,
-  SerializedJourney,
 } from "@modular-react/core";
 
 /** Opaque id minted by the composition runtime. Prefixed `ci_` to disambiguate from `ji_`. */
 export type CompositionInstanceId = string;
 
-/** Status of a composition instance over its lifetime. */
-export type CompositionStatus = "loading" | "active" | "disposed";
+/**
+ * Status of a composition instance. Compositions are pure projections of
+ * state — there is no async setup phase, so instances flip straight from
+ * `"active"` (the only initial value) to `"disposed"` on teardown.
+ */
+export type CompositionStatus = "active" | "disposed";
 
 // ---------------------------------------------------------------------------
 // Zone resolution — what a selector returns
@@ -88,11 +89,7 @@ export type ZoneSelector<TModules extends ModuleTypeMap, TState> = (
  *     synchronous. Only meaningful for lazy entries; eager entries
  *     are already resolved.
  */
-export interface ZoneDescriptor<
-  TModules extends ModuleTypeMap,
-  TState,
-  TContract = unknown,
-> {
+export interface ZoneDescriptor<TModules extends ModuleTypeMap, TState, TContract = unknown> {
   readonly select: ZoneSelector<TModules, TState>;
   readonly contract?: ExitContract<TContract>;
   readonly fallback?: React.ComponentType;
@@ -112,10 +109,9 @@ export type ZoneMap<TModules extends ModuleTypeMap, TState> = Readonly<
  * Lifecycle hooks fired by the composition runtime around an instance's
  * lifetime. Symmetric with `ModuleLifecycle` from core:
  *
- *   - `onMount` runs once when the instance transitions to `"active"` —
- *     synchronously inside `runtime.start()` for memory-only compositions,
- *     and after the persistence `load()` resolves for persistence-backed
- *     ones. It can fire before any outlet has attached.
+ *   - `onMount` runs once at `runtime.start()`, synchronously, before
+ *     `start()` returns the new instance id. It can fire before any
+ *     outlet has attached.
  *   - `onUnmount` runs once when the instance is disposed — either by
  *     an explicit `runtime.end(id)` or by the last outlet detaching
  *     (after a disposal microtask that survives StrictMode mount cycles).
@@ -154,8 +150,7 @@ export type CompositionZoneErrorPolicy = "retry" | "fallback" | "ignore";
  *   - `TZones`   — the zone-name → descriptor map. Use `const` inference
  *     in `defineComposition` to preserve literal-string zone names.
  *   - `TState`   — the composition's scoped store shape.
- *   - `TInput`   — initialization input; threaded through persistence
- *     `keyFor` and `initialState`.
+ *   - `TInput`   — initialization input threaded into `initialState`.
  *   - `TMeta`    — app-owned discovery metadata bag, merged onto `CatalogMeta`.
  */
 export interface CompositionDefinition<
@@ -206,17 +201,6 @@ export interface CompositionDefinition<
     readonly state: TState;
     readonly reason: unknown;
   }) => void;
-
-  /**
-   * Definition-level migration hook. Runs over a loaded blob whenever
-   * its `version` does not match `definition.version`. Returning a
-   * migrated blob lets the runtime continue; throwing — or returning a
-   * value the runtime can't reconcile — surfaces as a
-   * {@link CompositionHydrationError}. Mirrors `JourneyDefinition.onHydrate`.
-   */
-  readonly onHydrate?: (
-    blob: SerializedComposition<unknown>,
-  ) => SerializedComposition<TState>;
 }
 
 /**
@@ -230,9 +214,7 @@ export type AnyCompositionDefinition = CompositionDefinition<any, any, any, any,
 // Register options + internal record
 // ---------------------------------------------------------------------------
 
-export interface CompositionRegisterOptions<TState = unknown, TInput = unknown> {
-  /** Persistence adapter — without it, instances live in memory only. */
-  persistence?: CompositionPersistence<TState, TInput>;
+export interface CompositionRegisterOptions<TState = unknown> {
   /**
    * Fires when a zone selector or panel render throws. Observation-only —
    * the outlet still applies the `onZoneError` policy. Useful for shell
@@ -244,10 +226,8 @@ export interface CompositionRegisterOptions<TState = unknown, TInput = unknown> 
   ) => void;
   /**
    * Layered on top of the definition-level `lifecycle.onMount` — fires
-   * exactly once when the instance transitions to `"active"` (after the
-   * persistence load resolves, or immediately for memory-only
-   * compositions). Useful for shell telemetry that doesn't belong in
-   * composition-author code.
+   * exactly once when the instance starts. Useful for shell telemetry
+   * that doesn't belong in composition-author code.
    */
   onMount?: (ctx: {
     readonly compositionId: string;
@@ -263,66 +243,30 @@ export interface CompositionRegisterOptions<TState = unknown, TInput = unknown> 
     readonly instanceId: CompositionInstanceId;
     readonly state: TState;
   }) => void;
-  /**
-   * Registration-level migration hook. Runs AFTER the definition's own
-   * `onHydrate` — shells can layer environment-specific upgrades on top
-   * of the composition author's. Same contract: produce a blob whose
-   * `version` matches the active definition, or throw.
-   */
-  onHydrate?: (
-    blob: SerializedComposition<unknown>,
-  ) => SerializedComposition<TState>;
-  /**
-   * Debounce window (in milliseconds) between persistence writes for
-   * this composition. When set, `dispatch` mutations within the window
-   * coalesce into a single trailing-edge save. Defaults to `0` —
-   * every mutation triggers a save (matching {@link JourneyPersistence}'s
-   * semantics).
-   *
-   * High-frequency interactions (drag, controlled inputs) should set
-   * this to ~150ms; durability-critical state should leave it at 0.
-   * Disposal always flushes any pending save before clearing the blob.
-   */
-  saveDebounceMs?: number;
 }
 
-export interface RegisteredComposition<TState = unknown, TInput = unknown> {
+export interface RegisteredComposition<TState = unknown> {
   readonly definition: AnyCompositionDefinition;
-  readonly options: CompositionRegisterOptions<TState, TInput> | undefined;
+  readonly options: CompositionRegisterOptions<TState> | undefined;
 }
 
 // ---------------------------------------------------------------------------
-// Persistence — reuse the journey adapter shape, narrower serialized blob
+// Hydration blob — for SSR / out-of-band attachment, NOT persistence.
 // ---------------------------------------------------------------------------
 
 /**
- * Persistence adapter for a composition instance. Structurally compatible
- * with {@link JourneyPersistence} so the same backend implementation can
- * serve both — only the blob shape narrows.
- */
-export interface CompositionPersistence<TState = unknown, TInput = unknown> {
-  /**
-   * Compute the persistence key from the composition id and starting
-   * input. MUST be deterministic — `start()` probes this key to find an
-   * existing instance and achieve idempotency.
-   */
-  keyFor: (ctx: { compositionId: string; input: TInput }) => string;
-  load: (key: string) => MaybePromise<SerializedComposition<TState> | null>;
-  save: (key: string, blob: SerializedComposition<TState>) => MaybePromise<void>;
-  remove: (key: string) => MaybePromise<void>;
-}
-
-/**
- * Serialized form of a composition instance. Intentionally smaller than
- * {@link SerializedJourney} — no step history, no rollback snapshots, no
- * parent/child link. Compositions are pure state projections, so resume
- * deterministically replays selectors against `state`.
+ * Serialized form of a composition instance, used solely by
+ * {@link hydrateComposition} to attach a server-rendered or debug-dump
+ * blob to a runtime. Compositions intentionally do NOT ship a persistence
+ * adapter — their state is coordination, not flow, and applications that
+ * want it durable should keep it in their own state store (URL params,
+ * Redux + redux-persist, zustand-persist, etc.) and feed it into the
+ * composition through `initialState(input)`.
  */
 export interface SerializedComposition<TState = unknown> {
   readonly definitionId: string;
   readonly version: string;
   readonly instanceId: CompositionInstanceId;
-  readonly status: "active";
   readonly state: TState;
   readonly startedAt: string;
   readonly updatedAt: string;
@@ -397,37 +341,24 @@ export interface CompositionRuntime {
    * Imperatively mutate the composition's state. Accepts either a partial
    * object (shallow-merged) or an updater function. Panels and the host
    * usually go through {@link CompositionContextValue.dispatch} via
-   * `useCompositionDispatch`; this is the lower-level entry point.
-   *
-   * Behavior across statuses:
-   *   - `"loading"` — the updater is buffered and replayed in arrival
-   *     order once the persistence load resolves and the instance flips
-   *     to `"active"`. Callers do not lose writes issued right after
-   *     `start()`.
-   *   - `"active"` — applied synchronously to the underlying store.
-   *   - `"disposed"` — silently dropped.
+   * `useCompositionDispatch`; this is the lower-level entry point. A
+   * dispatch on a disposed (or unknown) instance is a silent no-op.
    */
   dispatch<TState>(
     id: CompositionInstanceId,
     updater: Partial<TState> | ((prev: TState) => Partial<TState> | TState),
   ): void;
   /**
-   * Tear down an instance. Cancels any pending debounced save, fires
-   * `lifecycle.onUnmount` and the registration-level `onUnmount`, fires
-   * `onDispose(ctx)`, unsubscribes the store, removes the persisted blob
-   * (successor-aware — if another instance already claimed the same
-   * persistence key, the remove is suppressed), notifies subscribers one
-   * last time with `status: "disposed"`, then deletes the record.
-   * Idempotent — calling on an already-disposed instance is a no-op.
+   * Tear down an instance. Fires `lifecycle.onUnmount`, the
+   * registration-level `onUnmount`, and `onDispose(ctx)`; unsubscribes
+   * the store; notifies subscribers one last time with
+   * `status: "disposed"`; then deletes the record. Idempotent — calling
+   * on an already-disposed instance is a no-op.
    *
    * Callers usually do not invoke this directly; the outlet disposes
-   * automatically when it unmounts and no other listeners remain.
-   * Reach for `end()` for programmatic teardown (e.g. a Cmd-K palette
-   * killing a stale instance, or test cleanup).
+   * automatically when it unmounts and no other listeners remain. Reach
+   * for `end()` for programmatic teardown (e.g. a Cmd-K palette killing
+   * a stale instance, or test cleanup).
    */
   end(id: CompositionInstanceId, ctx?: { readonly reason: unknown }): void;
 }
-
-// Re-export the journey persistence type so callers who want a shared
-// backend can satisfy both contracts from a single adapter shape.
-export type { JourneyPersistence };

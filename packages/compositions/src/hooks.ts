@@ -1,10 +1,6 @@
 import { createContext, useContext, useSyncExternalStore } from "react";
 import type { Store } from "@modular-react/core";
-import type {
-  CompositionInstanceId,
-  CompositionRuntime,
-  CompositionZoneEvent,
-} from "./types.js";
+import type { CompositionInstanceId, CompositionRuntime, CompositionZoneEvent } from "./types.js";
 
 /**
  * Per-mount context value the `<CompositionOutlet>` installs above each
@@ -71,11 +67,7 @@ export function useCompositionState<TState, U = TState>(
   const getSnapshot = selector
     ? () => selector(store.getState())
     : () => store.getState() as unknown as U;
-  return useSyncExternalStore(
-    store.subscribe,
-    getSnapshot,
-    getSnapshot,
-  );
+  return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
 }
 
 /**
@@ -162,9 +154,7 @@ export function createCompositionContext<TState>(): TypedCompositionHooks<TState
   function useState<U>(selector: (state: TState) => U): U;
   function useState(): TState;
   function useState<U>(selector?: (state: TState) => U): TState | U {
-    return selector
-      ? useCompositionState<TState, U>(selector)
-      : useCompositionState<TState>();
+    return selector ? useCompositionState<TState, U>(selector) : useCompositionState<TState>();
   }
   return {
     useState: useState as TypedCompositionHooks<TState>["useState"],

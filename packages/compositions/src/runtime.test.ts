@@ -2,10 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import { defineComposition } from "./define-composition.js";
 import { createCompositionRuntime, getInternals } from "./runtime.js";
-import {
-  createMemoryCompositionPersistence,
-  defineCompositionPersistence,
-} from "./persistence.js";
 import type { RegisteredComposition } from "./types.js";
 
 // --- Fixture modules ---------------------------------------------------------
@@ -183,50 +179,13 @@ describe("CompositionRuntime", () => {
     expect(() => runtime.end("ci_unknown" as never)).not.toThrow();
   });
 
-  it("idempotent start: same persistence key returns same instance id (after probe)", async () => {
-    const persistence = defineCompositionPersistence<{ documentId: string }, EditorState>(
-      createMemoryCompositionPersistence({
-        keyFor: ({ compositionId, input }) => `${compositionId}:${input.documentId}`,
-      }),
-    );
-    const runtime = createCompositionRuntime(
-      [{ definition: editor, options: { persistence } } as RegisteredComposition],
-      { modules: { editor: editorModule, contentful: contentfulModule }, debug: false },
-    );
+  it("mints a fresh instance on every start (no built-in dedupe)", () => {
+    const runtime = freshRuntime();
     const a = runtime.start("editor", { documentId: "doc-1" });
-    // Allow persistence.load microtask to settle (transitions loading → active).
-    await Promise.resolve();
-    await Promise.resolve();
     const b = runtime.start("editor", { documentId: "doc-1" });
-    expect(b).toBe(a);
-  });
-
-  it("hydrates persisted state on a subsequent start", async () => {
-    const store = createMemoryCompositionPersistence<{ documentId: string }, EditorState>({
-      keyFor: ({ compositionId, input }) => `${compositionId}:${input.documentId}`,
-    });
-    // Seed a blob as if a prior session already saved state.
-    store.save(`editor:doc-1`, {
-      definitionId: "editor",
-      version: "1.0.0",
-      instanceId: "ci_seed" as never,
-      status: "active",
-      state: { documentId: "doc-1", activeIntegrationId: "contentful" },
-      startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-
-    const runtime = createCompositionRuntime(
-      [{ definition: editor, options: { persistence: store } } as RegisteredComposition],
-      { modules: { editor: editorModule, contentful: contentfulModule }, debug: false },
-    );
-    const id = runtime.start("editor", { documentId: "doc-1" });
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(runtime.getInstance(id)?.state).toEqual({
-      documentId: "doc-1",
-      activeIntegrationId: "contentful",
-    });
+    expect(b).not.toBe(a);
+    expect(runtime.getInstance(a)?.state.documentId).toBe("doc-1");
+    expect(runtime.getInstance(b)?.state.documentId).toBe("doc-1");
   });
 
   it("listInstances / listDefinitions reflect runtime state", () => {

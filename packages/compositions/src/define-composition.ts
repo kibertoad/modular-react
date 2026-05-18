@@ -43,7 +43,8 @@ export const defineComposition =
   >() =>
   <TInput = void, const TZones extends ZoneMap<TModules, TState> = ZoneMap<TModules, TState>>(
     definition: CompositionDefinition<TModules, TZones, TState, TInput, CatalogMeta & TMeta>,
-  ): CompositionDefinition<TModules, TZones, TState, TInput, CatalogMeta & TMeta> => definition;
+  ): CompositionDefinition<TModules, TZones, TState, TInput, CatalogMeta & TMeta> =>
+    definition;
 
 /**
  * Identity helper that ties a composition handle to its typed input.

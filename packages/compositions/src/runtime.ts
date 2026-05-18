@@ -1,13 +1,10 @@
 import { createStore, isDevEnv } from "@modular-react/core";
 import type { ModuleDescriptor, Store } from "@modular-react/core";
 import type {
-  AnyCompositionDefinition,
   CompositionDefinitionSummary,
   CompositionHandleRef,
   CompositionInstance,
   CompositionInstanceId,
-  CompositionPersistence,
-  CompositionRegisterOptions,
   CompositionRuntime,
   CompositionStatus,
   RegisteredComposition,
@@ -17,8 +14,9 @@ import { CompositionHydrationError, UnknownCompositionError } from "./validation
 
 /**
  * Per-instance internal record. Trimmed analog of journeys'
- * `InstanceRecord` — no step history, no rollback, no parent/child link.
- * Compositions are pure state projections; resume = rerun selectors.
+ * `InstanceRecord` — no step history, no rollback, no parent/child link,
+ * and (since compositions don't ship a persistence adapter) no save
+ * pipeline. Resume = re-run selectors against the in-memory state.
  */
 export interface CompositionInstanceRecord<TState = unknown> {
   id: CompositionInstanceId;
@@ -27,7 +25,6 @@ export interface CompositionInstanceRecord<TState = unknown> {
   state: TState;
   /** Underlying reactive store. setState merges or replaces just like zustand. */
   store: Store<TState>;
-  persistenceKey: string | null;
   startedAt: string;
   updatedAt: string;
   /** Monotonic counter — bumped on observable changes, used to memoize the public snapshot. */
@@ -36,15 +33,6 @@ export interface CompositionInstanceRecord<TState = unknown> {
   /** Outlet attachment count; disposal trigger when this drops to 0. */
   outletRefCount: number;
   listeners: Set<() => void>;
-  pendingSave: SerializedComposition<TState> | null;
-  saveInFlight: boolean;
-  pendingRemove: boolean;
-  /**
-   * Active debounce timer for trailing-edge persistence writes (registration
-   * option `saveDebounceMs`). Cleared on flush/disposal so a late timer
-   * never fires after the instance is gone.
-   */
-  saveDebounceHandle: ReturnType<typeof setTimeout> | null;
   /** Per-zone consecutive retry counter, used by the outlet's retryLimit gate. */
   zoneRetryCounts: Map<string, number>;
   /** `lifecycle.onMount` has fired for this instance — gate so it only runs once. */
@@ -52,14 +40,6 @@ export interface CompositionInstanceRecord<TState = unknown> {
   unmountFired: boolean;
   /** Subscription to the store's `subscribe` — kept so we can detach on disposal. */
   storeUnsubscribe: () => void;
-  /**
-   * Buffer for `runtime.dispatch` calls that arrive while `status` is
-   * still `"loading"` (persistence load in flight). Flushed in order
-   * once the instance transitions to `"active"`. Without this, hosts
-   * that fire-and-forget a `dispatch` right after `start()` silently
-   * lose the write.
-   */
-  pendingDispatches: Array<unknown>;
 }
 
 export interface CompositionRuntimeOptions {
@@ -94,9 +74,9 @@ export interface CompositionRuntimeInternals {
   ) => void;
   /**
    * Direct-hydration escape hatch used by `hydrateComposition`. Bypasses
-   * `start()` (and therefore `keyFor` / `initialState`) so out-of-band
-   * blobs can be attached without crashing definitions that require
-   * `TInput` or persist under a key the caller hasn't computed.
+   * `start()` (and therefore `initialState`) so out-of-band blobs (SSR
+   * dumps, debug snapshots) can be attached without going through the
+   * input-driven init path.
    */
   readonly __hydrate: (
     reg: RegisteredComposition,
@@ -141,8 +121,6 @@ export function createCompositionRuntime(
   const definitions = new Map<string, RegisteredComposition>();
   for (const reg of registered) {
     if (definitions.has(reg.definition.id)) {
-      // Surface duplicate registrations even when bypassing the plugin —
-      // the alternative (silent last-wins) makes test setups confusing.
       throw new Error(
         `[@modular-react/compositions] Composition "${reg.definition.id}" is registered more than once. ` +
           `Pass a single RegisteredComposition per id to createCompositionRuntime().`,
@@ -152,28 +130,6 @@ export function createCompositionRuntime(
   }
 
   const instances = new Map<CompositionInstanceId, CompositionInstanceRecord>();
-  /**
-   * `keyIndex` is namespaced internally by `compositionId` so two
-   * compositions with the same `keyFor` string cannot collide. Mirrors
-   * the journey runtime's pattern.
-   */
-  const keyIndex = new Map<string, CompositionInstanceId>();
-  /**
-   * Per-key serialization of persistence writes. Two records sharing
-   * the same `keyFor` result (an end + restart cycle on the same doc)
-   * have independent `saveInFlight` flags, so without this chain a
-   * disposed instance's late save could land AFTER a successor's save
-   * and clobber the newer data. Adapters whose `save` resolves in
-   * non-FIFO order (network-backed, batched, multi-tab) would also
-   * reorder writes without it. Each save awaits the previous one
-   * scheduled under the same `fullKey`; the chain entry is cleared
-   * once it's the leaf so no per-key memory leak.
-   */
-  const keySaveChains = new Map<string, Promise<unknown>>();
-
-  function indexKey(compositionId: string, userKey: string): string {
-    return `${compositionId}\x1f${userKey}`;
-  }
 
   function nowIso(): string {
     return new Date().toISOString();
@@ -213,7 +169,7 @@ export function createCompositionRuntime(
       } catch (err) {
         // Always log listener throws — a silent listener bug is hard to
         // diagnose without observability and `debug` is usually off in
-        // production. We still route to `options.onError` so shell
+        // production. We also route to `options.onError` so shell
         // telemetry sees it under a known channel.
         console.error("[@modular-react/compositions] listener threw", err);
         fireOnError(record.id, err, { zone: "", phase: "lifecycle" });
@@ -237,191 +193,6 @@ export function createCompositionRuntime(
     return instance;
   }
 
-  // -------------------------------------------------------------------------
-  // Persistence save pipeline — lifted from journeys' runtime (§10.2) with
-  // debounce + successor-aware remove protection.
-  // -------------------------------------------------------------------------
-
-  function schedulePersist<TState>(
-    record: CompositionInstanceRecord<TState>,
-    persistence: CompositionPersistence<TState>,
-    debounceMs: number,
-  ) {
-    if (debounceMs > 0) {
-      // Trailing-edge debounce: cancel any pending timer, set a new one.
-      // The timer captures the freshest serialize() at fire-time, so the
-      // burst of mutations collapses to one save with the final state.
-      if (record.saveDebounceHandle !== null) {
-        clearTimeout(record.saveDebounceHandle);
-      }
-      record.saveDebounceHandle = setTimeout(() => {
-        record.saveDebounceHandle = null;
-        const blob = serialize(record);
-        if (record.saveInFlight) {
-          record.pendingSave = blob;
-          return;
-        }
-        void runSave(record, persistence, blob);
-      }, debounceMs);
-      return;
-    }
-    const blob = serialize(record);
-    if (record.saveInFlight) {
-      record.pendingSave = blob;
-      return;
-    }
-    void runSave(record, persistence, blob);
-  }
-
-  /**
-   * Cancel any in-flight debounce timer so a trailing-edge save never
-   * fires after the instance is gone. Disposal always removes the blob
-   * anyway, so the pending state is intentionally dropped — flushing it
-   * to disk only to immediately remove would be wasted work.
-   */
-  function cancelDebouncedSave<TState>(
-    record: CompositionInstanceRecord<TState>,
-    // `persistence` is unused but kept in the signature for symmetry with
-    // `removePersisted` / `schedulePersist`.
-    _persistence: CompositionPersistence<TState>,
-  ) {
-    if (record.saveDebounceHandle === null) return;
-    clearTimeout(record.saveDebounceHandle);
-    record.saveDebounceHandle = null;
-  }
-
-  async function runSave<TState>(
-    record: CompositionInstanceRecord<TState>,
-    persistence: CompositionPersistence<TState>,
-    blob: SerializedComposition<TState>,
-  ) {
-    record.saveInFlight = true;
-    const key = record.persistenceKey;
-    const fullKey = key ? indexKey(record.compositionId, key) : null;
-    try {
-      if (!key || !fullKey) return;
-      // Chain this save behind any earlier save for the same persistence
-      // key — including saves owned by a prior, now-disposed record on
-      // the same slot. Without serialization, FIFO ordering is at the
-      // adapter's mercy and a late save can clobber a successor.
-      const previous = keySaveChains.get(fullKey);
-      const thisSave: Promise<unknown> = (previous ?? Promise.resolve()).then(
-        () => {
-          // Re-check ownership at fire time: a record disposed while
-          // chained behind another save has nothing to write — the
-          // successor (if any) will save its own state, and disposed
-          // records without successors will have their blob removed
-          // via `pendingRemove` below. Without this guard, a queued
-          // save from a disposed record would still land its stale
-          // bytes after the successor's save lands.
-          if (record.status === "disposed" && keyIndex.get(fullKey) !== record.id) {
-            return;
-          }
-          return persistence.save(key, blob);
-        },
-      );
-      keySaveChains.set(fullKey, thisSave);
-      try {
-        await thisSave;
-      } finally {
-        // Only clear the slot if no later save has chained on top of us.
-        if (keySaveChains.get(fullKey) === thisSave) {
-          keySaveChains.delete(fullKey);
-        }
-      }
-    } catch (err) {
-      if (debug) {
-        console.error(
-          `[@modular-react/compositions] Failed to persist "${record.compositionId}" instance ${record.id}`,
-          err,
-        );
-      }
-    } finally {
-      record.saveInFlight = false;
-      if (record.pendingRemove) {
-        record.pendingRemove = false;
-        record.pendingSave = null;
-        if (record.persistenceKey) {
-          // Successor-aware: if another instance has claimed the same
-          // persistence key since disposal started, suppress the remove
-          // — otherwise we'd wipe the new instance's blob.
-          const checkKey = indexKey(record.compositionId, record.persistenceKey);
-          if (!keyIndex.has(checkKey)) {
-            fireAndForgetRemove(persistence, record.persistenceKey);
-          }
-        }
-      } else if (record.pendingSave) {
-        const next = record.pendingSave;
-        record.pendingSave = null;
-        void runSave(record, persistence, next);
-      }
-    }
-  }
-
-  function removePersisted<TState>(
-    record: CompositionInstanceRecord<TState>,
-    persistence: CompositionPersistence<TState>,
-  ) {
-    if (!record.persistenceKey) return;
-    record.pendingSave = null;
-    if (record.saveDebounceHandle !== null) {
-      clearTimeout(record.saveDebounceHandle);
-      record.saveDebounceHandle = null;
-    }
-    const key = record.persistenceKey;
-    const fullKey = indexKey(record.compositionId, key);
-    // Only release the index slot if it still points to THIS record.
-    // A successor that already claimed the slot via a parallel `start()`
-    // must keep it.
-    if (keyIndex.get(fullKey) === record.id) {
-      keyIndex.delete(fullKey);
-    } else {
-      // Successor owns the slot; do not remove its data.
-      return;
-    }
-    if (record.saveInFlight) {
-      record.pendingRemove = true;
-      return;
-    }
-    // Re-check the slot one more time: a synchronous successor could
-    // appear between `keyIndex.delete` above and this call. That window
-    // is single-threaded JS so it can't happen here, but the symmetry
-    // with the deferred branch above is clearer this way.
-    fireAndForgetRemove(persistence, key);
-  }
-
-  function fireAndForgetRemove<TState>(
-    persistence: CompositionPersistence<TState>,
-    key: string,
-  ) {
-    try {
-      const maybe = persistence.remove(key);
-      if (maybe && typeof (maybe as Promise<void>).catch === "function") {
-        (maybe as Promise<void>).catch((err) => {
-          if (debug) {
-            console.error("[@modular-react/compositions] persistence.remove rejected", err);
-          }
-        });
-      }
-    } catch (err) {
-      if (debug) console.error("[@modular-react/compositions] persistence.remove threw", err);
-    }
-  }
-
-  function serialize<TState>(
-    record: CompositionInstanceRecord<TState>,
-  ): SerializedComposition<TState> {
-    return {
-      definitionId: record.compositionId,
-      version: definitions.get(record.compositionId)!.definition.version,
-      instanceId: record.id,
-      status: "active",
-      state: record.state,
-      startedAt: record.startedAt,
-      updatedAt: record.updatedAt,
-    };
-  }
-
   function fireOnError(
     id: CompositionInstanceId,
     err: unknown,
@@ -437,14 +208,18 @@ export function createCompositionRuntime(
     }
   }
 
-  function fireOnMount<TState>(reg: RegisteredComposition, record: CompositionInstanceRecord<TState>) {
+  function fireOnMount<TState>(
+    reg: RegisteredComposition,
+    record: CompositionInstanceRecord<TState>,
+  ) {
     if (record.mountFired) return;
     record.mountFired = true;
     try {
-      (reg.definition.lifecycle?.onMount as ((s: TState, d: Readonly<Record<string, unknown>>) => void) | undefined)?.(
-        record.state,
-        deps,
-      );
+      (
+        reg.definition.lifecycle?.onMount as
+          | ((s: TState, d: Readonly<Record<string, unknown>>) => void)
+          | undefined
+      )?.(record.state, deps);
     } catch (err) {
       if (debug) console.error("[@modular-react/compositions] lifecycle.onMount threw", err);
       fireOnError(record.id, err, { zone: "", phase: "lifecycle" });
@@ -467,10 +242,11 @@ export function createCompositionRuntime(
     if (record.unmountFired) return;
     record.unmountFired = true;
     try {
-      (reg.definition.lifecycle?.onUnmount as ((s: TState, d: Readonly<Record<string, unknown>>) => void) | undefined)?.(
-        record.state,
-        deps,
-      );
+      (
+        reg.definition.lifecycle?.onUnmount as
+          | ((s: TState, d: Readonly<Record<string, unknown>>) => void)
+          | undefined
+      )?.(record.state, deps);
     } catch (err) {
       if (debug) console.error("[@modular-react/compositions] lifecycle.onUnmount threw", err);
       fireOnError(record.id, err, { zone: "", phase: "lifecycle" });
@@ -487,267 +263,43 @@ export function createCompositionRuntime(
   }
 
   // -------------------------------------------------------------------------
-  // Hydration / migration helpers
-  // -------------------------------------------------------------------------
-
-  /**
-   * Walk a freshly-loaded blob through the definition-level + registration-
-   * level migration hooks, then verify the result's version matches the
-   * active definition. Returns the (possibly migrated) blob on success,
-   * or throws `CompositionHydrationError` on a version mismatch we
-   * can't reconcile.
-   */
-  function migrateBlob<TState>(
-    reg: RegisteredComposition,
-    blob: SerializedComposition<unknown>,
-  ): SerializedComposition<TState> {
-    let migrated: SerializedComposition<unknown> = blob;
-    let ranAny = false;
-
-    const defHydrate = reg.definition.onHydrate as
-      | ((b: SerializedComposition<unknown>) => SerializedComposition<unknown>)
-      | undefined;
-    if (defHydrate) {
-      ranAny = true;
-      try {
-        migrated = defHydrate(migrated);
-      } catch (err) {
-        throw new CompositionHydrationError(
-          `onHydrate (definition) threw while migrating blob for "${reg.definition.id}" ` +
-            `(blob=${blob.version} def=${reg.definition.version}).`,
-          { cause: err },
-        );
-      }
-    }
-
-    const regHydrate = reg.options?.onHydrate as
-      | ((b: SerializedComposition<unknown>) => SerializedComposition<unknown>)
-      | undefined;
-    if (regHydrate) {
-      ranAny = true;
-      try {
-        migrated = regHydrate(migrated);
-      } catch (err) {
-        throw new CompositionHydrationError(
-          `onHydrate (registration) threw while migrating blob for "${reg.definition.id}" ` +
-            `(blob=${blob.version} def=${reg.definition.version}).`,
-          { cause: err },
-        );
-      }
-    }
-
-    if (migrated.version !== reg.definition.version) {
-      if (ranAny) {
-        throw new CompositionHydrationError(
-          `onHydrate for "${reg.definition.id}" returned blob version ${migrated.version}, ` +
-            `expected ${reg.definition.version}.`,
-        );
-      }
-      throw new CompositionHydrationError(
-        `Hydrate version mismatch for "${reg.definition.id}": blob=${blob.version} ` +
-          `def=${reg.definition.version}. Provide onHydrate to migrate.`,
-      );
-    }
-
-    return migrated as SerializedComposition<TState>;
-  }
-
-  // -------------------------------------------------------------------------
-  // Instance creation / hydration
+  // Instance creation
   // -------------------------------------------------------------------------
 
   function createRecord<TState>(
     reg: RegisteredComposition,
     instanceId: CompositionInstanceId,
     state: TState,
-    persistenceKey: string | null,
     startedAt: string,
     updatedAt: string,
-    status: CompositionStatus = "active",
   ): CompositionInstanceRecord<TState> {
     const store = createStore<TState>(state);
-    const debounceMs =
-      typeof reg.options?.saveDebounceMs === "number" && reg.options.saveDebounceMs > 0
-        ? reg.options.saveDebounceMs
-        : 0;
     const record: CompositionInstanceRecord<TState> = {
       id: instanceId,
       compositionId: reg.definition.id,
-      status,
+      status: "active",
       state,
       store,
-      persistenceKey,
       startedAt,
       updatedAt,
       revision: 0,
       cachedSnapshot: null,
       outletRefCount: 0,
       listeners: new Set(),
-      pendingSave: null,
-      saveInFlight: false,
-      pendingRemove: false,
-      saveDebounceHandle: null,
       zoneRetryCounts: new Map(),
       mountFired: false,
       unmountFired: false,
       storeUnsubscribe: () => {
         // populated below
       },
-      pendingDispatches: [],
     };
-    // Wire store → record. setState pushes to record.state, bumps revision,
-    // notifies subscribers, schedules persistence. Single source of truth.
     record.storeUnsubscribe = store.subscribe((next) => {
       record.state = next;
-      // Only stamp `updatedAt` once the instance is active — during the
-      // initial persistence-load splice we briefly write loaded state via
-      // the store, and the load path itself is responsible for setting
-      // `updatedAt` to the blob's value.
-      if (record.status === "active") {
-        record.updatedAt = nowIso();
-      }
+      record.updatedAt = nowIso();
       notify(record);
-      const persistence = reg.options?.persistence;
-      if (persistence && record.status === "active") {
-        schedulePersist(record, persistence, debounceMs);
-      }
     });
     instances.set(instanceId, record);
     return record;
-  }
-
-  function flushPendingDispatches<TState>(record: CompositionInstanceRecord<TState>) {
-    if (record.pendingDispatches.length === 0) return;
-    const queue = record.pendingDispatches;
-    record.pendingDispatches = [];
-    for (const updater of queue) {
-      try {
-        record.store.setState(updater as never);
-      } catch (err) {
-        if (debug) {
-          console.error(
-            "[@modular-react/compositions] queued dispatch threw after load",
-            err,
-          );
-        }
-        // Surface to shell telemetry so a faulty queued-write doesn't
-        // disappear silently. We tag it as `lifecycle` (consistent with
-        // hydration migration throws) since the replay is part of the
-        // load → active transition.
-        fireOnError(record.id, err, { zone: "", phase: "lifecycle" });
-      }
-    }
-  }
-
-  function startCore<TState, TInput>(
-    reg: RegisteredComposition<TState, TInput>,
-    input: TInput,
-  ): CompositionInstanceId {
-    const persistence = reg.options?.persistence;
-    const compositionId = reg.definition.id;
-
-    if (persistence) {
-      const userKey = persistence.keyFor({ compositionId, input });
-      const fullKey = indexKey(compositionId, userKey);
-      const existing = keyIndex.get(fullKey);
-      if (existing && instances.has(existing)) {
-        return existing;
-      }
-      const instanceId = mintInstanceId();
-      keyIndex.set(fullKey, instanceId);
-
-      const initial = reg.definition.initialState(input);
-      const record = createRecord<TState>(
-        reg as RegisteredComposition<unknown, unknown> as RegisteredComposition,
-        instanceId,
-        initial as TState,
-        userKey,
-        nowIso(),
-        nowIso(),
-        "loading",
-      );
-      // Probe persistence asynchronously. On hit, replace state with the
-      // loaded blob; on miss, keep the freshly minted initial state. Either
-      // way, transition loading → active and fire onMount.
-      void Promise.resolve(persistence.load(userKey)).then(
-        (blob) => {
-          if (!instances.has(instanceId)) return; // disposed mid-flight
-          if (blob && blob.definitionId === compositionId) {
-            try {
-              const migrated = migrateBlob<TState>(
-                reg as unknown as RegisteredComposition,
-                blob as SerializedComposition<unknown>,
-              );
-              // Order matters: assign timestamps BEFORE replacing state.
-              // The store's subscriber checks `status` and skips
-              // `updatedAt` rewrites while loading — so once `setState`
-              // fires, `record.updatedAt` is already the blob's value.
-              record.startedAt = migrated.startedAt;
-              record.updatedAt = migrated.updatedAt;
-              record.state = migrated.state;
-              record.store.setState(migrated.state, true);
-            } catch (err) {
-              if (debug) {
-                console.error(
-                  `[@modular-react/compositions] hydrate failed for "${compositionId}"; falling back to initialState`,
-                  err,
-                );
-              }
-              fireOnError(record.id, err, { zone: "", phase: "lifecycle" });
-              // Drop the unmigrateable blob so the next start() doesn't
-              // re-encounter it.
-              fireAndForgetRemove(
-                persistence as CompositionPersistence<TState>,
-                userKey,
-              );
-            }
-          }
-          record.status = "active";
-          notify(record);
-          fireOnMount(reg as RegisteredComposition, record);
-          flushPendingDispatches(record);
-          // Persist immediately on cold-start so a refresh before any state
-          // change still finds a blob keyed under userKey.
-          schedulePersist(
-            record,
-            persistence as CompositionPersistence<TState>,
-            // Cold-start save bypasses debounce — durability for fresh
-            // instances matters more than write-amplification at idle.
-            0,
-          );
-        },
-        (err) => {
-          if (!instances.has(instanceId)) return;
-          if (debug) {
-            console.error(
-              `[@modular-react/compositions] persistence.load threw for "${compositionId}"`,
-              err,
-            );
-          }
-          record.status = "active";
-          notify(record);
-          fireOnMount(reg as RegisteredComposition, record);
-          flushPendingDispatches(record);
-        },
-      );
-      return instanceId;
-    }
-
-    // No persistence — mint a fresh active instance synchronously.
-    const instanceId = mintInstanceId();
-    const initial = reg.definition.initialState(input);
-    const record = createRecord<TState>(
-      reg as RegisteredComposition,
-      instanceId,
-      initial as TState,
-      null,
-      nowIso(),
-      nowIso(),
-      "active",
-    );
-    fireOnMount(reg as RegisteredComposition, record);
-    notify(record);
-    return instanceId;
   }
 
   function endInstance(id: CompositionInstanceId, reason: unknown): void {
@@ -755,10 +307,6 @@ export function createCompositionRuntime(
     if (!record) return;
     if (record.status === "disposed") return;
     const reg = definitions.get(record.compositionId);
-    // Cancel any pending debounced save — disposal removes the blob
-    // synchronously below, so trailing-edge state is intentionally dropped.
-    const persistence = reg?.options?.persistence;
-    if (persistence) cancelDebouncedSave(record, persistence);
     record.status = "disposed";
     fireOnUnmount(reg as RegisteredComposition, record);
     try {
@@ -772,7 +320,6 @@ export function createCompositionRuntime(
       if (debug) console.error("[@modular-react/compositions] onDispose threw", err);
     }
     record.storeUnsubscribe();
-    if (persistence) removePersisted(record, persistence);
     notify(record);
     record.listeners.clear();
     instances.delete(id);
@@ -788,7 +335,18 @@ export function createCompositionRuntime(
         typeof handleOrId === "string" ? handleOrId : (handleOrId as CompositionHandleRef).id;
       const input = rest[0];
       const reg = assertKnown(compositionId);
-      return startCore(reg, input);
+      const instanceId = mintInstanceId();
+      const initial = reg.definition.initialState(input);
+      const record = createRecord(
+        reg as RegisteredComposition,
+        instanceId,
+        initial,
+        nowIso(),
+        nowIso(),
+      );
+      fireOnMount(reg as RegisteredComposition, record);
+      notify(record);
+      return instanceId;
     },
     getInstance(id) {
       const record = instances.get(id);
@@ -817,12 +375,8 @@ export function createCompositionRuntime(
         // Mirror the disposal gate from `__detach`: when the last
         // listener and outlet both leave, schedule disposal via a
         // microtask so a StrictMode mount/unmount/mount dance or a
-        // subscribe-then-resubscribe pattern doesn't tear the
-        // instance down prematurely. Without this branch, an instance
-        // kept alive solely by external subscribers (devtools, redux
-        // bridges) outlived its useful lifetime — the documented
-        // contract ("disposed when last outlet detaches AND no other
-        // listeners remain") wasn't enforced from the listener side.
+        // subscribe-then-resubscribe pattern doesn't tear the instance
+        // down prematurely.
         if (record.outletRefCount === 0 && record.listeners.size === 0) {
           queueMicrotask(() => {
             const r = instances.get(id);
@@ -838,12 +392,6 @@ export function createCompositionRuntime(
       const record = instances.get(id);
       if (!record) return;
       if (record.status === "disposed") return;
-      if (record.status === "loading") {
-        // Buffer until the persistence load resolves and status flips to
-        // "active" — then flushPendingDispatches replays in arrival order.
-        record.pendingDispatches.push(updater);
-        return;
-      }
       record.store.setState(updater as any);
     },
     end(id, ctx) {
@@ -893,12 +441,17 @@ export function createCompositionRuntime(
     },
     __fireOnError: (id, err, ctx) => fireOnError(id, err, ctx),
     __hydrate: (reg, blob) => {
-      // Migrate first so a version mismatch raises before we mint a
-      // record we'd have to roll back.
-      const migrated = migrateBlob<unknown>(reg, blob);
-      const instanceId = migrated.instanceId ?? mintInstanceId();
-      // Refuse to clobber a live record under the same id — the caller
-      // (or a parallel hydrate) is racing with itself.
+      // Hydration is for attaching an out-of-band blob (SSR dump, debug
+      // snapshot). We require the blob's version to match the active
+      // definition — there is no auto-migration runner because there is
+      // no persistence layer to encounter old blobs in the wild.
+      if (blob.version !== reg.definition.version) {
+        throw new CompositionHydrationError(
+          `Hydrate blob for "${reg.definition.id}" has version "${blob.version}", ` +
+            `expected "${reg.definition.version}". Migrate the blob upstream before calling hydrateComposition.`,
+        );
+      }
+      const instanceId = blob.instanceId ?? mintInstanceId();
       if (instances.has(instanceId)) {
         throw new CompositionHydrationError(
           `Cannot hydrate "${reg.definition.id}" into instanceId "${instanceId}" — ` +
@@ -908,14 +461,9 @@ export function createCompositionRuntime(
       const record = createRecord<unknown>(
         reg,
         instanceId,
-        migrated.state,
-        // No persistenceKey: hydrated blobs are caller-owned; the runtime
-        // does not register them with `keyIndex` so persisted-driven
-        // start() calls remain independent.
-        null,
-        migrated.startedAt,
-        migrated.updatedAt,
-        "active",
+        blob.state,
+        blob.startedAt,
+        blob.updatedAt,
       );
       fireOnMount(reg, record);
       notify(record);
@@ -931,18 +479,17 @@ export function createCompositionRuntime(
 export { CompositionHydrationError, UnknownCompositionError };
 
 /**
- * Hydrate a previously-serialized composition into an active instance.
- * Mirrors `JourneyRuntime.hydrate` — used by shells that load blobs out
- * of band (e.g. from a server-side dump) and want to attach them to a
- * runtime without going through `start()`.
+ * Attach a previously-serialized composition into a runtime. Useful for
+ * SSR (the server pre-computes the seed blob and ships it to the client)
+ * and for debugging dumps. NOT a persistence mechanism — the compositions
+ * package intentionally does not ship one. Callers that want durability
+ * should keep their state outside the composition (URL params, an
+ * application-level store) and feed it back through `initialState`.
  *
- * Unlike the persistence-driven load inside `start()`, this path:
- *   - preserves the blob's `instanceId` so out-of-band references
- *     (analytics, debug dumps) round-trip,
- *   - skips `keyFor` / persistence probing entirely (the blob was
- *     produced out-of-band, the adapter wasn't necessarily consulted),
- *   - runs `onHydrate` migrations so version-bumped blobs migrate the
- *     same way as the load path.
+ *   - the blob's `instanceId` is preserved (so cross-document references
+ *     in dumps round-trip),
+ *   - the blob's `version` must match the active definition — there is
+ *     no built-in migration runner.
  */
 export function hydrateComposition<TState>(
   runtime: CompositionRuntime,

@@ -30,7 +30,7 @@ export interface CompositionsPluginExtension {
     TInput = void,
   >(
     definition: CompositionDefinition<TModules, TZones, TState, TInput>,
-    options?: CompositionRegisterOptions<TState, TInput>,
+    options?: CompositionRegisterOptions<TState>,
   ): void;
 }
 
@@ -83,7 +83,7 @@ export function compositionsPlugin(
           TInput = void,
         >(
           definition: CompositionDefinition<TModules, TZones, TState, TInput>,
-          regOpts?: CompositionRegisterOptions<TState, TInput>,
+          regOpts?: CompositionRegisterOptions<TState>,
         ): void {
           const def = definition as AnyCompositionDefinition;
           const issues = validateCompositionDefinition(def);

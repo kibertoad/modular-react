@@ -8,27 +8,12 @@
 export { defineComposition, defineCompositionHandle } from "./define-composition.js";
 
 export {
-  defineCompositionPersistence,
-  createWebStorageCompositionPersistence,
-  createMemoryCompositionPersistence,
-} from "./persistence.js";
-export type {
-  SyncCompositionPersistence,
-  WebStorageCompositionPersistenceOptions,
-  MemoryCompositionPersistenceOptions,
-  MemoryCompositionPersistence,
-} from "./persistence.js";
-
-export {
   createCompositionRuntime,
   hydrateComposition,
   CompositionHydrationError,
   UnknownCompositionError,
 } from "./runtime.js";
-export type {
-  CompositionRuntimeOptions,
-  CompositionInstanceRecord,
-} from "./runtime.js";
+export type { CompositionRuntimeOptions, CompositionInstanceRecord } from "./runtime.js";
 
 export {
   CompositionValidationError,
@@ -67,7 +52,6 @@ export type {
   CompositionInstance,
   CompositionInstanceId,
   CompositionLifecycle,
-  CompositionPersistence,
   CompositionRegisterOptions,
   CompositionRuntime,
   CompositionStatus,

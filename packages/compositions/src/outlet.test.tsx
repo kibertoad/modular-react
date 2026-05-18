@@ -262,4 +262,66 @@ describe("CompositionOutlet", () => {
     );
     expect(screen.getByTestId("empty-fallback")).toBeTruthy();
   });
+
+  it("swaps between two entries of the same module based on state", () => {
+    // The conditional-module pattern works at the entry granularity too:
+    // a single zone can dispatch between two entries of one module, not
+    // only across different modules.
+    interface PickerState {
+      readonly mode: "main" | "tools";
+    }
+    function ToolsPanel() {
+      return <div data-testid="editor-tools">tools</div>;
+    }
+    const editorWithTools = defineModule({
+      id: "editor",
+      version: "1.0.0",
+      exitPoints: { saved: defineExit() },
+      entryPoints: {
+        main: defineEntry({
+          component: EditorMainPanel,
+          input: schema<{ documentId: string }>(),
+        }),
+        tools: defineEntry({
+          component: ToolsPanel,
+          input: schema<void>(),
+        }),
+      },
+    });
+    type Mods = { readonly editor: typeof editorWithTools };
+    const def = defineComposition<Mods, PickerState>()({
+      id: "picker",
+      version: "1.0.0",
+      initialState: () => ({ mode: "main" as const }),
+      zones: {
+        body: {
+          select: ({ state }) => ({
+            kind: "module-entry",
+            module: "editor",
+            entry: state.mode,
+            input: state.mode === "main" ? { documentId: "doc-1" } : undefined,
+          }),
+        },
+      },
+    });
+    const runtime = createCompositionRuntime(
+      [{ definition: def, options: undefined } as RegisteredComposition],
+      { modules: { editor: editorWithTools }, debug: false },
+    );
+    const id = runtime.start("picker", undefined);
+    render(
+      <CompositionsProvider runtime={runtime}>
+        <CompositionOutlet compositionId="picker" instanceId={id}>
+          {(zones) => <div data-testid="root">{zones.body}</div>}
+        </CompositionOutlet>
+      </CompositionsProvider>,
+    );
+    expect(screen.getByTestId("editor-main")).toBeTruthy();
+    expect(screen.queryByTestId("editor-tools")).toBeNull();
+    act(() => {
+      runtime.dispatch<PickerState>(id, { mode: "tools" });
+    });
+    expect(screen.getByTestId("editor-tools")).toBeTruthy();
+    expect(screen.queryByTestId("editor-main")).toBeNull();
+  });
 });

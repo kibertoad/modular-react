@@ -1,34 +1,18 @@
 /**
- * Regression coverage for the second review pass (the one that flagged
- * the hook-order violation in `ZoneRenderer` and the successor-clobber
- * race in the persistence pipeline). Each block maps to a finding from
- * that review.
+ * Regression coverage for the second review pass + the persistence-
+ * removal + cycle-protection follow-up.
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
-import {
-  defineEntry,
-  defineExit,
-  defineModule,
-  schema,
-} from "@modular-react/core";
-import { JourneyProvider } from "@modular-react/journeys";
+import { defineEntry, defineModule, schema } from "@modular-react/core";
 
 import { defineComposition } from "./define-composition.js";
 import { createCompositionRuntime } from "./runtime.js";
 import { CompositionOutlet } from "./outlet.js";
 import { CompositionsProvider } from "./provider.js";
 import { useCompositionState } from "./hooks.js";
-import {
-  createMemoryCompositionPersistence,
-} from "./persistence.js";
-import type {
-  CompositionInstanceId,
-  CompositionPersistence,
-  RegisteredComposition,
-  SerializedComposition,
-} from "./types.js";
+import type { RegisteredComposition } from "./types.js";
 
 afterEach(() => {
   cleanup();
@@ -90,120 +74,13 @@ describe("ZoneRenderer hook stability across selector throws", () => {
         </CompositionsProvider>,
       );
     }).not.toThrow();
-    // Initial render: selector threw, fallback rendered.
     expect(screen.queryByTestId("ok")).toBeNull();
-    // Flip the state — selector now succeeds. The fix means the
-    // additional hooks introduced on the recovery render don't crash
-    // React's hook-count check.
     expect(() => {
       act(() => {
         runtime.dispatch<State>(id, { flaky: false });
       });
     }).not.toThrow();
     expect(screen.getByTestId("ok")).toBeTruthy();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Successor-clobber regression — out-of-order save completion across an
-// `end + restart` cycle. Per-key save serialization ensures the older
-// instance's pending save lands before the successor's saves, regardless
-// of the adapter's per-call ordering guarantees.
-// ---------------------------------------------------------------------------
-
-describe("persistence save ordering across end + restart", () => {
-  interface DocState {
-    readonly documentId: string;
-    readonly counter: number;
-  }
-  const editorEntry = defineEntry({
-    component: (() => null) as never,
-    input: schema<{ documentId: string }>(),
-  });
-  const editorModuleFixture = defineModule({
-    id: "editor",
-    version: "1.0.0",
-    exitPoints: { saved: defineExit() },
-    entryPoints: { main: editorEntry },
-  });
-  type Modules = { readonly editor: typeof editorModuleFixture };
-  const def = defineComposition<Modules, DocState>()({
-    id: "editor",
-    version: "1.0.0",
-    initialState: (input: { documentId: string }) => ({
-      documentId: input.documentId,
-      counter: 0,
-    }),
-    zones: {
-      main: {
-        select: ({ state }) => ({
-          kind: "module-entry",
-          module: "editor",
-          entry: "main",
-          input: { documentId: state.documentId },
-        }),
-      },
-    },
-  });
-
-  it("does not let a disposed record's late save clobber a successor's blob", async () => {
-    // Adapter whose `save` resolves in the OPPOSITE order from how it
-    // was called. Without per-key serialization the older record's
-    // save would land last and overwrite the successor's state.
-    const backend = new Map<string, SerializedComposition<DocState>>();
-    const callOrder: number[] = [];
-    let nextCallSeq = 0;
-    const pendingSaves: Array<() => void> = [];
-
-    const persistence: CompositionPersistence<DocState, { documentId: string }> = {
-      keyFor: ({ compositionId, input }) => `${compositionId}:${input.documentId}`,
-      load: (key) => backend.get(key) ?? null,
-      save: (key, blob) => {
-        const seq = ++nextCallSeq;
-        return new Promise<void>((resolve) => {
-          pendingSaves.push(() => {
-            callOrder.push(seq);
-            backend.set(key, blob);
-            resolve();
-          });
-        });
-      },
-      remove: (key) => {
-        backend.delete(key);
-      },
-    };
-
-    const runtime = createCompositionRuntime(
-      [{ definition: def, options: { persistence } } as RegisteredComposition],
-      { modules: { editor: editorModuleFixture }, debug: false },
-    );
-
-    const a = runtime.start("editor", { documentId: "doc-1" });
-    await flushMicrotasks();
-    runtime.dispatch<DocState>(a, { counter: 1 });
-    runtime.end(a);
-
-    const b = runtime.start("editor", { documentId: "doc-1" });
-    expect(b).not.toBe(a);
-    await flushMicrotasks();
-    runtime.dispatch<DocState>(b, { counter: 99 });
-
-    // Fire pending saves in REVERSE order so the older saves resolve
-    // last. Per-key serialization should still ensure they land in
-    // chained order under the same key.
-    for (const release of [...pendingSaves].reverse()) {
-      release();
-      await flushMicrotasks();
-    }
-    // Drain any saves that were queued as a result of a prior save's
-    // `pendingSave` re-trigger.
-    while (pendingSaves.length > 0) {
-      const next = pendingSaves.shift()!;
-      next();
-      await flushMicrotasks();
-    }
-
-    expect(backend.get("editor:doc-1")?.state.counter).toBe(99);
   });
 });
 
@@ -218,7 +95,7 @@ describe("runtime.subscribe disposal gate", () => {
     id: "trivial",
     version: "1.0.0",
     initialState: () => ({ tick: 0 }),
-    zones: { only: { select: () => ({ kind: "empty" } as const) } },
+    zones: { only: { select: () => ({ kind: "empty" }) as const } },
   });
 
   it("disposes the instance after the last listener unsubscribes with no outlet attached", async () => {
@@ -230,7 +107,6 @@ describe("runtime.subscribe disposal gate", () => {
     const unsubscribe = runtime.subscribe(id, () => {});
     expect(runtime.getInstance(id)).not.toBeNull();
     unsubscribe();
-    // Microtask flushes — disposal microtask fires.
     await flushMicrotasks();
     expect(runtime.getInstance(id)).toBeNull();
   });
@@ -243,7 +119,6 @@ describe("runtime.subscribe disposal gate", () => {
     const id = runtime.start("trivial", undefined);
     const unsubscribe = runtime.subscribe(id, () => {});
     unsubscribe();
-    // Synchronous re-subscribe before the microtask drain.
     const unsubscribe2 = runtime.subscribe(id, () => {});
     await flushMicrotasks();
     expect(runtime.getInstance(id)).not.toBeNull();
@@ -287,11 +162,7 @@ describe("notFoundComponent", () => {
     ));
     render(
       <CompositionsProvider runtime={runtime}>
-        <CompositionOutlet
-          compositionId="nf"
-          instanceId={id}
-          notFoundComponent={NotFound as never}
-        >
+        <CompositionOutlet compositionId="nf" instanceId={id} notFoundComponent={NotFound as never}>
           {(zones) => <div>{zones.body}</div>}
         </CompositionOutlet>
       </CompositionsProvider>,
@@ -334,11 +205,7 @@ describe("journey-kind resolution without JourneyProvider", () => {
     );
     render(
       <CompositionsProvider runtime={runtime}>
-        <CompositionOutlet
-          compositionId="no-provider"
-          instanceId={id}
-          errorComponent={ErrorView}
-        >
+        <CompositionOutlet compositionId="no-provider" instanceId={id} errorComponent={ErrorView}>
           {(zones) => <div>{zones.only}</div>}
         </CompositionOutlet>
       </CompositionsProvider>,
@@ -400,63 +267,9 @@ describe("two outlets on the same instanceId", () => {
     });
     expect(screen.getByTestId("first").textContent).toBe("7");
     expect(screen.getByTestId("second").textContent).toBe("7");
-    // Unmount the host entirely — the disposal microtask should fire
-    // and the instance should be gone.
     view.unmount();
     await flushMicrotasks();
     expect(runtime.getInstance(id)).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// loadingFallback renders while persistence load is pending.
-// ---------------------------------------------------------------------------
-
-describe("loadingFallback during persistence load", () => {
-  it("renders the loadingFallback while status === 'loading'", async () => {
-    type State = { readonly tick: number };
-    let resolveLoad!: (blob: SerializedComposition<State> | null) => void;
-    const loadPending = new Promise<SerializedComposition<State> | null>((res) => {
-      resolveLoad = res;
-    });
-    const persistence: CompositionPersistence<State, void> = {
-      keyFor: ({ compositionId }) => `${compositionId}:singleton`,
-      load: () => loadPending,
-      save: () => {
-        /* noop */
-      },
-      remove: () => {
-        /* noop */
-      },
-    };
-    const def = defineComposition<{}, State>()({
-      id: "slow",
-      version: "1.0.0",
-      initialState: () => ({ tick: 0 }),
-      zones: { only: { select: () => ({ kind: "empty" } as const) } },
-    });
-    const runtime = createCompositionRuntime(
-      [{ definition: def, options: { persistence } } as RegisteredComposition],
-      { modules: {}, debug: false },
-    );
-    const id = runtime.start("slow", undefined);
-    render(
-      <CompositionsProvider runtime={runtime}>
-        <CompositionOutlet
-          compositionId="slow"
-          instanceId={id}
-          loadingFallback={<div data-testid="loading">loading…</div>}
-        >
-          {(zones) => <div>{zones.only}</div>}
-        </CompositionOutlet>
-      </CompositionsProvider>,
-    );
-    expect(screen.getByTestId("loading")).toBeTruthy();
-    await act(async () => {
-      resolveLoad(null);
-      await flushMicrotasks();
-    });
-    expect(screen.queryByTestId("loading")).toBeNull();
   });
 });
 
@@ -473,7 +286,7 @@ describe("no JourneyProvider required for non-journey zones", () => {
       id: "plain",
       version: "1.0.0",
       initialState: () => ({}),
-      zones: { only: { select: () => ({ kind: "empty" } as const) } },
+      zones: { only: { select: () => ({ kind: "empty" }) as const } },
     });
     const runtime = createCompositionRuntime(
       [{ definition: def, options: undefined } as RegisteredComposition],
@@ -506,7 +319,7 @@ describe("listener throws routed through options.onError", () => {
       id: "tick",
       version: "1.0.0",
       initialState: () => ({ tick: 0 }),
-      zones: { only: { select: () => ({ kind: "empty" } as const) } },
+      zones: { only: { select: () => ({ kind: "empty" }) as const } },
     });
     const runtime = createCompositionRuntime(
       [{ definition: def, options: { onError } } as RegisteredComposition],
@@ -516,8 +329,6 @@ describe("listener throws routed through options.onError", () => {
     runtime.subscribe(id, () => {
       throw new Error("listener boom");
     });
-    // Silence the unconditional console.error that the runtime now
-    // emits for listener throws.
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       runtime.dispatch<{ tick: number }>(id, { tick: 1 });
@@ -532,43 +343,79 @@ describe("listener throws routed through options.onError", () => {
 });
 
 // ---------------------------------------------------------------------------
-// pending-dispatch replay errors are surfaced via onError.
+// Cycle detection — a composition instance refuses to mount itself as a
+// descendant. Simulates a journey step rendering its parent composition.
 // ---------------------------------------------------------------------------
 
-describe("queued-dispatch errors during load replay", () => {
-  it("routes a queued updater throw to options.onError", async () => {
-    interface State {
-      readonly counter: number;
+describe("composition cycle detection", () => {
+  it("renders the errorComponent instead of stack-overflowing when an instance mounts itself", () => {
+    interface State {}
+    type Modules = { readonly self: ReturnType<typeof makeSelfModule> };
+
+    // The panel renders a nested CompositionOutlet for THE SAME composition
+    // instance — exactly the shape a journey-of-composition cycle produces
+    // after the journey step renders.
+    function makeSelfModule(getInstanceId: () => string, getRuntime: () => any) {
+      return defineModule({
+        id: "self",
+        version: "1.0.0",
+        entryPoints: {
+          recurse: defineEntry({
+            component: () => (
+              <CompositionOutlet
+                runtime={getRuntime()}
+                compositionId="cycle"
+                instanceId={getInstanceId() as never}
+              >
+                {(zones) => <div data-testid="inner">{zones.body}</div>}
+              </CompositionOutlet>
+            ),
+            input: schema<void>(),
+          }),
+        },
+      });
     }
-    const onError = vi.fn();
-    const persistence: CompositionPersistence<State, void> = {
-      keyFor: ({ compositionId }) => `${compositionId}:single`,
-      load: () => null,
-      save: () => {
-        /* noop */
-      },
-      remove: () => {
-        /* noop */
-      },
-    };
-    const def = defineComposition<{}, State>()({
-      id: "queued",
+
+    let cycleInstanceId = "";
+    let cycleRuntime: any = null;
+    const selfModule = makeSelfModule(
+      () => cycleInstanceId,
+      () => cycleRuntime,
+    );
+    const def = defineComposition<Modules, State>()({
+      id: "cycle",
       version: "1.0.0",
-      initialState: () => ({ counter: 0 }),
-      zones: { only: { select: () => ({ kind: "empty" } as const) } },
+      initialState: () => ({}),
+      zones: {
+        body: {
+          select: () => ({ kind: "module-entry", module: "self", entry: "recurse" }),
+        },
+      },
     });
     const runtime = createCompositionRuntime(
-      [{ definition: def, options: { persistence, onError } } as RegisteredComposition],
-      { modules: {}, debug: false },
+      [{ definition: def, options: undefined } as RegisteredComposition],
+      { modules: { self: selfModule }, debug: false },
     );
-    const id = runtime.start("queued", undefined);
-    runtime.dispatch<State>(id, () => {
-      throw new Error("queued boom");
-    });
-    await flushMicrotasks();
-    expect(onError).toHaveBeenCalledWith(
-      expect.any(Error),
-      expect.objectContaining({ phase: "lifecycle" }),
-    );
+    cycleRuntime = runtime;
+    cycleInstanceId = runtime.start("cycle", undefined);
+
+    expect(() => {
+      render(
+        <CompositionsProvider runtime={runtime}>
+          <CompositionOutlet compositionId="cycle" instanceId={cycleInstanceId}>
+            {(zones) => <div data-testid="outer">{zones.body}</div>}
+          </CompositionOutlet>
+        </CompositionsProvider>,
+      );
+    }).not.toThrow();
+
+    // The outer outlet renders normally; the recursive descendant outlet
+    // detects the cycle and renders the default error fallback (the inner
+    // <CompositionOutlet> in the recursing panel doesn't forward our custom
+    // errorComponent — the point is that we get a recognizable error
+    // rather than a stack overflow).
+    expect(screen.getByTestId("outer")).toBeTruthy();
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toMatch(/already in the render ancestry/);
   });
 });

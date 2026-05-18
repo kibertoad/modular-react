@@ -22,14 +22,13 @@ If you instead need a stepped flow ("complete A → branch into B or C → final
 - [Runtime surface](#runtime-surface) — `CompositionRuntime`
 - [Composition handles](#composition-handles) — typed tokens for `runtime.start(handle, input)`
 - [`CompositionsProvider` + context](#compositionsprovider--context)
-- [Persistence](#persistence) — adapters, key design, save debounce, version migration
 - [Rendering — `CompositionOutlet`](#rendering--compositionoutlet) — props, render-prop, error policies, preload
 - [Hooks for foreign panels](#hooks-for-foreign-panels) — `useCompositionState` / `Dispatch` / `Emit` / `Zone`, typed-bundle factory
 - [Validation](#validation) — definition-time + resolve-time checks
-- [Hydration](#hydration) — out-of-band blob attachment + version migration
+- [Hydration](#hydration) — attaching an SSR or debug-dump blob
+- [Cycle safety](#cycle-safety) — composition ↔ journey nesting
 - [Errors, races, and edge cases](#errors-races-and-edge-cases)
 - [Limitations](#limitations)
-- [API reference](#api-reference)
 - [Comparison with journeys](#comparison-with-journeys)
 
 ## Installation
@@ -216,7 +215,7 @@ The render-prop receives one `ReactNode` per zone, fully wrapped (`Suspense` + p
 
 ### 5. Drive the composition from inside a panel
 
-A panel that lives inside the composition reads state and dispatches changes via the hooks. The panel itself doesn't know which composition it's in — only that it's inside *some* composition.
+A panel that lives inside the composition reads state and dispatches changes via the hooks. The panel itself doesn't know which composition it's in — only that it's inside _some_ composition.
 
 ```typescript
 // contentful/src/SourcePanel.tsx
@@ -283,12 +282,11 @@ Selectors run on every state change. They must be pure functions of `(state, dep
 
 ### Instance lifecycle and statuses
 
-Three statuses:
+Two statuses:
 
-| status     | meaning                                                                                            |
-| ---------- | -------------------------------------------------------------------------------------------------- |
-| `loading`  | only possible when persistence is wired — the runtime is awaiting `persistence.load(key)`          |
-| `active`   | the instance is live; `dispatch`, `subscribe`, and outlet rendering all work normally              |
+| status     | meaning                                                                                                        |
+| ---------- | -------------------------------------------------------------------------------------------------------------- |
+| `active`   | the instance is live; `dispatch`, `subscribe`, and outlet rendering all work normally                          |
 | `disposed` | the instance is torn down; subscribers receive one last `"disposed"` snapshot and `getInstance` returns `null` |
 
 Disposal happens automatically when:
@@ -304,33 +302,24 @@ For every instance, the runtime guarantees this sequence:
 
 ```
 start(handle, input)
-  ├── persistence.load() (if wired, async; status="loading")
-  │     ├── on hit: blob is migrated through onHydrate (def, then registration)
-  │     │   └── version-mismatch with no onHydrate → blob wiped, fresh start
-  │     └── on miss: keep the input-derived initial state
-  ├── status → "active"
+  ├── initialState(input) → state
   ├── lifecycle.onMount(state, deps)
-  ├── options.onMount({ compositionId, instanceId, state })
-  ├── buffered dispatches (issued during loading) replay in order
-  └── persistence.save(key, blob)   // cold-start save, bypasses debounce
+  └── options.onMount({ compositionId, instanceId, state })
 
-... live mutations ...
+... live mutations via dispatch ...
 
 end(id) | last outlet detaches
-  ├── cancel any pending debounce timer
   ├── status → "disposed"
   ├── lifecycle.onUnmount(state, deps)
   ├── options.onUnmount({ compositionId, instanceId, state })
-  ├── definition.onDispose({ compositionId, instanceId, state, reason })
-  └── persistence.remove(key)       // successor-aware (see Persistence)
+  └── definition.onDispose({ compositionId, instanceId, state, reason })
 ```
 
 `onError` is fired observation-only on throws from selectors, panel renders, lifecycle hooks, hydration migrations, and `onZoneEvent` callbacks.
 
 ### Idempotency: `start()` semantics
 
-- **With persistence**: `start(handle, sameInput)` returns the existing `instanceId` if a live record's `keyFor({ compositionId, input })` matches. Two `start()` calls back-to-back with the same input return the same id.
-- **Without persistence**: every `start()` mints a fresh instance. The caller is responsible for caching the id (e.g. `useMemo` keyed on `documentId`).
+Every `start()` call mints a fresh instance — the runtime does not dedupe by input. The caller is responsible for caching the id where idempotency matters (e.g. `useMemo` keyed on `documentId` in a route component, or a routing layer that stores the id in URL/route state). This matches how journeys without persistence behave and keeps composition lifecycles owned by the host rather than the runtime.
 
 ## Authoring patterns
 
@@ -508,13 +497,13 @@ interface CompositionRuntime {
 
 ### When to call which
 
-| API                          | When                                                                |
-| ---------------------------- | ------------------------------------------------------------------- |
-| `start(handle, input)`       | Open an instance from a route loader, tab activation, or a button click |
-| `getInstance(id)`            | Read state outside React (telemetry, analytics, command-handlers)   |
-| `subscribe(id, listener)`    | External observers (Redux bridge, devtools)                         |
-| `dispatch(id, updater)`      | Imperative writes from outside a panel (URL sync, keyboard shortcuts) |
-| `end(id)`                    | Programmatic teardown that doesn't fit the "outlet unmount" trigger |
+| API                       | When                                                                    |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `start(handle, input)`    | Open an instance from a route loader, tab activation, or a button click |
+| `getInstance(id)`         | Read state outside React (telemetry, analytics, command-handlers)       |
+| `subscribe(id, listener)` | External observers (Redux bridge, devtools)                             |
+| `dispatch(id, updater)`   | Imperative writes from outside a panel (URL sync, keyboard shortcuts)   |
+| `end(id)`                 | Programmatic teardown that doesn't fit the "outlet unmount" trigger     |
 
 Inside panel components, prefer the React hooks — they handle subscription, dispatch, and instance binding for you.
 
@@ -550,86 +539,13 @@ Wrap the shell once, at or near the React root:
 
 If you register the plugin via `registry.use(compositionsPlugin())`, the framework wires `CompositionsProvider` automatically — you only need to mount it manually when you create runtimes outside the registry.
 
-## Persistence
+## A note on persistence — there is none
 
-A persistence adapter lets a composition instance survive page reloads, tab switches, and SSR hydration. Without one, instances live in memory only.
+Compositions intentionally do **not** ship a persistence adapter. Their state is _coordination_ (which integration is active, what is selected) rather than _flow_ (which step of a wizard you're on), and durable coordination state usually already lives somewhere else in the app — the URL, a route loader, a Redux/Zustand store with its own persist middleware. Forking that state into the composition's scoped store just to read it back via a persistence adapter doubles the source of truth.
 
-```typescript
-import {
-  createWebStorageCompositionPersistence,
-  defineCompositionPersistence,
-} from "@modular-react/compositions";
+When you want a composition to survive a reload, drive its `initialState(input)` from the durable source you already have. If you genuinely need to round-trip an entire composition's state, use [`hydrateComposition`](#hydration) with a blob you produced yourself — it skips `start()` so out-of-band attachment doesn't conflict with the input-driven init path.
 
-const persistence = defineCompositionPersistence<{ documentId: string }, EditorState>(
-  createWebStorageCompositionPersistence({
-    keyFor: ({ compositionId, input }) => `${compositionId}:${input.documentId}`,
-  }),
-);
-
-registry.registerComposition(editorComposition, { persistence });
-```
-
-Three stock adapters ship in this package:
-
-- **`createWebStorageCompositionPersistence`** — `localStorage` / `sessionStorage` (SSR-safe, corrupt entries lazily removed)
-- **`createMemoryCompositionPersistence`** — Map-backed, for tests and SSR
-- **`defineCompositionPersistence`** — identity helper that ties an arbitrary adapter to a composition's `TInput`
-
-The adapter shape is structurally compatible with `JourneyPersistence` — one backend implementation can serve both with different blob shapes.
-
-### Key design
-
-`keyFor` is called at `start()` time with `{ compositionId, input }` and must be **deterministic** — equal `{ compositionId, input }` must produce the same string on every call. The runtime uses the result both to dedupe live instances (`start` with the same `keyFor` result returns the existing `instanceId`) and to address the persistence backend. A `keyFor` that closes over ambient state (current user, session id, feature-flag) is a footgun: switching that ambient state silently produces two live records under the same logical identity. Pull every input the key depends on through the `input` parameter.
-
-```typescript
-keyFor: ({ compositionId, input }) =>
-  `${compositionId}:${input.tenantId}:${input.documentId}`,
-```
-
-The key is internally namespaced by `compositionId` so two compositions with the same `keyFor` cannot collide.
-
-### Save pipeline
-
-- **Without `saveDebounceMs`** (default): every dispatch triggers an async `persistence.save(key, blob)`. The runtime serializes saves per-instance (one in flight at a time), so adapters do not see out-of-order writes from the same instance. Cross-instance saves under the same key (an `end` + restart cycle on the same doc) are also chained, so a late save from a disposed record cannot clobber a successor's data.
-- **With `saveDebounceMs > 0`**: dispatches within the window coalesce into a single trailing-edge save. Disposal cancels any pending timer — the trailing state is intentionally dropped, since disposal removes the blob anyway. Set ~150ms for high-frequency interactions (drag, controlled inputs); leave at 0 for durability-critical state.
-- **Cold-start save**: when an instance starts and the persistence probe returns no blob (or returns a migratable one), the runtime fires one save immediately, **bypassing debounce**, so a refresh before any state change still finds the blob keyed under `userKey`.
-
-### Successor-aware remove
-
-If a fast end+restart cycle reuses the same key (e.g. close a doc, immediately re-open the same one), the runtime tracks who owns the persistence key. When a deferred remove (queued during a save-in-flight at disposal time) fires, it first checks whether a successor has claimed the slot — if so, the remove is suppressed. Without this guard, the deferred remove would wipe the successor's data.
-
-### Version migration: `onHydrate`
-
-When a loaded blob's `version` does not match the current `definition.version`, the runtime walks it through two optional hooks:
-
-```typescript
-defineComposition<EditorModules, EditorState>()({
-  id: "editor",
-  version: "2.0.0",
-  // …
-  onHydrate(blob) {
-    // Definition-level migration — author owns the shape.
-    if (blob.version === "1.0.0") {
-      return {
-        ...blob,
-        version: "2.0.0",
-        state: migrateV1ToV2(blob.state as V1State),
-      };
-    }
-    throw new Error(`Unmigratable blob version ${blob.version}`);
-  },
-});
-```
-
-The registration-level `onHydrate` (on `CompositionRegisterOptions`) runs after the definition's — shells can layer environment-specific upgrades on top.
-
-If no `onHydrate` is provided and the version drifts, the runtime:
-
-1. Surfaces a `CompositionHydrationError` via `options.onError` with `phase: "lifecycle"`.
-2. Wipes the stale blob (so the next start doesn't re-encounter it).
-3. Falls back to the fresh `initialState(input)`.
-
-The next save then writes a fresh v2 blob under the same key.
+Journeys _do_ ship a persistence adapter because their state is load-bearing: you can't resume "step 3 with accumulated state X" without that machinery. Compositions don't have that asymmetry — a fresh `start()` plus the right input recreates exactly the same layout.
 
 ## Rendering — `CompositionOutlet`
 
@@ -654,18 +570,18 @@ The next save then writes a fresh v2 blob under the same key.
 
 ### Props
 
-| prop                 | purpose                                                                                  |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| `runtime`            | Optional — defaults to the runtime from `CompositionsProvider` context                   |
-| `compositionId`      | Definition id (also resolvable via the instance, but the prop avoids a round-trip lookup) |
-| `instanceId`         | The id returned from `runtime.start(...)`                                                |
-| `modules`            | Optional override for the module descriptors (defaults to the runtime's module map)      |
-| `children`           | Render-prop receiving `{ [zoneName]: ReactNode }` — one fully-wrapped element per zone   |
-| `loadingFallback`    | Rendered while `status === "loading"` (i.e. waiting on persistence load)                 |
-| `notFoundComponent` | Rendered when a `module-entry` resolution names a module/entry that isn't registered     |
-| `errorComponent`     | Rendered when a zone's panel throws and `onZoneError` returns `"fallback"`                |
-| `onZoneEvent`        | Receives `useCompositionEmit({ kind, payload })` calls with the zone name attached       |
-| `retryLimit`         | Cap on `"retry"` policy responses before the zone falls back. Default `2`                |
+| prop                | purpose                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `runtime`           | Optional — defaults to the runtime from `CompositionsProvider` context                                       |
+| `compositionId`     | Definition id (also resolvable via the instance, but the prop avoids a round-trip lookup)                    |
+| `instanceId`        | The id returned from `runtime.start(...)`                                                                    |
+| `modules`           | Optional override for the module descriptors (defaults to the runtime's module map)                          |
+| `children`          | Render-prop receiving `{ [zoneName]: ReactNode }` — one fully-wrapped element per zone                       |
+| `loadingFallback`   | Used as the per-zone `Suspense` fallback while a lazy entry's chunk loads (entry-level `fallback` overrides) |
+| `notFoundComponent` | Rendered when a `module-entry` resolution names a module/entry that isn't registered                         |
+| `errorComponent`    | Rendered when a zone's panel throws and `onZoneError` returns `"fallback"`                                   |
+| `onZoneEvent`       | Receives `useCompositionEmit({ kind, payload })` calls with the zone name attached                           |
+| `retryLimit`        | Cap on `"retry"` policy responses before the zone falls back. Default `2`                                    |
 
 The render-prop receives one `ReactNode` per declared zone. Each `ReactNode` is wrapped in:
 
@@ -679,11 +595,11 @@ The host is responsible for layout only; rendering is fully owned by the framewo
 
 The composition's `onZoneError(err, ctx)` returns one of three policies:
 
-| policy     | behavior                                                                                                                                                  |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"retry"`  | Bumps the per-zone retry counter (capped by `retryLimit`) and remounts the boundary with a fresh key. Counter resets when the resolution changes successfully |
-| `"fallback"` | Renders `errorComponent` (default: a red-bordered card). Stays visible until the resolution changes                                                       |
-| `"ignore"` | Renders `null`. Useful for optional UI sugar (recommendation strip, ambient hints) whose failure shouldn't show error chrome                              |
+| policy       | behavior                                                                                                                                                      |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"retry"`    | Bumps the per-zone retry counter (capped by `retryLimit`) and remounts the boundary with a fresh key. Counter resets when the resolution changes successfully |
+| `"fallback"` | Renders `errorComponent` (default: a red-bordered card). Stays visible until the resolution changes                                                           |
+| `"ignore"`   | Renders `null`. Useful for optional UI sugar (recommendation strip, ambient hints) whose failure shouldn't show error chrome                                  |
 
 Default policy is `"fallback"` if `onZoneError` is not declared on the definition. `options.onError` is always called for telemetry, regardless of policy.
 
@@ -794,11 +710,7 @@ The contract check is intentionally weak ("at least one"). Selectors are dynamic
 
 ## Hydration
 
-`hydrateComposition` attaches an out-of-band blob (e.g. a server-side dump, a snapshot test fixture, a debugging dump) without going through `start()`. Unlike the persistence-driven load:
-
-- The original `blob.instanceId` is preserved (so cross-document references in dumps round-trip)
-- `keyFor` / persistence probing is skipped
-- The blob is run through both `onHydrate` hooks before being applied
+`hydrateComposition` attaches an out-of-band blob — typically an SSR dump or a debug snapshot — to an existing runtime without going through `start()`. This is **not** a persistence path; the compositions package doesn't ship one. Use it when you have a server-rendered state you want to hand off to the client verbatim:
 
 ```typescript
 import { hydrateComposition, CompositionHydrationError } from "@modular-react/compositions";
@@ -808,15 +720,25 @@ try {
   // id === dumpBlob.instanceId
 } catch (err) {
   if (err instanceof CompositionHydrationError) {
-    // version mismatch with no onHydrate, or onHydrate returned an incompatible shape
+    // version mismatch, definitionId mismatch, or instanceId already live
   }
   throw err;
 }
 ```
 
-The function throws `UnknownCompositionError` if the composition id isn't registered, and `CompositionHydrationError` if the blob's `definitionId` doesn't match the supplied id, the blob's version doesn't match the definition after migration, or the supplied `instanceId` is already live.
+The function throws `UnknownCompositionError` when the composition id isn't registered, and `CompositionHydrationError` when:
 
-The hydrated record carries `persistenceKey: null` — `runtime.end(id)` will NOT fire `persistence.remove` for hydrated instances. If you want hydration to participate in the keyIndex, dispatch a no-op to trigger a save, or use `start()` instead.
+- the blob's `definitionId` doesn't match the supplied composition id,
+- the blob's `version` doesn't match the active definition (there is no migration runner — migrate the blob upstream before calling), or
+- the supplied `instanceId` is already live in the runtime.
+
+The hydrated instance is otherwise indistinguishable from one minted by `start()` and follows the same disposal rules.
+
+## Cycle safety
+
+`<CompositionOutlet>` tracks the set of composition instance ids currently in the React ancestor chain. If a descendant outlet attempts to render an instance already in that set — typically because a zone hosts a journey whose step renders the same composition instance — the descendant outlet refuses to mount and renders its `errorComponent` with a clear message instead of stack-overflowing.
+
+The detection is narrow on purpose: it catches the **same instance** rendering inside itself. Cycles that recurse through two different instances of the same definition (composition C₁ → journey J → composition C₂ where C₁ and C₂ share a definition) aren't caught — the outlets see different instance ids and proceed. Similarly, `@modular-react/journeys` runs its own parent-link cycle detection for journey-to-journey invocations but does not see composition ancestors. If you author a cycle that crosses the journey ↔ composition boundary on different instance ids, neither package can detect it for you; restructure to share a single instance and the in-ancestor check then catches the recursion.
 
 ## Errors, races, and edge cases
 
@@ -826,21 +748,13 @@ The hydrated record carries `persistenceKey: null` — `runtime.end(id)` will NO
 
 - `"select"` — the zone's `select` function threw (the zone renders its `errorComponent`)
 - `"render"` — a panel's render or commit threw (the zone error boundary engages with `onZoneError`)
-- `"lifecycle"` — `lifecycle.onMount`, `lifecycle.onUnmount`, `onDispose`, or hydration migration threw
+- `"lifecycle"` — `lifecycle.onMount`, `lifecycle.onUnmount`, or `onDispose` threw
 
 Telemetry runs for **every** throw, regardless of the `onZoneError` policy.
-
-### Loading-phase dispatch is buffered
-
-A dispatch issued while `status === "loading"` is queued in `record.pendingDispatches` and replayed in arrival order once the load resolves. Hosts that fire-and-forget a `dispatch` right after `start()` (e.g. URL sync on route activation) do not lose writes.
 
 ### StrictMode tolerance
 
 The runtime defers disposal one microtask so React 18/19 StrictMode's mount/unmount/mount cycle never tears an instance down on first visit. The microtask checks both `outletRefCount` and `listeners.size` before firing `endInstance`; if anything is still listening, disposal is skipped.
-
-### Successor-aware persistence cleanup
-
-A fast end → restart with the same `keyFor` result will preserve the new instance's blob — the deferred remove from the disposed instance is suppressed when a successor owns the keyIndex slot. See [Persistence](#persistence).
 
 ### Validation timing
 
@@ -854,111 +768,24 @@ If the plugin is bypassed (`createCompositionRuntime` called directly), only the
 - **Selectors must be pure functions of (state, deps).** They run on every state change and on every parent re-render of the outlet. Side effects, time-based behavior, or `setState` from inside a selector will cause undefined behavior.
 - **No transition graph.** Compositions express layout coordination, not flow. If you need "advance to next module on exit", reach for `@modular-react/journeys`.
 - **No outlet-level error boundary.** The framework wraps each zone in its own boundary, not the entire outlet. A throw outside the zone-render path (e.g. from the host's render-prop body) is the host's responsibility.
-- **No persistence migration runner.** A blob with a different `version` is migrated by your `onHydrate` callback — there is no built-in "run these migrations in sequence" helper. Most apps need only one or two version bumps over the composition's lifetime, so a single switch on `blob.version` is enough.
+- **No built-in persistence.** Coordination state lives in memory; durable storage belongs in the application (URL params, app-level store). See the [persistence note](#a-note-on-persistence--there-is-none).
 - **Composition panels' `exit` prop is a no-op stub.** Foreign panels rendered inside a composition zone cannot deliver exits to the host's exit dispatcher. Use `dispatch` for state changes and `emit` for cross-zone events instead. (Journeys hosted inside a zone deliver exits through the journey runtime normally.)
 - **`React.memo` and `forwardRef`'d entry components are not supported.** `resolveEntryComponent` in `@modular-react/react` requires `typeof entry.component === "function"`. Panels can still memoize internally via `useMemo` / `useCallback`.
-- **`saveDebounceMs` drops trailing state on disposal.** A pending debounced save is cancelled at disposal time; the corresponding blob is removed anyway. Browser-close (no clean disposal) does not flush the pending save — implement a `beforeunload` handler at the app level if that matters.
-
-## API reference
-
-### Authoring
-
-```typescript
-import {
-  defineComposition,
-  defineCompositionHandle,
-  defineCompositionPersistence,
-  createWebStorageCompositionPersistence,
-  createMemoryCompositionPersistence,
-  createCompositionContext,
-} from "@modular-react/compositions";
-
-import type {
-  CompositionDefinition,
-  CompositionDefinitionSummary,
-  CompositionHandleRef,
-  CompositionInstance,
-  CompositionInstanceId,
-  CompositionLifecycle,
-  CompositionPersistence,
-  CompositionRegisterOptions,
-  CompositionRuntime,
-  CompositionStatus,
-  CompositionZoneErrorPolicy,
-  CompositionZoneEvent,
-  ZoneDescriptor,
-  ZoneMap,
-  ZoneResolution,
-  ZoneSelector,
-  ZoneSelectorCtx,
-  SerializedComposition,
-  SyncCompositionPersistence,
-  TypedCompositionHooks,
-  WebStorageCompositionPersistenceOptions,
-  MemoryCompositionPersistenceOptions,
-  MemoryCompositionPersistence,
-} from "@modular-react/compositions";
-```
-
-### Runtime + plugin
-
-```typescript
-import {
-  createCompositionRuntime,
-  hydrateComposition,
-  compositionsPlugin,
-  CompositionHydrationError,
-  CompositionValidationError,
-  UnknownCompositionError,
-  validateCompositionContracts,
-  validateCompositionDefinition,
-} from "@modular-react/compositions";
-
-import type {
-  CompositionRuntimeOptions,
-  CompositionInstanceRecord,
-  CompositionsPluginExtension,
-  CompositionsPluginOptions,
-} from "@modular-react/compositions";
-```
-
-### React surface
-
-```typescript
-import {
-  CompositionOutlet,
-  CompositionsProvider,
-  CompositionInstanceContext,
-  useCompositionState,
-  useCompositionDispatch,
-  useCompositionEmit,
-  useCompositionZone,
-  useCompositionsContext,
-} from "@modular-react/compositions";
-
-import type {
-  CompositionOutletProps,
-  CompositionOutletNotFoundProps,
-  CompositionOutletErrorProps,
-  CompositionsProviderProps,
-  CompositionProviderValue,
-  CompositionContextValue,
-} from "@modular-react/compositions";
-```
+- **Cycle detection is partial across the journey ↔ composition boundary.** Same-instance recursion is caught; recursion through two different instances of the same definition is not. See [Cycle safety](#cycle-safety).
 
 ## Comparison with journeys
 
-|                                | `@modular-react/compositions`                           | `@modular-react/journeys`                              |
-| ------------------------------ | ------------------------------------------------------- | ------------------------------------------------------ |
-| **Primary use**                | Multi-module screen layout with shared state             | Multi-module stepped workflow with typed transitions   |
-| **State model**                | Scoped store; selectors project state into zones        | Step + accumulated state; transitions advance step     |
-| **Flow**                       | No graph — any state can produce any resolution         | Directed graph of `(step, exit) → next step`           |
-| **Authoring shape**            | `defineComposition({ zones, initialState })`            | `defineJourney({ start, transitions })`                |
-| **Instance id prefix**         | `ci_*`                                                  | `ji_*`                                                 |
-| **Persistence blob fields**    | `state` only                                             | `state`, `step`, `history`, `rollbackSnapshots`, `future`, `parentLink` |
-| **Hooks inside panels**        | `useCompositionState/Dispatch/Emit/Zone`                | `useJourneyState`, `useJourneyInstance`, `useJourneyCallStack` |
-| **Outlet**                     | `CompositionOutlet` (render-prop, multi-zone)            | `JourneyOutlet` (single step, leaf-walk)               |
-| **Validation**                 | Zone contracts (spot-check) + `moduleCompat`             | Reachability + transition exhaustiveness + contracts   |
-| **Composition with the other** | A zone can mount `<JourneyOutlet>` via `kind: "journey"` | A journey step can render `<CompositionOutlet>` like any other component |
+|                                | `@modular-react/compositions`                                   | `@modular-react/journeys`                                                |
+| ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **Primary use**                | Multi-module screen layout with shared state                    | Multi-module stepped workflow with typed transitions                     |
+| **State model**                | Scoped store; selectors project state into zones                | Step + accumulated state; transitions advance step                       |
+| **Flow**                       | No graph — any state can produce any resolution                 | Directed graph of `(step, exit) → next step`                             |
+| **Authoring shape**            | `defineComposition({ zones, initialState })`                    | `defineJourney({ start, transitions })`                                  |
+| **Instance id prefix**         | `ci_*`                                                          | `ji_*`                                                                   |
+| **Persistence**                | None — keep durable coordination state in the application layer | First-class adapter (`JourneyPersistence`) with versioned blobs          |
+| **Hooks inside panels**        | `useCompositionState/Dispatch/Emit/Zone`                        | `useJourneyState`, `useJourneyInstance`, `useJourneyCallStack`           |
+| **Outlet**                     | `CompositionOutlet` (render-prop, multi-zone)                   | `JourneyOutlet` (single step, leaf-walk)                                 |
+| **Validation**                 | Zone contracts (spot-check) + `moduleCompat`                    | Reachability + transition exhaustiveness + contracts                     |
+| **Composition with the other** | A zone can mount `<JourneyOutlet>` via `kind: "journey"`        | A journey step can render `<CompositionOutlet>` like any other component |
 
 Choose **compositions** when the screen is a layout problem (which modules go where, sharing state). Choose **journeys** when the screen is a flow problem (do A, then B, then maybe C). They're complementary, not competing.

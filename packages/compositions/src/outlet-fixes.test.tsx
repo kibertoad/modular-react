@@ -5,23 +5,14 @@
 import { StrictMode, useContext } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
-import {
-  defineEntry,
-  defineExit,
-  defineModule,
-  schema,
-} from "@modular-react/core";
+import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import { JourneyProvider } from "@modular-react/journeys";
 
 import { defineComposition } from "./define-composition.js";
 import { createCompositionRuntime } from "./runtime.js";
 import { CompositionOutlet } from "./outlet.js";
 import { CompositionsProvider } from "./provider.js";
-import {
-  CompositionInstanceContext,
-  useCompositionDispatch,
-  useCompositionState,
-} from "./hooks.js";
+import { CompositionInstanceContext, useCompositionState } from "./hooks.js";
 import type { CompositionContextValue } from "./hooks.js";
 import type { RegisteredComposition } from "./types.js";
 
@@ -44,7 +35,6 @@ function ContextSpyPanel() {
   seenContextValues.push(ctx);
   return <div data-testid="ctx-spy">spy</div>;
 }
-
 
 function ThrowOnTickPanel() {
   const tick = useCompositionState<PanelState, number>((s) => s.tick);
@@ -131,7 +121,6 @@ describe("contextValue stability", () => {
       expect(seen).toBe(initialValue);
     }
   });
-
 });
 
 // ---------------------------------------------------------------------------

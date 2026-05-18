@@ -1,8 +1,10 @@
 import {
   Component,
   Suspense,
+  createContext,
   createElement,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -29,6 +31,26 @@ import type {
 
 /** Default cap on automatic retries before a zone falls back. */
 const DEFAULT_RETRY_CAP = 2;
+
+/**
+ * Set of composition instance ids currently rendering in the React
+ * ancestor chain. Used to short-circuit a composition that would otherwise
+ * mount itself as a descendant (e.g. composition C hosts journey J whose
+ * step renders `<CompositionOutlet instanceId={cId}>` for the same id),
+ * which would otherwise infinite-loop into a stack overflow. The check
+ * is by instance id, not composition id, so two parallel instances of
+ * the same composition definition still work normally.
+ *
+ * The detection is partial across the journey ↔ composition boundary:
+ * `@modular-react/journeys` runs its own parent-link cycle check for
+ * journey-to-journey invocations, but it does not see composition
+ * ancestors. A composition ↔ journey ↔ composition cycle that resolves
+ * to the same composition instance is caught here; a cycle through
+ * different instance ids of the same definition is not. Authors
+ * encountering that case should restructure to share a single instance
+ * (and the in-ancestor check then catches the recursion).
+ */
+const CompositionAncestryContext = createContext<ReadonlySet<CompositionInstanceId> | null>(null);
 
 export interface CompositionOutletNotFoundProps {
   readonly zone: string;
@@ -63,6 +85,10 @@ export interface CompositionOutletProps<TZones extends string = string> {
    * already applied). The host owns layout; the framework owns content.
    */
   readonly children: (zones: { readonly [K in TZones]: ReactNode }) => ReactNode;
+  /**
+   * Fallback rendered inside each zone's `Suspense` boundary while a
+   * lazy entry's chunk loads. Per-entry `fallback` overrides this.
+   */
   readonly loadingFallback?: ReactNode;
   readonly notFoundComponent?: ComponentType<CompositionOutletNotFoundProps>;
   readonly errorComponent?: ComponentType<CompositionOutletErrorProps>;
@@ -142,6 +168,17 @@ export function CompositionOutlet<TZones extends string = string>(
     );
   }
 
+  // Cycle guard: a composition trying to mount itself as a descendant
+  // (typically through a journey hosted in one of its own zones) would
+  // recurse forever. Bail out with a clear error fallback instead.
+  const ancestry = useContext(CompositionAncestryContext);
+  const cycleDetected = ancestry?.has(instanceId) ?? false;
+  const extendedAncestry = useMemo(() => {
+    const next = new Set(ancestry ?? []);
+    next.add(instanceId);
+    return next;
+  }, [ancestry, instanceId]);
+
   const instance = useInstanceSnapshot(runtime, instanceId);
   const internals = getInternals(runtime);
   const modules = modulesProp ?? internals.__moduleMap;
@@ -151,15 +188,14 @@ export function CompositionOutlet<TZones extends string = string>(
   // inside `__detach` so StrictMode's mount/unmount/mount dance leaves the
   // instance alive.
   useEffect(() => {
+    if (cycleDetected) return;
     internals.__attach(instanceId);
     return () => {
       internals.__detach(instanceId);
     };
-  }, [internals, instanceId]);
+  }, [internals, instanceId, cycleDetected]);
 
   const reg = internals.__getRegistered(compositionId);
-  // Capture all zone names once per definition so the rendered render-prop
-  // payload is consistent across renders even while instance is loading.
   const zoneNames = useMemo<readonly string[]>(() => {
     if (!reg) return [];
     return Object.keys(reg.definition.zones);
@@ -230,15 +266,25 @@ export function CompositionOutlet<TZones extends string = string>(
     };
   }, [reg, instance, stateSignature, zoneNames, modules, internals]);
 
+  if (cycleDetected) {
+    return renderError(
+      "<all>",
+      new Error(
+        `[@modular-react/compositions] Composition instance "${instanceId}" is already in the render ancestry — refusing to mount it as a descendant. ` +
+          `This is usually caused by a zone hosting a journey whose step renders the same composition instance.`,
+      ),
+      errorComponent,
+    );
+  }
   if (!instance) return null;
-  if (instance.status === "loading") return loadingFallback ?? null;
   if (instance.status === "disposed") return null;
 
   if (!reg) {
-    return createElement(
-      DefaultNotFound,
-      { zone: "<all>", moduleId: compositionId, entry: "(unknown composition)" },
-    );
+    return createElement(DefaultNotFound, {
+      zone: "<all>",
+      moduleId: compositionId,
+      entry: "(unknown composition)",
+    });
   }
 
   // Build the zone map: each entry is a fully-wrapped renderable element.
@@ -263,7 +309,11 @@ export function CompositionOutlet<TZones extends string = string>(
     );
   }
 
-  return children(zoneElements as { readonly [K in TZones]: ReactNode });
+  return (
+    <CompositionAncestryContext.Provider value={extendedAncestry}>
+      {children(zoneElements as { readonly [K in TZones]: ReactNode })}
+    </CompositionAncestryContext.Provider>
+  );
 }
 
 interface ZoneRendererProps {
@@ -447,9 +497,7 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
     const entry = mod?.entryPoints?.[selection.entry];
     if (!mod || !entry) {
       const NotFound = notFoundComponent ?? DefaultNotFound;
-      content = (
-        <NotFound zone={zone} moduleId={selection.module} entry={selection.entry} />
-      );
+      content = <NotFound zone={zone} moduleId={selection.module} entry={selection.entry} />;
     } else {
       const { Component: PanelComponent } = resolveEntryComponent(entry);
       const suspenseFallback = entry.fallback ?? loadingFallback ?? null;
@@ -489,19 +537,11 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
         if (cached) {
           journeyInstanceId = cached;
         } else {
-          journeyInstanceId = journeyRuntime.start(
-            selection.handle,
-            selection.input as never,
-          );
+          journeyInstanceId = journeyRuntime.start(selection.handle, selection.input as never);
           journeyInstanceCache.current.set(cacheKey, journeyInstanceId);
         }
       }
-      content = (
-        <JourneyOutlet
-          instanceId={journeyInstanceId}
-          loadingFallback={loadingFallback}
-        />
-      );
+      content = <JourneyOutlet instanceId={journeyInstanceId} loadingFallback={loadingFallback} />;
     }
   }
 
