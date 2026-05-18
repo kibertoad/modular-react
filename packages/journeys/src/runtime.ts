@@ -444,6 +444,11 @@ export function createJourneyRuntime(
   // a single goBack. If any one fails, the whole rewind is a no-op so
   // we never strand the user on an intermediate frame they didn't
   // ask for.
+  //
+  // O(history.length) per call by design. A breadcrumb render that
+  // calls `canRewindTo` once per chip pays O(N²) per render, which is
+  // negligible for the depths real wizards reach (<20). Not worth
+  // memoizing on `stepToken` until profiling says otherwise.
   function canRewindToFor(
     record: InstanceRecord,
     reg: RegisteredJourney,
@@ -454,8 +459,10 @@ export function createJourneyRuntime(
     if (!Number.isInteger(historyIndex)) return false;
     if (historyIndex < 0 || historyIndex >= record.history.length) return false;
     if (!canLeaveStep(record.step, reg)) return false;
+    // Loop bounds keep `i` in `[historyIndex + 1, history.length - 1]`,
+    // so the lookup is always defined — no defensive `?? null` needed.
     for (let i = record.history.length - 1; i > historyIndex; i--) {
-      if (!canLeaveStep(record.history[i] ?? null, reg)) return false;
+      if (!canLeaveStep(record.history[i]!, reg)) return false;
     }
     return true;
   }

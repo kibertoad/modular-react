@@ -793,6 +793,14 @@ export interface JourneyRuntime {
    * a child is in flight, `historyIndex` is not an integer in
    * `[0, history.length)`, or any frame the rewind would leave fails
    * the back opt-in.
+   *
+   * The one non-no-op failure is `buildInput` throwing on the
+   * destination — same path `goBack` takes. The journey aborts with
+   * `{ reason: "build-input-threw", moduleId, entry, error }` and
+   * fires `onError` (phase `"step"`). By the time the throw is
+   * caught, state / history / future have already been mutated to
+   * their post-rewind shape, so this is not atomic with the rewind;
+   * the abort takes over.
    */
   rewindTo(id: InstanceId, historyIndex: number): void;
   /**
@@ -803,9 +811,9 @@ export interface JourneyRuntime {
    *
    * Returns `false` when the id is unknown, the instance is
    * terminal / loading, a child is in flight, `historyIndex` is out
-   * of range or names the current step (nothing to rewind), or any
-   * frame the rewind would leave fails the back opt-in (transition
-   * `allowBack: true` + entry `allowBack !== false`).
+   * of `[0, history.length)` (negative, `>= history.length`, or not
+   * an integer), or any frame the rewind would leave fails the back
+   * opt-in (transition `allowBack: true` + entry `allowBack !== false`).
    */
   canRewindTo(id: InstanceId, historyIndex: number): boolean;
   /**

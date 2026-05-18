@@ -412,9 +412,11 @@ Key points:
 A long wizard typically wants a breadcrumb header so the user can click step 4 while on step 8, edit a field, then walk forward through every intermediate step (5 → 6 → 7 → 8) without losing data already entered downstream. The journey runtime ships the primitive for this: **`runtime.rewindTo(id, historyIndex)`**, a transactional multi-step `goBack`.
 
 ```ts
-// Render breadcrumbs from JourneyInstance.history and gate each chip
-// on canRewindTo, so opt-outs disable the affordance instead of
-// silently no-opping.
+// Render breadcrumbs from JourneyInstance.history plus the current
+// step (which isn't in `history`). Gate each historical chip on
+// canRewindTo so opt-outs disable the affordance instead of silently
+// no-opping; the current chip is the "you are here" marker and isn't
+// clickable.
 function Breadcrumbs({ instanceId, runtime }: { instanceId: InstanceId; runtime: JourneyRuntime }) {
   const instance = useJourneyInstance(instanceId);
   return (
@@ -428,6 +430,11 @@ function Breadcrumbs({ instanceId, runtime }: { instanceId: InstanceId; runtime:
           {frame.moduleId}.{frame.entry}
         </button>
       ))}
+      {instance.step && (
+        <span aria-current="step">
+          {instance.step.moduleId}.{instance.step.entry}
+        </span>
+      )}
     </nav>
   );
 }
@@ -437,7 +444,7 @@ For this round-trip to preserve data correctly, the journey has to be authored w
 
 1. **`allowBack: "preserve-state"` on every entry along the wizard path.** A `"rollback"` entry restores its pre-transition snapshot on the way back, which discards anything the user typed on later steps. `"preserve-state"` keeps the accumulated state intact so downstream form data is still in `state` after the rewind.
 2. **`buildInput(state)` on every entry.** Each step re-derives its `input` from accumulated journey state on every (re-)entry. Without it, a form returned to via `rewindTo` (or even a single `goBack`) renders against the snapshot frozen at the original push — meaning data the user has since added is invisible to the form.
-3. **Transition handlers stay pure routing.** When the user clicks `Next` forward after editing, every intermediate transition fires again so each step revalidates against the new state — that's the **point** of forcing forward re-traversal (an early edit may change which options are valid downstream). It only works safely if handlers are deterministic functions of `state` + `output`. Move side-effectful work (network calls, telemetry) into [loading entry points](#pattern---a-loading-entry-point-for-async-work) so a replay doesn't double-fire it.
+3. **Transition handlers stay pure routing.** When the user clicks `Next` forward after editing, every intermediate transition fires again so each step revalidates against the new state — that's the **point** of forcing forward re-traversal (an early edit may change which options are valid downstream). This only works safely under the [transition handler purity rules](#transition-handlers-are-pure-and-synchronous): handlers must be deterministic functions of `state` + `output`, and any side-effectful work belongs in a [loading entry point](#pattern---a-loading-entry-point-for-async-work) so a replay doesn't double-fire it.
 
 `rewindTo` is **atomic**: it walks the chain of frames it would leave and rejects the whole call if any one fails the back opt-in (transition `allowBack: true` + entry `allowBack !== false`). That means a non-rewindable step in the middle of the path can't strand the user halfway through — `canRewindTo` will return `false` and the breadcrumb chip stays disabled.
 

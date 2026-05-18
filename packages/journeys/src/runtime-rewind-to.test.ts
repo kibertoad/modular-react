@@ -870,3 +870,279 @@ describe("runtime.rewindTo: end-to-end edit-and-revisit", () => {
     });
   });
 });
+
+describe("runtime.rewindTo: buildInput throw on destination", () => {
+  it("aborts the instance with `build-input-threw` when the destination's buildInput throws", () => {
+    // Same failure mode as the goBack path: the journey aborts with
+    // `build-input-threw`, fires onError(phase: "step"), and ends up
+    // in `aborted` status. Pin the contract so the JSDoc note
+    // ("the one non-no-op failure") is enforced.
+    const error = new Error("destination buildInput exploded");
+    // `buildInput` runs both on initial start (computing the first
+    // input) and on re-entry via rewindTo / goBack. The flag stays
+    // false during start so the journey can advance past `dest`; the
+    // test flips it to true just before calling rewindTo so the throw
+    // only fires on the way back in.
+    let throwOnNextBuild = false;
+    const dest = defineModule({
+      id: "dest",
+      version: "1.0.0",
+      exitPoints: exits,
+      entryPoints: {
+        show: defineEntry({
+          component: (() => null) as never,
+          input: schema<{ derived: number }>(),
+          allowBack: "preserve-state",
+          buildInput: () => {
+            if (throwOnNextBuild) throw error;
+            return { derived: 0 };
+          },
+        }),
+      },
+    });
+    const mid = makeStep("mid");
+    const tail = makeStep("tail");
+    type M = {
+      readonly dest: typeof dest;
+      readonly mid: typeof mid;
+      readonly tail: typeof tail;
+    };
+    const j = defineJourney<M, Record<string, never>>()({
+      id: "rewind-build-throws",
+      version: "1.0.0",
+      initialState: () => ({}),
+      start: () => ({ module: "dest", entry: "show", input: { derived: 0 } }),
+      transitions: {
+        dest: {
+          show: {
+            allowBack: true,
+            next: () => ({ next: { module: "mid", entry: "show", input: undefined } }),
+          },
+        },
+        mid: {
+          show: {
+            allowBack: true,
+            next: () => ({ next: { module: "tail", entry: "show", input: undefined } }),
+          },
+        },
+        tail: {
+          show: { allowBack: true, next: () => ({ complete: undefined }) },
+        },
+      },
+    });
+
+    // onError fires with phase "step" — buildInput throw routes through
+    // abortFromBuildInputThrow → fireOnError before the abort
+    // transition is applied.
+    const onError = vi.fn();
+    const runtime = createJourneyRuntime([{ definition: j, options: { onError } }], {
+      modules: { dest, mid, tail },
+    });
+    const id = runtime.start(j.id, undefined);
+    const harness = createTestHarness(runtime);
+    harness.fireExit(id, "next"); // dest → mid
+    harness.fireExit(id, "next"); // mid → tail
+    onError.mockClear();
+    throwOnNextBuild = true;
+
+    runtime.rewindTo(id, 0); // would land on dest, whose buildInput now throws
+
+    const inst = runtime.getInstance(id);
+    expect(inst?.status).toBe("aborted");
+    expect(inst?.terminalPayload).toMatchObject({
+      reason: "build-input-threw",
+      moduleId: "dest",
+      entry: "show",
+      error,
+    });
+    expect(onError).toHaveBeenCalledTimes(1);
+    const [errArg, ctx] = onError.mock.calls[0] ?? [];
+    expect(errArg).toBe(error);
+    expect(ctx?.phase).toBe("step");
+  });
+});
+
+describe("runtime.rewindTo: persistence", () => {
+  it("schedules exactly one save with the post-rewind blob", async () => {
+    // The runtime calls schedulePersist once at the tail of
+    // dispatchRewindTo — same hook every other transition path uses.
+    // Pin the contract so a future refactor doesn't silently start
+    // emitting N writes for an N-step rewind.
+    const store = new Map<string, unknown>();
+    const save = vi.fn(async (k: string, b: unknown) => {
+      store.set(k, b);
+    });
+    const persistence = {
+      keyFor: () => "rewind:persist",
+      load: (k: string) => (store.get(k) as never) ?? null,
+      save,
+      remove: async (k: string) => {
+        store.delete(k);
+      },
+    };
+    const rt = createJourneyRuntime(
+      [{ definition: journey, options: { persistence: persistence as never } }],
+      { modules: { a: stepA, b: stepB, c: stepC, d: stepD, e: stepE } },
+    );
+    const id = rt.start(journey.id, undefined);
+    const harness = createTestHarness(rt);
+    harness.fireExit(id, "next");
+    harness.fireExit(id, "next");
+    harness.fireExit(id, "next");
+    harness.fireExit(id, "next");
+    // Flush all pre-rewind saves before measuring rewind's contribution.
+    await Promise.resolve();
+    await Promise.resolve();
+    save.mockClear();
+
+    rt.rewindTo(id, 1); // e → b, 3 frames popped
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(save).toHaveBeenCalledTimes(1);
+    const blob = save.mock.calls[0]?.[1] as { step?: { moduleId: string }; history?: unknown[] };
+    expect(blob?.step?.moduleId).toBe("b");
+    expect(blob?.history).toHaveLength(1); // only [a] left after landing on b
+  });
+});
+
+describe("runtime.rewindTo: status guards", () => {
+  it("is a no-op while the instance is in `loading` status", async () => {
+    // Async persistence holds the instance in `loading` until `load`
+    // resolves. rewindTo must short-circuit via the `status !== "active"`
+    // guard — no state mutation, no abort, no exception.
+    let resolveLoad: (blob: unknown) => void = () => {};
+    const loadPromise = new Promise<unknown>((r) => {
+      resolveLoad = r;
+    });
+    const rt = createJourneyRuntime(
+      [
+        {
+          definition: journey,
+          options: {
+            persistence: {
+              keyFor: () => "rewind:loading",
+              load: () => loadPromise,
+              save: async () => {},
+              remove: async () => {},
+            } as never,
+          },
+        },
+      ],
+      { modules: { a: stepA, b: stepB, c: stepC, d: stepD, e: stepE } },
+    );
+    const id = rt.start(journey.id, undefined);
+    expect(rt.getInstance(id)?.status).toBe("loading");
+
+    expect(() => rt.rewindTo(id, 0)).not.toThrow();
+    expect(rt.canRewindTo(id, 0)).toBe(false);
+    expect(rt.getInstance(id)?.status).toBe("loading");
+
+    // Drain the load promise so the test doesn't leak.
+    resolveLoad(null);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  it("is a no-op while a child journey is in flight", () => {
+    // Mirrors the goForward "active child" test: an invoked child
+    // gates the parent's navigation. rewindTo must not mutate while
+    // `activeChildId` is set, even though in practice the future
+    // stack is already empty by the time a child is in flight.
+    const childExits = { done: defineExit() } as const;
+    const childMod = defineModule({
+      id: "child",
+      version: "1.0.0",
+      exitPoints: childExits,
+      entryPoints: {
+        show: defineEntry({
+          component: (() => null) as never,
+          input: schema<void>(),
+          allowBack: "preserve-state",
+        }),
+      },
+    });
+    type ChildModules = { readonly child: typeof childMod };
+    const child = defineJourney<ChildModules, Record<string, never>>()({
+      id: "child-for-rewind",
+      version: "1.0.0",
+      initialState: () => ({}),
+      start: () => ({ module: "child", entry: "show", input: undefined }),
+      transitions: { child: { show: { done: () => ({ complete: undefined }) } } },
+    });
+
+    const parentExits = { next: defineExit(), invokeChild: defineExit() } as const;
+    const parentMod = defineModule({
+      id: "p",
+      version: "1.0.0",
+      exitPoints: parentExits,
+      entryPoints: {
+        a: defineEntry({
+          component: (() => null) as never,
+          input: schema<void>(),
+          allowBack: "preserve-state",
+        }),
+        b: defineEntry({
+          component: (() => null) as never,
+          input: schema<void>(),
+          allowBack: "preserve-state",
+        }),
+      },
+    });
+    type ParentModules = { readonly p: typeof parentMod };
+    const parent = defineJourney<ParentModules, Record<string, never>>()({
+      id: "parent-for-rewind",
+      version: "1.0.0",
+      invokes: [{ id: "child-for-rewind", __input: undefined } as never],
+      initialState: () => ({}),
+      start: () => ({ module: "p", entry: "a", input: undefined }),
+      transitions: {
+        p: {
+          a: {
+            allowBack: true,
+            next: () => ({ next: { module: "p", entry: "b", input: undefined } }),
+          },
+          b: {
+            allowBack: true,
+            invokeChild: () => ({
+              invoke: {
+                handle: { id: "child-for-rewind" } as never,
+                input: undefined,
+                resume: "back",
+              },
+            }),
+          },
+        },
+      },
+      resumes: {
+        p: {
+          b: {
+            back: ({ state }) => ({ state }),
+          },
+        },
+      },
+    });
+
+    const runtime = createJourneyRuntime(
+      [
+        { definition: parent, options: undefined },
+        { definition: child, options: undefined },
+      ],
+      { modules: { p: parentMod, child: childMod } },
+    );
+    const id = runtime.start(parent.id, undefined);
+    const harness = createTestHarness(runtime);
+    harness.fireExit(id, "next"); // a → b, history=[a]
+    harness.fireExit(id, "invokeChild");
+    expect(runtime.getInstance(id)?.activeChildId).not.toBeNull();
+
+    const before = runtime.getInstance(id);
+    expect(runtime.canRewindTo(id, 0)).toBe(false);
+    runtime.rewindTo(id, 0);
+    const after = runtime.getInstance(id);
+    expect(after?.step).toEqual(before?.step);
+    expect(after?.history).toEqual(before?.history);
+    expect(after?.activeChildId).toEqual(before?.activeChildId);
+  });
+});
