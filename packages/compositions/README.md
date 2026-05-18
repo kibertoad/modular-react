@@ -579,7 +579,7 @@ The adapter shape is structurally compatible with `JourneyPersistence` — one b
 
 ### Key design
 
-`keyFor` is called at `start()` time with `{ compositionId, input }` and must be **deterministic**. The runtime uses it both to dedupe live instances (`start` with the same `keyFor` result returns the existing `instanceId`) and to address the persistence backend. A typical pattern:
+`keyFor` is called at `start()` time with `{ compositionId, input }` and must be **deterministic** — equal `{ compositionId, input }` must produce the same string on every call. The runtime uses the result both to dedupe live instances (`start` with the same `keyFor` result returns the existing `instanceId`) and to address the persistence backend. A `keyFor` that closes over ambient state (current user, session id, feature-flag) is a footgun: switching that ambient state silently produces two live records under the same logical identity. Pull every input the key depends on through the `input` parameter.
 
 ```typescript
 keyFor: ({ compositionId, input }) =>
@@ -590,7 +590,7 @@ The key is internally namespaced by `compositionId` so two compositions with the
 
 ### Save pipeline
 
-- **Without `saveDebounceMs`** (default): every dispatch triggers an async `persistence.save(key, blob)`. The runtime serializes saves per-instance (one in flight at a time), so adapters do not see out-of-order writes from the same instance.
+- **Without `saveDebounceMs`** (default): every dispatch triggers an async `persistence.save(key, blob)`. The runtime serializes saves per-instance (one in flight at a time), so adapters do not see out-of-order writes from the same instance. Cross-instance saves under the same key (an `end` + restart cycle on the same doc) are also chained, so a late save from a disposed record cannot clobber a successor's data.
 - **With `saveDebounceMs > 0`**: dispatches within the window coalesce into a single trailing-edge save. Disposal cancels any pending timer — the trailing state is intentionally dropped, since disposal removes the blob anyway. Set ~150ms for high-frequency interactions (drag, controlled inputs); leave at 0 for durability-critical state.
 - **Cold-start save**: when an instance starts and the persistence probe returns no blob (or returns a migratable one), the runtime fires one save immediately, **bypassing debounce**, so a refresh before any state change still finds the blob keyed under `userKey`.
 

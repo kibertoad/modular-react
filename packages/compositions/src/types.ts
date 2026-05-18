@@ -179,14 +179,6 @@ export interface CompositionDefinition<
    */
   readonly moduleCompat?: { readonly [K in keyof TModules & string]?: string };
 
-  /**
-   * Closed set of journey handles any zone may host via a `"journey"`
-   * resolution. Optional — when present, the resolve-time validator
-   * verifies every reachable journey handle is in this list, parallel to
-   * `JourneyDefinition.invokes`.
-   */
-  readonly invokes?: ReadonlyArray<JourneyHandleRef<string, any, any>>;
-
   readonly lifecycle?: CompositionLifecycle<TState>;
 
   /**

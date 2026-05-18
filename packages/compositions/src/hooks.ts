@@ -59,13 +59,23 @@ function useRequiredContext(): CompositionContextValue {
  */
 export function useCompositionState<TState>(): TState;
 export function useCompositionState<TState, U>(selector: (state: TState) => U): U;
-export function useCompositionState<TState, U>(selector?: (state: TState) => U): TState | U {
+export function useCompositionState<TState, U = TState>(
+  selector?: (state: TState) => U,
+): TState | U {
   const ctx = useRequiredContext();
   const store = ctx.store as Store<TState>;
+  // Stable `getSnapshot` identity per render path — selector callers
+  // pass the selector unchanged, no-selector callers read the whole
+  // state. Both branches return the exact narrow type so the overload
+  // resolution at the call site stays honest.
   const getSnapshot = selector
     ? () => selector(store.getState())
-    : (() => store.getState() as unknown as TState | U);
-  return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot) as TState | U;
+    : () => store.getState() as unknown as U;
+  return useSyncExternalStore(
+    store.subscribe,
+    getSnapshot,
+    getSnapshot,
+  );
 }
 
 /**
@@ -112,7 +122,10 @@ export function useCompositionZone(): {
  * {@link createCompositionContext}.
  */
 export interface TypedCompositionHooks<TState> {
-  readonly useState: <U>(selector?: (state: TState) => U) => U | TState;
+  readonly useState: {
+    (): TState;
+    <U>(selector: (state: TState) => U): U;
+  };
   readonly useDispatch: () => (
     updater: Partial<TState> | ((prev: TState) => Partial<TState> | TState),
   ) => void;
@@ -142,11 +155,19 @@ export interface TypedCompositionHooks<TState> {
  * underlying generic hook.
  */
 export function createCompositionContext<TState>(): TypedCompositionHooks<TState> {
+  // Single function that the typed overloads route to. We don't branch on
+  // the selector argument at the React layer — `useCompositionState`
+  // already does that internally — so the hook call count is identical
+  // whether or not the caller supplies a selector.
+  function useState<U>(selector: (state: TState) => U): U;
+  function useState(): TState;
+  function useState<U>(selector?: (state: TState) => U): TState | U {
+    return selector
+      ? useCompositionState<TState, U>(selector)
+      : useCompositionState<TState>();
+  }
   return {
-    useState: <U,>(selector?: (state: TState) => U) =>
-      selector
-        ? (useCompositionState<TState, U>(selector) as U)
-        : (useCompositionState<TState>() as TState),
+    useState: useState as TypedCompositionHooks<TState>["useState"],
     useDispatch: () => useCompositionDispatch<TState>(),
     useEmit: () => useCompositionEmit(),
     useZone: () => useCompositionZone(),

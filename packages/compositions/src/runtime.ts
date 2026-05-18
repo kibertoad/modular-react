@@ -158,6 +158,18 @@ export function createCompositionRuntime(
    * the journey runtime's pattern.
    */
   const keyIndex = new Map<string, CompositionInstanceId>();
+  /**
+   * Per-key serialization of persistence writes. Two records sharing
+   * the same `keyFor` result (an end + restart cycle on the same doc)
+   * have independent `saveInFlight` flags, so without this chain a
+   * disposed instance's late save could land AFTER a successor's save
+   * and clobber the newer data. Adapters whose `save` resolves in
+   * non-FIFO order (network-backed, batched, multi-tab) would also
+   * reorder writes without it. Each save awaits the previous one
+   * scheduled under the same `fullKey`; the chain entry is cleared
+   * once it's the leaf so no per-key memory leak.
+   */
+  const keySaveChains = new Map<string, Promise<unknown>>();
 
   function indexKey(compositionId: string, userKey: string): string {
     return `${compositionId}\x1f${userKey}`;
@@ -199,7 +211,12 @@ export function createCompositionRuntime(
       try {
         listener();
       } catch (err) {
-        if (debug) console.error("[@modular-react/compositions] listener threw", err);
+        // Always log listener throws — a silent listener bug is hard to
+        // diagnose without observability and `debug` is usually off in
+        // production. We still route to `options.onError` so shell
+        // telemetry sees it under a known channel.
+        console.error("[@modular-react/compositions] listener threw", err);
+        fireOnError(record.id, err, { zone: "", phase: "lifecycle" });
       }
     }
   }
@@ -279,9 +296,39 @@ export function createCompositionRuntime(
     blob: SerializedComposition<TState>,
   ) {
     record.saveInFlight = true;
+    const key = record.persistenceKey;
+    const fullKey = key ? indexKey(record.compositionId, key) : null;
     try {
-      if (!record.persistenceKey) return;
-      await persistence.save(record.persistenceKey, blob);
+      if (!key || !fullKey) return;
+      // Chain this save behind any earlier save for the same persistence
+      // key — including saves owned by a prior, now-disposed record on
+      // the same slot. Without serialization, FIFO ordering is at the
+      // adapter's mercy and a late save can clobber a successor.
+      const previous = keySaveChains.get(fullKey);
+      const thisSave: Promise<unknown> = (previous ?? Promise.resolve()).then(
+        () => {
+          // Re-check ownership at fire time: a record disposed while
+          // chained behind another save has nothing to write — the
+          // successor (if any) will save its own state, and disposed
+          // records without successors will have their blob removed
+          // via `pendingRemove` below. Without this guard, a queued
+          // save from a disposed record would still land its stale
+          // bytes after the successor's save lands.
+          if (record.status === "disposed" && keyIndex.get(fullKey) !== record.id) {
+            return;
+          }
+          return persistence.save(key, blob);
+        },
+      );
+      keySaveChains.set(fullKey, thisSave);
+      try {
+        await thisSave;
+      } finally {
+        // Only clear the slot if no later save has chained on top of us.
+        if (keySaveChains.get(fullKey) === thisSave) {
+          keySaveChains.delete(fullKey);
+        }
+      }
     } catch (err) {
       if (debug) {
         console.error(
@@ -298,8 +345,8 @@ export function createCompositionRuntime(
           // Successor-aware: if another instance has claimed the same
           // persistence key since disposal started, suppress the remove
           // — otherwise we'd wipe the new instance's blob.
-          const fullKey = indexKey(record.compositionId, record.persistenceKey);
-          if (!keyIndex.has(fullKey)) {
+          const checkKey = indexKey(record.compositionId, record.persistenceKey);
+          if (!keyIndex.has(checkKey)) {
             fireAndForgetRemove(persistence, record.persistenceKey);
           }
         }
@@ -583,6 +630,11 @@ export function createCompositionRuntime(
             err,
           );
         }
+        // Surface to shell telemetry so a faulty queued-write doesn't
+        // disappear silently. We tag it as `lifecycle` (consistent with
+        // hydration migration throws) since the replay is part of the
+        // load → active transition.
+        fireOnError(record.id, err, { zone: "", phase: "lifecycle" });
       }
     }
   }
@@ -762,6 +814,24 @@ export function createCompositionRuntime(
       record.listeners.add(listener);
       return () => {
         record.listeners.delete(listener);
+        // Mirror the disposal gate from `__detach`: when the last
+        // listener and outlet both leave, schedule disposal via a
+        // microtask so a StrictMode mount/unmount/mount dance or a
+        // subscribe-then-resubscribe pattern doesn't tear the
+        // instance down prematurely. Without this branch, an instance
+        // kept alive solely by external subscribers (devtools, redux
+        // bridges) outlived its useful lifetime — the documented
+        // contract ("disposed when last outlet detaches AND no other
+        // listeners remain") wasn't enforced from the listener side.
+        if (record.outletRefCount === 0 && record.listeners.size === 0) {
+          queueMicrotask(() => {
+            const r = instances.get(id);
+            if (!r) return;
+            if (r.outletRefCount > 0) return;
+            if (r.listeners.size > 0) return;
+            endInstance(id, "unsubscribed");
+          });
+        }
       };
     },
     dispatch(id, updater) {

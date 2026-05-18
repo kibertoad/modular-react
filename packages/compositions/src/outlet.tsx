@@ -361,32 +361,57 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
     [runtime, compositionId, instanceId, zone, store, dispatch, emit],
   );
 
-  // Track previous selectionKey across renders so we can clear the
-  // per-zone retry counter once a fresh (working) resolution lands. Without
-  // this, a zone that exhausts its retry budget can never recover even after
-  // the upstream issue is fixed.
+  // Tracks the previous render's selectionKey so we can detect a
+  // resolution change and reset the per-zone retry counter in a commit-
+  // time effect (mutating runtime state during render is unsafe in
+  // concurrent React — a discarded render would still reset the counter).
   const previousSelectionKeyRef = useRef<string | null>(null);
+  // Read by the boundary's componentDidCatch via `handleError`. Set
+  // synchronously below (just before render) so the value is current at
+  // commit time; the effect-driven `previousSelectionKeyRef` would still
+  // be one render behind when `componentDidCatch` fires.
+  const selectionKeyForErrorRef = useRef<string>("empty");
+
+  // Phase 1: derive the resolution + a deterministic selection key.
+  // Both have to be computed before the effect declared below, so the
+  // effect's `selectionKey` dep is stable across renders.
+  let selection: ZoneResolution<any> = { kind: "empty" };
+  let selectorError: unknown = null;
+  if (record && store && state !== null) {
+    try {
+      selection = descriptor.select({ state: state as unknown, deps: internals.__deps });
+    } catch (err) {
+      selectorError = err;
+    }
+  }
+  const selectionKey = computeSelectionKey(selection, selectorError, modules);
+
+  // Phase 2: side-effect — reset retry counter when the resolution
+  // changes successfully. Effect-only so a discarded concurrent render
+  // never mutates runtime state.
+  useEffect(() => {
+    const prev = previousSelectionKeyRef.current;
+    if (prev !== null && prev !== selectionKey) {
+      internals.__resetRetry(instanceId, zone);
+    }
+    previousSelectionKeyRef.current = selectionKey;
+  }, [internals, instanceId, zone, selectionKey]);
 
   if (!record || !store) return null;
-  // After the early-return above, `state` is guaranteed to be the store
-  // snapshot (not the null sentinel). Cast it locally to make the contract
-  // explicit at the call sites below.
-  const currentState = state as unknown;
 
-  // Run the selector. Catch throws so a bad selector aborts the zone, not
-  // the whole composition.
-  let selection: ZoneResolution<any> = { kind: "empty" };
-  try {
-    selection = descriptor.select({ state: currentState, deps: internals.__deps });
-  } catch (err) {
-    internals.__fireOnError(instanceId, err, { zone, phase: "select" });
-    return renderError(zone, err, errorComponent);
+  if (selectorError) {
+    internals.__fireOnError(instanceId, selectorError, { zone, phase: "select" });
+    return renderError(zone, selectorError, errorComponent);
   }
 
-  // Captured by reference inside the boundary's componentDidCatch.
-  // Re-built every render so it always sees the freshest selectionKey
-  // (computed lower in the render) and currentState.
-  const selectionKeyForErrorRef = useRef<string>("empty");
+  // Mutate the ref synchronously just before render so the boundary's
+  // `componentDidCatch` (which fires during the commit phase, before
+  // any post-commit effect) sees the current selectionKey. Ref writes
+  // in render are a documented escape hatch; the only effect of a
+  // discarded concurrent render is that the next render overwrites
+  // the value before `handleError` ever runs.
+  selectionKeyForErrorRef.current = selectionKey;
+  const currentState = state as unknown;
 
   const handleError = (err: unknown): void => {
     internals.__fireOnError(instanceId, err, { zone, phase: "render" });
@@ -413,7 +438,6 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
 
   // Build the renderable content for this resolution.
   let content: ReactNode = null;
-  let selectionKey = "empty";
 
   if (selection.kind === "empty") {
     const Fallback = descriptor.fallback;
@@ -426,11 +450,9 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
       content = (
         <NotFound zone={zone} moduleId={selection.module} entry={selection.entry} />
       );
-      selectionKey = `notfound:${selection.module}:${selection.entry}`;
     } else {
       const { Component: PanelComponent } = resolveEntryComponent(entry);
       const suspenseFallback = entry.fallback ?? loadingFallback ?? null;
-      selectionKey = `entry:${selection.module}:${selection.entry}`;
       content = (
         <Suspense fallback={suspenseFallback}>
           <PanelComponent
@@ -459,7 +481,6 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
         ),
         errorComponent,
       );
-      selectionKey = `journey-err:${selection.handle.id}`;
     } else {
       let journeyInstanceId = selection.instanceId;
       if (!journeyInstanceId) {
@@ -475,7 +496,6 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
           journeyInstanceCache.current.set(cacheKey, journeyInstanceId);
         }
       }
-      selectionKey = `journey:${selection.handle.id}:${journeyInstanceId}`;
       content = (
         <JourneyOutlet
           instanceId={journeyInstanceId}
@@ -484,17 +504,6 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
       );
     }
   }
-
-  // Reset the per-zone retry counter when the resolution successfully
-  // changes to a different selectionKey (the next render commits with
-  // new content). This is purely behavioral — the counter cap continues
-  // to protect against infinite retry loops within a single resolution.
-  const previousSelectionKey = previousSelectionKeyRef.current;
-  if (previousSelectionKey !== null && previousSelectionKey !== selectionKey) {
-    internals.__resetRetry(instanceId, zone);
-  }
-  previousSelectionKeyRef.current = selectionKey;
-  selectionKeyForErrorRef.current = selectionKey;
 
   // Per-zone error boundary. Keyed by selectionKey + retryKey so a
   // selector change cleanly remounts a fresh boundary.
@@ -513,6 +522,36 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
       </ZoneErrorBoundary>
     </CompositionInstanceContext.Provider>
   );
+}
+
+/**
+ * Pure derivation of a stable per-resolution key. Lives outside the
+ * component body so the dependency lists of `useEffect` callers stay
+ * obvious — the key only depends on what the function reads.
+ *
+ * For `journey` resolutions without an explicit `instanceId` we hash
+ * the input rather than the runtime-minted id, so the key is stable
+ * across the discarded/committed render boundary (the cached id may
+ * not exist yet on the first attempted render).
+ */
+function computeSelectionKey(
+  selection: ZoneResolution<any>,
+  selectorError: unknown,
+  modules: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>,
+): string {
+  if (selectorError) return "select-error";
+  if (selection.kind === "empty") return "empty";
+  if (selection.kind === "module-entry") {
+    const mod = modules[selection.module];
+    const entry = mod?.entryPoints?.[selection.entry];
+    if (!mod || !entry) return `notfound:${selection.module}:${selection.entry}`;
+    return `entry:${selection.module}:${selection.entry}`;
+  }
+  if (selection.kind === "journey") {
+    const idSuffix = selection.instanceId ?? hashInput(selection.input);
+    return `journey:${selection.handle.id}:${idSuffix}`;
+  }
+  return "unknown";
 }
 
 // Panels rendered inside compositions don't have a direct exit channel —

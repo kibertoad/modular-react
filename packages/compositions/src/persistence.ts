@@ -50,6 +50,13 @@ export interface WebStorageCompositionPersistenceOptions<TInput> {
  *
  * Corrupt entries (invalid JSON) are removed lazily on `load` so a
  * single bad write doesn't block future loads.
+ *
+ * `keyFor` must be **deterministic** over `{ compositionId, input }` and
+ * must not close over ambient state (current user, session id) that can
+ * change between calls — the runtime uses the same key both to dedupe
+ * live instances (via `keyIndex`) and to address the storage backend,
+ * so a non-stable key produces two records under the same logical
+ * identity and silently drops persisted state on reload.
  */
 export function createWebStorageCompositionPersistence<TInput, TState>(
   options: WebStorageCompositionPersistenceOptions<TInput>,
@@ -128,13 +135,24 @@ export interface MemoryCompositionPersistence<TInput, TState>
  * Map-backed `CompositionPersistence` for tests and SSR. Gives tests a
  * canonical isolated store (no bleed between cases) and keeps the
  * runtime's persistence code paths exercised.
+ *
+ * Cloning prefers `structuredClone` (which preserves `Date`, `Map`,
+ * `Set`, `undefined`, typed arrays, etc.) and falls back to JSON
+ * round-tripping where unavailable. The JSON path is lossy — composition
+ * authors persisting any of the above through the memory adapter in tests
+ * should run on a modern Node where `structuredClone` exists.
  */
+const cloneBlob: <T>(value: T) => T =
+  typeof structuredClone === "function"
+    ? <T,>(value: T): T => structuredClone(value)
+    : <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
 export function createMemoryCompositionPersistence<TInput, TState>(
   options: MemoryCompositionPersistenceOptions<TInput, TState>,
 ): MemoryCompositionPersistence<TInput, TState> {
   const shouldClone = options.clone !== false;
   const copy = (blob: SerializedComposition<TState>): SerializedComposition<TState> =>
-    shouldClone ? (JSON.parse(JSON.stringify(blob)) as SerializedComposition<TState>) : blob;
+    shouldClone ? cloneBlob(blob) : blob;
 
   const store = new Map<string, SerializedComposition<TState>>(
     options.initial ? Array.from(options.initial, ([k, v]) => [k, copy(v)] as const) : undefined,
