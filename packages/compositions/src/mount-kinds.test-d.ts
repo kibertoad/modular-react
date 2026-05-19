@@ -15,14 +15,14 @@
  *   ─────────────────────────────────────  | ────────── | ──────────────
  *   (omitted — default)                    |   yes      |   yes
  *   ["journey"]                            |   yes      |   NO
- *   ["composition"]                        |   yes**    |   yes
+ *   ["composition"]                        |   NO       |   yes
  *   ["journey", "composition"]             |   yes      |   yes
  *
- *   ** "yes" because journeys haven't switched their `StepSpec` over
- *      to the mount-kind filter yet. Compositions are the only host
- *      that filters today; journeys still accept any entry. This
- *      asymmetry is intentional for v1 (compositions is the new
- *      surface introducing the concept).
+ *   The journey-side symmetric matrix lives in
+ *   `packages/journeys/src/mount-kinds.test-d.ts` — `StepSpec`,
+ *   `TransitionMap`, and the wildcard helpers all filter to
+ *   `"journey"`-mountable entries the same way `CompositionZoneSpec`
+ *   filters to `"composition"`.
  *
  * Each negative assertion below was verified by temporarily flipping
  * it to a positive (`// @ts-expect-error` → no directive) and

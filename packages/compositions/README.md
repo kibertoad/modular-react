@@ -227,7 +227,7 @@ export function EditorRoute({ documentId }: { documentId: string }) {
 
 The render-prop receives one `ReactNode` per zone, fully wrapped (`Suspense` + per-zone error boundary already applied). The host owns layout; the framework owns content.
 
-> `useComposition` reads its runtime from the surrounding `<CompositionsProvider>` — wired automatically when you use `compositionsPlugin()`. If you're mounting the outlet without the plugin, pass `useComposition(handle, input, { runtime })` to bypass the context lookup.
+> `useComposition` reads its runtime from the surrounding `<CompositionsProvider>` — wired automatically when you use `compositionsPlugin()`. If you're mounting the outlet without the plugin, pass `useComposition(handle, input, useCompositionOptions({ runtime }))` to bypass the context lookup.
 
 ### 5. Drive the composition from inside a panel
 
