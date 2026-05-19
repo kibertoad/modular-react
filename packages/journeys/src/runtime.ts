@@ -406,6 +406,23 @@ export function createJourneyRuntime(
     return perEntry?.allowBack === true;
   }
 
+  // "Can we pop `step` off the top of the stack?" — per-frame opt-in
+  // check shared by `canGoBackFor` (current step only) and
+  // `canRewindToFor` (walks the frames a multi-step rewind would
+  // leave). When the runtime has a module descriptor for this step
+  // and the descriptor's entry explicitly opts out, the opt-out wins.
+  // When no descriptor is registered (headless simulator, tests that
+  // don't pass `modules`) we trust the journey's transition opt-in
+  // and treat the missing descriptor as 'preserve-state' — matches
+  // the documented fallback in `JourneyRuntimeOptions.modules`.
+  function canLeaveStep(step: JourneyStep | null, reg: RegisteredJourney): boolean {
+    if (!step) return false;
+    if (!journeyAllowsBack(reg.definition, step)) return false;
+    const mode = entryAllowBackMode(step);
+    if (mode === false && moduleMap[step.moduleId]) return false;
+    return true;
+  }
+
   // Single source of truth for "would goBack(id) actually rewind?". Used
   // by `bindStepCallbacks` (gates the step-prop closure), `dispatchGoBack`
   // (rejects calls that should be no-ops), and the `runtime.canGoBack`
@@ -417,17 +434,36 @@ export function createJourneyRuntime(
     if (record.status !== "active") return false;
     if (record.activeChildId) return false;
     if (record.history.length === 0) return false;
-    const step = record.step;
-    if (!step) return false;
-    if (!journeyAllowsBack(reg.definition, step)) return false;
-    // When the runtime has a module descriptor for this step and the
-    // descriptor's entry explicitly opts out, the opt-out wins. When no
-    // descriptor is registered (headless simulator, tests that don't
-    // pass `modules`) we trust the journey's transition opt-in and
-    // treat the missing descriptor as 'preserve-state' — matches the
-    // documented fallback in `JourneyRuntimeOptions.modules`.
-    const mode = entryAllowBackMode(step);
-    if (mode === false && moduleMap[step.moduleId]) return false;
+    return canLeaveStep(record.step, reg);
+  }
+
+  // Single source of truth for "would rewindTo(id, historyIndex)
+  // actually rewind?". A multi-step rewind is atomic: every frame the
+  // call would leave (the current step plus every history entry above
+  // the target) must pass the same opt-in `canGoBackFor` enforces for
+  // a single goBack. If any one fails, the whole rewind is a no-op so
+  // we never strand the user on an intermediate frame they didn't
+  // ask for.
+  //
+  // O(history.length) per call by design. A breadcrumb render that
+  // calls `canRewindTo` once per chip pays O(N²) per render, which is
+  // negligible for the depths real wizards reach (<20). Not worth
+  // memoizing on `stepToken` until profiling says otherwise.
+  function canRewindToFor(
+    record: InstanceRecord,
+    reg: RegisteredJourney,
+    historyIndex: number,
+  ): boolean {
+    if (record.status !== "active") return false;
+    if (record.activeChildId) return false;
+    if (!Number.isInteger(historyIndex)) return false;
+    if (historyIndex < 0 || historyIndex >= record.history.length) return false;
+    if (!canLeaveStep(record.step, reg)) return false;
+    // Loop bounds keep `i` in `[historyIndex + 1, history.length - 1]`,
+    // so the lookup is always defined — no defensive `?? null` needed.
+    for (let i = record.history.length - 1; i > historyIndex; i--) {
+      if (!canLeaveStep(record.history[i]!, reg)) return false;
+    }
     return true;
   }
 
@@ -1896,6 +1932,61 @@ export function createJourneyRuntime(
     notify(record);
   }
 
+  // Multi-step rewind. Mutates record state to look exactly like N
+  // successive `dispatchGoBack` calls would have left it (same future
+  // stack contents, same per-frame snapshot-pairing, same rollback
+  // restoration rules), but bumps stepToken once, fires one
+  // `onTransition` event, and re-runs `buildInput` only on the
+  // destination — intermediate frames never render, so per-pop
+  // re-derivation would be wasted work.
+  function dispatchRewindTo(record: InstanceRecord, reg: RegisteredJourney, historyIndex: number) {
+    if (!canRewindToFor(record, reg, historyIndex)) return;
+
+    const fromStep = record.step;
+    const popCount = record.history.length - historyIndex;
+    for (let i = 0; i < popCount; i++) {
+      const leavingStep = record.step!;
+      const previousStep = record.history.pop()!;
+      const snapshot = record.rollbackSnapshots.pop();
+      // Capture the redo target before mutating state — same shape as
+      // `dispatchGoBack` so a subsequent `goForward` sees an identical
+      // future stack.
+      record.future.push({ step: leavingStep, state: record.state, snapshot });
+      const mode = entryAllowBackMode(leavingStep);
+      if (mode === "rollback" && snapshot !== undefined) {
+        record.state = snapshot;
+      }
+      record.step = previousStep;
+    }
+    record.hasRollbackSnapshot = record.rollbackSnapshots.some((s) => s !== undefined);
+
+    // Re-run `buildInput` against the final (possibly rolled-back) state
+    // so the destination form renders against accumulated journey
+    // state instead of the snapshot frozen at first push.
+    const builtDest = withBuiltInput(record.step!, record.state);
+    if (isBuildInputThrow(builtDest)) {
+      abortFromBuildInputThrow(
+        record,
+        reg,
+        record.step!,
+        builtDest.buildInputThrew,
+        "rewindTo destination",
+        null,
+      );
+      return;
+    }
+    record.step = builtDest;
+
+    record.resumeBouncesAtStep = null;
+    record.stepToken += 1;
+    record.updatedAt = nowIso();
+    record.cachedCallbacks = null;
+    fireOnTransition(reg, record, fromStep, record.step, null);
+    const persistence = reg.options?.persistence;
+    if (persistence) schedulePersist(record, persistence);
+    notify(record);
+  }
+
   function bindStepCallbacks(record: InstanceRecord, reg: RegisteredJourney) {
     if (record.cachedCallbacks && record.cachedCallbacks.stepToken === record.stepToken) {
       return record.cachedCallbacks;
@@ -2569,6 +2660,26 @@ export function createJourneyRuntime(
       const record = instances.get(id);
       if (!record) return false;
       return canGoForwardFor(record);
+    },
+
+    rewindTo(id, historyIndex) {
+      const record = instances.get(id);
+      if (!record) return;
+      const reg = definitions.get(record.journeyId);
+      if (!reg) return;
+      // Id-based path has no captured stepToken to go stale against —
+      // `dispatchRewindTo`'s own guards (via `canRewindToFor`) cover
+      // terminal / loading / active-child / out-of-range / opt-out
+      // cases. Same pattern as `goBack` / `goForward` above.
+      dispatchRewindTo(record, reg, historyIndex);
+    },
+
+    canRewindTo(id, historyIndex) {
+      const record = instances.get(id);
+      if (!record) return false;
+      const reg = definitions.get(record.journeyId);
+      if (!reg) return false;
+      return canRewindToFor(record, reg, historyIndex);
     },
 
     end(id, reason) {
