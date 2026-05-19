@@ -1,6 +1,6 @@
 {
   "name": "@modular-react/testing",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Testing utilities for @modular-react modules: mock stores, module resolution, and slot evaluation.",
   "repository": {
     "type": "git",
