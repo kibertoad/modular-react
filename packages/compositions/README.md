@@ -884,22 +884,29 @@ The runtime defers disposal one microtask so React 18/19 StrictMode's mount/unmo
 - **No outlet-level error boundary.** The framework wraps each zone in its own boundary, not the entire outlet. A throw outside the zone-render path (e.g. from the host's render-prop body) is the host's responsibility.
 - **No built-in persistence.** Coordination state lives in memory; durable storage belongs in the application (URL params, app-level store). See the [persistence note](#a-note-on-persistence--there-is-none).
 - **Composition panels' `exit` prop is a no-op stub.** Foreign panels rendered inside a composition zone cannot deliver exits to the host's exit dispatcher. Use `dispatch` for state changes and `emit` for cross-zone events instead. (Journeys hosted inside a zone deliver exits through the journey runtime normally.)
-- **`React.memo` and `forwardRef`'d entry components are not supported.** `resolveEntryComponent` in `@modular-react/react` requires `typeof entry.component === "function"`. Panels can still memoize internally via `useMemo` / `useCallback`.
 - **Cycle detection is partial across the journey ↔ composition boundary.** Same-instance recursion is caught; recursion through two different instances of the same definition is not. See [Cycle safety](#cycle-safety).
 
-## Comparison with journeys
+## Comparison with sibling primitives
 
-|                                | `@modular-react/compositions`                                   | `@modular-react/journeys`                                                |
-| ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| **Primary use**                | Multi-module screen layout with shared state                    | Multi-module stepped workflow with typed transitions                     |
-| **State model**                | Scoped store; selectors project state into zones                | Step + accumulated state; transitions advance step                       |
-| **Flow**                       | No graph — any state can produce any resolution                 | Directed graph of `(step, exit) → next step`                             |
-| **Authoring shape**            | `defineComposition({ zones, initialState })`                    | `defineJourney({ start, transitions })`                                  |
-| **Instance id prefix**         | `ci_*`                                                          | `ji_*`                                                                   |
-| **Persistence**                | None — keep durable coordination state in the application layer | First-class adapter (`JourneyPersistence`) with versioned blobs          |
-| **Hooks inside panels**        | `useCompositionState/Dispatch/Emit/Zone`                        | `useJourneyState`, `useJourneyInstance`, `useJourneyCallStack`           |
-| **Outlet**                     | `CompositionOutlet` (render-prop, multi-zone)                   | `JourneyOutlet` (single step, leaf-walk)                                 |
-| **Validation**                 | Zone contracts (spot-check) + `moduleCompat`                    | Reachability + transition exhaustiveness + contracts                     |
-| **Composition with the other** | A zone can mount `<JourneyOutlet>` via `kind: "journey"`        | A journey step can render `<CompositionOutlet>` like any other component |
+Three primitives in the framework arrange modules on a screen. Pick by problem shape: extending one screen vs. coordinating several modules in parallel vs. driving a stepped flow.
 
-Choose **compositions** when the screen is a layout problem (which modules go where, sharing state). Choose **journeys** when the screen is a flow problem (do A, then B, then maybe C). They're complementary, not competing.
+|                                | `module.zones` (route-level)                                                      | `@modular-react/compositions` (this package)                    | `@modular-react/journeys`                                                |
+| ------------------------------ | --------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **Primary use**                | A foreign module contributes a single component to a named slot on the active route | Multi-module screen layout with shared state, rendered in parallel | Multi-module stepped workflow with typed transitions                     |
+| **Cardinality**                | One contribution per zone (most-recent active wins)                               | N panels mounted simultaneously, one per declared zone          | One step rendered at a time                                              |
+| **Declared by**                | `defineModule({ zones })` + route `staticData`                                     | `defineComposition({ zones })`                                  | `defineJourney({ start, transitions })`                                  |
+| **State model**                | None — slots map id → component                                                   | Scoped store; selectors project state into zones                | Step + accumulated state; transitions advance step                       |
+| **Flow**                       | Static contribution                                                               | No graph — any state can produce any resolution                 | Directed graph of `(step, exit) → next step`                             |
+| **Read in shell**              | `useZones` / `useActiveZones`                                                     | `<CompositionOutlet>` render-prop with zone names               | `<JourneyOutlet>` (leaf-walk through current step)                       |
+| **Instance id prefix**         | n/a                                                                               | `ci_*`                                                          | `ji_*`                                                                   |
+| **Persistence**                | n/a                                                                               | None — keep durable coordination state in the application layer | First-class adapter (`JourneyPersistence`) with versioned blobs          |
+| **Hooks inside panels**        | n/a                                                                               | `useCompositionState/Dispatch/Emit/Zone`                        | `useJourneyState`, `useJourneyInstance`, `useJourneyCallStack`           |
+| **Validation**                 | Slot-name + route lookup                                                          | Zone contracts (spot-check) + `moduleCompat`                    | Reachability + transition exhaustiveness + contracts                     |
+| **Composition with the other** | n/a                                                                               | A zone can mount `<JourneyOutlet>` via `kind: "journey"`        | A journey step can render `<CompositionOutlet>` like any other component |
+
+Choose by problem shape:
+- **`module.zones`** when a route already exists and another module needs to contribute one widget (a header chip, a command, a sidebar entry) — the contribution is static and tied to the active route.
+- **Compositions** when one screen layout coordinates several modules with **shared state** — multiple panels mounted in parallel, each reactive to a per-instance scoped store.
+- **Journeys** when the screen is a **flow problem** — do A, then B, then maybe C, with typed handoffs between steps.
+
+The three are complementary, not competing. A screen can use all of them: a route hosting a `<CompositionOutlet>` whose `inspector` zone hosts a `<JourneyOutlet>`, while the route itself contributes a `module.zones` chip to the shell header.

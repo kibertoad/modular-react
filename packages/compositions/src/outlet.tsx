@@ -135,6 +135,15 @@ function useInstanceSnapshot(
  *   - Unhashable input (final catch-all) falls back to a typeof tag —
  *     duplicates land in the same bucket, the conservative choice.
  */
+/**
+ * Dispatch placeholder for selector invocations on the preload path.
+ * Preload only reads `module`/`entry` off the resulting resolution; any
+ * `dispatch`-driven callbacks the selector bakes into `input` are never
+ * invoked from preload, so a stable no-op is correct here. Shared (not
+ * inlined) so identity-equality across preload runs doesn't fluctuate.
+ */
+const noopDispatch: (updater: unknown) => void = () => {};
+
 function hashInput(input: unknown): string {
   if (input === undefined) return "u";
   try {
@@ -270,7 +279,15 @@ export function CompositionOutlet<TZones extends string = string>(
       if (!descriptor) continue;
       let selection: ZoneResolution<any>;
       try {
-        selection = descriptor.select({ state: instance.state, deps: internals.__deps });
+        selection = descriptor.select({
+          state: instance.state,
+          deps: internals.__deps,
+          // Preload paths only inspect `module`/`entry` on the
+          // resolution — they never invoke any callback the selector
+          // may have baked into `input`. A no-op dispatch is correct
+          // here.
+          dispatch: noopDispatch,
+        });
       } catch {
         parts.push(`${zoneName}:err`);
         continue;
@@ -297,7 +314,11 @@ export function CompositionOutlet<TZones extends string = string>(
       for (const { zoneName, descriptor } of eagerZones) {
         let selection: ZoneResolution<any>;
         try {
-          selection = descriptor.select({ state: instance.state, deps: internals.__deps });
+          selection = descriptor.select({
+            state: instance.state,
+            deps: internals.__deps,
+            dispatch: noopDispatch,
+          });
         } catch {
           // Selector errors are surfaced at render time; preload is
           // best-effort, so we swallow here.
@@ -522,7 +543,16 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
   let selectorError: unknown = null;
   if (record && store && state !== null) {
     try {
-      selection = descriptor.select({ state: state as unknown, deps: internals.__deps });
+      selection = descriptor.select({
+        state: state as unknown,
+        deps: internals.__deps,
+        // Stable dispatch reference (memoized at line 479 keyed on
+        // `[runtime, instanceId]`). Callbacks the selector closes over
+        // this with stay referentially stable across re-renders, so
+        // `React.memo`'d panels can compare `input` deeply via a custom
+        // comparator without thrashing on identity churn.
+        dispatch,
+      });
     } catch (err) {
       selectorError = err;
     }

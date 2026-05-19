@@ -122,16 +122,29 @@ export type ZoneSpec<TModules extends ModuleTypeMap> =
   | { readonly kind: "empty" };
 
 /**
- * Snapshot of the runtime context passed to every zone selector. `state`
- * is the composition's current state; `deps` is the shared-dependency
- * snapshot captured from the registry at resolve time.
+ * Snapshot of the runtime context passed to every zone selector.
+ *
+ *   - `state` — the composition's current state.
+ *   - `deps`  — the shared-dependency snapshot captured from the registry
+ *     at resolve time.
+ *   - `dispatch` — bound to the active instance, stable across renders.
+ *     Selectors that build *prop-driven panel inputs* use this to wire
+ *     callbacks into the panel's `input` (e.g.
+ *     `onSelect: (id) => dispatch({ selectedItem: id })`) so the panel
+ *     module stays composition-unaware. See the package README's
+ *     "Authoring patterns — Prop-driven panels vs panel hooks" section.
  *
  * Selectors are pure functions — they MUST NOT mutate `state` or fire
- * side effects. The runtime re-runs them on every state change.
+ * side effects. Calling `dispatch` *synchronously* from the selector
+ * body is a side effect and unsupported; only place callbacks that the
+ * panel may later invoke into the returned resolution's `input`.
  */
 export interface ZoneSelectorCtx<TState> {
   readonly state: TState;
   readonly deps: Readonly<Record<string, unknown>>;
+  readonly dispatch: (
+    updater: Partial<TState> | ((prev: TState) => Partial<TState> | TState),
+  ) => void;
 }
 
 /**
