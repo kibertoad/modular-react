@@ -542,28 +542,29 @@ Rules:
 
 ### Pattern - a loading entry point for async work
 
-Transitions are pure and synchronous. When a step needs to fetch data between user actions, put the fetch inside a **loading entry** on the next module; that module fires an exit with the loaded data, and the journey transitions from that exit as usual.
+Transitions are pure and synchronous. When a step needs to fetch data between user actions, put the fetch inside a **loading entry** on the next module; that module fires an exit with the loaded data, and the journey transitions from that exit as usual. Use `useWaitForExit` to dispatch the exit when the fetch resolves — it owns the first-wins latch, unmount cleanup, and the step-token guard so the component stays declarative.
 
 ```tsx
 // modules/risk/src/LoadRiskReport.tsx
+import { useWaitForExit } from "@modular-react/journeys";
+
 export function LoadRiskReport({
   input,
   exit,
 }: ModuleEntryProps<{ customerId: string }, RiskExits>) {
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const report = await api.fetchRiskReport(input.customerId);
-        if (!cancelled) exit("reportReady", { report });
-      } catch (err) {
-        if (!cancelled) exit("failed", { reason: String(err) });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [input.customerId]);
+  useWaitForExit(exit, {
+    subscribe: (resolve) => {
+      const controller = new AbortController();
+      api
+        .fetchRiskReport(input.customerId, { signal: controller.signal })
+        .then((report) => resolve("reportReady", { report }))
+        .catch((err) => {
+          if (controller.signal.aborted) return;
+          resolve("failed", { reason: String(err) });
+        });
+      return () => controller.abort();
+    },
+  });
 
   return <LoadingSpinner label="Computing risk…" />;
 }
@@ -591,53 +592,56 @@ transitions: {
 }
 ```
 
-The cancellation flag matters: if the user clicks `goBack` before the fetch resolves, the component unmounts and the step token advances. A stale `exit('reportReady', …)` would be dropped by the runtime anyway (see [step tokens](#errors-races-and-edge-cases)), but explicit cancellation avoids the race and spurious network work.
+Returning `() => controller.abort()` from `subscribe` tears down the in-flight request if the user clicks `goBack` before the fetch resolves. The runtime would drop a stale `exit('reportReady', …)` via step tokens anyway (see [step tokens](#errors-races-and-edge-cases)), and `useWaitForExit`'s latch would drop a late `resolve(...)`, but cancelling the network work avoids the spurious request. `useWaitForExit` is the helper the next pattern leans on more heavily; for a single in-flight fetch, the manual form below is equivalent and equally valid:
+
+```tsx
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    try {
+      const report = await api.fetchRiskReport(input.customerId);
+      if (!cancelled) exit("reportReady", { report });
+    } catch (err) {
+      if (!cancelled) exit("failed", { reason: String(err) });
+    }
+  })();
+  return () => {
+    cancelled = true;
+  };
+}, [input.customerId]);
+```
 
 ### Pattern - event-driven wait with timeout
 
-When the next step depends on an event the backend pushes — a websocket message, an SSE frame, a long-poll resolution, anything outside the plain request/response cycle — the shape is the loading-entry pattern above with two additions: a polling fallback in case the push channel drops a message, and a timeout that decides what happens when nothing arrives. The wait still lives inside a step component that fires an exit; the journey owns what each exit means.
+When the next step depends on an event the backend pushes — a websocket message, an SSE frame, a long-poll resolution, anything outside the plain request/response cycle — the shape is the loading-entry pattern above with two additions: a polling fallback in case the push channel drops a message, and a deadline that decides what happens when nothing arrives. The wait still lives inside a step component that fires an exit; the journey owns what each exit means. `useWaitForExit` composes the three channels so the call site stays declarative.
 
 ```tsx
 // modules/projects/src/WaitForTranslationProcess.tsx
+import { useWaitForExit } from "@modular-react/journeys";
+
 export function WaitForTranslationProcess({
   input,
   exit,
 }: ModuleEntryProps<{ projectId: string }, WaitExits>) {
-  useEffect(() => {
-    let settled = false;
-    const settle = (fire: () => void) => {
-      if (settled) return;
-      settled = true;
-      fire();
-    };
-
+  useWaitForExit(exit, {
     // Push channel — websocket, SSE, push notification: whichever transport
-    // the app uses. The journey doesn't care.
-    const unsubscribe = events.on(
-      `translation-process:${input.projectId}`,
-      (process) => settle(() => exit("ready", { process })),
-    );
-
+    // the app uses. The hook doesn't care.
+    subscribe: (resolve) =>
+      events.on(`translation-process:${input.projectId}`, (process) =>
+        resolve("ready", { process }),
+      ),
     // Polling fallback for missed push frames.
-    const poll = setInterval(async () => {
-      const process = await api.getTranslationProcess(input.projectId);
-      if (process) settle(() => exit("ready", { process }));
-    }, 3000);
-
-    // Timeout fallback — the journey decides whether that's a recoverable
-    // exit ("editor opens with no preloaded process") or an abort arm.
-    const timeout = setTimeout(
-      () => settle(() => exit("timedOut")),
-      60_000,
-    );
-
-    return () => {
-      settled = true;
-      unsubscribe();
-      clearInterval(poll);
-      clearTimeout(timeout);
-    };
-  }, [input.projectId]);
+    poll: {
+      intervalMs: 3000,
+      check: async (resolve) => {
+        const process = await api.getTranslationProcess(input.projectId);
+        if (process) resolve("ready", { process });
+      },
+    },
+    // Deadline arm — the journey decides whether that's a recoverable exit
+    // ("editor opens with no preloaded process") or an abort.
+    timeout: { ms: 60_000, fire: "timedOut" },
+  });
 
   return <Spinner label="Preparing translation…" />;
 }
@@ -660,14 +664,16 @@ transitions: {
 }
 ```
 
-What the journey shape gives you that a "submit, then `useEffect(() => navigate(...), [...])` in shell code" hand-roll does not:
+What this shape gives you that a "submit, then `useEffect(() => navigate(...), [...])` in shell code" hand-roll does not:
 
-- **Single owner of the transition.** Step tokens (see [Errors, races, and edge cases](#errors-races-and-edge-cases)) guarantee the first exit wins; later dispatches from any channel are dropped by the runtime. A push frame that arrives after the timeout, a poll tick that races the push, a stale callback from a previous instance — all dropped. The hand-rolled equivalent has to maintain its own `settled` flag _and_ make sure no effect re-fires after navigation: easy to get wrong when a router commit churns the `navigate` reference back through the effect's dep array, or when a stale "timed out" flag survives from a previous submission.
-- **No side effects in query callbacks.** The push subscription and the polling fallback live inside a `useEffect`, not inside a react-query `refetchInterval` callback. RQ invokes that callback during render-phase scheduling and requires it to be pure; calling `navigate` (or any side effect) from there is the contract violation that turns "advance once" into "re-fire on every commit."
-- **Fresh latches per attempt.** Each push of `waitForTranslationProcess` mounts a fresh component with fresh latches. There is no journey-scoped equivalent of "the previous submission's `timedOut` flag is still set, so the next submission navigates instantly."
+- **Single owner of the transition.** `useWaitForExit` latches on the first dispatched exit; later resolutions from any channel are dropped. Step tokens (see [Errors, races, and edge cases](#errors-races-and-edge-cases)) are the runtime-level backstop: an exit fired after the step has advanced is dropped even if the local latch were missing. The hand-rolled equivalent has to maintain its own `settled` flag _and_ make sure no effect re-fires after navigation — easy to get wrong when a router commit churns the `navigate` reference back through the effect's dep array, or when a stale "timed out" flag survives from a previous submission.
+- **No side effects in query callbacks.** The push subscription and the polling fallback live inside `useWaitForExit`'s effect, not inside a react-query `refetchInterval` callback. RQ invokes that callback during render-phase scheduling and requires it to be pure; calling `navigate` (or any side effect) from there is the contract violation that turns "advance once" into "re-fire on every commit."
+- **Fresh latches per attempt.** Each push of `waitForTranslationProcess` mounts a fresh component with a fresh latch. There is no journey-scoped equivalent of "the previous submission's `timedOut` flag is still set, so the next submission navigates instantly."
 - **Cycle / bounce guards.** Even if a transition handler is buggy and re-enters the same step, `maxResumeBouncesPerStep` (default 8) aborts the parent with `resume-bounce-limit` instead of leaving React to detect a #185 update-depth crash.
 
-If the journey would treat `ready` and `timedOut` identically (no branching, same next module + input shape), collapse them into one exit. Two exits are only worth it when the journey's downstream — state writes, next module, telemetry — diverges between the success and timeout paths.
+`useWaitForExit`'s timeout has two forms: pass `fire: "exitName"` when the deadline dispatches a no-payload exit (the common case), or `fire: (resolve) => resolve("fallback", payload)` when the deadline needs to compute its output. The named form is constrained at the type level to exits whose schema declares a `void` output, so an exit that needs a payload won't compile in the named form.
+
+If the journey would treat `ready` and `timedOut` identically (same next module + input shape, no state divergence), collapse them into one exit on the module's side. Two exits are only worth it when the journey's downstream — state writes, next module, telemetry — diverges between the success and timeout paths.
 
 ### Pattern - optional exits (entries that don't emit every exit)
 
@@ -2516,17 +2522,18 @@ Every export you're likely to call, grouped by role.
 
 ### Rendering + context (`@modular-react/journeys`)
 
-| Export                         | Purpose                                                                                                                                                                                                                                                                                                                                                                                              |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `JourneyProvider`              | Context provider for the runtime and optional `onModuleExit`. Mount once at the shell root.                                                                                                                                                                                                                                                                                                          |
-| `useJourneyContext`            | Reads the current provider value, or `null`.                                                                                                                                                                                                                                                                                                                                                         |
-| `JourneyOutlet`                | Renders the current step of a journey instance. Handles loading, error boundary, terminal, and abandon-on-unmount. By default walks the active call chain and renders the leaf — pass `leafOnly={false}` for layered presentations.                                                                                                                                                                  |
-| `useJourneyCallStack`          | `(runtime, rootId) => readonly InstanceId[]` — returns the live root → … → leaf chain. Subscribes to every link so the array re-resolves when the chain shifts.                                                                                                                                                                                                                                      |
-| `useJourneyInstance`           | `(id: InstanceId \| null) => JourneyInstance \| null` — subscribes to a single instance via `useSyncExternalStore` and returns its full snapshot (`status`, `step`, `state`, `terminalPayload`, …). Reads the runtime from `<JourneyProvider>`; returns `null` for unknown ids or no provider. Tearing-free under concurrent React. Prefer this when a host needs more than `state`.                 |
-| `useJourneyState`              | `<TState>(id: InstanceId \| null) => TState \| null` — sugar over `useJourneyInstance(id)?.state`. Use when the caller only needs `state` and the journey's `TState` is known at the call site.                                                                                                                                                                                                      |
-| `useActiveLeafJourneyInstance` | `(rootId: InstanceId \| null) => JourneyInstance \| null` — **the recommended primitive when the host doesn't know the leaf's depth.** Walks `activeChildId` from the root to the active leaf and returns the leaf's full `JourneyInstance`. `inst.journeyId` is a natural discriminator when the leaf may be the root parent OR any invoked descendant. Re-subscribes as the chain grows / shrinks. |
-| `useActiveLeafJourneyState`    | `<TState>(rootId: InstanceId \| null) => TState \| null` — sugar over `useActiveLeafJourneyInstance(rootId)?.state`. Returns a single `T`, so callers whose leaf can be any of several journeys must type it as `<ParentState \| ChildState>` and discriminate manually — usually that's a sign the caller actually wants `useActiveLeafJourneyInstance` and `inst.journeyId` to switch on.          |
-| `ModuleTab`                    | Renders a single module entry outside a route. Non-journey counterpart to `JourneyOutlet`.                                                                                                                                                                                                                                                                                                           |
+| Export                         | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JourneyProvider`              | Context provider for the runtime and optional `onModuleExit`. Mount once at the shell root.                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `useJourneyContext`            | Reads the current provider value, or `null`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `JourneyOutlet`                | Renders the current step of a journey instance. Handles loading, error boundary, terminal, and abandon-on-unmount. By default walks the active call chain and renders the leaf — pass `leafOnly={false}` for layered presentations.                                                                                                                                                                                                                                                                                    |
+| `useJourneyCallStack`          | `(runtime, rootId) => readonly InstanceId[]` — returns the live root → … → leaf chain. Subscribes to every link so the array re-resolves when the chain shifts.                                                                                                                                                                                                                                                                                                                                                        |
+| `useJourneyInstance`           | `(id: InstanceId \| null) => JourneyInstance \| null` — subscribes to a single instance via `useSyncExternalStore` and returns its full snapshot (`status`, `step`, `state`, `terminalPayload`, …). Reads the runtime from `<JourneyProvider>`; returns `null` for unknown ids or no provider. Tearing-free under concurrent React. Prefer this when a host needs more than `state`.                                                                                                                                   |
+| `useJourneyState`              | `<TState>(id: InstanceId \| null) => TState \| null` — sugar over `useJourneyInstance(id)?.state`. Use when the caller only needs `state` and the journey's `TState` is known at the call site.                                                                                                                                                                                                                                                                                                                        |
+| `useActiveLeafJourneyInstance` | `(rootId: InstanceId \| null) => JourneyInstance \| null` — **the recommended primitive when the host doesn't know the leaf's depth.** Walks `activeChildId` from the root to the active leaf and returns the leaf's full `JourneyInstance`. `inst.journeyId` is a natural discriminator when the leaf may be the root parent OR any invoked descendant. Re-subscribes as the chain grows / shrinks.                                                                                                                   |
+| `useActiveLeafJourneyState`    | `<TState>(rootId: InstanceId \| null) => TState \| null` — sugar over `useActiveLeafJourneyInstance(rootId)?.state`. Returns a single `T`, so callers whose leaf can be any of several journeys must type it as `<ParentState \| ChildState>` and discriminate manually — usually that's a sign the caller actually wants `useActiveLeafJourneyInstance` and `inst.journeyId` to switch on.                                                                                                                            |
+| `useWaitForExit`               | `<TExits>(exit, channels) => void` — for step components that wait on an async backend event. Composes a push `subscribe` channel, a `poll` channel, and a `timeout` arm with first-wins-latched dispatch and unmount cleanup. Channel-callback identities are ref'd internally, so callback churn between renders doesn't restart the wait; scalar shape changes (`poll.intervalMs`, `timeout.ms`, named timeout exit) do. See [Pattern - event-driven wait with timeout](#pattern---event-driven-wait-with-timeout). |
+| `ModuleTab`                    | Renders a single module entry outside a route. Non-journey counterpart to `JourneyOutlet`.                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 ### Runtime + validation (`@modular-react/journeys`)
 
