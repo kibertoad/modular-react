@@ -1,7 +1,7 @@
 import { assertType, describe, expectTypeOf, it } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import { defineComposition, defineCompositionHandle } from "./define-composition.js";
-import type { ZoneResolution } from "./types.js";
+import type { CompositionZoneResolution } from "./types.js";
 
 // --- Fixture modules ---------------------------------------------------------
 
@@ -111,8 +111,8 @@ describe("defineComposition typing", () => {
     assertType<Inferred>({ documentId: "doc-1" });
   });
 
-  it("ZoneResolution is a discriminated union over `kind`", () => {
-    const select = (): ZoneResolution<AppModules> => ({ kind: "empty" });
+  it("CompositionZoneResolution is a discriminated union over `kind`", () => {
+    const select = (): CompositionZoneResolution<AppModules> => ({ kind: "empty" });
     const resolution = select();
     if (resolution.kind === "module-entry") {
       // narrowed:

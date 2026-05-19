@@ -1,5 +1,5 @@
 import type { CatalogMeta, ModuleTypeMap } from "@modular-react/core";
-import type { CompositionDefinition, ZoneMap } from "./types.js";
+import type { CompositionDefinition, CompositionZoneMap } from "./types.js";
 
 /**
  * Declare a composition with full type inference on zones, state, and input.
@@ -41,7 +41,13 @@ export const defineComposition =
     TState,
     TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
   >() =>
-  <TInput = void, const TZones extends ZoneMap<TModules, TState> = ZoneMap<TModules, TState>>(
+  <
+    TInput = void,
+    const TZones extends CompositionZoneMap<TModules, TState> = CompositionZoneMap<
+      TModules,
+      TState
+    >,
+  >(
     definition: CompositionDefinition<TModules, TZones, TState, TInput, CatalogMeta & TMeta>,
   ): CompositionDefinition<TModules, TZones, TState, TInput, CatalogMeta & TMeta> =>
     definition;

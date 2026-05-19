@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { ComponentType, ReactNode } from "react";
+import { isDevEnv } from "@modular-react/core";
 import type { ModuleDescriptor } from "@modular-react/core";
 import { resolveEntryComponent } from "@modular-react/react";
 
@@ -23,33 +24,54 @@ import type {
   CompositionInstanceId,
   CompositionRuntime,
   CompositionZoneEvent,
-  ZoneDescriptor,
-  ZoneResolution,
+  CompositionZoneDescriptor,
+  CompositionZoneResolution,
 } from "./types.js";
-import { createZoneStores, noopZoneStores, type ZoneStores } from "./stores.js";
+import {
+  createCompositionZoneStores,
+  noopCompositionZoneStores,
+  type CompositionZoneStores,
+} from "./stores.js";
 
 /** Default cap on automatic retries before a zone falls back. */
 const DEFAULT_RETRY_CAP = 2;
 
 /**
- * Set of composition instance ids currently rendering in the React
- * ancestor chain. Used to short-circuit a composition that would otherwise
- * mount itself as a descendant (e.g. composition C hosts journey J whose
- * step renders `<CompositionOutlet instanceId={cId}>` for the same id),
- * which would otherwise infinite-loop into a stack overflow. The check
- * is by instance id, not composition id, so two parallel instances of
- * the same composition definition still work normally.
+ * Hard cap on how deep a composition definition can nest inside
+ * itself before we treat the chain as a cycle. Bound on the upper end
+ * of any plausible real-world layout (sub-editors etc. tend to be 2-3
+ * deep). Anything beyond is almost certainly a journey ↔ composition
+ * loop that bounces through *different* instance ids of the same
+ * definition — same logical recursion the same-instance guard catches,
+ * just laundered through fresh ids.
+ */
+const DEFAULT_DEFINITION_DEPTH_CAP = 8;
+
+/**
+ * Composition ancestry tracked in the React tree:
+ *   - `instances` — instance ids currently rendering above this outlet.
+ *     A hit here is treated as a hard cycle (we render the error
+ *     fallback in place of the offending outlet) because the
+ *     composition would otherwise infinite-loop into a stack overflow.
+ *   - `definitionDepth` — number of times each composition id appears
+ *     in the chain regardless of instance id. Two parallel instances
+ *     of the same definition (e.g. side-by-side documents) is a
+ *     legitimate pattern and stays under the depth cap; a
+ *     journey↔composition loop that re-opens the same definition under
+ *     a fresh id every iteration hits the cap quickly and produces
+ *     the error fallback instead of a stack overflow.
  *
  * The detection is partial across the journey ↔ composition boundary:
  * `@modular-react/journeys` runs its own parent-link cycle check for
  * journey-to-journey invocations, but it does not see composition
- * ancestors. A composition ↔ journey ↔ composition cycle that resolves
- * to the same composition instance is caught here; a cycle through
- * different instance ids of the same definition is not. Authors
- * encountering that case should restructure to share a single instance
- * (and the in-ancestor check then catches the recursion).
+ * ancestors. The same-instance guard catches the trivial case; the
+ * depth-cap guard catches the cross-instance variant.
  */
-const CompositionAncestryContext = createContext<ReadonlySet<CompositionInstanceId> | null>(null);
+interface CompositionAncestry {
+  readonly instances: ReadonlySet<CompositionInstanceId>;
+  readonly definitionDepth: ReadonlyMap<string, number>;
+}
+const CompositionAncestryContext = createContext<CompositionAncestry | null>(null);
 
 export interface CompositionOutletNotFoundProps {
   readonly zone: string;
@@ -108,16 +130,23 @@ export interface CompositionOutletProps<TZones extends string = string> {
  * from journeys' `instance-hooks.ts` — uses `useSyncExternalStore` for
  * tearing-free reads and falls back to `null` when the instance is
  * unknown (e.g. mid-disposal).
+ *
+ * `subscribe` and `getSnapshot` are stabilized via `useCallback` so
+ * React doesn't observe a fresh function identity on every render and
+ * re-run its subscribe/unsubscribe dance — each unsubscribe goes
+ * through the runtime's disposal microtask gate, so churn is wasted
+ * work and (transiently) makes the listener count look like 0.
  */
 function useInstanceSnapshot(
   runtime: CompositionRuntime,
   instanceId: CompositionInstanceId,
 ): CompositionInstance | null {
-  return useSyncExternalStore(
-    (cb) => runtime.subscribe(instanceId, cb),
-    () => runtime.getInstance(instanceId),
-    () => runtime.getInstance(instanceId),
+  const subscribe = useCallback(
+    (cb: () => void) => runtime.subscribe(instanceId, cb),
+    [runtime, instanceId],
   );
+  const getSnapshot = useCallback(() => runtime.getInstance(instanceId), [runtime, instanceId]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 /**
@@ -151,9 +180,9 @@ const noopDispatch: (updater: unknown) => void = () => {};
  * store baked into `input`, so a stub provider is correct and avoids
  * holding a real runtime + instance handle on a path that doesn't
  * need them. Cast to widen `unknown` → `any` so the unified noop
- * satisfies the per-`TState` `ZoneStores` contract.
+ * satisfies the per-`TState` `CompositionZoneStores` contract.
  */
-const noopStores = noopZoneStores as unknown as ZoneStores<any>;
+const noopStores = noopCompositionZoneStores as unknown as CompositionZoneStores<any>;
 
 function hashInput(input: unknown): string {
   if (input === undefined) return "u";
@@ -169,7 +198,16 @@ function serializeStable(value: unknown, ancestors: Set<object>): string {
   if (value === null) return "null";
   const t = typeof value;
   if (t === "string") return JSON.stringify(value);
-  if (t === "number") return Number.isFinite(value as number) ? String(value) : "null";
+  if (t === "number") {
+    const n = value as number;
+    if (Number.isFinite(n)) return String(n);
+    // Use distinct sentinels so NaN / +Infinity / -Infinity all hash
+    // differently — `JSON.stringify(NaN)` would collapse them all to
+    // `"null"` and a cache keyed on the hash would falsely treat
+    // them as the same input.
+    if (Number.isNaN(n)) return '"<nan>"';
+    return n > 0 ? '"<+inf>"' : '"<-inf>"';
+  }
   if (t === "boolean") return value ? "true" : "false";
   if (t === "bigint") return `"<bigint:${(value as bigint).toString()}>"`;
   if (t === "function" || t === "symbol") return `"<${t}>"`;
@@ -225,16 +263,28 @@ export function CompositionOutlet<TZones extends string = string>(
     );
   }
 
-  // Cycle guard: a composition trying to mount itself as a descendant
-  // (typically through a journey hosted in one of its own zones) would
-  // recurse forever. Bail out with a clear error fallback instead.
+  // Cycle guard. Two checks:
+  //   1. Same instance id already in the ancestry → trivial cycle
+  //      (a panel rendering an outlet for the same id it's hosted
+  //      inside). Hard fail, render the error fallback.
+  //   2. Same composition id appearing more times than the depth cap
+  //      → cross-instance cycle, typically a journey that re-opens
+  //      the composition under a fresh instance id every hop. The
+  //      hops use different ids so the instance check misses them,
+  //      but the definition depth grows without bound until the
+  //      stack does. Hard fail at the cap.
   const ancestry = useContext(CompositionAncestryContext);
-  const cycleDetected = ancestry?.has(instanceId) ?? false;
-  const extendedAncestry = useMemo(() => {
-    const next = new Set(ancestry ?? []);
-    next.add(instanceId);
-    return next;
-  }, [ancestry, instanceId]);
+  const cycleDetected = ancestry?.instances.has(instanceId) ?? false;
+  const currentDefinitionDepth = ancestry?.definitionDepth.get(compositionId) ?? 0;
+  const definitionCycleDetected =
+    !cycleDetected && currentDefinitionDepth >= DEFAULT_DEFINITION_DEPTH_CAP;
+  const extendedAncestry = useMemo<CompositionAncestry>(() => {
+    const instances = new Set(ancestry?.instances ?? []);
+    instances.add(instanceId);
+    const definitionDepth = new Map(ancestry?.definitionDepth ?? []);
+    definitionDepth.set(compositionId, (definitionDepth.get(compositionId) ?? 0) + 1);
+    return { instances, definitionDepth };
+  }, [ancestry, instanceId, compositionId]);
 
   const instance = useInstanceSnapshot(runtime, instanceId);
   const internals = getInternals(runtime);
@@ -272,26 +322,34 @@ export function CompositionOutlet<TZones extends string = string>(
   // could ever preload from it.
   const eagerZoneNames = useMemo<readonly string[]>(() => {
     if (!reg) return [];
-    const zones = reg.definition.zones as Record<string, ZoneDescriptor<any, any>>;
+    const zones = reg.definition.zones as Record<string, CompositionZoneDescriptor<any, any>>;
     const names: string[] = [];
     for (const zoneName of zoneNames) {
       if (zones[zoneName]?.preload === "eager") names.push(zoneName);
     }
     return names;
   }, [reg, zoneNames]);
+  const hasEagerZones = eagerZoneNames.length > 0;
 
+  // Gate the signature's instance-shaped dep on `hasEagerZones`. When
+  // no zone declares `preload: "eager"`, the dep is a constant `null`
+  // across renders so the memo's identity check short-circuits even
+  // though `instance` itself changes on every dispatch. Without this,
+  // the memo body re-allocates a closure per dispatch even when
+  // nothing could ever preload from it.
+  const eagerSignatureInput = hasEagerZones ? instance : null;
   const eagerSignature = useMemo(() => {
-    if (eagerZoneNames.length === 0) return "";
-    if (!reg || !instance || instance.status !== "active") return "";
-    const zones = reg.definition.zones as Record<string, ZoneDescriptor<any, any>>;
+    if (!hasEagerZones) return "";
+    if (!reg || !eagerSignatureInput || eagerSignatureInput.status !== "active") return "";
+    const zones = reg.definition.zones as Record<string, CompositionZoneDescriptor<any, any>>;
     const parts: string[] = [];
     for (const zoneName of eagerZoneNames) {
       const descriptor = zones[zoneName];
       if (!descriptor) continue;
-      let selection: ZoneResolution<any>;
+      let selection: CompositionZoneResolution<any>;
       try {
         selection = descriptor.select({
-          state: instance.state,
+          state: eagerSignatureInput.state,
           deps: internals.__deps,
           // Preload paths only inspect `module`/`entry` on the
           // resolution — they never invoke any callback the selector
@@ -307,13 +365,15 @@ export function CompositionOutlet<TZones extends string = string>(
       parts.push(`${zoneName}:${computeSelectionKey(selection, null, modules)}`);
     }
     return parts.join("|");
-  }, [reg, instance, eagerZoneNames, modules, internals]);
+  }, [reg, eagerSignatureInput, hasEagerZones, eagerZoneNames, modules, internals]);
 
   useEffect(() => {
+    if (!hasEagerZones) return;
     if (!reg || !instance || instance.status !== "active") return;
-    if (eagerSignature === "" || eagerZoneNames.length === 0) return;
-    const zones = reg.definition.zones as Record<string, ZoneDescriptor<any, any>>;
-    const eagerZones: Array<{ zoneName: string; descriptor: ZoneDescriptor<any, any> }> = [];
+    if (eagerSignature === "") return;
+    const zones = reg.definition.zones as Record<string, CompositionZoneDescriptor<any, any>>;
+    const eagerZones: Array<{ zoneName: string; descriptor: CompositionZoneDescriptor<any, any> }> =
+      [];
     for (const zoneName of eagerZoneNames) {
       const descriptor = zones[zoneName];
       if (descriptor) eagerZones.push({ zoneName, descriptor });
@@ -324,7 +384,7 @@ export function CompositionOutlet<TZones extends string = string>(
     const run = (): void => {
       if (cancelled) return;
       for (const { zoneName, descriptor } of eagerZones) {
-        let selection: ZoneResolution<any>;
+        let selection: CompositionZoneResolution<any>;
         try {
           selection = descriptor.select({
             state: instance.state,
@@ -374,7 +434,7 @@ export function CompositionOutlet<TZones extends string = string>(
     // trigger a re-run; the other deps are stable across the lifetime
     // of an outlet and listed for ESLint hygiene only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reg, instance, eagerSignature, eagerZoneNames, modules, internals]);
+  }, [reg, instance, eagerSignature, eagerZoneNames, hasEagerZones, modules, internals]);
 
   if (cycleDetected) {
     return renderError(
@@ -382,6 +442,17 @@ export function CompositionOutlet<TZones extends string = string>(
       new Error(
         `[@modular-react/compositions] Composition instance "${instanceId}" is already in the render ancestry — refusing to mount it as a descendant. ` +
           `This is usually caused by a zone hosting a journey whose step renders the same composition instance.`,
+      ),
+      errorComponent,
+    );
+  }
+  if (definitionCycleDetected) {
+    return renderError(
+      "<all>",
+      new Error(
+        `[@modular-react/compositions] Composition "${compositionId}" has nested inside itself ${DEFAULT_DEFINITION_DEPTH_CAP} times — refusing to recurse further. ` +
+          `This usually means a zone is hosting a journey whose step re-opens the same composition under a fresh instance id each hop. ` +
+          `Restructure to share a single composition instance (the same-instance guard will then catch the recursion) or break the loop in the journey definition.`,
       ),
       errorComponent,
     );
@@ -396,7 +467,9 @@ export function CompositionOutlet<TZones extends string = string>(
   // Build the zone map: each entry is a fully-wrapped renderable element.
   const zoneElements: Record<string, ReactNode> = {};
   for (const zoneName of zoneNames) {
-    const descriptor = (reg.definition.zones as Record<string, ZoneDescriptor<any, any>>)[zoneName];
+    const descriptor = (
+      reg.definition.zones as Record<string, CompositionZoneDescriptor<any, any>>
+    )[zoneName];
     zoneElements[zoneName] = (
       <ZoneRenderer
         key={zoneName}
@@ -427,7 +500,7 @@ interface ZoneRendererProps {
   readonly compositionId: string;
   readonly instanceId: CompositionInstanceId;
   readonly zone: string;
-  readonly descriptor: ZoneDescriptor<any, any>;
+  readonly descriptor: CompositionZoneDescriptor<any, any>;
   readonly modules: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>;
   readonly loadingFallback?: ReactNode;
   readonly notFoundComponent?: ComponentType<CompositionOutletNotFoundProps>;
@@ -461,13 +534,19 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
   // on every state change. The store lives on the instance record. The
   // getSnapshot result is null-tolerant — if the record disappears
   // mid-disposal, the null short-circuits the selector path below.
+  //
+  // `subscribeState` / `getStateSnapshot` are stabilized so React
+  // doesn't see a fresh subscribe identity on every render. Without
+  // it, every parent re-render churns an underlying-store subscribe/
+  // unsubscribe pair.
   const record = internals.__getRecord(instanceId);
   const store = record?.store;
-  const state = useSyncExternalStore(
-    (cb) => (store ? store.subscribe(cb) : () => {}),
-    () => (store ? store.getState() : null),
-    () => (store ? store.getState() : null),
+  const subscribeState = useCallback(
+    (cb: () => void) => (store ? store.subscribe(cb) : () => {}),
+    [store],
   );
+  const getStateSnapshot = useCallback(() => (store ? store.getState() : null), [store]);
+  const state = useSyncExternalStore(subscribeState, getStateSnapshot, getStateSnapshot);
 
   // Per-resolution journey instance cache. Without it, the JourneyOutlet
   // path mints a fresh `ji_*` on every state change because the selector
@@ -478,20 +557,52 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
   // long-running composition that cycles through many distinct inputs
   // doesn't accumulate orphan journey instances for the lifetime of
   // the outlet.
+  //
+  // `adapter.start` runs during render and is idempotent per fiber via
+  // this ref. `adapter.end`, however, is a *destructive* side effect
+  // against a foreign runtime — calling it from render risks tearing
+  // down an instance the committed UI is still showing (a discarded
+  // concurrent render that rolled over would otherwise end an id the
+  // previous committed render is still mounting). End calls are queued
+  // here and drained from a commit-time effect (`journeyEndEffect`
+  // below) so only committed renders' rollovers actually end their
+  // predecessors.
   const journeyInstanceCache = useRef<{
     readonly key: string;
     readonly id: CompositionInstanceId;
   } | null>(null);
+  const journeyEndQueue = useRef<CompositionInstanceId[]>([]);
+
+  // Drain the end-queue after every commit. Any rolled-over journey
+  // ids accumulated by the latest committed render get ended here,
+  // safely outside the render path. If no `end` adapter is registered
+  // the queue is cleared anyway (the foreign runtime is on its own).
+  useEffect(() => {
+    const queue = journeyEndQueue.current;
+    if (queue.length === 0) return;
+    const adapter = runtime.getMountAdapter("journey");
+    const endFn = adapter?.end;
+    if (endFn) {
+      for (const id of queue) endFn(id);
+    }
+    queue.length = 0;
+  });
 
   // End the cached journey instance when this ZoneRenderer unmounts.
   // Otherwise the last cached entry would outlive the zone and the
-  // adapter has no way to know its outlet is gone.
+  // adapter has no way to know its outlet is gone. Also drains any
+  // ids still parked in the end-queue (a render that rolled over and
+  // then unmounted before the drain effect fired).
   useEffect(() => {
     return () => {
-      const cached = journeyInstanceCache.current;
-      if (!cached) return;
       const adapter = runtime.getMountAdapter("journey");
-      adapter?.end?.(cached.id);
+      const endFn = adapter?.end;
+      if (endFn) {
+        for (const id of journeyEndQueue.current) endFn(id);
+        const cached = journeyInstanceCache.current;
+        if (cached) endFn(cached.id);
+      }
+      journeyEndQueue.current = [];
       journeyInstanceCache.current = null;
     };
   }, [runtime]);
@@ -511,7 +622,7 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
   // within this outlet mount, which is what `useSyncExternalStore` in
   // the panel needs to avoid re-subscribing.
   const stores = useMemo(
-    () => createZoneStores<unknown>(runtime, instanceId),
+    () => createCompositionZoneStores<unknown>(runtime, instanceId),
     [runtime, instanceId],
   );
   const emit = useCallback(
@@ -562,7 +673,7 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
   // Phase 1: derive the resolution + a deterministic selection key.
   // Both have to be computed before the effect declared below, so the
   // effect's `selectionKey` dep is stable across renders.
-  let selection: ZoneResolution<any> = { kind: "empty" };
+  let selection: CompositionZoneResolution<any> = { kind: "empty" };
   let selectorError: unknown = null;
   if (record && store && state !== null) {
     try {
@@ -702,11 +813,13 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
         if (cached && cached.key === cacheKey) {
           journeyInstanceId = cached.id;
         } else {
-          // Roll over: end the previously-cached instance (if any) before
-          // minting a fresh one. The adapter's `end` is optional; when
-          // absent we let the embedded runtime handle teardown by its own
-          // rules (typically: its outlet unmounts on next commit).
-          if (cached) adapter.end?.(cached.id);
+          // Roll over: queue the previously-cached id for end-after-
+          // commit (the destructive side effect must not run during
+          // render — see the `journeyEndQueue` comment above). The
+          // mint itself stays in render: it's idempotent per fiber
+          // via `journeyInstanceCache`, and a discarded render's
+          // mint is reused by the next render attempt.
+          if (cached) journeyEndQueue.current.push(cached.id);
           journeyInstanceId = adapter.start(selection.handle.id, selection.input);
           journeyInstanceCache.current = { key: cacheKey, id: journeyInstanceId };
         }
@@ -746,7 +859,7 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
  * not exist yet on the first attempted render).
  */
 function computeSelectionKey(
-  selection: ZoneResolution<any>,
+  selection: CompositionZoneResolution<any>,
   selectorError: unknown,
   modules: Readonly<Record<string, ModuleDescriptor<any, any, any, any>>>,
 ): string {
@@ -773,10 +886,24 @@ function computeSelectionKey(
 // Panels rendered inside compositions don't have a direct exit channel —
 // the no-op stub lets ModuleEntryProps stay structurally satisfied while
 // the panel dispatches through `useCompositionDispatch` instead.
-const NOOP_EXIT = (() => {
-  // Intentionally empty; foreign panels that try to call `exit()` will get
-  // a silent no-op rather than a crash. Authors who want exit-style
-  // behavior should call `useCompositionEmit({ kind: 'exit', payload })`.
+//
+// Type-checks pass through `as never`, so a foreign panel (typically a
+// journey-shaped one being reused here) that calls `exit("name", payload)`
+// gets neither a compile error nor a crash — it just silently drops.
+// To surface that footgun, we warn in dev the first time a given exit
+// name is observed on this NOOP_EXIT path. Once per name keeps the
+// warning useful for diagnostic and quiet under repeated user actions.
+const NOOP_EXIT_WARNED = new Set<string>();
+const NOOP_EXIT = ((exitName?: string) => {
+  if (!isDevEnv()) return;
+  const key = typeof exitName === "string" && exitName.length > 0 ? exitName : "<anonymous>";
+  if (NOOP_EXIT_WARNED.has(key)) return;
+  NOOP_EXIT_WARNED.add(key);
+  console.warn(
+    `[@modular-react/compositions] A panel mounted into a composition zone called \`exit(${JSON.stringify(key)}, …)\`. ` +
+      `Composition panels don't have an exit channel — the call has been dropped. ` +
+      `Use \`useCompositionDispatch\` to mutate composition state, or \`useCompositionEmit\` for cross-zone hand-offs.`,
+  );
 }) as never;
 
 function renderError(

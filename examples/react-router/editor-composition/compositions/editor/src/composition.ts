@@ -12,7 +12,7 @@ import type { EditorState, SourceId } from "./state.js";
  * depend only on `@modular-react/core` (for `ReadableStore` /
  * `WritableStore` interfaces); they do NOT import this package, so no
  * cycle. With each module's `entryPoints` typed via `defineModule`,
- * `ZoneSpec<EditorModuleMap>` checks `input` against the target entry's
+ * `CompositionZoneSpec<EditorModuleMap>` checks `input` against the target entry's
  * declared schema at compile time — a wrong-shaped input or a typo'd
  * entry name fails to typecheck.
  *

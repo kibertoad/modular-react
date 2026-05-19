@@ -5,12 +5,12 @@ import type { ModuleEntryProps } from "@modular-react/core";
 
 import { createCompositionRuntime } from "./runtime.js";
 import { defineComposition } from "./define-composition.js";
-import { createZoneStores } from "./stores.js";
+import { createCompositionZoneStores } from "./stores.js";
 import type { RegisteredComposition } from "./types.js";
 
 /**
  * Coverage for the typed store-contract primitive
- * ({@link createZoneStores}) — verifies the three behaviours panels
+ * ({@link createCompositionZoneStores}) — verifies the three behaviours panels
  * depend on:
  *
  *   1. **Identity stability**: same `(instance, key)` → same store
@@ -56,7 +56,7 @@ function makeRuntime() {
   return { runtime, instanceId };
 }
 
-describe("createZoneStores", () => {
+describe("createCompositionZoneStores", () => {
   let cleanup: Array<() => void> = [];
   afterEach(() => {
     for (const fn of cleanup.splice(0)) fn();
@@ -64,7 +64,7 @@ describe("createZoneStores", () => {
 
   it("returns the same store reference for repeated calls with the same key", () => {
     const { runtime, instanceId } = makeRuntime();
-    const stores = createZoneStores<FixtureState>(runtime, instanceId);
+    const stores = createCompositionZoneStores<FixtureState>(runtime, instanceId);
 
     const a = stores.readable("counter", (s) => s.counter);
     const b = stores.readable("counter", (s) => s.counter);
@@ -85,7 +85,7 @@ describe("createZoneStores", () => {
 
   it("getSnapshot reads the current composition state", () => {
     const { runtime, instanceId } = makeRuntime();
-    const stores = createZoneStores<FixtureState>(runtime, instanceId);
+    const stores = createCompositionZoneStores<FixtureState>(runtime, instanceId);
     const store: ReadableStore<number> = stores.readable("counter", (s) => s.counter);
 
     expect(store.getSnapshot()).toBe(0);
@@ -95,7 +95,7 @@ describe("createZoneStores", () => {
 
   it("subscribe fires only on slice-level changes, not on unrelated state updates", () => {
     const { runtime, instanceId } = makeRuntime();
-    const stores = createZoneStores<FixtureState>(runtime, instanceId);
+    const stores = createCompositionZoneStores<FixtureState>(runtime, instanceId);
     const counterStore = stores.readable("counter", (s) => s.counter);
 
     let fires = 0;
@@ -120,7 +120,7 @@ describe("createZoneStores", () => {
 
   it("writable.set drives composition state via runtime.dispatch", () => {
     const { runtime, instanceId } = makeRuntime();
-    const stores = createZoneStores<FixtureState>(runtime, instanceId);
+    const stores = createCompositionZoneStores<FixtureState>(runtime, instanceId);
     const store: WritableStore<number> = stores.writable("counter", {
       get: (s) => s.counter,
       set: (value) => ({ counter: value }),
@@ -138,7 +138,7 @@ describe("createZoneStores", () => {
 
   it("multiple subscribers all fire on a slice change; unsubscribing removes one only", () => {
     const { runtime, instanceId } = makeRuntime();
-    const stores = createZoneStores<FixtureState>(runtime, instanceId);
+    const stores = createCompositionZoneStores<FixtureState>(runtime, instanceId);
     const store = stores.readable("counter", (s) => s.counter);
 
     let firesA = 0;

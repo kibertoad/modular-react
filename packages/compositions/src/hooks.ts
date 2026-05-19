@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from "react";
 import type { Store } from "@modular-react/core";
 import type {
   CompositionHandleRef,
@@ -305,5 +305,39 @@ export function useComposition(
   if (ref.current === null) {
     ref.current = runtime.start(handleOrId as never, input as never);
   }
-  return ref.current;
+  const instanceId = ref.current;
+
+  // Keep the instance alive for the lifetime of the calling component.
+  //
+  // The outlet's `__attach`/`__detach` refcount is the usual disposal
+  // signal, but a caller that holds an id WITHOUT mounting an outlet
+  // (or that conditionally renders one) would otherwise orphan the
+  // instance forever: `runtime.start()` puts the record in the
+  // instances map but never schedules disposal — only `__detach` and
+  // `subscribe`'s unsubscribe path do.
+  //
+  // The fix is to register a no-op subscription. `runtime.subscribe`
+  // increments `listeners`; the returned unsubscribe runs the same
+  // microtask-deferred disposal gate as `__detach`, so when the last
+  // outlet and the last subscriber both go away the instance is
+  // cleaned up — and a still-mounted sibling outlet keeps the
+  // instance alive (the gate checks `outletRefCount === 0 &&
+  // listeners.size === 0`).
+  //
+  // StrictMode dev: mount → simulated unmount → remount fires effect
+  // cleanup once, then a fresh effect. The cleanup's unsubscribe
+  // microtask sees `listeners.size === 0` (until the remount's effect
+  // re-subscribes) AND `outletRefCount === 0` if no outlet attached
+  // yet — but the remount's start() in the fresh fiber has already
+  // ALSO registered a listener on the new id, not this one. So the
+  // first fiber's instance correctly disposes. Real instance: one
+  // per visible component, matching the documented contract.
+  useEffect(() => {
+    // No-op listener — the goal is only to participate in the
+    // disposal refcount. We don't need to react to state changes.
+    const unsubscribe = runtime.subscribe(instanceId, () => {});
+    return unsubscribe;
+  }, [runtime, instanceId]);
+
+  return instanceId;
 }

@@ -34,11 +34,7 @@ import { defineComposition } from "./define-composition.js";
 import { createCompositionRuntime, getInternals, hydrateComposition } from "./runtime.js";
 import { CompositionOutlet } from "./outlet.js";
 import { CompositionsProvider } from "./provider.js";
-import {
-  useComposition,
-  useCompositionOptions,
-  useCompositionState,
-} from "./hooks.js";
+import { useComposition, useCompositionOptions, useCompositionState } from "./hooks.js";
 import { validateCompositionContracts } from "./validation.js";
 import type {
   CompositionInstanceId,
@@ -252,8 +248,9 @@ describe("useComposition arg disambiguation", () => {
       // Input shape: { runtime: "preview" } — would have been wrongly
       // classified as `UseCompositionOptions` by the old key-sniff.
       const id = useComposition("brand", { runtime: "preview" });
-      observedState = runtime.getInstance<{ runtime: string }>(id)
-        ?.state as { runtime: string } | null;
+      observedState = runtime.getInstance<{ runtime: string }>(id)?.state as {
+        runtime: string;
+      } | null;
       return <div data-testid="id">{id}</div>;
     }
     render(
@@ -437,8 +434,7 @@ describe("'ignore' policy resets on resolution change", () => {
           }),
         },
       },
-      onZoneError: (_err, ctx) =>
-        ctx.state.mode === "ignored-broken" ? "ignore" : "fallback",
+      onZoneError: (_err, ctx) => (ctx.state.mode === "ignored-broken" ? "ignore" : "fallback"),
     });
     const runtime = createCompositionRuntime(
       [{ definition: def, options: undefined } as RegisteredComposition],
@@ -483,7 +479,7 @@ describe("'ignore' policy resets on resolution change", () => {
 // ---------------------------------------------------------------------------
 
 describe("hydrateComposition round-trip", () => {
-  it("attaches a blob and yields a snapshot equal to the source", () => {
+  it("attaches a blob and yields a snapshot equal to the source", async () => {
     const def = defineComposition<{}, { docId: string; tick: number }>()({
       id: "rt",
       version: "1.0.0",
@@ -502,9 +498,10 @@ describe("hydrateComposition round-trip", () => {
       startedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-02T00:00:00.000Z",
     };
-    const id = hydrateComposition(runtime, "rt", blob);
-    expect(id).toBe("ci_external");
-    const snapshot = runtime.getInstance(id);
+    const handle = hydrateComposition(runtime, "rt", blob);
+    expect(handle.instanceId).toBe("ci_external");
+    expect(typeof handle.release).toBe("function");
+    const snapshot = runtime.getInstance(handle.instanceId);
     expect(snapshot).toMatchObject({
       id: "ci_external",
       compositionId: "rt",
@@ -513,6 +510,11 @@ describe("hydrateComposition round-trip", () => {
       startedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-02T00:00:00.000Z",
     });
+    // Hydration holds keep the instance alive even with no outlet or
+    // listener attached. Releasing schedules disposal via the gate.
+    handle.release();
+    await flushMicrotasks();
+    expect(runtime.getInstance("ci_external" as CompositionInstanceId)).toBeNull();
   });
 });
 

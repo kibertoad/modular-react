@@ -7,10 +7,10 @@ import type {
   ModuleTypeMap,
   RuntimeMountAdapter,
 } from "@modular-react/core";
-import type { ZoneStores } from "./stores.js";
+import type { CompositionZoneStores } from "./stores.js";
 
 export type { ReadableStore, WritableStore } from "@modular-react/core";
-export type { ZoneStores } from "./stores.js";
+export type { CompositionZoneStores } from "./stores.js";
 
 /** Opaque id minted by the composition runtime. Prefixed `ci_` to disambiguate from `ji_`. */
 export type CompositionInstanceId = string;
@@ -45,9 +45,9 @@ export type CompositionStatus = "active" | "disposed";
  * composition's typed module map, so a typo or a module that isn't
  * registered fails at compile time. For *strong* per-`(module, entry)`
  * input checking — i.e. selectors that fail compile when `input` doesn't
- * match the target entry's declared schema — see {@link ZoneSpec}.
+ * match the target entry's declared schema — see {@link CompositionZoneSpec}.
  */
-export type ZoneResolution<TModules extends ModuleTypeMap = ModuleTypeMap> =
+export type CompositionZoneResolution<TModules extends ModuleTypeMap = ModuleTypeMap> =
   | {
       readonly kind: "module-entry";
       readonly module: keyof TModules & string;
@@ -63,12 +63,12 @@ export type ZoneResolution<TModules extends ModuleTypeMap = ModuleTypeMap> =
   | { readonly kind: "empty" };
 
 /**
- * Internal helper: detects `any` at the type level so {@link ZoneSpec} can
- * fall back to the loose {@link ZoneResolution} shape when no concrete
+ * Internal helper: detects `any` at the type level so {@link CompositionZoneSpec} can
+ * fall back to the loose {@link CompositionZoneResolution} shape when no concrete
  * `TModules` is supplied. Without this gate, the mapped-type expansion
  * collapses `module-entry` to `never` (a known TS quirk with `any` in
  * mapped-key positions) and breaks the framework's own
- * `ZoneSelector<any, any>` paths.
+ * `CompositionZoneSelector<any, any>` paths.
  */
 type IsAny<T> = 0 extends 1 & T ? true : false;
 
@@ -77,7 +77,7 @@ type IsAny<T> = 0 extends 1 & T ? true : false;
  * `(module, entry)` pair in `TModules`, with `input` narrowed to the
  * target entry's declared schema. Falls back to the loose runtime shape
  * when `TModules` is `any` so internal generic-erased paths
- * (`ZoneSelector<any, any>` etc.) keep type-checking.
+ * (`CompositionZoneSelector<any, any>` etc.) keep type-checking.
  */
 type ModuleEntryArm<TModules extends ModuleTypeMap> =
   IsAny<TModules> extends true
@@ -105,17 +105,17 @@ type ModuleEntryArm<TModules extends ModuleTypeMap> =
  * `module` + `entry` picks the corresponding `input` type, so a selector
  * that returns a wrong-shaped input fails at compile time.
  *
- * Selectors authored against {@link ZoneSelector} return this form;
- * the runtime stores resolutions in the looser {@link ZoneResolution}
+ * Selectors authored against {@link CompositionZoneSelector} return this form;
+ * the runtime stores resolutions in the looser {@link CompositionZoneResolution}
  * shape so internal paths don't pay per-generic mapped-type cost.
  *
  * Authors who want input type-checking must supply concrete module
  * descriptors in their `TModules` type — typically via `import type
  * editorModule from "@my-org/editor"` and a `typeof` map. With a wide
- * `TModules` (default or `any`), `ZoneSpec` falls back to the loose
+ * `TModules` (default or `any`), `CompositionZoneSpec` falls back to the loose
  * resolution shape via the {@link ModuleEntryArm} fallback.
  */
-export type ZoneSpec<TModules extends ModuleTypeMap> =
+export type CompositionZoneSpec<TModules extends ModuleTypeMap> =
   | ModuleEntryArm<TModules>
   | {
       readonly kind: "journey";
@@ -149,24 +149,24 @@ export type ZoneSpec<TModules extends ModuleTypeMap> =
  * unsupported; only place callbacks / stores that the panel may later
  * invoke into the returned resolution's `input`.
  */
-export interface ZoneSelectorCtx<TState> {
+export interface CompositionZoneSelectorCtx<TState> {
   readonly state: TState;
   readonly deps: Readonly<Record<string, unknown>>;
   readonly dispatch: (
     updater: Partial<TState> | ((prev: TState) => Partial<TState> | TState),
   ) => void;
-  readonly stores: ZoneStores<TState>;
+  readonly stores: CompositionZoneStores<TState>;
 }
 
 /**
  * Pure projection of composition state into a zone resolution. Returns
- * {@link ZoneSpec} (strong per-`(module, entry)` typing) so wrong-shaped
+ * {@link CompositionZoneSpec} (strong per-`(module, entry)` typing) so wrong-shaped
  * `input` fails at compile time when `TModules` is concrete; assignable
- * to {@link ZoneResolution} for runtime storage.
+ * to {@link CompositionZoneResolution} for runtime storage.
  */
-export type ZoneSelector<TModules extends ModuleTypeMap, TState> = (
-  ctx: ZoneSelectorCtx<TState>,
-) => ZoneSpec<TModules>;
+export type CompositionZoneSelector<TModules extends ModuleTypeMap, TState> = (
+  ctx: CompositionZoneSelectorCtx<TState>,
+) => CompositionZoneSpec<TModules>;
 
 /**
  * Author-facing zone descriptor. The author registers `select` (mandatory)
@@ -185,16 +185,20 @@ export type ZoneSelector<TModules extends ModuleTypeMap, TState> = (
  *     synchronous. Only meaningful for lazy entries; eager entries
  *     are already resolved.
  */
-export interface ZoneDescriptor<TModules extends ModuleTypeMap, TState, TContract = unknown> {
-  readonly select: ZoneSelector<TModules, TState>;
+export interface CompositionZoneDescriptor<
+  TModules extends ModuleTypeMap,
+  TState,
+  TContract = unknown,
+> {
+  readonly select: CompositionZoneSelector<TModules, TState>;
   readonly contract?: ExitContract<TContract>;
   readonly fallback?: React.ComponentType;
   readonly preload?: "lazy" | "eager";
 }
 
 /** Map of zone names to descriptors. Author-facing input to `defineComposition`. */
-export type ZoneMap<TModules extends ModuleTypeMap, TState> = Readonly<
-  Record<string, ZoneDescriptor<TModules, TState, any>>
+export type CompositionZoneMap<TModules extends ModuleTypeMap, TState> = Readonly<
+  Record<string, CompositionZoneDescriptor<TModules, TState, any>>
 >;
 
 // ---------------------------------------------------------------------------
@@ -251,7 +255,7 @@ export type CompositionZoneErrorPolicy = "retry" | "fallback" | "ignore";
  */
 export interface CompositionDefinition<
   TModules extends ModuleTypeMap,
-  TZones extends ZoneMap<TModules, TState>,
+  TZones extends CompositionZoneMap<TModules, TState>,
   TState,
   TInput = void,
   TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
@@ -329,14 +333,14 @@ export interface CompositionRegisterOptions<TState = unknown> {
   onError?: (
     err: unknown,
     ctx: {
-      readonly zone: string;
-      readonly phase:
-        | "select"
-        | "render"
-        | "lifecycle"
-        | "emit"
-        | "notify"
-        | "retry-exhausted";
+      /**
+       * Zone the error was attributed to. `undefined` for
+       * non-zone-scoped phases — `"notify"` (a subscriber listener
+       * fired during a state-change notify) and `"lifecycle"` (an
+       * `onMount`/`onUnmount` hook threw).
+       */
+      readonly zone: string | undefined;
+      readonly phase: "select" | "render" | "lifecycle" | "emit" | "notify" | "retry-exhausted";
     },
   ) => void;
   /**

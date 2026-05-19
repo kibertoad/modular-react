@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 /**
- * Tests `ZoneSelectorCtx.dispatch` — the framework field selectors close
+ * Tests `CompositionZoneSelectorCtx.dispatch` — the framework field selectors close
  * over when they bake imperative callbacks into a panel's `input`
  * (`onClose`, `onSubmit`, emit-style fire-and-forget triggers, etc.).
  *
@@ -63,7 +63,7 @@ const counterModule = defineModule({
 
 type CounterModules = { readonly counter: typeof counterModule };
 
-describe("ZoneSelectorCtx.dispatch", () => {
+describe("CompositionZoneSelectorCtx.dispatch", () => {
   it("threads dispatch into panel input; panel-invoked callback updates state", async () => {
     const composition = defineComposition<CounterModules, CounterState>()({
       id: "counter-composition",
@@ -131,7 +131,10 @@ describe("ZoneSelectorCtx.dispatch", () => {
               kind: "module-entry",
               module: "counter",
               entry: "main",
-              input: { count: state.count, onIncrement: () => dispatch({ count: state.count + 1 }) },
+              input: {
+                count: state.count,
+                onIncrement: () => dispatch({ count: state.count + 1 }),
+              },
             };
           },
         },

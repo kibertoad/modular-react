@@ -37,11 +37,32 @@ export interface CompositionInstanceRecord<TState = unknown> {
   /** Outlet attachment count; disposal trigger when this drops to 0. */
   outletRefCount: number;
   listeners: Set<() => void>;
+  /**
+   * Hydration holds — incremented for each `hydrateComposition` call,
+   * decremented by the returned `release()` function. A hydrated
+   * instance is a deliberate seed (typically an SSR blob the caller
+   * wants to survive across navigation between outlet mounts) so it
+   * does NOT auto-dispose when the last outlet detaches. The
+   * `start()` path leaves this at 0 — those instances are owned by
+   * whoever mounts the outlet.
+   */
+  hydrationHolds: number;
   /** Per-zone consecutive retry counter, used by the outlet's retryLimit gate. */
   zoneRetryCounts: Map<string, number>;
   /** `lifecycle.onMount` has fired for this instance — gate so it only runs once. */
   mountFired: boolean;
   unmountFired: boolean;
+  /**
+   * Disposal is in flight: status still reads `"active"` (so unmount
+   * hooks can observe a still-live instance) but no new state mutations
+   * should land. Dispatches that arrive between the start of
+   * `endInstance` and the final status flip are ignored so an
+   * `onDispose` or `onUnmount` hook that calls `dispatch` doesn't
+   * corrupt the terminal snapshot or fan out to listeners that have
+   * already moved on. Cleared back to false implicitly when the record
+   * is deleted from the instances map.
+   */
+  disposing: boolean;
   /** Subscription to the store's `subscribe` — kept so we can detach on disposal. */
   storeUnsubscribe: () => void;
 }
@@ -76,26 +97,26 @@ export interface CompositionRuntimeInternals {
     id: CompositionInstanceId,
     err: unknown,
     ctx: {
-      zone: string;
-      phase:
-        | "select"
-        | "render"
-        | "lifecycle"
-        | "emit"
-        | "notify"
-        | "retry-exhausted";
+      zone: string | undefined;
+      phase: "select" | "render" | "lifecycle" | "emit" | "notify" | "retry-exhausted";
     },
   ) => void;
   /**
    * Direct-hydration escape hatch used by `hydrateComposition`. Bypasses
    * `start()` (and therefore `initialState`) so out-of-band blobs (SSR
    * dumps, debug snapshots) can be attached without going through the
-   * input-driven init path.
+   * input-driven init path. Bumps `hydrationHolds` to 1 — the caller
+   * decrements via {@link CompositionRuntimeInternals.__releaseHydrationHold}.
    */
   readonly __hydrate: (
     reg: RegisteredComposition,
     blob: SerializedComposition<unknown>,
   ) => CompositionInstanceId;
+  /**
+   * Decrement the hydration hold count for `id` and re-run the disposal
+   * gate. No-op on an unknown / already-disposed id.
+   */
+  readonly __releaseHydrationHold: (id: CompositionInstanceId) => void;
 }
 
 const INTERNALS = new WeakMap<CompositionRuntime, CompositionRuntimeInternals>();
@@ -132,6 +153,12 @@ export function createCompositionRuntime(
   const moduleMap = options.modules ?? {};
   const deps = options.deps ?? {};
 
+  // Duplicate-id guard. `validateCompositionContracts` below also
+  // catches duplicates with a richer error, so the plugin path
+  // surfaces them at registry-validate time. This block is the last
+  // line of defense for direct callers (tests, library wrappers,
+  // hydration plumbing) who skip the plugin and might otherwise
+  // silently overwrite a definition.
   const definitions = new Map<string, RegisteredComposition>();
   for (const reg of registered) {
     if (definitions.has(reg.definition.id)) {
@@ -170,8 +197,15 @@ export function createCompositionRuntime(
   function mintInstanceId(): CompositionInstanceId {
     const cryptoObj = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
     if (cryptoObj?.randomUUID) return `ci_${cryptoObj.randomUUID()}`;
-    const rand = Math.random().toString(36).slice(2, 10);
-    return `ci_${Date.now().toString(36)}_${rand}`;
+    // No `crypto.randomUUID` — e.g. older Node test runners or
+    // sandboxed contexts. Two `Math.random()` calls give ~104 bits
+    // of entropy combined; together with the millisecond timestamp
+    // the same-ms collision probability is negligible. The previous
+    // 8-character single random had ~40 bits, which can collide
+    // within a tight test loop.
+    const rand1 = Math.random().toString(36).slice(2, 12);
+    const rand2 = Math.random().toString(36).slice(2, 12);
+    return `ci_${Date.now().toString(36)}_${rand1}${rand2}`;
   }
 
   function assertKnown(compositionId: string): RegisteredComposition {
@@ -207,7 +241,7 @@ export function createCompositionRuntime(
         // distinct `"notify"` phase so shell telemetry can split
         // notify-time failures from selector/render/emit ones.
         console.error("[@modular-react/compositions] listener threw", err);
-        fireOnError(record.id, err, { zone: "<notify>", phase: "notify" });
+        fireOnError(record.id, err, { zone: undefined, phase: "notify" });
       }
     }
   }
@@ -232,14 +266,8 @@ export function createCompositionRuntime(
     id: CompositionInstanceId,
     err: unknown,
     ctx: {
-      zone: string;
-      phase:
-        | "select"
-        | "render"
-        | "lifecycle"
-        | "emit"
-        | "notify"
-        | "retry-exhausted";
+      zone: string | undefined;
+      phase: "select" | "render" | "lifecycle" | "emit" | "notify" | "retry-exhausted";
     },
   ) {
     const record = instances.get(id);
@@ -266,7 +294,7 @@ export function createCompositionRuntime(
       )?.(record.state, deps);
     } catch (err) {
       if (debug) console.error("[@modular-react/compositions] lifecycle.onMount threw", err);
-      fireOnError(record.id, err, { zone: "", phase: "lifecycle" });
+      fireOnError(record.id, err, { zone: undefined, phase: "lifecycle" });
     }
     try {
       reg.options?.onMount?.({
@@ -293,7 +321,7 @@ export function createCompositionRuntime(
       )?.(record.state, deps);
     } catch (err) {
       if (debug) console.error("[@modular-react/compositions] lifecycle.onUnmount threw", err);
-      fireOnError(record.id, err, { zone: "", phase: "lifecycle" });
+      fireOnError(record.id, err, { zone: undefined, phase: "lifecycle" });
     }
     try {
       reg.options?.onUnmount?.({
@@ -343,6 +371,8 @@ export function createCompositionRuntime(
       zoneRetryCounts: new Map(),
       mountFired: false,
       unmountFired: false,
+      disposing: false,
+      hydrationHolds: 0,
       storeUnsubscribe,
     };
     instances.set(instanceId, record);
@@ -361,6 +391,13 @@ export function createCompositionRuntime(
     // status flips and the terminal notify goes out.
     if (ending.has(id)) return;
     ending.add(id);
+    // Flip the `disposing` flag BEFORE the hooks run so a hook that
+    // calls `dispatch` (or any path that lands in `dispatch` —
+    // listener fan-out, indirect emit) is silently ignored. `status`
+    // is still `"active"` here on purpose: the hooks themselves want
+    // to read a live instance via `getInstance(id)`. The terminal
+    // status flip happens after the hooks return.
+    record.disposing = true;
     const reg = definitions.get(record.compositionId);
     fireOnUnmount(reg as RegisteredComposition, record);
     try {
@@ -436,13 +473,20 @@ export function createCompositionRuntime(
         // listener and outlet both leave, schedule disposal via a
         // microtask so a StrictMode mount/unmount/mount dance or a
         // subscribe-then-resubscribe pattern doesn't tear the instance
-        // down prematurely.
-        if (record.outletRefCount === 0 && record.listeners.size === 0) {
+        // down prematurely. Hydration holds also block disposal — a
+        // hydrated instance survives outlet remounts until the
+        // caller releases its hold.
+        if (
+          record.outletRefCount === 0 &&
+          record.listeners.size === 0 &&
+          record.hydrationHolds === 0
+        ) {
           queueMicrotask(() => {
             const r = instances.get(id);
             if (!r) return;
             if (r.outletRefCount > 0) return;
             if (r.listeners.size > 0) return;
+            if (r.hydrationHolds > 0) return;
             endInstance(id, "unsubscribed");
           });
         }
@@ -452,6 +496,12 @@ export function createCompositionRuntime(
       const record = instances.get(id);
       if (!record) return;
       if (record.status === "disposed") return;
+      // `disposing` flips true at the start of `endInstance`, before
+      // any hook fires. Dispatches from `onUnmount`/`onDispose` (or
+      // any reactivity those hooks trigger) would otherwise mutate
+      // state and notify listeners that are about to be cleared,
+      // corrupting the terminal snapshot.
+      if (record.disposing) return;
       record.store.setState(updater as any);
     },
     end(id, ctx) {
@@ -489,15 +539,22 @@ export function createCompositionRuntime(
       const record = instances.get(id);
       if (!record) return;
       record.outletRefCount = Math.max(0, record.outletRefCount - 1);
-      // Disposal gate: only end when no outlet AND no other listeners.
-      // Deferred via microtask so React 18/19 StrictMode mount/unmount/mount
-      // cycles don't tear the instance down on first visit.
-      if (record.outletRefCount === 0 && record.listeners.size === 0) {
+      // Disposal gate: only end when no outlet AND no other listeners
+      // AND no outstanding hydration holds. Deferred via microtask so
+      // React 18/19 StrictMode mount/unmount/mount cycles don't tear
+      // the instance down on first visit. A hydrated instance with a
+      // live hold survives outlet remounts until the caller releases.
+      if (
+        record.outletRefCount === 0 &&
+        record.listeners.size === 0 &&
+        record.hydrationHolds === 0
+      ) {
         queueMicrotask(() => {
           const r = instances.get(id);
           if (!r) return;
           if (r.outletRefCount > 0) return;
           if (r.listeners.size > 0) return;
+          if (r.hydrationHolds > 0) return;
           endInstance(id, "unmounted");
         });
       }
@@ -516,6 +573,25 @@ export function createCompositionRuntime(
       record.zoneRetryCounts.delete(zone);
     },
     __fireOnError: (id, err, ctx) => fireOnError(id, err, ctx),
+    __releaseHydrationHold: (id) => {
+      const record = instances.get(id);
+      if (!record) return;
+      record.hydrationHolds = Math.max(0, record.hydrationHolds - 1);
+      if (
+        record.hydrationHolds === 0 &&
+        record.outletRefCount === 0 &&
+        record.listeners.size === 0
+      ) {
+        queueMicrotask(() => {
+          const r = instances.get(id);
+          if (!r) return;
+          if (r.hydrationHolds > 0) return;
+          if (r.outletRefCount > 0) return;
+          if (r.listeners.size > 0) return;
+          endInstance(id, "hydration-released");
+        });
+      }
+    },
     __hydrate: (reg, blob) => {
       // Hydration is for attaching an out-of-band blob (SSR dump, debug
       // snapshot). Match the blob's definition id explicitly: callers
@@ -560,6 +636,12 @@ export function createCompositionRuntime(
         blob.startedAt,
         blob.updatedAt,
       );
+      // Hold the instance for the caller. `hydrateComposition`
+      // exposes a `release()` that decrements this — between hydrate
+      // and release the instance survives outlet remounts. Without
+      // this, the first outlet that mounts and unmounts (typical
+      // navigation) would disposal-gate the seed away.
+      record.hydrationHolds += 1;
       fireOnMount(reg, record);
       notify(record);
       return instanceId;
@@ -574,6 +656,23 @@ export function createCompositionRuntime(
 export { CompositionHydrationError, UnknownCompositionError };
 
 /**
+ * Handle returned by {@link hydrateComposition}. The instance survives
+ * outlet remounts (the usual hydrate → mount → navigate-away → come
+ * back flow) until the caller invokes `release()`. After release the
+ * instance becomes eligible for the normal disposal gate — when no
+ * outlet is attached and no listener is subscribed, the microtask
+ * disposes it.
+ *
+ * Multiple `release()` calls are idempotent. A hydrated instance the
+ * caller drops the handle on without releasing leaks — by design,
+ * since the caller asked for an out-of-band reference.
+ */
+export interface CompositionHydrationHandle {
+  readonly instanceId: CompositionInstanceId;
+  readonly release: () => void;
+}
+
+/**
  * Attach a previously-serialized composition into a runtime. Useful for
  * SSR (the server pre-computes the seed blob and ships it to the client)
  * and for debugging dumps. NOT a persistence mechanism — the compositions
@@ -585,12 +684,19 @@ export { CompositionHydrationError, UnknownCompositionError };
  *     in dumps round-trip),
  *   - the blob's `version` must match the active definition — there is
  *     no built-in migration runner.
+ *
+ * Returns a {@link CompositionHydrationHandle}. The hydrated instance
+ * is "held" by the runtime — it does NOT auto-dispose when the first
+ * outlet unmounts, which matches the typical hydrate-then-navigate
+ * usage. Call `release()` when you no longer need the seed; the
+ * instance is then eligible for normal refcount-based disposal (or
+ * call `runtime.end(id)` for immediate teardown).
  */
 export function hydrateComposition<TState>(
   runtime: CompositionRuntime,
   compositionId: string,
   blob: SerializedComposition<TState>,
-): CompositionInstanceId {
+): CompositionHydrationHandle {
   const internals = getInternals(runtime);
   const reg = internals.__getRegistered(compositionId);
   if (!reg) {
@@ -604,5 +710,14 @@ export function hydrateComposition<TState>(
       `Hydrate blob is for "${blob.definitionId}" but caller asked for "${compositionId}"`,
     );
   }
-  return internals.__hydrate(reg, blob as SerializedComposition<unknown>);
+  const instanceId = internals.__hydrate(reg, blob as SerializedComposition<unknown>);
+  let released = false;
+  return {
+    instanceId,
+    release: () => {
+      if (released) return;
+      released = true;
+      internals.__releaseHydrationHold(instanceId);
+    },
+  };
 }

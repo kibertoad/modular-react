@@ -13,7 +13,11 @@ export {
   CompositionHydrationError,
   UnknownCompositionError,
 } from "./runtime.js";
-export type { CompositionRuntimeOptions, CompositionInstanceRecord } from "./runtime.js";
+export type {
+  CompositionRuntimeOptions,
+  CompositionInstanceRecord,
+  CompositionHydrationHandle,
+} from "./runtime.js";
 
 export {
   CompositionValidationError,
@@ -65,9 +69,11 @@ export type {
   CompositionZoneErrorPolicy,
   RegisteredComposition,
   SerializedComposition,
-  ZoneDescriptor,
-  ZoneMap,
-  ZoneResolution,
-  ZoneSelector,
-  ZoneSelectorCtx,
+  CompositionZoneDescriptor,
+  CompositionZoneMap,
+  CompositionZoneResolution,
+  CompositionZoneSelector,
+  CompositionZoneSelectorCtx,
+  CompositionZoneSpec,
+  CompositionZoneStores,
 } from "./types.js";

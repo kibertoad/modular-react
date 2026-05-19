@@ -125,10 +125,7 @@ export function validateCompositionContracts(
   // large registries; this turns the per-zone-with-contract check into
   // a single Map lookup. Identity matching matches `wildcardTransitions`
   // semantics.
-  const modulesByContract = new WeakMap<
-    object,
-    Array<ModuleDescriptor<any, any, any, any>>
-  >();
+  const modulesByContract = new WeakMap<object, Array<ModuleDescriptor<any, any, any, any>>>();
   for (const mod of modules) {
     const exits = mod.exitPoints;
     if (!exits) continue;

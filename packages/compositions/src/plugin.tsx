@@ -14,7 +14,7 @@ import type {
   CompositionRegisterOptions,
   CompositionRuntime,
   RegisteredComposition,
-  ZoneMap,
+  CompositionZoneMap,
 } from "./types.js";
 
 /**
@@ -25,7 +25,7 @@ import type {
 export interface CompositionsPluginExtension {
   registerComposition<
     TModules extends ModuleTypeMap,
-    TZones extends ZoneMap<TModules, TState>,
+    TZones extends CompositionZoneMap<TModules, TState>,
     TState,
     TInput = void,
   >(
@@ -91,7 +91,7 @@ export function compositionsPlugin(
       return {
         registerComposition<
           TModules extends ModuleTypeMap,
-          TZones extends ZoneMap<TModules, TState>,
+          TZones extends CompositionZoneMap<TModules, TState>,
           TState,
           TInput = void,
         >(
