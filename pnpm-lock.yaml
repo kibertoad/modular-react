@@ -2229,9 +2229,6 @@ importers:
       '@modular-react/core':
         specifier: workspace:*
         version: link:../core
-      '@modular-react/journeys':
-        specifier: workspace:*
-        version: link:../journeys
       '@modular-react/react':
         specifier: workspace:*
         version: link:../react

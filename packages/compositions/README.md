@@ -330,7 +330,7 @@ end(id) | last outlet detaches
 
 ### Idempotency: `start()` semantics
 
-Every `start()` call mints a fresh instance — the runtime does not dedupe by input. The caller is responsible for caching the id where idempotency matters (e.g. `useMemo` keyed on `documentId` in a route component, or a routing layer that stores the id in URL/route state). This matches how journeys without persistence behave and keeps composition lifecycles owned by the host rather than the runtime.
+Every `start()` call mints a fresh instance — the runtime does not dedupe by input. Host components should call [`useComposition(handle, input)`](#host-hook--usecomposition) so the id is minted **once per mount** and disposed via the outlet's refcount when the host unmounts. Do not wrap `runtime.start(...)` in `useMemo` (it's not guaranteed to run only once — React may discard or re-evaluate memos during concurrent rendering), and do not call it from `useEffect` (that introduces a render-then-mint lag the outlet can't paper over). For SSR-style hand-off or persistence-driven resume, mint the instance outside React and hand the id to the outlet.
 
 ## Authoring patterns
 
@@ -692,10 +692,17 @@ const instanceId = useComposition(editorHandle, { documentId: "doc-1" });
 const instanceId = useComposition("editor", { documentId: "doc-1" });
 
 // Explicit runtime — useful for standalone consumers not using the plugin.
-const instanceId = useComposition(editorHandle, { documentId: "doc-1" }, { runtime });
+// Wrap options with `useCompositionOptions(...)` so the hook can tell options
+// apart from an input that happens to have a `runtime` field.
+import { useCompositionOptions } from "@modular-react/compositions";
+const instanceId = useComposition(
+  editorHandle,
+  { documentId: "doc-1" },
+  useCompositionOptions({ runtime }),
+);
 ```
 
-**What it does.** Lazy-ref initializer that calls `runtime.start(...)` exactly once per component mount and returns the minted id. No `useEffect`. No setState round-trip. Reads the runtime from `<CompositionsProvider>` context by default; pass `options.runtime` to bypass.
+**What it does.** Lazy-ref initializer that calls `runtime.start(...)` exactly once per component mount and returns the minted id. No `useEffect`. No setState round-trip. Reads the runtime from `<CompositionsProvider>` context by default; pass an explicit runtime via `useCompositionOptions({ runtime })` to bypass.
 
 **Disposal.** Automatic via `<CompositionOutlet>`'s attach/detach refcount: when the outlet unmounts and no other listeners remain, the runtime ends the instance after a microtask (the microtask defer keeps StrictMode's simulated mount/unmount/mount dance from tearing it down on first visit). For imperative teardown — a "close" button, a Cmd-K palette killing a stale instance — call `runtime.end(id)` directly.
 
@@ -837,6 +844,9 @@ The detection is narrow on purpose: it catches the **same instance** rendering i
 - `"select"` — the zone's `select` function threw (the zone renders its `errorComponent`)
 - `"render"` — a panel's render or commit threw (the zone error boundary engages with `onZoneError`)
 - `"lifecycle"` — `lifecycle.onMount`, `lifecycle.onUnmount`, or `onDispose` threw
+- `"emit"` — the host's `onZoneEvent` callback threw while handling a `useCompositionEmit` call
+- `"notify"` — a `runtime.subscribe` listener threw during a notify pass
+- `"retry-exhausted"` — `onZoneError` returned `"retry"` but the configured `retryLimit` was already consumed; the original render error is passed through and the zone's fallback UI renders
 
 Telemetry runs for **every** throw, regardless of the `onZoneError` policy.
 
@@ -846,10 +856,9 @@ The runtime defers disposal one microtask so React 18/19 StrictMode's mount/unmo
 
 ### Validation timing
 
-- Definition-time (`registerComposition`) — synchronous, throws `CompositionValidationError` immediately on structural issues
-- Resolve-time (`registry.resolve()`) — synchronous, throws `CompositionValidationError` on duplicate ids, `moduleCompat` mismatches, and contract gaps
-
-If the plugin is bypassed (`createCompositionRuntime` called directly), only the runtime's duplicate-id check fires; structural and contract validation are skipped.
+- Definition-time (`registerComposition`) — synchronous, throws `CompositionValidationError` immediately on structural issues.
+- Resolve-time (`registry.resolve()`) — synchronous, throws `CompositionValidationError` on duplicate ids, `moduleCompat` mismatches, and contract gaps.
+- Direct construction (`createCompositionRuntime(registered, { modules })`) — synchronous, runs the same cross-reference checks as resolve-time when a `modules` map is supplied. Structural validation is still expected to have happened upstream (via `registerComposition` or your test fixture); the runtime constructor will also reject duplicate composition ids on its own.
 
 ## Limitations
 

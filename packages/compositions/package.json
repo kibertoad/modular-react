@@ -31,7 +31,6 @@
   },
   "devDependencies": {
     "@modular-react/core": "workspace:*",
-    "@modular-react/journeys": "workspace:*",
     "@modular-react/react": "workspace:*",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.14",

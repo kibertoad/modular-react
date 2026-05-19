@@ -174,6 +174,17 @@ export function createCompositionContext<TState>(): TypedCompositionHooks<TState
 // Host-side: mint an instance for a composition the host wants to render.
 // ---------------------------------------------------------------------------
 
+/**
+ * Brand symbol on {@link UseCompositionOptions} so the runtime overload
+ * resolver can disambiguate it from an `input` of shape `{ runtime: … }`
+ * without relying on key-counting (which would break the moment options
+ * gained a second field). Always set via `useCompositionOptions(...)` —
+ * callers can also spread the constant export `USE_COMPOSITION_OPTIONS`.
+ */
+const USE_COMPOSITION_OPTIONS_BRAND: unique symbol = Symbol.for(
+  "@modular-react/compositions/useCompositionOptions",
+);
+
 export interface UseCompositionOptions {
   /**
    * Runtime to mint the instance against. Optional when a
@@ -181,6 +192,35 @@ export interface UseCompositionOptions {
    * runtime from context in that case (parallel to `<CompositionOutlet>`).
    */
   readonly runtime?: CompositionRuntime;
+}
+
+/**
+ * Wrap a {@link UseCompositionOptions} object so {@link useComposition}
+ * can detect it positionally even when `TInput` happens to have a
+ * `runtime` field. Pass the result as the last argument:
+ *
+ * ```ts
+ * useComposition(handle, input, useCompositionOptions({ runtime }));
+ * ```
+ *
+ * Branding is the only safe disambiguation when `TInput` is `unknown` —
+ * a key-shape sniff (the previous approach) misclassified any input
+ * object whose only key was `runtime`.
+ */
+export function useCompositionOptions(
+  options: UseCompositionOptions,
+): UseCompositionOptions & { readonly [USE_COMPOSITION_OPTIONS_BRAND]: true } {
+  return Object.assign({}, options, {
+    [USE_COMPOSITION_OPTIONS_BRAND]: true as const,
+  });
+}
+
+function isBrandedOptions(value: unknown): value is UseCompositionOptions {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<symbol, unknown>)[USE_COMPOSITION_OPTIONS_BRAND] === true
+  );
 }
 
 /**
@@ -217,38 +257,20 @@ export function useComposition(
   handleOrId: CompositionHandleRef<string, unknown> | string,
   ...rest: unknown[]
 ): CompositionInstanceId {
-  // Disambiguate the overloads: when the first arg is a handle and TInput
-  // is `void`, callers may omit `input` entirely; for the string-id form
-  // `input` is always positional. The last argument is the optional
-  // `UseCompositionOptions`. We tease them apart by shape so the same
-  // implementation backs every overload.
+  // Disambiguate the overloads positionally with a symbol brand on
+  // `options`. The previous "object with only a `runtime` key" sniff
+  // misclassified an `input` of shape `{ runtime: … }` (a perfectly
+  // valid TInput) as options, and would break the moment options
+  // gained a second field. The brand is the only signal we trust.
   let input: unknown = undefined;
   let options: UseCompositionOptions | undefined;
   if (rest.length > 0) {
     const last = rest[rest.length - 1];
-    if (
-      typeof last === "object" &&
-      last !== null &&
-      "runtime" in (last as Record<string, unknown>) &&
-      rest.length > 1
-    ) {
-      options = last as UseCompositionOptions;
-      input = rest[0];
+    if (isBrandedOptions(last)) {
+      options = last;
+      if (rest.length > 1) input = rest[0];
     } else {
-      // Either a single `input`-shaped arg, or a single options-shaped
-      // arg (handle form with void input). Treat an object that ONLY
-      // has a `runtime` field as options; anything else as input.
-      if (
-        rest.length === 1 &&
-        typeof last === "object" &&
-        last !== null &&
-        Object.keys(last as Record<string, unknown>).length === 1 &&
-        "runtime" in (last as Record<string, unknown>)
-      ) {
-        options = last as UseCompositionOptions;
-      } else {
-        input = rest[0];
-      }
+      input = last;
     }
   }
 
@@ -256,17 +278,29 @@ export function useComposition(
   const runtime = options?.runtime ?? context?.runtime;
   if (!runtime) {
     throw new Error(
-      "[@modular-react/compositions] useComposition() needs a runtime. Pass `options.runtime` or mount a <CompositionsProvider>.",
+      "[@modular-react/compositions] useComposition() needs a runtime. Pass `options.runtime` (via `useCompositionOptions(...)`) or mount a <CompositionsProvider>.",
     );
   }
 
-  // Lazy ref init: the start() call runs exactly once per component
-  // instance, during the first render's reconciliation. StrictMode's
-  // double-render uses the SAME ref on the second pass, so start() is
-  // not double-invoked. On a real unmount/remount cycle (route change,
-  // key change), React tears down the component and a fresh ref is
-  // allocated on the next mount — the outlet's detach microtask has
-  // already disposed the previous instance by then.
+  // Lazy ref init: the start() call runs exactly once per committed
+  // component instance.
+  //
+  // Why useRef and not useState(() => start()): React's StrictMode
+  // intentionally double-invokes `useState` lazy initializers in dev
+  // to test purity. `runtime.start()` is impure (it mutates the
+  // runtime's instance map), so the lazy-init form would leak one
+  // orphan instance per mount under StrictMode. A useRef + render-
+  // time idempotent write does NOT trip that path: the ref object
+  // persists across StrictMode's double-render of the same fiber,
+  // so the `=== null` check on the second pass short-circuits.
+  //
+  // Concurrent rendering bail-outs are also safe: a discarded render's
+  // ref write persists onto the fiber, and the next render attempt
+  // sees `ref.current !== null` and skips `start()`. The only path
+  // that calls start() twice is a real unmount/remount cycle (route
+  // change, key change), where the outlet's detach microtask has
+  // already disposed the previous instance by the time the next mount
+  // runs.
   const ref = useRef<CompositionInstanceId | null>(null);
   if (ref.current === null) {
     ref.current = runtime.start(handleOrId as never, input as never);

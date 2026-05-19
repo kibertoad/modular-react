@@ -24,7 +24,15 @@ function ContentfulSourcePanel({ input }: { input: { documentId: string } }) {
               data-testid={`contentful-${e.id}`}
               aria-pressed={selected === e.id}
               onClick={() => dispatch({ selectedSourceItem: e.id })}
-              style={{ all: "unset", cursor: "pointer", textDecoration: "underline" }}
+              style={{
+                background: "none",
+                border: 0,
+                padding: 0,
+                color: "inherit",
+                font: "inherit",
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
             >
               {e.title}
             </button>

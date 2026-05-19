@@ -220,12 +220,28 @@ export interface CompositionRegisterOptions<TState = unknown> {
    * Fires when a zone selector or panel render throws. Observation-only —
    * the outlet still applies the `onZoneError` policy. Useful for shell
    * telemetry that doesn't belong in composition authoring code.
+   *
+   * Phases:
+   *  - `"select"` — the zone's `select` callback threw.
+   *  - `"render"` — a panel rendered into the zone threw.
+   *  - `"lifecycle"` — `lifecycle.onMount` / `onUnmount` threw.
+   *  - `"emit"` — the host's `onZoneEvent` callback threw.
+   *  - `"notify"` — a runtime subscriber listener threw.
+   *  - `"retry-exhausted"` — the host returned `policy: "retry"` from
+   *    `onZoneError` but the configured `retryLimit` had already been
+   *    consumed; the original render error is passed through.
    */
   onError?: (
     err: unknown,
     ctx: {
       readonly zone: string;
-      readonly phase: "select" | "render" | "lifecycle" | "emit" | "notify";
+      readonly phase:
+        | "select"
+        | "render"
+        | "lifecycle"
+        | "emit"
+        | "notify"
+        | "retry-exhausted";
     },
   ) => void;
   /**

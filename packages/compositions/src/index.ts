@@ -40,6 +40,7 @@ export {
   useCompositionEmit,
   useCompositionZone,
   useComposition,
+  useCompositionOptions,
   createCompositionContext,
   CompositionInstanceContext,
 } from "./hooks.js";

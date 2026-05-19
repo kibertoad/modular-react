@@ -8,7 +8,7 @@ A multi-zone editor screen wired with [`@modular-react/compositions`](../../../p
 
 The three panel modules know nothing about the composition. Each is a regular `defineModule` with `entryPoints`; the composition wires them into zones at the layout level.
 
-```
+```text
 ┌────────────────────────────────────────────────────────────────┐
 │  [ source ▾ ]              EDITOR — doc-1                      │
 │  Contentful ●                                                  │
@@ -32,7 +32,7 @@ Then open `http://localhost:5197`.
 
 ## Layout
 
-```
+```text
 app-shared/   — types + the composition definition
 modules/      — editor / contentful / strapi panel modules
 shell/        — registry, root route, CompositionOutlet wiring, e2e

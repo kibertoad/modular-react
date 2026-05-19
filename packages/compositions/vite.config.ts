@@ -16,7 +16,6 @@ export default defineConfig({
         "react/jsx-runtime",
         "react-dom",
         "@modular-react/core",
-        "@modular-react/journeys",
         "@modular-react/react",
       ],
     },

@@ -11,6 +11,11 @@ function EditorMain({ input }: { input: { documentId: string } }) {
   const activeSource = useEditorState((s: EditorState) => s.activeSource);
   const dispatch = useEditorDispatch();
   const set = (next: SourceId | null) => dispatch({ activeSource: next });
+  // Per-instance group name: if two editor compositions render on the
+  // same page, native radio grouping would let the most-recent click
+  // bleed across instances. Scope by documentId so each instance owns
+  // its own radio group.
+  const groupName = `source-${input.documentId}`;
 
   return (
     <section data-testid="editor-main" style={{ padding: "1rem" }}>
@@ -20,11 +25,24 @@ function EditorMain({ input }: { input: { documentId: string } }) {
         <Choice
           label="Contentful"
           value="contentful"
+          name={groupName}
           active={activeSource === "contentful"}
           onSelect={set}
         />
-        <Choice label="Strapi" value="strapi" active={activeSource === "strapi"} onSelect={set} />
-        <Choice label="None" value={null} active={activeSource === null} onSelect={set} />
+        <Choice
+          label="Strapi"
+          value="strapi"
+          name={groupName}
+          active={activeSource === "strapi"}
+          onSelect={set}
+        />
+        <Choice
+          label="None"
+          value={null}
+          name={groupName}
+          active={activeSource === null}
+          onSelect={set}
+        />
       </div>
     </section>
   );
@@ -33,11 +51,13 @@ function EditorMain({ input }: { input: { documentId: string } }) {
 function Choice({
   label,
   value,
+  name,
   active,
   onSelect,
 }: {
   label: string;
   value: SourceId | null;
+  name: string;
   active: boolean;
   onSelect: (next: SourceId | null) => void;
 }) {
@@ -45,7 +65,7 @@ function Choice({
     <label style={{ display: "block", padding: "0.25rem 0" }}>
       <input
         type="radio"
-        name="source"
+        name={name}
         checked={active}
         onChange={() => onSelect(value)}
         data-testid={`source-choice-${value ?? "none"}`}

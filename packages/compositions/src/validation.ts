@@ -120,6 +120,26 @@ export function validateCompositionContracts(
   const moduleById = new Map<string, ModuleDescriptor<any, any, any, any>>();
   for (const mod of modules) moduleById.set(mod.id, mod);
 
+  // Index modules-by-contract once. The inner loop's O(N_modules ×
+  // N_exits) scan-for-contract-identity became the dominant cost for
+  // large registries; this turns the per-zone-with-contract check into
+  // a single Map lookup. Identity matching matches `wildcardTransitions`
+  // semantics.
+  const modulesByContract = new WeakMap<
+    object,
+    Array<ModuleDescriptor<any, any, any, any>>
+  >();
+  for (const mod of modules) {
+    const exits = mod.exitPoints;
+    if (!exits) continue;
+    for (const exit of Object.values(exits)) {
+      if (typeof exit !== "object" || exit === null) continue;
+      const bucket = modulesByContract.get(exit) ?? [];
+      if (bucket.length === 0) modulesByContract.set(exit, bucket);
+      bucket.push(mod);
+    }
+  }
+
   const seenIds = new Set<string>();
   for (const reg of compositions) {
     const def = reg.definition;
@@ -176,21 +196,11 @@ export function validateCompositionContracts(
         );
         continue;
       }
-      // Walk modules. A candidate satisfies the contract when any of its
-      // declared exit points reference the same `ExitContract` value (by
-      // identity, matching how `wildcardTransitions` matches contracts).
-      let anySatisfied = false;
-      for (const mod of modules) {
-        const exits = mod.exitPoints;
-        if (!exits) continue;
-        for (const exit of Object.values(exits)) {
-          if (exit === contract) {
-            anySatisfied = true;
-            break;
-          }
-        }
-        if (anySatisfied) break;
-      }
+      // Walk the contract-keyed index. A candidate satisfies the
+      // contract when any of its declared exit points reference the
+      // same `ExitContract` value (by identity, matching how
+      // `wildcardTransitions` matches contracts).
+      const anySatisfied = (modulesByContract.get(contract as object) ?? []).length > 0;
       if (!anySatisfied) {
         issues.push(
           `composition "${def.id}" zone "${zoneName}" declares contract "${contract.kind}" but no registered module exposes it as an exit point`,

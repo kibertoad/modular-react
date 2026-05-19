@@ -120,39 +120,58 @@ function useInstanceSnapshot(
 }
 
 /**
- * Stable input hash used to dedupe lazy journey-zone instance ids.
- * Tolerates non-JSON-serializable input (cycles, functions) by falling
- * back to a stringified type tag — duplicates of unhashable input land
- * in the same bucket, which is the conservative choice (one journey
- * instance instead of N).
+ * Stable input hash used to dedupe lazy journey-zone instance ids and
+ * to key per-input boundaries in module-entry resolutions.
  *
- * Object keys are sorted before stringification so two selectors that
- * spell the same input with different key insertion order (`{a, b}`
- * vs `{b, a}`) produce identical hashes — otherwise the cache would
- * needlessly mint a fresh instance on every re-render that reordered
- * the spread.
+ * Properties:
+ *   - Object keys are sorted so `{a, b}` and `{b, a}` hash identically.
+ *   - Shared (non-cyclic) subtrees serialize fully on every occurrence,
+ *     so `{x: A, y: A}` and `{x: A_copy, y: A_copy}` hash equally when
+ *     `A` and `A_copy` have the same content. (A naive `seen` WeakSet
+ *     mis-flags the second visit as `<cycle>`, breaking this.)
+ *   - True cycles short-circuit to `<cycle>` so we never infinite-loop.
+ *   - Functions and non-serializable leaves (e.g. BigInt) serialize as
+ *     `<fn>` / `<bigint:…>` so they don't trip JSON.stringify.
+ *   - Unhashable input (final catch-all) falls back to a typeof tag —
+ *     duplicates land in the same bucket, the conservative choice.
  */
 function hashInput(input: unknown): string {
   if (input === undefined) return "u";
   try {
-    return JSON.stringify(input, stableReplacer());
+    return serializeStable(input, new Set());
   } catch {
     return `<${typeof input}>`;
   }
 }
 
-function stableReplacer(): (key: string, value: unknown) => unknown {
-  const seen = new WeakSet<object>();
-  return (_key, value) => {
-    if (value === null || typeof value !== "object") return value;
-    if (Array.isArray(value)) return value;
-    if (seen.has(value as object)) return "<cycle>";
-    seen.add(value as object);
-    const keys = Object.keys(value as Record<string, unknown>).sort();
-    const out: Record<string, unknown> = {};
-    for (const k of keys) out[k] = (value as Record<string, unknown>)[k];
-    return out;
-  };
+function serializeStable(value: unknown, ancestors: Set<object>): string {
+  if (value === undefined) return "undefined";
+  if (value === null) return "null";
+  const t = typeof value;
+  if (t === "string") return JSON.stringify(value);
+  if (t === "number") return Number.isFinite(value as number) ? String(value) : "null";
+  if (t === "boolean") return value ? "true" : "false";
+  if (t === "bigint") return `"<bigint:${(value as bigint).toString()}>"`;
+  if (t === "function" || t === "symbol") return `"<${t}>"`;
+  if (t !== "object") return JSON.stringify(value);
+  const obj = value as object;
+  if (ancestors.has(obj)) return '"<cycle>"';
+  ancestors.add(obj);
+  try {
+    if (Array.isArray(value)) {
+      const items = (value as readonly unknown[]).map((v) => serializeStable(v, ancestors));
+      return `[${items.join(",")}]`;
+    }
+    const record = value as Record<string, unknown>;
+    const keys = Object.keys(record).sort();
+    const parts: string[] = [];
+    for (const k of keys) {
+      parts.push(`${JSON.stringify(k)}:${serializeStable(record[k], ancestors)}`);
+    }
+    return `{${parts.join(",")}}`;
+  } finally {
+    ancestors.delete(obj);
+  }
 }
 
 /**
@@ -227,13 +246,28 @@ export function CompositionOutlet<TZones extends string = string>(
   // any eager zone's resolution (e.g. an unrelated counter increment)
   // produce an identical signature and the effect's identity-comparison
   // short-circuits — no idle-callback churn for noisy state.
+  //
+  // Skip the prep entirely when no zone is eager (the common case);
+  // otherwise re-run the prep for every dispatch even though nothing
+  // could ever preload from it.
+  const eagerZoneNames = useMemo<readonly string[]>(() => {
+    if (!reg) return [];
+    const zones = reg.definition.zones as Record<string, ZoneDescriptor<any, any>>;
+    const names: string[] = [];
+    for (const zoneName of zoneNames) {
+      if (zones[zoneName]?.preload === "eager") names.push(zoneName);
+    }
+    return names;
+  }, [reg, zoneNames]);
+
   const eagerSignature = useMemo(() => {
+    if (eagerZoneNames.length === 0) return "";
     if (!reg || !instance || instance.status !== "active") return "";
     const zones = reg.definition.zones as Record<string, ZoneDescriptor<any, any>>;
     const parts: string[] = [];
-    for (const zoneName of zoneNames) {
+    for (const zoneName of eagerZoneNames) {
       const descriptor = zones[zoneName];
-      if (descriptor?.preload !== "eager") continue;
+      if (!descriptor) continue;
       let selection: ZoneResolution<any>;
       try {
         selection = descriptor.select({ state: instance.state, deps: internals.__deps });
@@ -244,18 +278,16 @@ export function CompositionOutlet<TZones extends string = string>(
       parts.push(`${zoneName}:${computeSelectionKey(selection, null, modules)}`);
     }
     return parts.join("|");
-  }, [reg, instance, zoneNames, modules, internals]);
+  }, [reg, instance, eagerZoneNames, modules, internals]);
 
   useEffect(() => {
     if (!reg || !instance || instance.status !== "active") return;
-    if (eagerSignature === "") return;
-    const eagerZones: Array<{ zoneName: string; descriptor: ZoneDescriptor<any, any> }> = [];
+    if (eagerSignature === "" || eagerZoneNames.length === 0) return;
     const zones = reg.definition.zones as Record<string, ZoneDescriptor<any, any>>;
-    for (const zoneName of zoneNames) {
+    const eagerZones: Array<{ zoneName: string; descriptor: ZoneDescriptor<any, any> }> = [];
+    for (const zoneName of eagerZoneNames) {
       const descriptor = zones[zoneName];
-      if (descriptor?.preload === "eager") {
-        eagerZones.push({ zoneName, descriptor });
-      }
+      if (descriptor) eagerZones.push({ zoneName, descriptor });
     }
     if (eagerZones.length === 0) return;
 
@@ -308,7 +340,7 @@ export function CompositionOutlet<TZones extends string = string>(
     // trigger a re-run; the other deps are stable across the lifetime
     // of an outlet and listed for ESLint hygiene only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reg, instance, eagerSignature, zoneNames, modules, internals]);
+  }, [reg, instance, eagerSignature, eagerZoneNames, modules, internals]);
 
   if (cycleDetected) {
     return renderError(
@@ -497,16 +529,26 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
   }
   const selectionKey = computeSelectionKey(selection, selectorError, modules);
 
-  // Phase 2: side-effect — reset retry counter when the resolution
-  // changes successfully. Effect-only so a discarded concurrent render
-  // never mutates runtime state.
+  // Phase 2: side-effect — when the resolution changes, reset both the
+  // per-zone retry counter and any sticky `"ignore"` decision the
+  // previous resolution set. Effect-only so a discarded concurrent
+  // render never mutates runtime state.
+  //
+  // Why ignoredSelectionKey lives here: without resetting, a panel that
+  // failed once under the ignore policy would keep rendering `null` if
+  // its selectionKey ever recurred after a detour. Clearing on
+  // resolution change scopes the suppression to the specific resolution
+  // the host marked ignorable.
   useEffect(() => {
     const prev = previousSelectionKeyRef.current;
     if (prev !== null && prev !== selectionKey) {
       internals.__resetRetry(instanceId, zone);
+      if (ignoredSelectionKey !== null && ignoredSelectionKey !== selectionKey) {
+        setIgnoredSelectionKey(null);
+      }
     }
     previousSelectionKeyRef.current = selectionKey;
-  }, [internals, instanceId, zone, selectionKey]);
+  }, [internals, instanceId, zone, selectionKey, ignoredSelectionKey]);
 
   if (!record || !store) return null;
 
@@ -532,8 +574,12 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
     if (policy === "retry") {
       if (internals.__consumeRetry(instanceId, zone, retryLimit)) {
         setRetryKey((k) => k + 1);
+        return;
       }
-      // budget exhausted — fall through to the boundary's fallback UI
+      // Budget exhausted — surface a distinct phase so shell telemetry
+      // can split "retried successfully" from "host asked for retries
+      // but ran out". The boundary's fallback UI still renders below.
+      internals.__fireOnError(instanceId, err, { zone, phase: "retry-exhausted" });
       return;
     }
     if (policy === "ignore") {

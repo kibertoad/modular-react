@@ -75,7 +75,16 @@ export interface CompositionRuntimeInternals {
   readonly __fireOnError: (
     id: CompositionInstanceId,
     err: unknown,
-    ctx: { zone: string; phase: "select" | "render" | "lifecycle" | "emit" | "notify" },
+    ctx: {
+      zone: string;
+      phase:
+        | "select"
+        | "render"
+        | "lifecycle"
+        | "emit"
+        | "notify"
+        | "retry-exhausted";
+    },
   ) => void;
   /**
    * Direct-hydration escape hatch used by `hydrateComposition`. Bypasses
@@ -182,7 +191,13 @@ export function createCompositionRuntime(
   function notify(record: CompositionInstanceRecord) {
     record.revision += 1;
     record.cachedSnapshot = null;
-    for (const listener of record.listeners) {
+    // Snapshot before iterating: a listener may call `subscribe`/
+    // `unsubscribe` on the same record (a useSyncExternalStore-driven
+    // re-subscribe is the common case). Iterating the live `Set` would
+    // pick up added entries on the same pass and skip removed ones —
+    // both behaviors silently cause double or missed fires.
+    const listeners = [...record.listeners];
+    for (const listener of listeners) {
       try {
         listener();
       } catch (err) {
@@ -216,7 +231,16 @@ export function createCompositionRuntime(
   function fireOnError(
     id: CompositionInstanceId,
     err: unknown,
-    ctx: { zone: string; phase: "select" | "render" | "lifecycle" | "emit" | "notify" },
+    ctx: {
+      zone: string;
+      phase:
+        | "select"
+        | "render"
+        | "lifecycle"
+        | "emit"
+        | "notify"
+        | "retry-exhausted";
+    },
   ) {
     const record = instances.get(id);
     if (!record) return;
@@ -294,7 +318,17 @@ export function createCompositionRuntime(
     updatedAt: string,
   ): CompositionInstanceRecord<TState> {
     const store = createStore<TState>(state);
-    const record: CompositionInstanceRecord<TState> = {
+    // Subscribe FIRST so the record's `storeUnsubscribe` field is the
+    // real handle from the start — the previous "no-op placeholder,
+    // overwrite after construction" pattern was a hidden assumption
+    // that `store.subscribe` never fires synchronously.
+    let record!: CompositionInstanceRecord<TState>;
+    const storeUnsubscribe = store.subscribe((next) => {
+      record.state = next;
+      record.updatedAt = nowIso();
+      notify(record);
+    });
+    record = {
       id: instanceId,
       compositionId: reg.definition.id,
       status: "active",
@@ -309,15 +343,8 @@ export function createCompositionRuntime(
       zoneRetryCounts: new Map(),
       mountFired: false,
       unmountFired: false,
-      storeUnsubscribe: () => {
-        // populated below
-      },
+      storeUnsubscribe,
     };
-    record.storeUnsubscribe = store.subscribe((next) => {
-      record.state = next;
-      record.updatedAt = nowIso();
-      notify(record);
-    });
     instances.set(instanceId, record);
     return record;
   }
@@ -491,9 +518,18 @@ export function createCompositionRuntime(
     __fireOnError: (id, err, ctx) => fireOnError(id, err, ctx),
     __hydrate: (reg, blob) => {
       // Hydration is for attaching an out-of-band blob (SSR dump, debug
-      // snapshot). We require the blob's version to match the active
-      // definition — there is no auto-migration runner because there is
-      // no persistence layer to encounter old blobs in the wild.
+      // snapshot). Match the blob's definition id explicitly: callers
+      // that bypass `hydrateComposition` (test code, future SSR
+      // plumbing) would otherwise be able to install a record whose
+      // `compositionId` disagrees with its definition.
+      if (blob.definitionId !== reg.definition.id) {
+        throw new CompositionHydrationError(
+          `Hydrate blob is for "${blob.definitionId}" but the resolved definition is "${reg.definition.id}"`,
+        );
+      }
+      // We require the blob's version to match the active definition —
+      // there is no auto-migration runner because there is no
+      // persistence layer to encounter old blobs in the wild.
       if (blob.version !== reg.definition.version) {
         throw new CompositionHydrationError(
           `Hydrate blob for "${reg.definition.id}" has version "${blob.version}", ` +
