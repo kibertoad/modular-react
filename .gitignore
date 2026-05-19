@@ -10,3 +10,6 @@ playwright-report/
 test-results/
 /examples/catalog/dist-catalog
 /packages/catalog/dist-spa
+
+# Shell crash dumps (Cygwin / MSYS / Git Bash on Windows)
+*.stackdump

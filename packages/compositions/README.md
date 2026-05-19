@@ -245,9 +245,10 @@ zones: {
       entry: "sourcePanel",
       input: {
         documentId: state.documentId,
-        // Stable per (instance, "selectedItem") — same reference across
-        // selector re-runs, so useSyncExternalStore doesn't re-subscribe.
-        selectedItem: stores.writable("selectedItem", {
+        // Stable per (instance, "selectedSourceItem") — same reference
+        // across selector re-runs, so useSyncExternalStore doesn't
+        // re-subscribe.
+        selectedSourceItem: stores.writable("selectedSourceItem", {
           get: (s) => s.selectedSourceItem,
           set: (value) => ({ selectedSourceItem: value }),
         }),
@@ -264,13 +265,13 @@ import type { ModuleEntryProps, WritableStore } from "@modular-react/core";
 
 interface SourcePanelInput {
   readonly documentId: string;
-  readonly selectedItem: WritableStore<string | null>;
+  readonly selectedSourceItem: WritableStore<string | null>;
 }
 
 export function ContentfulSourcePanel({ input }: ModuleEntryProps<SourcePanelInput>) {
   const selected = useSyncExternalStore(
-    input.selectedItem.subscribe,
-    input.selectedItem.getSnapshot,
+    input.selectedSourceItem.subscribe,
+    input.selectedSourceItem.getSnapshot,
   );
   return (
     <ul>
@@ -278,7 +279,7 @@ export function ContentfulSourcePanel({ input }: ModuleEntryProps<SourcePanelInp
         <li
           key={it.id}
           aria-current={selected === it.id || undefined}
-          onClick={() => input.selectedItem.set(it.id)}
+          onClick={() => input.selectedSourceItem.set(it.id)}
         >
           {it.title}
         </li>
@@ -292,24 +293,7 @@ The panel team and composition team share only the structural `WritableStore<str
 
 See [Pattern — typed store projections](#pattern--typed-store-projections-composition-unaware-panels) for the full design.
 
-**Alternative for same-team scenarios — composition hooks.** When one team owns both the composition and the panels, calling `useCompositionState` / `useCompositionDispatch` directly is slightly less ceremony — the panel imports the composition's `TState` and subscribes to slices through the hook:
-
-```typescript
-import { useCompositionState, useCompositionDispatch } from "@modular-react/compositions";
-import type { EditorState } from "@myorg/editor-composition";
-
-export function ContentfulSourcePanel({ input }: ModuleEntryProps<{ documentId: string }>) {
-  const selected = useCompositionState<EditorState, string | null>(
-    (s) => s.selectedSourceItem,
-  );
-  const dispatch = useCompositionDispatch<EditorState>();
-  return (/* same UI as above, calling dispatch({ selectedSourceItem: it.id }) */);
-}
-```
-
-See [Hooks for foreign panels](#hooks-for-foreign-panels) for the typed-hooks factory.
-
-> **Which pattern do I pick?** See [Hooks vs stores — which to use](#hooks-vs-stores--which-to-use).
+**Alternative for same-team scenarios — composition hooks.** When one team owns both the composition and the panels, `useCompositionState(selector)` and `useCompositionDispatch()` skip the typed-store layer — selectors return slices of `TState` directly, panels read/write through the hooks. See [Hooks for foreign panels](#hooks-for-foreign-panels) for the full code and the typed-hooks factory; trade-offs in [Hooks vs stores — which to use](#hooks-vs-stores--which-to-use).
 
 ## Core concepts
 
@@ -450,7 +434,7 @@ Both patterns subscribe at slice level (via `useSyncExternalStore` under the hoo
 | Ceremony at the panel                | Two lines of `useSyncExternalStore` per slice                            | One line of `useCompositionState(s => ...)` per slice                   |
 | Best for                             | Panels owned by a different team than the composition; reusable panels   | Panels and composition owned by the same team; one-off internal screens |
 
-**Default to stores** when modules and compositions are owned by different teams, or when you want a panel to be reusable outside this composition. **Reach for hooks** when the same team owns both and you want minimum ceremony — they're a fully-supported alternative, not a deprecated path.
+**Default to stores** when modules and compositions are owned by different teams, or when you want a panel to be reusable outside this composition. **Reach for hooks** when the same team owns both and you want minimum ceremony.
 
 The two patterns can coexist in one composition (e.g., the editor panel uses hooks because it's owned by the composition team; integration panels use stores because they're owned by integration teams).
 
@@ -796,6 +780,15 @@ import type { ComponentType, ReactNode } from "react";
 interface RuntimeMountAdapter<TInput = unknown> {
   start(definitionId: string, input: TInput): string; // returns instanceId
   Outlet: ComponentType<{ instanceId: string; loadingFallback?: ReactNode }>;
+  /**
+   * Optional teardown for an instance the host minted via `start`.
+   * Called by the composition outlet when its per-zone cache rolls
+   * over to a new resolution. Omitting it means the embedded runtime
+   * is on its own — typically fine because its outlet unmounts when
+   * the composition zone re-renders, but custom adapters wrapping a
+   * runtime that caches instances should implement it to avoid leaks.
+   */
+  end?(instanceId: string): void;
 }
 ```
 
@@ -813,6 +806,8 @@ manifest.extensions.compositions.registerMountAdapter(
 Register adapters once after `registry.resolve()` and before mounting React. The outlet caches the minted instance id per `(handle.id, structural hash of input)` per `ZoneRenderer`, so state changes that re-run the selector with the same handle+input do not call `adapter.start` again.
 
 Future kinds (composition-in-zone, federated remote modules) plug into the same hole.
+
+> **Asymmetry today.** Only the compositions runtime consumes adapters. The journeys runtime exposes a producer (`createJourneyMountAdapter`) but does not itself register adapters — embedding a composition inside a journey step works through `<CompositionOutlet>` directly inside the step's component, not through this seam. A symmetric `JourneyRuntime` consumer is future work; tracked alongside composition-in-composition.
 
 ## Composition handles
 
@@ -958,11 +953,13 @@ const instanceId = useComposition(
 - `useEffect(() => { setInstanceId(runtime.start(...)) }, [])` round-trips the id through React state before the outlet can attach. In StrictMode's dev double-mount it spawns a spurious instance the cleanup has to dispose, and the parent re-renders an extra time with `instanceId === null`. It's also the textbook ["You Might Not Need an Effect"](https://react.dev/learn/you-might-not-need-an-effect#initializing-the-application) case.
 - `useMemo(() => runtime.start(...), [])` looks tempting but the React docs explicitly say `useMemo` is **a pure optimization hint** — React may discard the memo cache and re-invoke the factory at any time, which would mint orphan instances every time it does so.
 
-`useComposition` uses a `useRef` initializer so the `start()` call is guaranteed to run exactly once per React mount, and lets the outlet's refcount handle disposal. Tests are in `third-pass-fixes.test.tsx` (`useComposition` describe block).
+`useComposition` uses a `useRef` initializer so the `start()` call is guaranteed to run exactly once per React mount, and lets the outlet's refcount handle disposal.
+
+> **The bound instance is fixed at first render.** `useComposition` ignores subsequent changes to its `handle` / `input` / runtime arguments — it returns the originally-minted id for the lifetime of the calling component. To re-mint, change the component's `key` so React unmounts and remounts the hook.
 
 ## Hooks for foreign panels
 
-> The alternative to the [typed store projections](#pattern--typed-store-projections-composition-unaware-panels) pattern, suited to in-team panels. The hook-based path is fully supported — neither pattern is deprecated. See [Hooks vs stores — which to use](#hooks-vs-stores--which-to-use) for the trade-off.
+> The alternative to the [typed store projections](#pattern--typed-store-projections-composition-unaware-panels) pattern, suited to in-team panels. See [Hooks vs stores — which to use](#hooks-vs-stores--which-to-use) for the trade-off.
 
 Panels inside a composition zone — and only those panels — can read the active instance via four hooks. They throw if called outside a `<CompositionOutlet>` zone.
 

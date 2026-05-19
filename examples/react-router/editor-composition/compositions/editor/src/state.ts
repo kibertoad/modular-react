@@ -1,17 +1,8 @@
-/** Id of a source-integration panel hosted in the composition's `source` zone. */
-export type SourceId = "contentful" | "strapi";
-
 /**
- * The composition's scoped store. The `main` zone always renders the
- * editor; the `source` zone projects `activeSource` → Contentful / Strapi
- * / empty; the `inspector` zone projects `selectedSourceItem` → details.
- *
- * Lives in the composition package — owned by the composition team, not
- * the shell team. Panel modules depend on this package when they
- * participate in the composition; they do not see it through `app-shared`.
+ * The composition's scoped store type. Re-exported from `app-shared` so
+ * the composition package and in-team panel modules (the editor module)
+ * can both import the same type without forming a workspace cycle. See
+ * the comment on `EditorState` in `app-shared/src/app-types.ts` for why
+ * the shape lives there rather than here.
  */
-export interface EditorState {
-  readonly documentId: string;
-  readonly activeSource: SourceId | null;
-  readonly selectedSourceItem: string | null;
-}
+export type { EditorState, SourceId } from "@example-rr-editor-composition/app-shared";

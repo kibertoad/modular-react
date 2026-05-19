@@ -315,6 +315,9 @@ importers:
 
   examples/react-router/editor-composition/compositions/editor:
     dependencies:
+      '@example-rr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
       '@example-rr-editor-composition/contentful':
         specifier: workspace:*
         version: link:../../modules/contentful
@@ -353,6 +356,12 @@ importers:
 
   examples/react-router/editor-composition/modules/editor:
     dependencies:
+      '@example-rr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../../packages/compositions
       '@modular-react/core':
         specifier: workspace:*
         version: link:../../../../../packages/core
@@ -1237,6 +1246,9 @@ importers:
 
   examples/tanstack-router/editor-composition/compositions/editor:
     dependencies:
+      '@example-tsr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
       '@example-tsr-editor-composition/contentful':
         specifier: workspace:*
         version: link:../../modules/contentful
@@ -1275,6 +1287,12 @@ importers:
 
   examples/tanstack-router/editor-composition/modules/editor:
     dependencies:
+      '@example-tsr-editor-composition/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/compositions':
+        specifier: workspace:*
+        version: link:../../../../../packages/compositions
       '@modular-react/core':
         specifier: workspace:*
         version: link:../../../../../packages/core

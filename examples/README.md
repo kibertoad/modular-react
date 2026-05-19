@@ -9,11 +9,13 @@ examples/
 ├── react-router/
 │   ├── integration-manager/          Sibling modules sharing a screen (React Router)
 │   ├── customer-onboarding-journey/  Multi-module workflow via @modular-react/journeys (React Router)
+│   ├── editor-composition/           Multi-module screen via @modular-react/compositions (React Router)
 │   ├── remote-capabilities/          Slots/navigation driven by a backend-served remote manifest
 │   └── active-project-manifest/      Per-project remote manifests swapped at runtime
 └── tanstack-router/
     ├── integration-manager/          Sibling modules sharing a screen (TanStack Router)
-    └── customer-onboarding-journey/  Multi-module workflow via @modular-react/journeys (TanStack Router)
+    ├── customer-onboarding-journey/  Multi-module workflow via @modular-react/journeys (TanStack Router)
+    └── editor-composition/           Multi-module screen via @modular-react/compositions (TanStack Router)
 ```
 
 ## Running an example
@@ -40,6 +42,10 @@ Three sibling modules (Contentful, Strapi, GitHub) that all render the same gene
 ### `customer-onboarding-journey`
 
 A multi-module onboarding flow (`profile → plan → billing`) composed with `@modular-react/journeys`. Shows entry/exit contracts, branching, serializable shared state, and workspace-tab persistence. Documented alongside the [Journeys package](../packages/journeys/README.md).
+
+### `editor-composition`
+
+An editor screen with main canvas, integration source picker, and inspector panels, each owned by a different module and coordinated through `@modular-react/compositions`. Shows zone selectors, a per-instance scoped store, typed store projections via `input`, and the alternate hooks pattern (`useCompositionState` / `useCompositionDispatch`) for in-team panels. Documented alongside the [Compositions package](../packages/compositions/README.md).
 
 ### `remote-capabilities`
 

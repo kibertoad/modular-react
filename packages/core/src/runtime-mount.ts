@@ -16,6 +16,14 @@ import type { ComponentType, ReactNode } from "react";
  * (compositions ↔ journeys; future compositions ↔ remote modules; future
  * composition-in-composition) share one shape without one plugin
  * package taking a hard dependency on another.
+ *
+ * **Asymmetry today.** Only the compositions runtime consumes adapters
+ * (`compositions.registerMountAdapter("journey", …)`). The journeys
+ * runtime exposes a producer (`createJourneyMountAdapter`) but does not
+ * itself register adapters — embedding a composition inside a journey
+ * step works through `<CompositionOutlet>` directly inside the step's
+ * component, not through this seam. A symmetric `JourneyRuntime`
+ * consumer is future work; tracked alongside composition-in-composition.
  */
 export interface RuntimeMountAdapter<TInput = unknown> {
   /**

@@ -240,6 +240,13 @@ export function createCompositionRuntime(
         // production. We also route to `options.onError` under a
         // distinct `"notify"` phase so shell telemetry can split
         // notify-time failures from selector/render/emit ones.
+        //
+        // We do NOT auto-unsubscribe a throwing listener. The listener
+        // owns its registration; revoking it on a throw could mask a
+        // bug (the listener is gone, the symptom is gone, the root
+        // cause stays). Hosts that want auto-detachment can wrap their
+        // listener in a try/catch that calls the unsubscribe themselves
+        // on a configured threshold.
         console.error("[@modular-react/compositions] listener threw", err);
         fireOnError(record.id, err, { zone: undefined, phase: "notify" });
       }

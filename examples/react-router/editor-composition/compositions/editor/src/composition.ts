@@ -74,18 +74,18 @@ export const editorComposition = defineComposition<EditorModuleMap, EditorState>
           : { kind: "empty" },
     },
     inspector: {
-      // Inspector reads only — readable stores are sufficient.
-      select: ({ state, stores }) => ({
+      // Inspector is owned by the same team as the composition, so it
+      // reads composition state directly through `useCompositionState`
+      // (the in-team hooks pattern). The selector here passes only
+      // `documentId` — the panel pulls everything else from context.
+      // Compare with the `main` and `source` zones above for the
+      // cross-team typed-store-projection pattern.
+      select: ({ state }) => ({
         kind: "module-entry",
         module: "editor",
         entry: "inspector",
         input: {
           documentId: state.documentId,
-          activeSource: stores.readable<SourceId | null>("activeSource:r", (s) => s.activeSource),
-          selectedItem: stores.readable<string | null>(
-            "selectedSourceItem:r",
-            (s) => s.selectedSourceItem,
-          ),
         },
       }),
     },

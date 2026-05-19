@@ -1,7 +1,7 @@
 {
   "name": "@modular-react/compositions",
   "version": "0.1.0",
-  "description": "Multi-module screen composition for modular-react. Arrange foreign module entries (and journeys) into named zones on a single screen, driven by a per-instance scoped store.",
+  "description": "Arrange modular-react modules into named zones on a single screen, driven by a per-instance scoped store.",
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",

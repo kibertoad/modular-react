@@ -48,6 +48,16 @@ const DEFAULT_RETRY_CAP = 2;
 const DEFAULT_DEFINITION_DEPTH_CAP = 8;
 
 /**
+ * Sentinel used by the zone's `getStateSnapshot` to mean "the instance
+ * record / store has disappeared mid-disposal". Using a unique Symbol
+ * (rather than `null` or `undefined`) keeps the path distinguishable
+ * from a composition whose state is *legitimately* `null`/`undefined`,
+ * so the selector still runs for such states instead of silently
+ * falling through to an `{ kind: "empty" }` zone.
+ */
+const STATE_UNAVAILABLE = Symbol("composition-state-unavailable");
+
+/**
  * Composition ancestry tracked in the React tree:
  *   - `instances` — instance ids currently rendering above this outlet.
  *     A hit here is treated as a hard cycle (we render the error
@@ -184,6 +194,20 @@ const noopDispatch: (updater: unknown) => void = () => {};
  */
 const noopStores = noopCompositionZoneStores as unknown as CompositionZoneStores<any>;
 
+/**
+ * Stable string hash of a structural input, used as a cache key for
+ * journey instance caching and as the input-fingerprint suffix in the
+ * resolution selection key. Order-invariant (object keys sorted) and
+ * cycle-safe.
+ *
+ * **Symbol keys are intentionally ignored.** `Object.keys` skips them,
+ * so two inputs that differ only in symbol-keyed property values hash
+ * identically. Inputs in this codebase are structural data crossing a
+ * module boundary; symbol keys are a per-realm capability marker that
+ * has no business in a wire-shape input. If a real scenario surfaces,
+ * extend `serializeStable` to fold `Object.getOwnPropertySymbols` in
+ * sorted order alongside string keys.
+ */
 function hashInput(input: unknown): string {
   if (input === undefined) return "u";
   try {
@@ -532,8 +556,10 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
 
   // Subscribe to the composition's store so the zone re-runs its selector
   // on every state change. The store lives on the instance record. The
-  // getSnapshot result is null-tolerant — if the record disappears
-  // mid-disposal, the null short-circuits the selector path below.
+  // getSnapshot result uses a unique `STATE_UNAVAILABLE` sentinel for
+  // the "record disappeared mid-disposal" condition, so a composition
+  // whose state is legitimately `null` (or any other falsy value) is
+  // distinguishable from "no store" and still drives the selector.
   //
   // `subscribeState` / `getStateSnapshot` are stabilized so React
   // doesn't see a fresh subscribe identity on every render. Without
@@ -545,7 +571,10 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
     (cb: () => void) => (store ? store.subscribe(cb) : () => {}),
     [store],
   );
-  const getStateSnapshot = useCallback(() => (store ? store.getState() : null), [store]);
+  const getStateSnapshot = useCallback(
+    () => (store ? store.getState() : STATE_UNAVAILABLE),
+    [store],
+  );
   const state = useSyncExternalStore(subscribeState, getStateSnapshot, getStateSnapshot);
 
   // Per-resolution journey instance cache. Without it, the JourneyOutlet
@@ -577,6 +606,14 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
   // ids accumulated by the latest committed render get ended here,
   // safely outside the render path. If no `end` adapter is registered
   // the queue is cleared anyway (the foreign runtime is on its own).
+  //
+  // Intentionally has no deps array — it must run after *every* commit
+  // (not just runtime-prop changes), since each committed render may
+  // have queued ids during render. Reads `runtime` from the closure,
+  // which is the *committed* render's runtime. Across a runtime swap
+  // the unmount cleanup below drains pending items against the old
+  // adapter first, so this effect only ever sees the new runtime's
+  // queue.
   useEffect(() => {
     const queue = journeyEndQueue.current;
     if (queue.length === 0) return;
@@ -675,7 +712,7 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
   // effect's `selectionKey` dep is stable across renders.
   let selection: CompositionZoneResolution<any> = { kind: "empty" };
   let selectorError: unknown = null;
-  if (record && store && state !== null) {
+  if (record && store && state !== STATE_UNAVAILABLE) {
     try {
       selection = descriptor.select({
         state: state as unknown,
@@ -919,12 +956,15 @@ function entryAllowsCompositionMount(entry: { readonly mountKinds?: readonly str
 // the no-op stub lets ModuleEntryProps stay structurally satisfied while
 // the panel dispatches through `useCompositionDispatch` instead.
 //
-// Type-checks pass through `as never`, so a foreign panel (typically a
-// journey-shaped one being reused here) that calls `exit("name", payload)`
-// gets neither a compile error nor a crash — it just silently drops.
-// To surface that footgun, we warn in dev the first time a given exit
-// name is observed on this NOOP_EXIT path. Once per name keeps the
-// warning useful for diagnostic and quiet under repeated user actions.
+// The `mountKinds: ["composition"]` (or default-all) opt-in lets an
+// entry legitimately mount in a composition zone even though its journey
+// code path may still call `exit()`. The render-time mountKinds guard
+// (above) rejects journey-only entries before they get this far, so the
+// remaining warn cases are entries that *can* legally render here but
+// whose body nonetheless dispatches through the (now no-op) exit
+// channel — a real footgun in shared module code. Warn in dev the first
+// time each name is observed; once per process keeps the diagnostic
+// useful and quiet under repeated user actions.
 const NOOP_EXIT_WARNED = new Set<string>();
 const NOOP_EXIT = ((exitName?: string) => {
   if (!isDevEnv()) return;
@@ -937,6 +977,17 @@ const NOOP_EXIT = ((exitName?: string) => {
       `Use \`useCompositionDispatch\` to mutate composition state, or \`useCompositionEmit\` for cross-zone hand-offs.`,
   );
 }) as never;
+
+/**
+ * Test-only: clear the per-process latch that suppresses repeated
+ * NOOP_EXIT warnings. Call from `beforeEach` if a test relies on
+ * observing the dev-warn for an exit name that an earlier test may have
+ * already exhausted. Not exported from the package entry; consumers
+ * should never need this.
+ */
+export function __resetNoopExitWarned(): void {
+  NOOP_EXIT_WARNED.clear();
+}
 
 function renderError(
   zone: string,

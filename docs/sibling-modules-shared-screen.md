@@ -293,8 +293,9 @@ If the command palette should include per-integration entries only while that in
 
 ## When not to use this pattern
 
+- **The modules need to share orchestration state, not just look the same.** A left panel and a main canvas that need to agree on a selection (and each dispatch into / read from the same state) is the multi-module screen case `@modular-react/compositions` was built for — graduate to it. The compositions package gives you a per-instance scoped store, named layout zones, and typed selectors over the same module map. The runnable [`editor-composition`](../examples/react-router/editor-composition/README.md) example shows the editor + integration-source + inspector layout end-to-end.
 - Integrations with fundamentally different UIs (a visual editor vs. a tabular browser). Then they're different screens and should be separate components owned by separate modules — not siblings of the same screen.
-- Integrations that need to share state across each other. Then a shared store in `app-shared` (or an owning integration-manager module) is the right home; sibling modules sharing a stateless screen doesn't fit. When that shared state is also the **orchestration bus** between modules — e.g. a left panel and a main canvas need to agree on a selection, with each panel free to dispatch into and read from the same state — graduate to [`@modular-react/compositions`](../packages/compositions/README.md). It gives you a per-instance scoped store, named layout zones, and typed selectors over the same module map.
+- Integrations that need to share read-only state across each other. A shared store in `app-shared` (or an owning integration-manager module) is the right home; sibling modules sharing a stateless screen doesn't fit. If the shared state turns into the orchestration bus, see the first bullet above.
 - Cases where the set of integrations is not known at build time. Then you're in plugin territory — use `registerLazy` or a runtime registration layer; the config-passed-as-props pattern still applies per-plugin.
 
 ## When to use this vs. Remote Capability Manifests

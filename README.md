@@ -178,6 +178,8 @@ Runnable examples live under [`examples/`](examples/), split by router integrati
 - [`examples/tanstack-router/integration-manager/`](examples/tanstack-router/integration-manager) — sibling modules sharing a screen (TanStack Router)
 - [`examples/react-router/customer-onboarding-journey/`](examples/react-router/customer-onboarding-journey) — multi-module workflow with typed journeys (React Router)
 - [`examples/tanstack-router/customer-onboarding-journey/`](examples/tanstack-router/customer-onboarding-journey) — multi-module workflow with typed journeys (TanStack Router)
+- [`examples/react-router/editor-composition/`](examples/react-router/editor-composition) — multi-module screen via `@modular-react/compositions` (React Router)
+- [`examples/tanstack-router/editor-composition/`](examples/tanstack-router/editor-composition) — multi-module screen via `@modular-react/compositions` (TanStack Router)
 - [`examples/react-router/remote-capabilities/`](examples/react-router/remote-capabilities) — slots/navigation driven by a backend-served remote manifest
 - [`examples/react-router/active-project-manifest/`](examples/react-router/active-project-manifest) — per-project remote manifests swapped at runtime
 

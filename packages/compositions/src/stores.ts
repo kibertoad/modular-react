@@ -28,6 +28,17 @@ export interface CompositionZoneStores<TState> {
    * Get-or-create a writable store projecting a slice of composition
    * state. `set` translates a slice value into a state-updater that the
    * composition's runtime applies via `dispatch`.
+   *
+   * **First-writer-wins.** The `get` and `set` closures from the *first*
+   * `writable(key, …)` call for a given key are the ones the returned
+   * store closes over for its entire lifetime. Subsequent calls with the
+   * same key return the same store object and the new closures are
+   * dropped; in dev they're invoked as behavioural drift probes that
+   * warn once per key on disagreement. This is what makes the store
+   * reference stable across selector re-runs (panels using
+   * `useSyncExternalStore` would otherwise re-subscribe on every render).
+   * Selectors should keep `get`/`set` pure functions of `state`/`value`
+   * and not close over per-render data.
    */
   writable<TSlice>(
     key: string,

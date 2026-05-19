@@ -527,3 +527,141 @@ describe("compositionsPlugin reuse guard", () => {
     expect(() => ext.registerComposition(def)).toThrow(/after the plugin already resolved/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// useCompositionState — derived-object selectors don't tear
+// ---------------------------------------------------------------------------
+
+describe("useCompositionState derived-object selectors", () => {
+  it("does not tear when the selector returns a fresh object on each call", async () => {
+    // React calls `getSnapshot` on every render and compares with
+    // `Object.is`. A naive `useSyncExternalStore` wiring would invoke
+    // a fresh-object-returning selector each time, fail the identity
+    // check, and either log "The result of getSnapshot should be
+    // cached" or loop. The hook's internal cache keys results on the
+    // store-state reference, so the same selector applied to the same
+    // state returns the same object identity.
+    const { useCompositionState } = await import("./hooks.js");
+    interface S {
+      readonly a: number;
+      readonly b: number;
+    }
+    function Panel() {
+      // Selector returns a fresh object each call but reads the same
+      // slices. The wrapper hook must cache it on state identity.
+      const slice = useCompositionState<S, { readonly sum: number }>((s) => ({ sum: s.a + s.b }));
+      return <div data-testid="slice">{slice.sum}</div>;
+    }
+    const mod = defineModule({
+      id: "panels",
+      version: "1.0.0",
+      entryPoints: {
+        sum: defineEntry({ component: Panel as never, input: schema<void>() }),
+      },
+    });
+    type Mods = { readonly panels: typeof mod };
+    const def = defineComposition<Mods, S>()({
+      id: "deriv",
+      version: "1.0.0",
+      initialState: () => ({ a: 1, b: 2 }),
+      zones: {
+        body: { select: () => ({ kind: "module-entry", module: "panels", entry: "sum" }) },
+      },
+    });
+    const runtime = createCompositionRuntime(
+      [{ definition: def, options: undefined } as RegisteredComposition],
+      { modules: { panels: mod }, debug: false },
+    );
+    const id = runtime.start("deriv", undefined);
+    const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(
+        <CompositionsProvider runtime={runtime}>
+          <CompositionOutlet compositionId="deriv" instanceId={id}>
+            {(zones) => <div>{zones.body}</div>}
+          </CompositionOutlet>
+        </CompositionsProvider>,
+      );
+      expect(screen.getByTestId("slice").textContent).toBe("3");
+      // No tearing warning logged. React 19's check fires through
+      // `console.error`; presence of any such message would indicate a
+      // regression.
+      const messages = warn.mock.calls.map((c) => String(c[0]));
+      expect(messages.some((m) => /getSnapshot/i.test(m))).toBe(false);
+
+      // Dispatch that *doesn't* change the read slices — the panel
+      // still renders the same sum and the cached object identity is
+      // preserved (otherwise React would log the tearing warning here
+      // too).
+      act(() => {
+        runtime.dispatch<S>(id, { a: 1, b: 2 });
+      });
+      expect(screen.getByTestId("slice").textContent).toBe("3");
+
+      // Dispatch that *does* change the read slices — the panel
+      // re-renders with the new sum.
+      act(() => {
+        runtime.dispatch<S>(id, { a: 10, b: 5 });
+      });
+      expect(screen.getByTestId("slice").textContent).toBe("15");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ZoneRenderer — null state still drives the selector
+// ---------------------------------------------------------------------------
+
+describe("null state drives the selector", () => {
+  it("invokes the zone selector when composition state is legitimately null", () => {
+    // `getStateSnapshot` uses a `STATE_UNAVAILABLE` symbol sentinel
+    // for the mid-disposal "no store" condition, not `null`, so a
+    // composition whose state is `null` still flows through the
+    // selector instead of silently falling to `{ kind: "empty" }`.
+    function Marker() {
+      return <div data-testid="rendered-because-state-was-null">ok</div>;
+    }
+    const mod = defineModule({
+      id: "panels",
+      version: "1.0.0",
+      entryPoints: {
+        marker: defineEntry({ component: Marker as never, input: schema<void>() }),
+      },
+    });
+    type Mods = { readonly panels: typeof mod };
+    const def = defineComposition<Mods, null>()({
+      id: "null-state",
+      version: "1.0.0",
+      initialState: () => null,
+      zones: {
+        body: {
+          select: ({ state }) => {
+            // The selector must observe `state === null` (not the
+            // unavailable sentinel). If the gate confused null with
+            // unavailable, this selector wouldn't run and the zone
+            // would render empty.
+            if (state === null) {
+              return { kind: "module-entry", module: "panels", entry: "marker" } as const;
+            }
+            return { kind: "empty" } as const;
+          },
+        },
+      },
+    });
+    const runtime = createCompositionRuntime(
+      [{ definition: def, options: undefined } as RegisteredComposition],
+      { modules: { panels: mod }, debug: false },
+    );
+    const id = runtime.start("null-state", undefined);
+    render(
+      <CompositionsProvider runtime={runtime}>
+        <CompositionOutlet compositionId="null-state" instanceId={id}>
+          {(zones) => <div>{zones.body}</div>}
+        </CompositionOutlet>
+      </CompositionsProvider>,
+    );
+    expect(screen.getByTestId("rendered-because-state-was-null")).toBeTruthy();
+  });
+});

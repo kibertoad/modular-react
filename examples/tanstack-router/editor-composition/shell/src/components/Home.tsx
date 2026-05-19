@@ -1,4 +1,5 @@
 import { CompositionOutlet, useComposition } from "@modular-react/compositions";
+import { editorCompositionHandle } from "@example-tsr-editor-composition/editor-composition";
 
 const DOCUMENT_ID = "doc-1";
 
@@ -7,9 +8,13 @@ const DOCUMENT_ID = "doc-1";
  * lifecycle (instance minted by `useComposition`, disposal handled by the
  * outlet's refcount) and same three-column zone layout. The composition
  * outlet and the host-side hook are router-agnostic.
+ *
+ * The typed `editorCompositionHandle` propagates the input shape to the
+ * host call site so a typo or missing field is a compile error rather
+ * than a runtime validation hit.
  */
 export function Home() {
-  const instanceId = useComposition("editor", { documentId: DOCUMENT_ID });
+  const instanceId = useComposition(editorCompositionHandle, { documentId: DOCUMENT_ID });
 
   return (
     <CompositionOutlet compositionId="editor" instanceId={instanceId}>

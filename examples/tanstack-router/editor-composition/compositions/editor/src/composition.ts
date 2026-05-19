@@ -52,17 +52,15 @@ export const editorComposition = defineComposition<EditorModuleMap, EditorState>
           : { kind: "empty" },
     },
     inspector: {
-      select: ({ state, stores }) => ({
+      // In-team hooks pattern — see RR sibling for rationale. Panel
+      // reads composition state via `useCompositionState`, not via
+      // injected stores.
+      select: ({ state }) => ({
         kind: "module-entry",
         module: "editor",
         entry: "inspector",
         input: {
           documentId: state.documentId,
-          activeSource: stores.readable<SourceId | null>("activeSource:r", (s) => s.activeSource),
-          selectedItem: stores.readable<string | null>(
-            "selectedSourceItem:r",
-            (s) => s.selectedSourceItem,
-          ),
         },
       }),
     },

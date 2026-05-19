@@ -18,7 +18,7 @@ import { defineEntry, defineModule, schema } from "@modular-react/core";
 
 import { defineComposition } from "./define-composition.js";
 import { createCompositionRuntime, hydrateComposition } from "./runtime.js";
-import { CompositionOutlet } from "./outlet.js";
+import { CompositionOutlet, __resetNoopExitWarned } from "./outlet.js";
 import { CompositionsProvider } from "./provider.js";
 import type {
   CompositionInstanceId,
@@ -309,6 +309,19 @@ describe("NOOP_EXIT dev-warn", () => {
       // No new warn for the same exit name.
       const reMessages = warn.mock.calls.map((c) => String(c[0]));
       expect(reMessages.some((m) => m.includes('"done"'))).toBe(false);
+
+      // `__resetNoopExitWarned()` clears the latch so a subsequent
+      // exit call for the same name re-fires the warn. This is the
+      // test-isolation escape hatch: without it, a test suite that
+      // exercises exit("done") more than once would only see the
+      // warn from the first case.
+      warn.mockClear();
+      __resetNoopExitWarned();
+      act(() => {
+        runtime.dispatch(id, {});
+      });
+      const postResetMessages = warn.mock.calls.map((c) => String(c[0]));
+      expect(postResetMessages.some((m) => m.includes('"done"'))).toBe(true);
     } finally {
       warn.mockRestore();
     }

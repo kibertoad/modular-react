@@ -35,6 +35,7 @@ Routes, slots, navigation, workspaces - none of that changes. Journeys sit **on 
 - [Observation hooks](#observation-hooks)
 - [Testing](#testing) - module-level, pure simulator, integration, persistence adapters
 - [Integration patterns](#integration-patterns) - tabs, modals, routes, wizards, command palette
+- [Embedding a journey in a composition zone](#embedding-a-journey-in-a-composition-zone) - wiring `createJourneyMountAdapter` so a `@modular-react/compositions` zone can mount a journey
 - [Debugging](#debugging) - dev-mode warnings and introspection
 - [Errors, races, and edge cases](#errors-races-and-edge-cases)
 - [Limitations](#limitations)
@@ -2310,6 +2311,26 @@ palette.register("onboarding:start", async ({ customerId }) => {
   workspace.openTab({ kind: "journey", id: "customer-onboarding", input: { customerId } });
 });
 ```
+
+## Embedding a journey in a composition zone
+
+When a screen hosts several modules side-by-side and one of them is itself a multi-step journey, the `@modular-react/compositions` outlet can render the journey through a `RuntimeMountAdapter`. The journeys package ships a one-line factory that wraps a `JourneyRuntime` into the adapter shape compositions expect:
+
+```ts
+import { createJourneyMountAdapter } from "@modular-react/journeys";
+
+// After `registry.resolve()`, before mounting React:
+manifest.extensions.compositions.registerMountAdapter(
+  "journey",
+  createJourneyMountAdapter(manifest.extensions.journeys),
+);
+```
+
+A composition zone whose selector returns `{ kind: "journey", handle, input }` will then resolve through the registered adapter — the composition outlet mints (or reuses a cached) journey instance and renders `<JourneyOutlet>` for it. The journey runs with its own state, history, and persistence; the composition's scoped store and the journey's state stay separate.
+
+The adapter forwards `start` and `end` to the journey runtime: when the composition zone rolls over to a different journey resolution, the previously-cached journey instance is `runtime.end()`-ed via the adapter so it doesn't outlive its outlet.
+
+Wiring is one-directional today — the compositions runtime consumes adapters; the journeys runtime does not (yet) register them. Embedding a composition inside a journey step is still done by mounting `<CompositionOutlet>` directly inside the step's component, not through this seam. See [`@modular-react/compositions`'s "Runtime mount adapters" section](../compositions/README.md#runtime-mount-adapters) for the host side.
 
 ## Debugging
 

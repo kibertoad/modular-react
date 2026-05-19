@@ -1,24 +1,32 @@
 import { useSyncExternalStore } from "react";
 import { defineEntry, defineModule, schema } from "@modular-react/core";
-import type { ReadableStore, WritableStore } from "@modular-react/core";
+import type { WritableStore } from "@modular-react/core";
+import { useCompositionState } from "@modular-react/compositions";
+import type { EditorState, SourceId } from "@example-rr-editor-composition/app-shared";
 
 /**
- * Source-integration id the editor canvas knows about. Declared inline
- * because this module owns the chooser UI — the host supplies stores
- * carrying values drawn from this set. The module imports nothing
- * composition-specific.
+ * The `main` entry receives `SourceId` through a `WritableStore`
+ * injection (the cross-team pattern); the `inspector` entry, owned by
+ * the same team as the composition, reads composition state directly
+ * through the hooks (the in-team pattern). `SourceId` and `EditorState`
+ * are shared via `app-shared` to avoid a workspace cycle between this
+ * module and the composition package.
  */
-type SourceId = "contentful" | "strapi";
 
 interface EditorMainInput {
   readonly documentId: string;
   readonly activeSource: WritableStore<SourceId | null>;
 }
 
+/**
+ * Inspector input: only the host-provided document id. Composition
+ * state (active source + selected item) is read through
+ * `useCompositionState` inside the panel — the in-team hooks pattern.
+ * Compare with `EditorMainInput` above for the cross-team store-projection
+ * pattern.
+ */
 interface InspectorInput {
   readonly documentId: string;
-  readonly activeSource: ReadableStore<SourceId | null>;
-  readonly selectedItem: ReadableStore<string | null>;
 }
 
 function EditorMain({ input }: { input: EditorMainInput }) {
@@ -92,15 +100,16 @@ function Choice({
   );
 }
 
-function InspectorPanel({ input }: { input: InspectorInput }) {
-  const activeSource = useSyncExternalStore(
-    input.activeSource.subscribe,
-    input.activeSource.getSnapshot,
-  );
-  const selectedItem = useSyncExternalStore(
-    input.selectedItem.subscribe,
-    input.selectedItem.getSnapshot,
-  );
+function InspectorPanel(_props: { input: InspectorInput }) {
+  // In-team hooks pattern: this module ships alongside the composition
+  // package, so it can import the composition's `EditorState` shape and
+  // read slices directly through `useCompositionState`. No
+  // `WritableStore` / `ReadableStore` ceremony in the panel's input.
+  // Each selector returns a primitive so `Object.is` snapshot equality
+  // is automatic — the panel re-renders only when the read slice
+  // changes.
+  const activeSource = useCompositionState<EditorState, SourceId | null>((s) => s.activeSource);
+  const selectedItem = useCompositionState<EditorState, string | null>((s) => s.selectedSourceItem);
   return (
     <aside data-testid="inspector" style={{ padding: "1rem", borderLeft: "1px solid #e2e8f0" }}>
       <h3 style={{ marginTop: 0 }}>Inspector</h3>

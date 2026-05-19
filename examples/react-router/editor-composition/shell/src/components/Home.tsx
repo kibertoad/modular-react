@@ -1,4 +1,5 @@
 import { CompositionOutlet, useComposition } from "@modular-react/compositions";
+import { editorCompositionHandle } from "@example-rr-editor-composition/editor-composition";
 
 const DOCUMENT_ID = "doc-1";
 
@@ -9,13 +10,21 @@ const DOCUMENT_ID = "doc-1";
  * `main` / `source` / `inspector` zone layout — the panel modules and
  * the composition definition stay layout-agnostic.
  *
+ * The typed `editorCompositionHandle` (a `defineCompositionHandle` token
+ * exported alongside the composition definition) propagates the
+ * `{ documentId: string }` input type to `useComposition`, so a missing
+ * or wrong-shaped `input` is a compile error here at the host call
+ * site. The string-id overload (`useComposition("editor", input)`) is
+ * the dynamic fallback when the composition id isn't known at compile
+ * time.
+ *
  * No `useEffect` here: `useComposition` is a thin lazy-ref wrapper that
  * calls `runtime.start()` exactly once on first render and lets the
  * outlet's attach/detach refcount handle disposal when the Home route
  * unmounts. See the package README for the rationale.
  */
 export function Home() {
-  const instanceId = useComposition("editor", { documentId: DOCUMENT_ID });
+  const instanceId = useComposition(editorCompositionHandle, { documentId: DOCUMENT_ID });
 
   return (
     <CompositionOutlet compositionId="editor" instanceId={instanceId}>

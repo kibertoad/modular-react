@@ -476,6 +476,17 @@ export interface CompositionRuntime {
    * usually go through {@link CompositionContextValue.dispatch} via
    * `useCompositionDispatch`; this is the lower-level entry point. A
    * dispatch on a disposed (or unknown) instance is a silent no-op.
+   *
+   * **TState is caller-asserted, not verified.** The instance's actual
+   * state shape lives on its `CompositionDefinition`; this signature
+   * does not key `TState` to the `id` parameter (doing so would require
+   * either a typed handle parameter or a per-instance dispatch returned
+   * from `start()`). Callers responsible for picking a `TState` that
+   * matches the instance's definition. The render-path equivalent —
+   * `CompositionZoneSelectorCtx<TState>.dispatch` — has the same
+   * limitation. Planned follow-up: return a typed dispatch from
+   * `start()` / `useComposition` so the type parameter is fixed at
+   * mint time.
    */
   dispatch<TState>(
     id: CompositionInstanceId,

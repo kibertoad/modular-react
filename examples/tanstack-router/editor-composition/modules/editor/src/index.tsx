@@ -1,19 +1,24 @@
 import { useSyncExternalStore } from "react";
 import { defineEntry, defineModule, schema } from "@modular-react/core";
-import type { ReadableStore, WritableStore } from "@modular-react/core";
+import type { WritableStore } from "@modular-react/core";
+import { useCompositionState } from "@modular-react/compositions";
+import type { EditorState, SourceId } from "@example-tsr-editor-composition/app-shared";
 
-/** See RR sibling for rationale. */
-type SourceId = "contentful" | "strapi";
+/** See RR sibling for rationale on the cross-team vs in-team split. */
 
 interface EditorMainInput {
   readonly documentId: string;
   readonly activeSource: WritableStore<SourceId | null>;
 }
 
+/**
+ * Inspector input: only the host-provided document id. The panel reads
+ * the rest of its state through `useCompositionState` — the in-team
+ * hooks pattern. Compare with `EditorMainInput` for the cross-team
+ * store-projection pattern.
+ */
 interface InspectorInput {
   readonly documentId: string;
-  readonly activeSource: ReadableStore<SourceId | null>;
-  readonly selectedItem: ReadableStore<string | null>;
 }
 
 function EditorMain({ input }: { input: EditorMainInput }) {
@@ -83,15 +88,10 @@ function Choice({
   );
 }
 
-function InspectorPanel({ input }: { input: InspectorInput }) {
-  const activeSource = useSyncExternalStore(
-    input.activeSource.subscribe,
-    input.activeSource.getSnapshot,
-  );
-  const selectedItem = useSyncExternalStore(
-    input.selectedItem.subscribe,
-    input.selectedItem.getSnapshot,
-  );
+function InspectorPanel(_props: { input: InspectorInput }) {
+  // In-team hooks pattern — see RR sibling for rationale.
+  const activeSource = useCompositionState<EditorState, SourceId | null>((s) => s.activeSource);
+  const selectedItem = useCompositionState<EditorState, string | null>((s) => s.selectedSourceItem);
   return (
     <aside data-testid="inspector" style={{ padding: "1rem", borderLeft: "1px solid #e2e8f0" }}>
       <h3 style={{ marginTop: 0 }}>Inspector</h3>
