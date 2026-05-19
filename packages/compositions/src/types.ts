@@ -7,6 +7,10 @@ import type {
   ModuleTypeMap,
   RuntimeMountAdapter,
 } from "@modular-react/core";
+import type { ZoneStores } from "./stores.js";
+
+export type { ReadableStore, WritableStore } from "@modular-react/core";
+export type { ZoneStores } from "./stores.js";
 
 /** Opaque id minted by the composition runtime. Prefixed `ci_` to disambiguate from `ji_`. */
 export type CompositionInstanceId = string;
@@ -128,16 +132,22 @@ export type ZoneSpec<TModules extends ModuleTypeMap> =
  *   - `deps`  — the shared-dependency snapshot captured from the registry
  *     at resolve time.
  *   - `dispatch` — bound to the active instance, stable across renders.
- *     Selectors that build *prop-driven panel inputs* use this to wire
- *     callbacks into the panel's `input` (e.g.
- *     `onSelect: (id) => dispatch({ selectedItem: id })`) so the panel
- *     module stays composition-unaware. See the package README's
- *     "Authoring patterns — Prop-driven panels vs panel hooks" section.
+ *     For when a selector wants to wire a one-off imperative callback
+ *     into a panel's `input` (e.g. `onClick: () => dispatch(...)`).
+ *   - `stores`   — store-factory bound to the active instance. Stable
+ *     per `(instance, key)`. Used by selectors to project composition
+ *     state into typed {@link ReadableStore} / {@link WritableStore}
+ *     contracts that panel modules consume via their `input`. Panels
+ *     read with `useSyncExternalStore(store.subscribe, store.getSnapshot)`
+ *     and write with `store.set(value)`; they import only the
+ *     interface from `@modular-react/core` and stay unaware of the
+ *     composition's state shape.
  *
  * Selectors are pure functions — they MUST NOT mutate `state` or fire
  * side effects. Calling `dispatch` *synchronously* from the selector
- * body is a side effect and unsupported; only place callbacks that the
- * panel may later invoke into the returned resolution's `input`.
+ * body, or calling `store.set` directly, is a side effect and
+ * unsupported; only place callbacks / stores that the panel may later
+ * invoke into the returned resolution's `input`.
  */
 export interface ZoneSelectorCtx<TState> {
   readonly state: TState;
@@ -145,6 +155,7 @@ export interface ZoneSelectorCtx<TState> {
   readonly dispatch: (
     updater: Partial<TState> | ((prev: TState) => Partial<TState> | TState),
   ) => void;
+  readonly stores: ZoneStores<TState>;
 }
 
 /**

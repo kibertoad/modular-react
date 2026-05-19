@@ -26,6 +26,7 @@ import type {
   ZoneDescriptor,
   ZoneResolution,
 } from "./types.js";
+import { createZoneStores, noopZoneStores, type ZoneStores } from "./stores.js";
 
 /** Default cap on automatic retries before a zone falls back. */
 const DEFAULT_RETRY_CAP = 2;
@@ -143,6 +144,16 @@ function useInstanceSnapshot(
  * inlined) so identity-equality across preload runs doesn't fluctuate.
  */
 const noopDispatch: (updater: unknown) => void = () => {};
+
+/**
+ * Stores placeholder for selector invocations on the preload path.
+ * Same rationale as {@link noopDispatch} — preload never invokes any
+ * store baked into `input`, so a stub provider is correct and avoids
+ * holding a real runtime + instance handle on a path that doesn't
+ * need them. Cast to widen `unknown` → `any` so the unified noop
+ * satisfies the per-`TState` `ZoneStores` contract.
+ */
+const noopStores = noopZoneStores as unknown as ZoneStores<any>;
 
 function hashInput(input: unknown): string {
   if (input === undefined) return "u";
@@ -284,9 +295,10 @@ export function CompositionOutlet<TZones extends string = string>(
           deps: internals.__deps,
           // Preload paths only inspect `module`/`entry` on the
           // resolution — they never invoke any callback the selector
-          // may have baked into `input`. A no-op dispatch is correct
-          // here.
+          // may have baked into `input`. No-op `dispatch` + `stores`
+          // are correct here.
           dispatch: noopDispatch,
+          stores: noopStores,
         });
       } catch {
         parts.push(`${zoneName}:err`);
@@ -318,6 +330,7 @@ export function CompositionOutlet<TZones extends string = string>(
             state: instance.state,
             deps: internals.__deps,
             dispatch: noopDispatch,
+            stores: noopStores,
           });
         } catch {
           // Selector errors are surfaced at render time; preload is
@@ -491,6 +504,16 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
     },
     [runtime, instanceId],
   );
+  // Stable `stores` provider per `(runtime, instanceId)`. Selectors call
+  // `stores.readable(key, ...)` / `stores.writable(key, ...)` to project
+  // composition state into typed store contracts that panels consume
+  // via their `input`. Identity is stable across selector re-runs
+  // within this outlet mount, which is what `useSyncExternalStore` in
+  // the panel needs to avoid re-subscribing.
+  const stores = useMemo(
+    () => createZoneStores<unknown>(runtime, instanceId),
+    [runtime, instanceId],
+  );
   const emit = useCallback(
     (event: CompositionZoneEvent) => {
       try {
@@ -546,12 +569,13 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
       selection = descriptor.select({
         state: state as unknown,
         deps: internals.__deps,
-        // Stable dispatch reference (memoized at line 479 keyed on
-        // `[runtime, instanceId]`). Callbacks the selector closes over
-        // this with stay referentially stable across re-renders, so
-        // `React.memo`'d panels can compare `input` deeply via a custom
-        // comparator without thrashing on identity churn.
+        // Stable `dispatch` + `stores` references (memoized above keyed
+        // on `[runtime, instanceId]`). Callbacks and store references
+        // the selector closes over these with stay identity-stable
+        // across re-renders, so panels using `useSyncExternalStore`
+        // don't re-subscribe and `React.memo`'d panels don't churn.
         dispatch,
+        stores,
       });
     } catch (err) {
       selectorError = err;

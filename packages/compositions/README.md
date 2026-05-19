@@ -351,6 +351,131 @@ Every `start()` call mints a fresh instance — the runtime does not dedupe by i
 
 ## Authoring patterns
 
+### Pattern — typed store projections (composition-unaware panels)
+
+For strict separation between the **composition team** (owns coordination state) and the **panel teams** (own panel modules), project composition state into typed store contracts that panels consume via their `input`. Panels then depend only on the structural store interface — not on the composition's `TState` shape — so they import nothing composition-specific.
+
+The framework gives selectors a `stores` factory bound to the active instance. `stores.readable(key, get)` and `stores.writable(key, { get, set })` return objects stable per `(instance, key)`. They wrap the composition's per-instance store with **slice-level change detection** — subscribers fire only when the projected slice value actually differs (`Object.is`).
+
+The store types live in `@modular-react/core` as `ReadableStore<T>` / `WritableStore<T>`. They match `useSyncExternalStore`'s contract (`getSnapshot` + `subscribe`); a `WritableStore<T>` adds `set(value)`.
+
+**Composition side** — selector projects state into stores:
+
+```typescript
+import { defineComposition } from "@modular-react/compositions";
+import type editorModule from "@myorg/editor";
+import type contentfulModule from "@myorg/contentful";
+import type strapiModule from "@myorg/strapi";
+
+type Modules = {
+  readonly editor: typeof editorModule;
+  readonly contentful: typeof contentfulModule;
+  readonly strapi: typeof strapiModule;
+};
+
+interface EditorState {
+  readonly documentId: string;
+  readonly activeSource: "contentful" | "strapi" | null;
+  readonly selectedItem: string | null;
+}
+
+export const editorComposition = defineComposition<Modules, EditorState>()({
+  id: "editor",
+  version: "1.0.0",
+  initialState: (input: { documentId: string }) => ({
+    documentId: input.documentId,
+    activeSource: null,
+    selectedItem: null,
+  }),
+  zones: {
+    main: {
+      select: ({ state, stores }) => ({
+        kind: "module-entry",
+        module: "editor",
+        entry: "main",
+        input: {
+          documentId: state.documentId,
+          // Stable WritableStore<"contentful" | "strapi" | null> per
+          // (instance, "activeSource"). The editor panel uses it via
+          // useSyncExternalStore; identity stable across re-renders.
+          activeSource: stores.writable("activeSource", {
+            get: (s) => s.activeSource,
+            set: (value) => ({ activeSource: value }),
+          }),
+        },
+      }),
+    },
+    source: {
+      select: ({ state, stores }) =>
+        state.activeSource
+          ? {
+              kind: "module-entry",
+              module: state.activeSource,
+              entry: "sourcePanel",
+              input: {
+                documentId: state.documentId,
+                selectedItem: stores.writable("selectedItem", {
+                  get: (s) => s.selectedItem,
+                  set: (value) => ({ selectedItem: value }),
+                }),
+              },
+            }
+          : { kind: "empty" },
+    },
+  },
+});
+```
+
+**Panel side** — module declares the store interface in its `input`; reads via `useSyncExternalStore`:
+
+```typescript
+import { useSyncExternalStore } from "react";
+import { defineEntry, defineModule, schema } from "@modular-react/core";
+import type { WritableStore } from "@modular-react/core";
+
+interface SourcePanelInput {
+  readonly documentId: string;
+  readonly selectedItem: WritableStore<string | null>;
+}
+
+function ContentfulSourcePanel({ input }: { input: SourcePanelInput }) {
+  // Subscribes once per instance — the store's identity is stable, so
+  // useSyncExternalStore doesn't re-subscribe across re-renders.
+  const selectedItem = useSyncExternalStore(
+    input.selectedItem.subscribe,
+    input.selectedItem.getSnapshot,
+  );
+  return (
+    <ul>
+      {items.map((it) => (
+        <li
+          key={it.id}
+          aria-current={selectedItem === it.id || undefined}
+          onClick={() => input.selectedItem.set(it.id)}
+        >
+          {it.title}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default defineModule({
+  id: "contentful",
+  version: "1.0.0",
+  entryPoints: {
+    sourcePanel: defineEntry({
+      component: ContentfulSourcePanel,
+      input: schema<SourcePanelInput>(),
+    }),
+  },
+});
+```
+
+The panel imports **nothing composition-specific** — only `@modular-react/core` for the `WritableStore<T>` interface. The composition team can change `EditorState`'s shape without touching the panel; the only contract between them is `WritableStore<string | null>`. This is the recommended pattern for projects where panel modules and the composition are owned by different teams.
+
+For projects where a single team owns both, `useCompositionState` / `useCompositionDispatch` (below) are still supported and slightly less ceremony.
+
 ### Pattern — empty zone with a typed message
 
 ```typescript

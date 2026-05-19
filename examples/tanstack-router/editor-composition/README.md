@@ -11,12 +11,11 @@ Opens `http://localhost:5196`.
 ## Layout
 
 ```text
-app-shared/         — contract panels consume (state types, branded ids, typed hooks)
+app-shared/         — shell-team contract: AppDependencies, AppSlots
 compositions/
-  editor/           — composition definition + typed handle (depends on app-shared)
-modules/            — editor / contentful / strapi panel modules (depend on app-shared)
+  editor/           — composition team: state, runtime definition, handle
+modules/            — panel teams: depend on @modular-react/core ONLY
 shell/              — registry, root route, CompositionOutlet wiring, e2e
 ```
 
-Same module-layout argument as the RR sibling: panel modules depend on `app-shared`
-only, not on the composition definition package.
+Same store-contract pattern as the RR sibling — see [its README](../../react-router/editor-composition/README.md) and the [package authoring patterns](../../../packages/compositions/README.md#pattern--typed-store-projections-composition-unaware-panels) for the design rationale.

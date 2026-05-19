@@ -1,26 +1,27 @@
 import { defineComposition, defineCompositionHandle } from "@modular-react/compositions";
-import type { ModuleDescriptor } from "@modular-react/core";
-import type { EditorState } from "./state.js";
+import type editorModule from "@example-rr-editor-composition/editor";
+import type contentfulModule from "@example-rr-editor-composition/contentful";
+import type strapiModule from "@example-rr-editor-composition/strapi";
+import type { EditorState, SourceId } from "./state.js";
 
 /**
- * Typed module map the composition references in its selectors. Modeled
- * as a `type` (not an `interface`) so it satisfies the
- * `Record<string, ModuleDescriptor<…>>` shape that `ModuleTypeMap`
- * declares — an `interface` with concrete keys is missing the implicit
- * string index signature `Record` requires.
+ * Strongly-typed module map. Imports are `import type` only — the panel
+ * modules are not pulled into this package's bundle.
  *
- * Kept loose (`ModuleDescriptor<any, …>`) on purpose so the composition
- * package does not import panel-module types — modules depend on this
- * package for typed hooks; importing them back would create a cycle. For
- * strong per-`(module, entry)` input type-checking, the composition can
- * declare a concrete `import type` map (mirroring how journey definitions
- * import each module). See the package README's "Composition zones vs
- * `module.zones`" section for the trade-off.
+ * **Dependency direction**: composition → modules (one-way). Panel modules
+ * depend only on `@modular-react/core` (for `ReadableStore` /
+ * `WritableStore` interfaces); they do NOT import this package, so no
+ * cycle. With each module's `entryPoints` typed via `defineModule`,
+ * `ZoneSpec<EditorModuleMap>` checks `input` against the target entry's
+ * declared schema at compile time — a wrong-shaped input or a typo'd
+ * entry name fails to typecheck.
+ *
+ * Mirrors how journey examples type their module map.
  */
 type EditorModuleMap = {
-  readonly editor: ModuleDescriptor<any, any, any, any>;
-  readonly contentful: ModuleDescriptor<any, any, any, any>;
-  readonly strapi: ModuleDescriptor<any, any, any, any>;
+  readonly editor: typeof editorModule;
+  readonly contentful: typeof contentfulModule;
+  readonly strapi: typeof strapiModule;
 };
 
 export const editorComposition = defineComposition<EditorModuleMap, EditorState>()({
@@ -33,33 +34,59 @@ export const editorComposition = defineComposition<EditorModuleMap, EditorState>
   }),
   zones: {
     main: {
-      // Always render the editor canvas with the current document id.
-      select: ({ state }) => ({
+      // Project composition state into a `WritableStore<SourceId | null>`
+      // and hand it to the editor canvas via `input`. The panel reads
+      // with `useSyncExternalStore(store.subscribe, store.getSnapshot)`
+      // and writes with `store.set(...)`. Identity is stable per
+      // `(instance, "activeSource")` so the panel doesn't re-subscribe
+      // across selector re-runs.
+      select: ({ state, stores }) => ({
         kind: "module-entry",
         module: "editor",
         entry: "main",
-        input: { documentId: state.documentId },
+        input: {
+          documentId: state.documentId,
+          activeSource: stores.writable<SourceId | null>("activeSource", {
+            get: (s) => s.activeSource,
+            set: (value) => ({ activeSource: value }),
+          }),
+        },
       }),
     },
     source: {
-      // Project `activeSource` → a panel module / entry. Selectors are pure;
-      // dispatching a new `activeSource` is what causes this zone to flip.
-      select: ({ state }) =>
+      // Project `activeSource` → a source-integration panel. Selectors
+      // are pure; the editor panel's `activeSource.set(...)` is what
+      // causes this zone to flip on the next render pass.
+      select: ({ state, stores }) =>
         state.activeSource
           ? {
               kind: "module-entry",
               module: state.activeSource,
               entry: "sourcePanel",
-              input: { documentId: state.documentId },
+              input: {
+                documentId: state.documentId,
+                selectedItem: stores.writable<string | null>("selectedSourceItem", {
+                  get: (s) => s.selectedSourceItem,
+                  set: (value) => ({ selectedSourceItem: value }),
+                }),
+              },
             }
           : { kind: "empty" },
     },
     inspector: {
-      select: ({ state }) => ({
+      // Inspector reads only — readable stores are sufficient.
+      select: ({ state, stores }) => ({
         kind: "module-entry",
         module: "editor",
         entry: "inspector",
-        input: { documentId: state.documentId },
+        input: {
+          documentId: state.documentId,
+          activeSource: stores.readable<SourceId | null>("activeSource:r", (s) => s.activeSource),
+          selectedItem: stores.readable<string | null>(
+            "selectedSourceItem:r",
+            (s) => s.selectedSourceItem,
+          ),
+        },
       }),
     },
   },

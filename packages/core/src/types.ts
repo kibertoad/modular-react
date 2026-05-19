@@ -27,6 +27,38 @@ export interface ReactiveService<T> {
 }
 
 /**
+ * Read-only store interface — `useSyncExternalStore`-compatible. Modules
+ * that need to read shared state without coupling to *which* primitive
+ * provides it (a composition's per-instance store, a shell-level
+ * Zustand/Redux store, a test mock, etc.) declare an `input` field of
+ * this type. The host wires in the implementation — typically a
+ * composition's selector projection, but any subscribable source works.
+ *
+ * Alias of {@link ReactiveService} — same shape, named for the
+ * store-contract pattern. Use `ReadableStore<T>` when authoring module
+ * contracts; use `ReactiveService<T>` when authoring an
+ * app-dependencies entry that happens to be subscribable.
+ */
+export type ReadableStore<T> = ReactiveService<T>;
+
+/**
+ * Read-write store interface — extends {@link ReadableStore} with a
+ * `set` operation. Used the same way: panel modules declare
+ * `WritableStore<T>` on their input when they need to drive a value
+ * shared with sibling panels, and the host (typically a composition's
+ * selector) supplies the implementation. Panels stay unaware of
+ * *whose* state they are mutating.
+ */
+export interface WritableStore<T> extends ReadableStore<T> {
+  /**
+   * Replace the current value. Listeners fire when the value differs
+   * from the previous snapshot under the store implementation's
+   * change-detection rule (typically `Object.is`).
+   */
+  set: (value: T) => void;
+}
+
+/**
  * Default type for slot definitions when no explicit type is provided.
  * Every slot value must be a readonly array — modules contribute items
  * and the registry concatenates them across all registered modules.

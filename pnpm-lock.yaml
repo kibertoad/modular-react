@@ -315,6 +315,15 @@ importers:
 
   examples/react-router/editor-composition/compositions/editor:
     dependencies:
+      '@example-rr-editor-composition/contentful':
+        specifier: workspace:*
+        version: link:../../modules/contentful
+      '@example-rr-editor-composition/editor':
+        specifier: workspace:*
+        version: link:../../modules/editor
+      '@example-rr-editor-composition/strapi':
+        specifier: workspace:*
+        version: link:../../modules/strapi
       '@modular-react/compositions':
         specifier: workspace:*
         version: link:../../../../../packages/compositions
@@ -328,12 +337,6 @@ importers:
 
   examples/react-router/editor-composition/modules/contentful:
     dependencies:
-      '@example-rr-editor-composition/editor-composition':
-        specifier: workspace:*
-        version: link:../../compositions/editor
-      '@modular-react/compositions':
-        specifier: workspace:*
-        version: link:../../../../../packages/compositions
       '@modular-react/core':
         specifier: workspace:*
         version: link:../../../../../packages/core
@@ -350,12 +353,6 @@ importers:
 
   examples/react-router/editor-composition/modules/editor:
     dependencies:
-      '@example-rr-editor-composition/editor-composition':
-        specifier: workspace:*
-        version: link:../../compositions/editor
-      '@modular-react/compositions':
-        specifier: workspace:*
-        version: link:../../../../../packages/compositions
       '@modular-react/core':
         specifier: workspace:*
         version: link:../../../../../packages/core
@@ -372,12 +369,6 @@ importers:
 
   examples/react-router/editor-composition/modules/strapi:
     dependencies:
-      '@example-rr-editor-composition/editor-composition':
-        specifier: workspace:*
-        version: link:../../compositions/editor
-      '@modular-react/compositions':
-        specifier: workspace:*
-        version: link:../../../../../packages/compositions
       '@modular-react/core':
         specifier: workspace:*
         version: link:../../../../../packages/core
@@ -1246,6 +1237,15 @@ importers:
 
   examples/tanstack-router/editor-composition/compositions/editor:
     dependencies:
+      '@example-tsr-editor-composition/contentful':
+        specifier: workspace:*
+        version: link:../../modules/contentful
+      '@example-tsr-editor-composition/editor':
+        specifier: workspace:*
+        version: link:../../modules/editor
+      '@example-tsr-editor-composition/strapi':
+        specifier: workspace:*
+        version: link:../../modules/strapi
       '@modular-react/compositions':
         specifier: workspace:*
         version: link:../../../../../packages/compositions
@@ -1259,12 +1259,6 @@ importers:
 
   examples/tanstack-router/editor-composition/modules/contentful:
     dependencies:
-      '@example-tsr-editor-composition/editor-composition':
-        specifier: workspace:*
-        version: link:../../compositions/editor
-      '@modular-react/compositions':
-        specifier: workspace:*
-        version: link:../../../../../packages/compositions
       '@modular-react/core':
         specifier: workspace:*
         version: link:../../../../../packages/core
@@ -1281,12 +1275,6 @@ importers:
 
   examples/tanstack-router/editor-composition/modules/editor:
     dependencies:
-      '@example-tsr-editor-composition/editor-composition':
-        specifier: workspace:*
-        version: link:../../compositions/editor
-      '@modular-react/compositions':
-        specifier: workspace:*
-        version: link:../../../../../packages/compositions
       '@modular-react/core':
         specifier: workspace:*
         version: link:../../../../../packages/core
@@ -1303,12 +1291,6 @@ importers:
 
   examples/tanstack-router/editor-composition/modules/strapi:
     dependencies:
-      '@example-tsr-editor-composition/editor-composition':
-        specifier: workspace:*
-        version: link:../../compositions/editor
-      '@modular-react/compositions':
-        specifier: workspace:*
-        version: link:../../../../../packages/compositions
       '@modular-react/core':
         specifier: workspace:*
         version: link:../../../../../packages/core
