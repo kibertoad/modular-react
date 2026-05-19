@@ -1,12 +1,12 @@
 # Editor composition — React Router example
 
-A multi-zone editor screen wired with [`@modular-react/compositions`](../../../packages/compositions/README.md). The composition owns a small scoped store (`documentId`, `activeIntegrationId`, `selectedSourceItem`) and projects it into three named zones:
+A multi-zone editor screen wired with [`@modular-react/compositions`](../../../packages/compositions/README.md). The composition owns a small scoped store (`documentId`, `activeSource`, `selectedSourceItem`) and projects it into three named zones, exposing typed `WritableStore` / `ReadableStore` contracts to the panels:
 
-- **`main`** — always renders the editor panel.
-- **`source`** — toggles between Contentful, Strapi, or empty based on state. Foreign panels mutate the composition state via `useCompositionDispatch`.
-- **`inspector`** — reads `selectedSourceItem` from the composition state and shows details about it.
+- **`main`** — always renders the editor canvas. Receives `activeSource: WritableStore<SourceId | null>` so the editor can switch which integration mounts in the side panel.
+- **`source`** — mounts Contentful, Strapi, or empty based on `activeSource`. Receives `selectedItem: WritableStore<string | null>` so the panel can publish selections back to sibling zones.
+- **`inspector`** — receives readable views of both stores and renders details about the current selection.
 
-The three panel modules know nothing about the composition. Each is a regular `defineModule` with `entryPoints`; the composition wires them into zones at the layout level.
+The three panel modules know **nothing** about the composition — they import only the structural `ReadableStore<T>` / `WritableStore<T>` interfaces from `@modular-react/core` and read state via `useSyncExternalStore`. Strict shell/composition/panel-team separation is structural: a panel module has zero workspace deps on `compositions/editor`.
 
 ```text
 ┌────────────────────────────────────────────────────────────────┐
@@ -33,7 +33,22 @@ Then open `http://localhost:5197`.
 ## Layout
 
 ```text
-app-shared/   — types + the composition definition
-modules/      — editor / contentful / strapi panel modules
-shell/        — registry, root route, CompositionOutlet wiring, e2e
+app-shared/         — shell-team contract: AppDependencies, AppSlots
+compositions/
+  editor/           — composition team: state, runtime definition, handle.
+                      Imports panel module types (one-way: composition → modules).
+modules/            — panel teams: pure modules that read `WritableStore<T>` /
+                      `ReadableStore<T>` via their `input`. Depend on
+                      @modular-react/core ONLY — no workspace dep on either
+                      `app-shared` or `compositions/editor`.
+shell/              — registry, root route, CompositionOutlet wiring, e2e.
 ```
+
+Dependency direction is one-way: `composition → modules`. Modules import the
+generic store interfaces from `@modular-react/core`; the composition's selector
+projects state into those contracts via `stores.writable(key, { get, set })`
+and `stores.readable(key, get)`. Identity is stable per `(instance, key)`, so
+`useSyncExternalStore` in the panels doesn't re-subscribe across renders.
+
+See [the package README's "typed store projections" pattern](../../../packages/compositions/README.md#pattern--typed-store-projections-composition-unaware-panels)
+for the full design rationale.

@@ -14,16 +14,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@modular-react/compositions": "workspace:*",
-    "@modular-react/core": "workspace:*"
-  },
   "devDependencies": {
-    "@types/react": "^19.0.0",
-    "react": "^19.0.0",
     "typescript": "^6.0.2"
-  },
-  "peerDependencies": {
-    "react": "^19.0.0"
   }
 }

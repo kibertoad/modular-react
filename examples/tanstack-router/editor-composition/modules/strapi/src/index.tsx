@@ -1,7 +1,11 @@
+import { useSyncExternalStore } from "react";
 import { defineEntry, defineModule, schema } from "@modular-react/core";
-import { createEditorHooks, type EditorState } from "@example-tsr-editor-composition/app-shared";
+import type { WritableStore } from "@modular-react/core";
 
-const { useState: useEditorState, useDispatch: useEditorDispatch } = createEditorHooks();
+interface StrapiSourceInput {
+  readonly documentId: string;
+  readonly selectedItem: WritableStore<string | null>;
+}
 
 const SAMPLE_ENTRIES = [
   { id: "post-1", title: "Welcome post" },
@@ -9,21 +13,24 @@ const SAMPLE_ENTRIES = [
   { id: "post-9", title: "Compliance update" },
 ];
 
-function StrapiSourcePanel({ input }: { input: { documentId: string } }) {
-  const selected = useEditorState((s: EditorState) => s.selectedSourceItem);
-  const dispatch = useEditorDispatch();
+function StrapiSourcePanel({ input }: { input: StrapiSourceInput }) {
+  const { documentId } = input;
+  const selectedItem = useSyncExternalStore(
+    input.selectedItem.subscribe,
+    input.selectedItem.getSnapshot,
+  );
   return (
     <div data-testid="strapi-panel" style={{ padding: "1rem" }}>
       <h3 style={{ marginTop: 0 }}>Strapi</h3>
-      <p style={{ color: "#718096", fontSize: "0.875rem" }}>Source posts for {input.documentId}</p>
+      <p style={{ color: "#718096", fontSize: "0.875rem" }}>Source posts for {documentId}</p>
       <ul style={{ listStyle: "none", padding: 0 }}>
         {SAMPLE_ENTRIES.map((e) => (
           <li key={e.id} style={{ padding: "0.25rem 0" }}>
             <button
               type="button"
               data-testid={`strapi-${e.id}`}
-              aria-pressed={selected === e.id}
-              onClick={() => dispatch({ selectedSourceItem: e.id })}
+              aria-pressed={selectedItem === e.id}
+              onClick={() => input.selectedItem.set(e.id)}
               style={{
                 background: "none",
                 border: 0,
@@ -49,7 +56,7 @@ export default defineModule({
   entryPoints: {
     sourcePanel: defineEntry({
       component: StrapiSourcePanel,
-      input: schema<{ documentId: string }>(),
+      input: schema<StrapiSourceInput>(),
     }),
   },
 });

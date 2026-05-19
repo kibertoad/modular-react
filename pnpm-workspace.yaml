@@ -6,6 +6,7 @@ packages:
   - "examples/*/*/shell"
   - "examples/*/*/modules/*"
   - "examples/*/*/journeys/*"
+  - "examples/*/*/compositions/*"
 allowBuilds:
   esbuild: false
   msw: false

@@ -14,6 +14,7 @@
     "@example-rr-editor-composition/app-shared": "workspace:*",
     "@example-rr-editor-composition/contentful": "workspace:*",
     "@example-rr-editor-composition/editor": "workspace:*",
+    "@example-rr-editor-composition/editor-composition": "workspace:*",
     "@example-rr-editor-composition/strapi": "workspace:*",
     "@modular-react/compositions": "workspace:*",
     "@modular-react/core": "workspace:*",

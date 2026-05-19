@@ -50,7 +50,12 @@ Three roles, strictly separated:
 2. **The composition** owns a scoped store (`TState`), declares one **zone** per layout slot, and provides a pure **selector** per zone that maps state to "what should render here right now".
 3. **The host** (a route Component, a tab, a modal, anywhere) calls `runtime.start(handle, input)` to get an `instanceId`, then renders `<CompositionOutlet instanceId={id}>` with a layout render-prop that arranges the zones however it wants.
 
-The composition's store is the **orchestration bus**. Panels mutate it via `useCompositionDispatch`; sibling panels read the resulting state via `useCompositionState`. There is no other coupling between panels.
+The composition's store is the **orchestration bus**. Panels exchange data with it via either:
+
+- **Typed store contracts** — the selector projects state into `ReadableStore<T>` / `WritableStore<T>` (from `@modular-react/core`) and hands them to the panel via `input`. The panel imports only the structural store interface — recommended when panels and the composition are owned by different teams.
+- **Composition hooks** — `useCompositionState` / `useCompositionDispatch` read and write directly. Recommended when the same team owns both.
+
+Both patterns subscribe at slice level (via `useSyncExternalStore` under the hood) — they differ in coupling, not performance. See [Hooks vs stores — which to use](#hooks-vs-stores--which-to-use).
 
 ```text
 ┌──────────────────── Host (route / tab / modal) ─────────────────┐
@@ -226,47 +231,104 @@ The render-prop receives one `ReactNode` per zone, fully wrapped (`Suspense` + p
 
 ### 5. Drive the composition from inside a panel
 
-A panel that lives inside the composition reads state and dispatches changes via the hooks. The panel itself doesn't know which composition it's in — only that it's inside _some_ composition.
+Two supported patterns — pick by team ownership:
+
+**Recommended for cross-team scenarios — typed store contracts.** The composition's selector projects state into `ReadableStore<T>` / `WritableStore<T>` (from `@modular-react/core`) and hands them to panels via `input`. The panel imports only the structural store interface — *nothing* composition-specific — and reads via `useSyncExternalStore`:
 
 ```typescript
-// contentful/src/SourcePanel.tsx
-import {
-  useCompositionDispatch,
-  useCompositionEmit,
-  useCompositionState,
-} from "@modular-react/compositions";
-import type { EditorState } from "@myorg/editor-composition";
-import type { ModuleEntryProps } from "@modular-react/core";
+// editor-composition/src/composition.ts — selector projects state into a store
+zones: {
+  source: {
+    select: ({ state, stores }) => ({
+      kind: "module-entry",
+      module: state.activeSource,
+      entry: "sourcePanel",
+      input: {
+        documentId: state.documentId,
+        // Stable per (instance, "selectedItem") — same reference across
+        // selector re-runs, so useSyncExternalStore doesn't re-subscribe.
+        selectedItem: stores.writable("selectedItem", {
+          get: (s) => s.selectedSourceItem,
+          set: (value) => ({ selectedSourceItem: value }),
+        }),
+      },
+    }),
+  },
+},
+```
 
-export function ContentfulSourcePanel({ input }: ModuleEntryProps<{ documentId: string }>) {
-  const selected = useCompositionState<EditorState, string | null>(
-    (s) => s.selectedSourceItem,
+```typescript
+// contentful/src/SourcePanel.tsx — module imports zero composition types
+import { useSyncExternalStore } from "react";
+import type { ModuleEntryProps, WritableStore } from "@modular-react/core";
+
+interface SourcePanelInput {
+  readonly documentId: string;
+  readonly selectedItem: WritableStore<string | null>;
+}
+
+export function ContentfulSourcePanel({ input }: ModuleEntryProps<SourcePanelInput>) {
+  const selected = useSyncExternalStore(
+    input.selectedItem.subscribe,
+    input.selectedItem.getSnapshot,
   );
-  const dispatch = useCompositionDispatch<EditorState>();
-  const emit = useCompositionEmit();
-
   return (
     <ul>
       {items.map((it) => (
         <li
           key={it.id}
           aria-current={selected === it.id || undefined}
-          onClick={() => dispatch({ selectedSourceItem: it.id })}
+          onClick={() => input.selectedItem.set(it.id)}
         >
           {it.title}
         </li>
       ))}
-      <button onClick={() => emit({ kind: "open-diff", payload: { id: selected } })}>
-        Compare
-      </button>
     </ul>
   );
 }
 ```
 
-Pass typed hooks down per-composition with the `createCompositionContext<TState>()` factory if you don't want to spell `<EditorState>` at every call site — see [Hooks for foreign panels](#hooks-for-foreign-panels).
+The panel team and composition team share only the structural `WritableStore<string | null>` contract. The composition's `TState` shape can change without touching the panel; a different host can supply a different `WritableStore<string | null>` (test mock, shell-level Zustand store, etc.).
+
+See [Pattern — typed store projections](#pattern--typed-store-projections-composition-unaware-panels) for the full design.
+
+**Alternative for same-team scenarios — composition hooks.** When one team owns both the composition and the panels, calling `useCompositionState` / `useCompositionDispatch` directly is slightly less ceremony — the panel imports the composition's `TState` and subscribes to slices through the hook:
+
+```typescript
+import { useCompositionState, useCompositionDispatch } from "@modular-react/compositions";
+import type { EditorState } from "@myorg/editor-composition";
+
+export function ContentfulSourcePanel({ input }: ModuleEntryProps<{ documentId: string }>) {
+  const selected = useCompositionState<EditorState, string | null>(
+    (s) => s.selectedSourceItem,
+  );
+  const dispatch = useCompositionDispatch<EditorState>();
+  return (/* same UI as above, calling dispatch({ selectedSourceItem: it.id }) */);
+}
+```
+
+See [Hooks for foreign panels](#hooks-for-foreign-panels) for the typed-hooks factory.
+
+> **Which pattern do I pick?** See [Hooks vs stores — which to use](#hooks-vs-stores--which-to-use).
 
 ## Core concepts
+
+### Composition zones vs `module.zones`
+
+The framework has two distinct primitives that both use the word "zone." They are unrelated.
+
+| | `module.zones` (existing) | composition zones (this package) |
+|---|---|---|
+| Declared by | `defineModule({ zones: { ... } })` and the router's route `staticData` | `defineComposition({ zones: { ... } })` |
+| Populated by | The *active route's* module — at most one component per zone | The composition's per-zone `select(ctx)`, which can target any registered module |
+| Cardinality | One contribution per zone at a time (most-recent active wins) | Many panels mounted in parallel, one per declared zone |
+| Layout owner | The shell — `useZones` / `useActiveZones` read the merged map | The host — `<CompositionOutlet>`'s render-prop arranges zones however it wants |
+| Authoring shape | String → React component | String → `select(ctx) → ZoneResolution` |
+| Use when | A module needs to contribute a header chip, command, or one-shot slot to the active screen | Several modules need to render side-by-side on a single screen with shared coordination state |
+
+A composition does **not** participate in `module.zones`. The shell's `useZones`/`useActiveZones` will not see anything from a `<CompositionOutlet>`. The two systems are orthogonal — a screen can use both at once (e.g., a route uses `module.zones` for the header chip + a `<CompositionOutlet>` for the multi-panel body).
+
+Inside a composition zone, **the composition definition owns the zone name and the selector** (what renders here, driven by state); **the host owns the layout** (where the zone appears on screen). The framework wraps each zone in `<Suspense>` + a per-zone error boundary before handing the `ReactNode` to the host's render-prop.
 
 ### Zones
 
@@ -334,6 +396,149 @@ Every `start()` call mints a fresh instance — the runtime does not dedupe by i
 
 ## Authoring patterns
 
+### Hooks vs stores — which to use
+
+Both patterns subscribe at slice level (via `useSyncExternalStore` under the hood) and have equivalent re-render behavior — the choice is **ownership**, not performance.
+
+|                              | **Stores** (typed `ReadableStore` / `WritableStore` via `input`) | **Hooks** (`useCompositionState` / `useCompositionDispatch`) |
+| ---------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Panel imports                | `@modular-react/core` only (for `ReadableStore<T>` / `WritableStore<T>`)        | `@modular-react/compositions` + the composition's `TState` type         |
+| Panel workspace deps         | Zero on the composition package                                                 | Yes — module depends on the composition package for `TState`            |
+| Coupling between panel & composition | Structural — `WritableStore<T>` interface only                            | Nominal — the composition's `TState` shape                              |
+| Reuse in other hosts         | Easy — any `WritableStore<T>` works (test mock, shell-level store, …)           | Panel only renders inside *this* composition                            |
+| Composition's selector       | Calls `stores.writable("key", { get, set })`                                    | Selector returns plain `input`; panel reads from context                |
+| Ceremony at the panel        | Two lines of `useSyncExternalStore` per slice                                   | One line of `useCompositionState(s => ...)` per slice                   |
+| Best for                     | Panels owned by a different team than the composition; reusable panels          | Panels and composition owned by the same team; one-off internal screens |
+
+**Default to stores** when modules and compositions are owned by different teams, or when you want a panel to be reusable outside this composition. **Reach for hooks** when the same team owns both and you want minimum ceremony — they're a fully-supported alternative, not a deprecated path.
+
+The two patterns can coexist in one composition (e.g., the editor panel uses hooks because it's owned by the composition team; integration panels use stores because they're owned by integration teams).
+
+### Pattern — typed store projections (composition-unaware panels)
+
+For strict separation between the **composition team** (owns coordination state) and the **panel teams** (own panel modules), project composition state into typed store contracts that panels consume via their `input`. Panels then depend only on the structural store interface — not on the composition's `TState` shape — so they import nothing composition-specific.
+
+The framework gives selectors a `stores` factory bound to the active instance. `stores.readable(key, get)` and `stores.writable(key, { get, set })` return objects stable per `(instance, key)`. They wrap the composition's per-instance store with **slice-level change detection** — subscribers fire only when the projected slice value actually differs (`Object.is`).
+
+The store types live in `@modular-react/core` as `ReadableStore<T>` / `WritableStore<T>`. They match `useSyncExternalStore`'s contract (`getSnapshot` + `subscribe`); a `WritableStore<T>` adds `set(value)`.
+
+**Composition side** — selector projects state into stores:
+
+```typescript
+import { defineComposition } from "@modular-react/compositions";
+import type editorModule from "@myorg/editor";
+import type contentfulModule from "@myorg/contentful";
+import type strapiModule from "@myorg/strapi";
+
+type Modules = {
+  readonly editor: typeof editorModule;
+  readonly contentful: typeof contentfulModule;
+  readonly strapi: typeof strapiModule;
+};
+
+interface EditorState {
+  readonly documentId: string;
+  readonly activeSource: "contentful" | "strapi" | null;
+  readonly selectedItem: string | null;
+}
+
+export const editorComposition = defineComposition<Modules, EditorState>()({
+  id: "editor",
+  version: "1.0.0",
+  initialState: (input: { documentId: string }) => ({
+    documentId: input.documentId,
+    activeSource: null,
+    selectedItem: null,
+  }),
+  zones: {
+    main: {
+      select: ({ state, stores }) => ({
+        kind: "module-entry",
+        module: "editor",
+        entry: "main",
+        input: {
+          documentId: state.documentId,
+          // Stable WritableStore<"contentful" | "strapi" | null> per
+          // (instance, "activeSource"). The editor panel uses it via
+          // useSyncExternalStore; identity stable across re-renders.
+          activeSource: stores.writable("activeSource", {
+            get: (s) => s.activeSource,
+            set: (value) => ({ activeSource: value }),
+          }),
+        },
+      }),
+    },
+    source: {
+      select: ({ state, stores }) =>
+        state.activeSource
+          ? {
+              kind: "module-entry",
+              module: state.activeSource,
+              entry: "sourcePanel",
+              input: {
+                documentId: state.documentId,
+                selectedItem: stores.writable("selectedItem", {
+                  get: (s) => s.selectedItem,
+                  set: (value) => ({ selectedItem: value }),
+                }),
+              },
+            }
+          : { kind: "empty" },
+    },
+  },
+});
+```
+
+**Panel side** — module declares the store interface in its `input`; reads via `useSyncExternalStore`:
+
+```typescript
+import { useSyncExternalStore } from "react";
+import { defineEntry, defineModule, schema } from "@modular-react/core";
+import type { WritableStore } from "@modular-react/core";
+
+interface SourcePanelInput {
+  readonly documentId: string;
+  readonly selectedItem: WritableStore<string | null>;
+}
+
+function ContentfulSourcePanel({ input }: { input: SourcePanelInput }) {
+  // Subscribes once per instance — the store's identity is stable, so
+  // useSyncExternalStore doesn't re-subscribe across re-renders.
+  const selectedItem = useSyncExternalStore(
+    input.selectedItem.subscribe,
+    input.selectedItem.getSnapshot,
+  );
+  return (
+    <ul>
+      {items.map((it) => (
+        <li
+          key={it.id}
+          aria-current={selectedItem === it.id || undefined}
+          onClick={() => input.selectedItem.set(it.id)}
+        >
+          {it.title}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default defineModule({
+  id: "contentful",
+  version: "1.0.0",
+  entryPoints: {
+    sourcePanel: defineEntry({
+      component: ContentfulSourcePanel,
+      input: schema<SourcePanelInput>(),
+    }),
+  },
+});
+```
+
+The panel imports **nothing composition-specific** — only `@modular-react/core` for the `WritableStore<T>` interface. The composition team can change `EditorState`'s shape without touching the panel; the only contract between them is `WritableStore<string | null>`. This is the recommended pattern for projects where panel modules and the composition are owned by different teams.
+
+For projects where a single team owns both, `useCompositionState` / `useCompositionDispatch` (below) are still supported and slightly less ceremony.
+
 ### Pattern — empty zone with a typed message
 
 ```typescript
@@ -397,6 +602,8 @@ const emit = useCompositionEmit();
 ```
 
 ### Pattern — typed hooks per composition
+
+> Hook-based pattern — pairs with [Hooks for foreign panels](#hooks-for-foreign-panels). See [Hooks vs stores — which to use](#hooks-vs-stores--which-to-use) for when to reach for this vs. the store-projection pattern above.
 
 Avoid spelling `<EditorState>` at every call site by exporting pre-typed hooks from the composition package:
 
@@ -715,6 +922,8 @@ const instanceId = useComposition(
 
 ## Hooks for foreign panels
 
+> The alternative to the [typed store projections](#pattern--typed-store-projections-composition-unaware-panels) pattern, suited to in-team panels. The hook-based path is fully supported — neither pattern is deprecated. See [Hooks vs stores — which to use](#hooks-vs-stores--which-to-use) for the trade-off.
+
 Panels inside a composition zone — and only those panels — can read the active instance via four hooks. They throw if called outside a `<CompositionOutlet>` zone.
 
 ```typescript
@@ -867,22 +1076,29 @@ The runtime defers disposal one microtask so React 18/19 StrictMode's mount/unmo
 - **No outlet-level error boundary.** The framework wraps each zone in its own boundary, not the entire outlet. A throw outside the zone-render path (e.g. from the host's render-prop body) is the host's responsibility.
 - **No built-in persistence.** Coordination state lives in memory; durable storage belongs in the application (URL params, app-level store). See the [persistence note](#a-note-on-persistence--there-is-none).
 - **Composition panels' `exit` prop is a no-op stub.** Foreign panels rendered inside a composition zone cannot deliver exits to the host's exit dispatcher. Use `dispatch` for state changes and `emit` for cross-zone events instead. (Journeys hosted inside a zone deliver exits through the journey runtime normally.)
-- **`React.memo` and `forwardRef`'d entry components are not supported.** `resolveEntryComponent` in `@modular-react/react` requires `typeof entry.component === "function"`. Panels can still memoize internally via `useMemo` / `useCallback`.
 - **Cycle detection is partial across the journey ↔ composition boundary.** Same-instance recursion is caught; recursion through two different instances of the same definition is not. See [Cycle safety](#cycle-safety).
 
-## Comparison with journeys
+## Comparison with sibling primitives
 
-|                                | `@modular-react/compositions`                                   | `@modular-react/journeys`                                                |
-| ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| **Primary use**                | Multi-module screen layout with shared state                    | Multi-module stepped workflow with typed transitions                     |
-| **State model**                | Scoped store; selectors project state into zones                | Step + accumulated state; transitions advance step                       |
-| **Flow**                       | No graph — any state can produce any resolution                 | Directed graph of `(step, exit) → next step`                             |
-| **Authoring shape**            | `defineComposition({ zones, initialState })`                    | `defineJourney({ start, transitions })`                                  |
-| **Instance id prefix**         | `ci_*`                                                          | `ji_*`                                                                   |
-| **Persistence**                | None — keep durable coordination state in the application layer | First-class adapter (`JourneyPersistence`) with versioned blobs          |
-| **Hooks inside panels**        | `useCompositionState/Dispatch/Emit/Zone`                        | `useJourneyState`, `useJourneyInstance`, `useJourneyCallStack`           |
-| **Outlet**                     | `CompositionOutlet` (render-prop, multi-zone)                   | `JourneyOutlet` (single step, leaf-walk)                                 |
-| **Validation**                 | Zone contracts (spot-check) + `moduleCompat`                    | Reachability + transition exhaustiveness + contracts                     |
-| **Composition with the other** | A zone can mount `<JourneyOutlet>` via `kind: "journey"`        | A journey step can render `<CompositionOutlet>` like any other component |
+Three primitives in the framework arrange modules on a screen. Pick by problem shape: extending one screen vs. coordinating several modules in parallel vs. driving a stepped flow.
 
-Choose **compositions** when the screen is a layout problem (which modules go where, sharing state). Choose **journeys** when the screen is a flow problem (do A, then B, then maybe C). They're complementary, not competing.
+|                                | `module.zones` (route-level)                                                      | `@modular-react/compositions` (this package)                    | `@modular-react/journeys`                                                |
+| ------------------------------ | --------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **Primary use**                | A foreign module contributes a single component to a named slot on the active route | Multi-module screen layout with shared state, rendered in parallel | Multi-module stepped workflow with typed transitions                     |
+| **Cardinality**                | One contribution per zone (most-recent active wins)                               | N panels mounted simultaneously, one per declared zone          | One step rendered at a time                                              |
+| **Declared by**                | `defineModule({ zones })` + route `staticData`                                     | `defineComposition({ zones })`                                  | `defineJourney({ start, transitions })`                                  |
+| **State model**                | None — slots map id → component                                                   | Scoped store; selectors project state into zones                | Step + accumulated state; transitions advance step                       |
+| **Flow**                       | Static contribution                                                               | No graph — any state can produce any resolution                 | Directed graph of `(step, exit) → next step`                             |
+| **Read in shell**              | `useZones` / `useActiveZones`                                                     | `<CompositionOutlet>` render-prop with zone names               | `<JourneyOutlet>` (leaf-walk through current step)                       |
+| **Instance id prefix**         | n/a                                                                               | `ci_*`                                                          | `ji_*`                                                                   |
+| **Persistence**                | n/a                                                                               | None — keep durable coordination state in the application layer | First-class adapter (`JourneyPersistence`) with versioned blobs          |
+| **Panel ↔ host data flow**     | n/a                                                                               | Stores (`ReadableStore`/`WritableStore` via `input`) **or** hooks (`useCompositionState`/`Dispatch`/`Emit`/`Zone`) | `useJourneyState`, `useJourneyInstance`, `useJourneyCallStack`           |
+| **Validation**                 | Slot-name + route lookup                                                          | Zone contracts (spot-check) + `moduleCompat`                    | Reachability + transition exhaustiveness + contracts                     |
+| **Composition with the other** | n/a                                                                               | A zone can mount `<JourneyOutlet>` via `kind: "journey"`        | A journey step can render `<CompositionOutlet>` like any other component |
+
+Choose by problem shape:
+- **`module.zones`** when a route already exists and another module needs to contribute one widget (a header chip, a command, a sidebar entry) — the contribution is static and tied to the active route.
+- **Compositions** when one screen layout coordinates several modules with **shared state** — multiple panels mounted in parallel, each reactive to a per-instance scoped store.
+- **Journeys** when the screen is a **flow problem** — do A, then B, then maybe C, with typed handoffs between steps.
+
+The three are complementary, not competing. A screen can use all of them: a route hosting a `<CompositionOutlet>` whose `inspector` zone hosts a `<JourneyOutlet>`, while the route itself contributes a `module.zones` chip to the shell header.

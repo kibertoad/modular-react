@@ -26,6 +26,7 @@ import type {
   ZoneDescriptor,
   ZoneResolution,
 } from "./types.js";
+import { createZoneStores, noopZoneStores, type ZoneStores } from "./stores.js";
 
 /** Default cap on automatic retries before a zone falls back. */
 const DEFAULT_RETRY_CAP = 2;
@@ -135,6 +136,25 @@ function useInstanceSnapshot(
  *   - Unhashable input (final catch-all) falls back to a typeof tag —
  *     duplicates land in the same bucket, the conservative choice.
  */
+/**
+ * Dispatch placeholder for selector invocations on the preload path.
+ * Preload only reads `module`/`entry` off the resulting resolution; any
+ * `dispatch`-driven callbacks the selector bakes into `input` are never
+ * invoked from preload, so a stable no-op is correct here. Shared (not
+ * inlined) so identity-equality across preload runs doesn't fluctuate.
+ */
+const noopDispatch: (updater: unknown) => void = () => {};
+
+/**
+ * Stores placeholder for selector invocations on the preload path.
+ * Same rationale as {@link noopDispatch} — preload never invokes any
+ * store baked into `input`, so a stub provider is correct and avoids
+ * holding a real runtime + instance handle on a path that doesn't
+ * need them. Cast to widen `unknown` → `any` so the unified noop
+ * satisfies the per-`TState` `ZoneStores` contract.
+ */
+const noopStores = noopZoneStores as unknown as ZoneStores<any>;
+
 function hashInput(input: unknown): string {
   if (input === undefined) return "u";
   try {
@@ -270,7 +290,16 @@ export function CompositionOutlet<TZones extends string = string>(
       if (!descriptor) continue;
       let selection: ZoneResolution<any>;
       try {
-        selection = descriptor.select({ state: instance.state, deps: internals.__deps });
+        selection = descriptor.select({
+          state: instance.state,
+          deps: internals.__deps,
+          // Preload paths only inspect `module`/`entry` on the
+          // resolution — they never invoke any callback the selector
+          // may have baked into `input`. No-op `dispatch` + `stores`
+          // are correct here.
+          dispatch: noopDispatch,
+          stores: noopStores,
+        });
       } catch {
         parts.push(`${zoneName}:err`);
         continue;
@@ -297,7 +326,12 @@ export function CompositionOutlet<TZones extends string = string>(
       for (const { zoneName, descriptor } of eagerZones) {
         let selection: ZoneResolution<any>;
         try {
-          selection = descriptor.select({ state: instance.state, deps: internals.__deps });
+          selection = descriptor.select({
+            state: instance.state,
+            deps: internals.__deps,
+            dispatch: noopDispatch,
+            stores: noopStores,
+          });
         } catch {
           // Selector errors are surfaced at render time; preload is
           // best-effort, so we swallow here.
@@ -470,6 +504,16 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
     },
     [runtime, instanceId],
   );
+  // Stable `stores` provider per `(runtime, instanceId)`. Selectors call
+  // `stores.readable(key, ...)` / `stores.writable(key, ...)` to project
+  // composition state into typed store contracts that panels consume
+  // via their `input`. Identity is stable across selector re-runs
+  // within this outlet mount, which is what `useSyncExternalStore` in
+  // the panel needs to avoid re-subscribing.
+  const stores = useMemo(
+    () => createZoneStores<unknown>(runtime, instanceId),
+    [runtime, instanceId],
+  );
   const emit = useCallback(
     (event: CompositionZoneEvent) => {
       try {
@@ -522,7 +566,17 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
   let selectorError: unknown = null;
   if (record && store && state !== null) {
     try {
-      selection = descriptor.select({ state: state as unknown, deps: internals.__deps });
+      selection = descriptor.select({
+        state: state as unknown,
+        deps: internals.__deps,
+        // Stable `dispatch` + `stores` references (memoized above keyed
+        // on `[runtime, instanceId]`). Callbacks and store references
+        // the selector closes over these with stay identity-stable
+        // across re-renders, so panels using `useSyncExternalStore`
+        // don't re-subscribe and `React.memo`'d panels don't churn.
+        dispatch,
+        stores,
+      });
     } catch (err) {
       selectorError = err;
     }

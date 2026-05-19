@@ -9,6 +9,8 @@ export type {
   NavigationItemBase,
   ModuleLifecycle,
   ReactiveService,
+  ReadableStore,
+  WritableStore,
   SlotMap,
   SlotMapOf,
   ZoneMap,

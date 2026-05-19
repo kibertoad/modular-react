@@ -1,31 +1,42 @@
+import { useSyncExternalStore } from "react";
 import { defineEntry, defineModule, schema } from "@modular-react/core";
-import {
-  createEditorHooks,
-  type EditorState,
-  type SourceId,
-} from "@example-rr-editor-composition/app-shared";
-
-const { useState: useEditorState, useDispatch: useEditorDispatch } = createEditorHooks();
+import type { ReadableStore, WritableStore } from "@modular-react/core";
 
 /**
- * Main canvas: shows the document id and the chooser for which source
- * integration to mount in the side zone. Dispatches into the composition's
- * scoped store via `useCompositionDispatch` — the source zone selector
- * picks the new value up on its next render.
+ * Source-integration id the editor canvas knows about. Declared inline
+ * because this module owns the chooser UI — the host supplies stores
+ * carrying values drawn from this set. The module imports nothing
+ * composition-specific.
  */
-function EditorMain({ input }: { input: { documentId: string } }) {
-  const activeSource = useEditorState((s: EditorState) => s.activeSource);
-  const dispatch = useEditorDispatch();
-  const set = (next: SourceId | null) => dispatch({ activeSource: next });
+type SourceId = "contentful" | "strapi";
+
+interface EditorMainInput {
+  readonly documentId: string;
+  readonly activeSource: WritableStore<SourceId | null>;
+}
+
+interface InspectorInput {
+  readonly documentId: string;
+  readonly activeSource: ReadableStore<SourceId | null>;
+  readonly selectedItem: ReadableStore<string | null>;
+}
+
+function EditorMain({ input }: { input: EditorMainInput }) {
+  const { documentId } = input;
+  const activeSource = useSyncExternalStore(
+    input.activeSource.subscribe,
+    input.activeSource.getSnapshot,
+  );
+  const setSource = input.activeSource.set;
   // Per-instance group name: if two editor compositions render on the
   // same page, native radio grouping would let the most-recent click
   // bleed across instances. Scope by documentId so each instance owns
   // its own radio group.
-  const groupName = `source-${input.documentId}`;
+  const groupName = `source-${documentId}`;
 
   return (
     <section data-testid="editor-main" style={{ padding: "1rem" }}>
-      <h2 style={{ marginTop: 0 }}>Editor — {input.documentId}</h2>
+      <h2 style={{ marginTop: 0 }}>Editor — {documentId}</h2>
       <p>Document body goes here. Pick a source integration to mount in the side panel:</p>
       <div role="radiogroup" aria-label="Source integration" data-testid="source-chooser">
         <Choice
@@ -33,21 +44,21 @@ function EditorMain({ input }: { input: { documentId: string } }) {
           value="contentful"
           name={groupName}
           active={activeSource === "contentful"}
-          onSelect={set}
+          onSelect={setSource}
         />
         <Choice
           label="Strapi"
           value="strapi"
           name={groupName}
           active={activeSource === "strapi"}
-          onSelect={set}
+          onSelect={setSource}
         />
         <Choice
           label="None"
           value={null}
           name={groupName}
           active={activeSource === null}
-          onSelect={set}
+          onSelect={setSource}
         />
       </div>
     </section>
@@ -81,20 +92,21 @@ function Choice({
   );
 }
 
-/**
- * Inspector panel: reads `selectedSourceItem` and `activeSource` from
- * composition state. Sibling source panels write `selectedSourceItem` via
- * dispatch; this zone updates automatically.
- */
-function InspectorPanel() {
-  const selected = useEditorState((s: EditorState) => s.selectedSourceItem);
-  const activeSource = useEditorState((s: EditorState) => s.activeSource);
+function InspectorPanel({ input }: { input: InspectorInput }) {
+  const activeSource = useSyncExternalStore(
+    input.activeSource.subscribe,
+    input.activeSource.getSnapshot,
+  );
+  const selectedItem = useSyncExternalStore(
+    input.selectedItem.subscribe,
+    input.selectedItem.getSnapshot,
+  );
   return (
     <aside data-testid="inspector" style={{ padding: "1rem", borderLeft: "1px solid #e2e8f0" }}>
       <h3 style={{ marginTop: 0 }}>Inspector</h3>
       <dl>
         <dt>Selected item</dt>
-        <dd data-testid="inspector-selected">{selected ?? "—"}</dd>
+        <dd data-testid="inspector-selected">{selectedItem ?? "—"}</dd>
         <dt>Source</dt>
         <dd data-testid="inspector-source">{activeSource ?? "—"}</dd>
       </dl>
@@ -108,11 +120,11 @@ export default defineModule({
   entryPoints: {
     main: defineEntry({
       component: EditorMain,
-      input: schema<{ documentId: string }>(),
+      input: schema<EditorMainInput>(),
     }),
     inspector: defineEntry({
       component: InspectorPanel,
-      input: schema<{ documentId: string }>(),
+      input: schema<InspectorInput>(),
     }),
   },
 });
