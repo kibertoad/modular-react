@@ -55,7 +55,17 @@ export function resolveEntryComponent(entry: ModuleEntryPoint<any>): ResolvedEnt
   const eager = (entry as EagerModuleEntryPoint<unknown>).component;
   const importer = (entry as LazyModuleEntryPoint<unknown>).lazy;
 
-  if (typeof eager === "function") {
+  // Accept any non-`undefined` component value here — plain function
+  // components (`typeof === "function"`), `React.memo(...)` wrappers
+  // (`typeof === "object"`, `$$typeof === REACT_MEMO_TYPE`), and
+  // `React.forwardRef(...)` (`typeof === "object"`, `$$typeof ===
+  // REACT_FORWARD_REF_TYPE`) all live in the `component` field. The
+  // lazy branch below is the only place a function value can also be
+  // a *non*-component (an importer), so disambiguation is by field
+  // presence, not by `typeof`. `React.lazy(...)` is also accepted as
+  // an eager component because its result is a renderable React node;
+  // the framework will not call `.preload()` on it.
+  if (eager !== undefined) {
     resolved = {
       Component: eager as ComponentType<ModuleEntryProps<unknown, ExitPointMap>>,
       preload: () => Promise.resolve(),

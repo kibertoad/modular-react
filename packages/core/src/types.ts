@@ -27,6 +27,38 @@ export interface ReactiveService<T> {
 }
 
 /**
+ * Read-only store interface — `useSyncExternalStore`-compatible. Modules
+ * that need to read shared state without coupling to *which* primitive
+ * provides it (a composition's per-instance store, a shell-level
+ * Zustand/Redux store, a test mock, etc.) declare an `input` field of
+ * this type. The host wires in the implementation — typically a
+ * composition's selector projection, but any subscribable source works.
+ *
+ * Alias of {@link ReactiveService} — same shape, named for the
+ * store-contract pattern. Use `ReadableStore<T>` when authoring module
+ * contracts; use `ReactiveService<T>` when authoring an
+ * app-dependencies entry that happens to be subscribable.
+ */
+export type ReadableStore<T> = ReactiveService<T>;
+
+/**
+ * Read-write store interface — extends {@link ReadableStore} with a
+ * `set` operation. Used the same way: panel modules declare
+ * `WritableStore<T>` on their input when they need to drive a value
+ * shared with sibling panels, and the host (typically a composition's
+ * selector) supplies the implementation. Panels stay unaware of
+ * *whose* state they are mutating.
+ */
+export interface WritableStore<T> extends ReadableStore<T> {
+  /**
+   * Replace the current value. Listeners fire when the value differs
+   * from the previous snapshot under the store implementation's
+   * change-detection rule (typically `Object.is`).
+   */
+  set: (value: T) => void;
+}
+
+/**
  * Default type for slot definitions when no explicit type is provided.
  * Every slot value must be a readonly array — modules contribute items
  * and the registry concatenates them across all registered modules.
@@ -240,10 +272,43 @@ export type LazyEntryComponent<TInput> = () => Promise<
   | React.ComponentType<ModuleEntryProps<TInput, any>>
 >;
 
+/**
+ * Mount surfaces a module entry can be rendered on. Used by hosts that
+ * embed modules through different runtimes to reject mismatched mounts
+ * at the type level (and at validation time):
+ *
+ *   - `"journey"` — the entry depends on the journey surface: it
+ *     receives the `exit` / `goBack` / `goForward` props and the
+ *     component typically calls them. A panel like this rendered in a
+ *     composition zone would silently drop those calls.
+ *   - `"composition"` — the entry is suitable for a composition zone
+ *     (driven by a selector, communicates via `useCompositionDispatch`
+ *     / `useCompositionEmit`).
+ *
+ * Entries that omit {@link ModuleEntryPointBase.mountKinds} default to
+ * both surfaces — the conservative choice that keeps existing modules
+ * working unchanged. Entries that declare a narrow list are filtered
+ * out of incompatible mount surfaces' typed unions; e.g. a composition
+ * selector cannot return a `module-entry` resolution targeting an
+ * entry declared `mountKinds: ["journey"]`.
+ *
+ * Future surfaces (federated remotes, modal hosts, …) extend this
+ * union without changing existing entries.
+ */
+export type MountKind = "journey" | "composition";
+
 /** Fields shared by both eager and lazy entry-point variants. */
 interface ModuleEntryPointBase<TInput> {
   /** Type-level declaration of the input shape. Pure inference aid. */
   readonly input?: InputSchema<TInput>;
+  /**
+   * Mount surfaces this entry is intended for. See {@link MountKind}.
+   * Omit (or pass `undefined`) to allow every surface. Encoded as a
+   * tuple literal so per-host typed unions can filter on the literal
+   * members; `defineEntry`'s `const` type parameter captures the
+   * tuple narrowly.
+   */
+  readonly mountKinds?: readonly MountKind[];
   /**
    * Opt in to "go back" support.
    *   'preserve-state' — history pops; journey state is untouched.

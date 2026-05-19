@@ -9,6 +9,8 @@ export type {
   NavigationItemBase,
   ModuleLifecycle,
   ReactiveService,
+  ReadableStore,
+  WritableStore,
   SlotMap,
   SlotMapOf,
   ZoneMap,
@@ -27,6 +29,7 @@ export type {
   ExitPointMap,
   ExitFn,
   InputSchema,
+  MountKind,
 } from "./types.js";
 
 // Entry / exit helpers
@@ -116,6 +119,8 @@ export type {
 export type {
   ModuleTypeMap,
   EntryNamesOf,
+  EntryNamesByMountKindOf,
+  MountKindsOf,
   ExitNamesOf,
   EntryInputOf,
   ExitOutputOf,
@@ -159,3 +164,26 @@ export type {
   JourneySystemAbortReasonCode,
 } from "./journey-contracts.js";
 export { isTerminal, isJourneySystemAbort } from "./journey-contracts.js";
+
+// Semver subset — used by both @modular-react/journeys (range checks on
+// module-compat declarations) and @modular-react/compositions
+// (`moduleCompat` validation). Lives here so neither plugin has to depend
+// on the other for a piece of shared, dependency-free logic.
+export {
+  satisfies,
+  satisfiesParsed,
+  parseRange,
+  parseVersion,
+  compareVersions,
+  compareTriples,
+  SemverParseError,
+} from "./semver.js";
+export type { ParsedRange, SemverTriple } from "./semver.js";
+
+// Cross-plugin runtime-mount seam — `compositions` reads adapters of
+// this shape so it can embed journeys (today) or other runtimes
+// (composition-in-zone, federated remotes) without compile-time
+// coupling to any of them. Implementers ship a small factory next to
+// their runtime (e.g. `createJourneyMountAdapter` in
+// `@modular-react/journeys`).
+export type { RuntimeMountAdapter } from "./runtime-mount.js";

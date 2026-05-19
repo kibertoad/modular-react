@@ -1,7 +1,12 @@
-import { isExitContract } from "@modular-react/core";
+import {
+  isExitContract,
+  parseRange,
+  parseVersion,
+  satisfiesParsed,
+  SemverParseError,
+} from "@modular-react/core";
 import type { ExitContract, ModuleDescriptor } from "@modular-react/core";
 import type { AnyJourneyDefinition, RegisteredJourney } from "./types.js";
-import { parseRange, parseVersion, satisfiesParsed, SemverParseError } from "./semver.js";
 
 /**
  * Aggregated error thrown when one or more registered journeys reference

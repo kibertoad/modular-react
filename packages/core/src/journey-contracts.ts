@@ -18,6 +18,7 @@ import type {
   ExitPointSchema,
   ModuleDescriptor,
   ModuleEntryPoint,
+  MountKind,
   StandardSchemaIssue,
 } from "./types.js";
 
@@ -36,6 +37,52 @@ export type ModuleTypeMap = Record<string, ModuleDescriptor<any, any, any, any>>
 export type EntryNamesOf<TMod> = TMod extends { readonly entryPoints?: infer TEntries }
   ? TEntries extends EntryPointMap
     ? keyof TEntries & string
+    : never
+  : never;
+
+/**
+ * Mount surfaces an entry supports. Read off the entry's `mountKinds`
+ * field — if the entry declares a narrow tuple (e.g.
+ * `mountKinds: ["journey"]`), this returns the literal union
+ * (`"journey"`); if the field is absent or widened to `readonly
+ * MountKind[]`, this returns the default `MountKind` (every surface).
+ *
+ * The default-to-every-surface behavior is what makes the encoding
+ * backward-compatible: an existing entry without a `mountKinds`
+ * declaration is treated as compatible with every host.
+ */
+export type MountKindsOf<TEntry> =
+  // First branch: entry declares mountKinds as a required (post-`defineEntry`)
+  // readonly tuple. Capture the literal element type.
+  TEntry extends { readonly mountKinds: readonly (infer K extends MountKind)[] }
+    ? K
+    : // Second branch: entry declares mountKinds as an optional readonly
+      // tuple. TS treats the field type as `readonly K[] | undefined`,
+      // which doesn't match the first branch's `readonly K[]` pattern.
+      TEntry extends { readonly mountKinds?: readonly (infer K extends MountKind)[] | undefined }
+      ? [K] extends [never]
+        ? MountKind
+        : K
+      : MountKind;
+
+/**
+ * Entry names on a module filtered by mount kind. A composition zone's
+ * typed selector union uses
+ * `EntryNamesByMountKindOf<TModules[M], "composition">`; a journey's
+ * StepSpec equivalent uses `"journey"`.
+ *
+ * An entry is included iff `TKind` is one of its declared
+ * {@link MountKindsOf}. Entries without a `mountKinds` declaration
+ * default to every surface and are always included.
+ */
+export type EntryNamesByMountKindOf<TMod, TKind extends MountKind> = TMod extends {
+  readonly entryPoints?: infer TEntries;
+}
+  ? TEntries extends EntryPointMap
+    ? {
+        [E in keyof TEntries]: TKind extends MountKindsOf<TEntries[E]> ? E : never;
+      }[keyof TEntries] &
+        string
     : never
   : never;
 
@@ -76,15 +123,21 @@ export type ExitOutputOf<TMod, TExit> = TMod extends { readonly exitPoints?: inf
  * Discriminated union of every valid "next step" across the journey's
  * module map. Narrowing on `module` + `entry` picks the correct `input`
  * type; that's how `StepSpec` enforces input correctness per transition.
+ *
+ * Entries whose {@link MountKindsOf} excludes `"journey"` (e.g. an entry
+ * declared `mountKinds: ["composition"]`) are filtered out of this
+ * union. A transition that returns a composition-only `(module, entry)`
+ * is a compile error at the call site — the symmetric counterpart to
+ * compositions' `CompositionZoneSpec` filter on `"composition"`.
  */
 export type StepSpec<TModules extends ModuleTypeMap> = {
   [M in keyof TModules & string]: {
-    [E in EntryNamesOf<TModules[M]> & string]: {
+    [E in EntryNamesByMountKindOf<TModules[M], "journey"> & string]: {
       readonly module: M;
       readonly entry: E;
       readonly input: EntryInputOf<TModules[M], E>;
     };
-  }[EntryNamesOf<TModules[M]> & string];
+  }[EntryNamesByMountKindOf<TModules[M], "journey"> & string];
 }[keyof TModules & string];
 
 /**
@@ -106,15 +159,18 @@ export interface JourneyStep<TInput = unknown> {
  * Discriminated union of every concrete `JourneyStep` reachable in a
  * journey's module map. Narrowing on `moduleId` + `entry` picks the
  * correct `input` type.
+ *
+ * Composition-only entries are filtered out for the same reason as
+ * `StepSpec`: a journey cannot mount them.
  */
 export type JourneyStepFor<TModules extends ModuleTypeMap> = {
   [M in keyof TModules & string]: {
-    [E in EntryNamesOf<TModules[M]> & string]: {
+    [E in EntryNamesByMountKindOf<TModules[M], "journey"> & string]: {
       readonly moduleId: M;
       readonly entry: E;
       readonly input: EntryInputOf<TModules[M], E>;
     };
-  }[EntryNamesOf<TModules[M]> & string];
+  }[EntryNamesByMountKindOf<TModules[M], "journey"> & string];
 }[keyof TModules & string];
 
 /** Context passed to a transition handler. */
@@ -240,10 +296,15 @@ export type EntryTransitions<
   readonly allowBack?: boolean;
 };
 
-/** Map of module id → entry name → exit transitions. */
+/**
+ * Map of module id → entry name → exit transitions. Entry keys are
+ * filtered to journey-mountable entries — declaring a transition on a
+ * composition-only entry is a compile error because the entry could
+ * never be reached as a journey step in the first place.
+ */
 export type TransitionMap<TModules extends ModuleTypeMap, TState, TOutput = unknown> = {
   readonly [M in keyof TModules]?: {
-    readonly [E in EntryNamesOf<TModules[M]>]?: EntryTransitions<
+    readonly [E in EntryNamesByMountKindOf<TModules[M], "journey">]?: EntryTransitions<
       TModules,
       TState,
       TModules[M],
@@ -265,9 +326,14 @@ export type TransitionMap<TModules extends ModuleTypeMap, TState, TOutput = unkn
 // first hit fires. See `packages/journeys/src/runtime.ts` `dispatchExit`.
 // -----------------------------------------------------------------------------
 
-/** Union of every entry name declared by any module in the map. */
+/**
+ * Union of every journey-mountable entry name declared by any module
+ * in the map. Used as the key axis for tier-2 wildcard transitions —
+ * a module-unknown handler keyed by entry name can only target an
+ * entry name that some module declares journey-mountable.
+ */
 export type WildcardEntryNamesOf<TModules extends ModuleTypeMap> = {
-  [M in keyof TModules]: EntryNamesOf<TModules[M]>;
+  [M in keyof TModules]: EntryNamesByMountKindOf<TModules[M], "journey">;
 }[keyof TModules];
 
 /** Union of every exit name declared by any module in the map. */
@@ -275,9 +341,15 @@ export type WildcardExitNamesOf<TModules extends ModuleTypeMap> = {
   [M in keyof TModules]: ExitNamesOf<TModules[M]>;
 }[keyof TModules];
 
-/** Exit names emitted by modules that ALSO declare entry `E`. */
+/**
+ * Exit names emitted by modules that ALSO declare entry `E` as
+ * journey-mountable. A composition-only entry can't appear in a
+ * journey wildcard, so we filter to journey-mountable entries here.
+ */
 export type ExitNamesPairedWithEntry<TModules extends ModuleTypeMap, E> = {
-  [M in keyof TModules]: E extends EntryNamesOf<TModules[M]> ? ExitNamesOf<TModules[M]> : never;
+  [M in keyof TModules]: E extends EntryNamesByMountKindOf<TModules[M], "journey">
+    ? ExitNamesOf<TModules[M]>
+    : never;
 }[keyof TModules];
 
 /**
@@ -289,7 +361,7 @@ export type ExitNamesPairedWithEntry<TModules extends ModuleTypeMap, E> = {
  */
 export type WildcardExitOutputForEntry<TModules extends ModuleTypeMap, E, X> = UnionToIntersection<
   {
-    [M in keyof TModules]: E extends EntryNamesOf<TModules[M]>
+    [M in keyof TModules]: E extends EntryNamesByMountKindOf<TModules[M], "journey">
       ? X extends ExitNamesOf<TModules[M]>
         ? ExitOutputOf<TModules[M], X>
         : never
@@ -313,7 +385,7 @@ export type WildcardExitOutputOf<TModules extends ModuleTypeMap, X> = UnionToInt
  */
 export type WildcardEntryInputOf<TModules extends ModuleTypeMap, E> = UnionToIntersection<
   {
-    [M in keyof TModules]: E extends EntryNamesOf<TModules[M]>
+    [M in keyof TModules]: E extends EntryNamesByMountKindOf<TModules[M], "journey">
       ? EntryInputOf<TModules[M], E>
       : never;
   }[keyof TModules]
@@ -394,7 +466,7 @@ type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) exten
  */
 export type ResumeMap<TModules extends ModuleTypeMap, TState, TOutput = unknown> = {
   readonly [M in keyof TModules]?: {
-    readonly [E in EntryNamesOf<TModules[M]>]?: {
+    readonly [E in EntryNamesByMountKindOf<TModules[M], "journey">]?: {
       readonly [resumeName: string]: ResumeHandler<
         TModules,
         TState,

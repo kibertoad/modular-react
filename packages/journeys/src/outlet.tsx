@@ -278,6 +278,25 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
     const NotFound = notFoundComponent ?? DefaultNotFound;
     return createElement(NotFound, { moduleId: step.moduleId, entry: step.entry });
   }
+  if (!entryAllowsJourneyMount(entry)) {
+    // Type-level enforcement via `StepSpec`'s mountKinds filter catches
+    // this for code that goes through the typed surface. The runtime
+    // check is the belt-and-braces for type-bypass paths (any-typed
+    // module maps, dynamic step ids, `as never` casts): journey-only
+    // hosts must not mount entries declared `mountKinds: ["composition"]`
+    // because the panel's `exit`/`goBack`/`goForward` wouldn't make
+    // sense on the surface the entry was designed for.
+    const ErrorComp = errorComponent ?? DefaultError;
+    return createElement(ErrorComp, {
+      moduleId: step.moduleId,
+      error: new Error(
+        `[@modular-react/journeys] Entry "${step.moduleId}.${step.entry}" declares ` +
+          `mountKinds=${JSON.stringify(entry.mountKinds)} which does not include "journey". ` +
+          `Journey steps cannot mount composition-only entries — either widen the entry's mountKinds, ` +
+          `or pick a different module-entry in the transition.`,
+      ),
+    });
+  }
 
   // Resolve the *leaf's* record and registration so the step callbacks
   // (`exit`, `goBack`) drive the leaf's transitions. Using the root's
@@ -432,6 +451,20 @@ function collectPreloadTargets(
     }
   }
   return out;
+}
+
+/**
+ * Returns true iff the entry's `mountKinds` permits the `"journey"`
+ * host. Omitted `mountKinds` defaults to "every mount surface", so
+ * existing modules that never opted in still work.
+ *
+ * Mirrors the composition outlet's `entryAllowsCompositionMount`:
+ * the type-level filter on `StepSpec` is the primary enforcement;
+ * this is the runtime backstop against type-bypass paths.
+ */
+function entryAllowsJourneyMount(entry: { readonly mountKinds?: readonly string[] }): boolean {
+  if (!Array.isArray(entry.mountKinds)) return true;
+  return entry.mountKinds.includes("journey");
 }
 
 function DefaultNotFound({ moduleId, entry }: JourneyOutletNotFoundProps): ReactNode {

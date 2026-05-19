@@ -35,6 +35,7 @@ Routes, slots, navigation, workspaces - none of that changes. Journeys sit **on 
 - [Observation hooks](#observation-hooks)
 - [Testing](#testing) - module-level, pure simulator, integration, persistence adapters
 - [Integration patterns](#integration-patterns) - tabs, modals, routes, wizards, command palette
+- [Embedding a journey in a composition zone](#embedding-a-journey-in-a-composition-zone) - wiring `createJourneyMountAdapter` so a `@modular-react/compositions` zone can mount a journey
 - [Debugging](#debugging) - dev-mode warnings and introspection
 - [Errors, races, and edge cases](#errors-races-and-edge-cases)
 - [Limitations](#limitations)
@@ -368,6 +369,41 @@ Two additive (optional) fields on `ModuleDescriptor`:
 `ModuleEntryProps<TInput, TExits>` typed props for the component - `{ input, exit, goBack?, goForward? }`, with `exit(name, output)` cross-checked against `TExits` at compile time. `goForward` is the inverse of `goBack` — present only when the future / redo stack has an entry to restore (i.e. the user just called `goBack` and no fresh exit has cleared the redo target). Most shells wire Forward at the shell level (browser button); the per-component prop is for steps that surface an in-page redo control.
 
 Exits are **module-level, not per-entry** - every entry on a module shares the same `exitPoints` vocabulary. The journey's transition map (not the module) decides which exits a given entry actually uses, so two entries on the same module can map the same exit name to entirely different next steps.
+
+### `mountKinds` — opting an entry out of journeys
+
+Some entries belong to a single host surface. A panel designed for a composition zone reads composition state via `useCompositionDispatch` / `useCompositionEmit` and has no use for `exit`/`goBack`/`goForward` — mounting it as a journey step would silently strand the user. Conversely, a journey-shaped step has nowhere to dispatch composition events from a composition zone.
+
+`defineEntry({ mountKinds: [...] })` lets an entry declare which hosts it accepts:
+
+```ts
+defineEntry({
+  component: CheckoutStep,
+  input: schema<{ amount: number }>(),
+  mountKinds: ["journey"], // journey only — composition selectors reject this entry
+});
+
+defineEntry({
+  component: EditorPanel,
+  input: schema<{ documentId: string }>(),
+  mountKinds: ["composition"], // composition only — journey transitions reject this entry
+});
+
+defineEntry({
+  component: SharedHeader,
+  input: schema<void>(),
+  mountKinds: ["journey", "composition"], // both — the default if omitted
+});
+```
+
+Enforcement runs in two places:
+
+1. **Compile time** — `StepSpec<TModules>` filters out entries that don't include `"journey"`. A transition handler returning `{ module, entry, input }` for a composition-only entry is a type error at the transition site; the diagnostic enumerates the entries that ARE journey-mountable on that module.
+2. **Render time** — if a step ever resolves to a composition-only entry through a type-bypass path (a dynamic id, an `as never` cast), the journey outlet renders a clear error fallback instead of mounting the wrong-surface panel.
+
+Backward compatibility: omitting `mountKinds` is treated as "every surface" — pre-v1.5 modules continue to work in journeys and compositions without changes.
+
+The annotation captures _intent_, not _capability_: a module can declare `mountKinds: ["journey", "composition"]` and still ship a component that crashes outside a journey. The compile-time filter trusts the declaration; a panel that calls `exit(...)` inside a composition zone gets a separate dev-warn (see the compositions package).
 
 ### `allowBack` - three values
 
@@ -2319,6 +2355,26 @@ palette.register("onboarding:start", async ({ customerId }) => {
 });
 ```
 
+## Embedding a journey in a composition zone
+
+When a screen hosts several modules side-by-side and one of them is itself a multi-step journey, the `@modular-react/compositions` outlet can render the journey through a `RuntimeMountAdapter`. The journeys package ships a one-line factory that wraps a `JourneyRuntime` into the adapter shape compositions expect:
+
+```ts
+import { createJourneyMountAdapter } from "@modular-react/journeys";
+
+// After `registry.resolve()`, before mounting React:
+manifest.extensions.compositions.registerMountAdapter(
+  "journey",
+  createJourneyMountAdapter(manifest.extensions.journeys),
+);
+```
+
+A composition zone whose selector returns `{ kind: "journey", handle, input }` will then resolve through the registered adapter — the composition outlet mints (or reuses a cached) journey instance and renders `<JourneyOutlet>` for it. The journey runs with its own state, history, and persistence; the composition's scoped store and the journey's state stay separate.
+
+The adapter forwards `start` and `end` to the journey runtime: when the composition zone rolls over to a different journey resolution, the previously-cached journey instance is `runtime.end()`-ed via the adapter so it doesn't outlive its outlet.
+
+Wiring is one-directional today — the compositions runtime consumes adapters; the journeys runtime does not (yet) register them. Embedding a composition inside a journey step is still done by mounting `<CompositionOutlet>` directly inside the step's component, not through this seam. See [`@modular-react/compositions`'s "Runtime mount adapters" section](../compositions/README.md#runtime-mount-adapters) for the host side.
+
 ## Debugging
 
 The runtime enables dev-mode logs automatically when `process.env.NODE_ENV !== 'production'`. Signals to watch for:
@@ -2497,17 +2553,17 @@ Every export you're likely to call, grouped by role.
 
 ### Runtime + validation (`@modular-react/journeys`)
 
-| Export                      | Purpose                                                                                                                                                                                                                                                                                                                                                                                                        |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createJourneyRuntime`      | Low-level runtime factory. Normally called by the registry; exported for advanced use (test harnesses, custom hosts).                                                                                                                                                                                                                                                                                          |
-| `validateJourneyContracts`  | Cross-checks a journey's transitions and `moduleCompat` against registered modules. Runs automatically at `resolveManifest()` / `resolve()`; exported for custom validation flows.                                                                                                                                                                                                                             |
-| `validateJourneyDefinition` | Structural sanity check on a definition's own shape. Runs automatically in `registerJourney`.                                                                                                                                                                                                                                                                                                                  |
-| `satisfies(version, range)` | Test a `MAJOR.MINOR.PATCH` version against the npm-semver subset used by `moduleCompat`. Exported for apps that want to run the same compatibility math outside the journeys validator (e.g. checking a saved blob's recorded version against a current journey's compat range). See [Pattern - module compatibility (`moduleCompat`)](#pattern---module-compatibility-modulecompat) for the supported syntax. |
-| `compareVersions(a, b)`     | Order two version strings lexicographically by `(major, minor, patch)`. Returns `-1` / `0` / `1`. Useful for "is this saved blob older than the cutoff?" comparisons; for matching against a range use `satisfies`.                                                                                                                                                                                            |
-| `SemverParseError`          | Thrown by `satisfies` / `compareVersions` on malformed input.                                                                                                                                                                                                                                                                                                                                                  |
-| `JourneyValidationError`    | Aggregated validation error. `.issues: readonly string[]`.                                                                                                                                                                                                                                                                                                                                                     |
-| `JourneyHydrationError`     | Thrown from `hydrate` / async-load when the blob is unusable.                                                                                                                                                                                                                                                                                                                                                  |
-| `UnknownJourneyError`       | Thrown from `runtime.start(journeyId, input)` when `journeyId` is not registered. Catch this specifically in shell-state rehydration loops (see [Rehydrating shell-level work](#rehydrating-shell-level-work-tabs-task-queues-drafts)); surface anything else as a real bug.                                                                                                                                   |
+| Export                      | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createJourneyRuntime`      | Low-level runtime factory. Normally called by the registry; exported for advanced use (test harnesses, custom hosts).                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `validateJourneyContracts`  | Cross-checks a journey's transitions and `moduleCompat` against registered modules. Runs automatically at `resolveManifest()` / `resolve()`; exported for custom validation flows.                                                                                                                                                                                                                                                                                                                                                     |
+| `validateJourneyDefinition` | Structural sanity check on a definition's own shape. Runs automatically in `registerJourney`.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `satisfies(version, range)` | Re-exported from `@modular-react/core` for back-compat. Tests a `MAJOR.MINOR.PATCH` version against the npm-semver subset used by `moduleCompat`. Exported for apps that want to run the same compatibility math outside the journeys validator (e.g. checking a saved blob's recorded version against a current journey's compat range). See [Pattern - module compatibility (`moduleCompat`)](#pattern---module-compatibility-modulecompat) for the supported syntax. New callers should import from `@modular-react/core` directly. |
+| `compareVersions(a, b)`     | Re-exported from `@modular-react/core`. Order two version strings lexicographically by `(major, minor, patch)`. Returns `-1` / `0` / `1`. Useful for "is this saved blob older than the cutoff?" comparisons; for matching against a range use `satisfies`.                                                                                                                                                                                                                                                                            |
+| `SemverParseError`          | Re-exported from `@modular-react/core`. Thrown by `satisfies` / `compareVersions` on malformed input.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `JourneyValidationError`    | Aggregated validation error. `.issues: readonly string[]`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `JourneyHydrationError`     | Thrown from `hydrate` / async-load when the blob is unusable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `UnknownJourneyError`       | Thrown from `runtime.start(journeyId, input)` when `journeyId` is not registered. Catch this specifically in shell-state rehydration loops (see [Rehydrating shell-level work](#rehydrating-shell-level-work-tabs-task-queues-drafts)); surface anything else as a real bug.                                                                                                                                                                                                                                                           |
 
 ### Runtime methods (the `JourneyRuntime` returned as `manifest.journeys`)
 

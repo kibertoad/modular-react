@@ -42,6 +42,7 @@ jobs:
             ["packages/core"]="@modular-react/core"
             ["packages/react"]="@modular-react/react"
             ["packages/journeys"]="@modular-react/journeys"
+            ["packages/compositions"]="@modular-react/compositions"
             ["packages/testing"]="@modular-react/testing"
             ["packages/catalog"]="@modular-react/catalog"
             ["packages/react-router-cli"]="@react-router-modules/cli"
@@ -178,6 +179,21 @@ jobs:
             example_path: examples/tanstack-router/remote-capabilities
             runtime_path: packages/tanstack-router-runtime
             core_path: packages/tanstack-router-core
+          # Compositions examples — exercise @modular-react/compositions
+          # mounted inside each router's shell. The plugin (in
+          # packages/compositions) is router-agnostic, so we cover both
+          # routers to catch any regression in either runtime's provider
+          # plumbing or the dedupe wiring.
+          - shell: "@example-rr-editor-composition/shell"
+            shell_artifact: "example-rr-editor-composition-shell"
+            example_path: examples/react-router/editor-composition
+            runtime_path: packages/react-router-runtime
+            core_path: packages/react-router-core
+          - shell: "@example-tsr-editor-composition/shell"
+            shell_artifact: "example-tsr-editor-composition-shell"
+            example_path: examples/tanstack-router/editor-composition
+            runtime_path: packages/tanstack-router-runtime
+            core_path: packages/tanstack-router-core
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -188,13 +204,16 @@ jobs:
         uses: tj-actions/changed-files@7dee1b0c1557f278e5c7dc244927139d78c0e22a # v47.0.4
         with:
           # Run when the target example changes, or when any package the
-          # example links to changes. Journeys + the runtime + core are the
-          # paths where a duplicate-module regression would surface.
+          # example links to changes. Journeys + compositions + the
+          # runtime + core are the paths where a duplicate-module
+          # regression would surface (each ships its own
+          # module-private WeakMap of runtime internals).
           files: |
             ${{ matrix.example_path }}/**
             ${{ matrix.runtime_path }}/**
             ${{ matrix.core_path }}/**
             packages/journeys/**
+            packages/compositions/**
             packages/react/**
             packages/core/**
             .github/workflows/ci.yml

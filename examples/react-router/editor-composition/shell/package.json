@@ -1,0 +1,36 @@
+{
+  "name": "@example-rr-editor-composition/shell",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@example-rr-editor-composition/app-shared": "workspace:*",
+    "@example-rr-editor-composition/contentful": "workspace:*",
+    "@example-rr-editor-composition/editor": "workspace:*",
+    "@example-rr-editor-composition/editor-composition": "workspace:*",
+    "@example-rr-editor-composition/strapi": "workspace:*",
+    "@modular-react/compositions": "workspace:*",
+    "@modular-react/core": "workspace:*",
+    "@modular-react/react": "workspace:*",
+    "@react-router-modules/core": "workspace:*",
+    "@react-router-modules/runtime": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router": "^7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^6.0.2",
+    "vite": "^6.0.0"
+  }
+}
