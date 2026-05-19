@@ -29,6 +29,7 @@ export type {
   ExitPointMap,
   ExitFn,
   InputSchema,
+  MountKind,
 } from "./types.js";
 
 // Entry / exit helpers
@@ -118,6 +119,8 @@ export type {
 export type {
   ModuleTypeMap,
   EntryNamesOf,
+  EntryNamesByMountKindOf,
+  MountKindsOf,
   ExitNamesOf,
   EntryInputOf,
   ExitOutputOf,

@@ -47,9 +47,12 @@ test("defineEntry({ lazy }) returns LazyModuleEntryPoint, not the wider union", 
 });
 
 test("defineEntry rejects an entry that declares BOTH component and lazy", () => {
-  // @ts-expect-error — eager branch sets `lazy: never`, lazy branch sets
-  // `component: never`; declaring both fails both overloads.
+  // Both fields present → no overload accepts (eager has `lazy?: never`,
+  // lazy has `component?: never`). The error attribution under the
+  // mount-kinds overload chain lands on the offending field, not the
+  // call site, so we narrow the directive accordingly.
   defineEntry({
+    // @ts-expect-error — declaring both `component` and `lazy` is rejected by every overload.
     component: Component,
     lazy: () => Promise.resolve({ default: Component }),
   });

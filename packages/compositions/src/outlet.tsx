@@ -770,6 +770,23 @@ function ZoneRenderer(props: ZoneRendererProps): ReactNode {
     if (!mod || !entry) {
       const NotFound = notFoundComponent ?? DefaultNotFound;
       content = <NotFound zone={zone} moduleId={selection.module} entry={selection.entry} />;
+    } else if (!entryAllowsCompositionMount(entry)) {
+      // Type-level enforcement via `CompositionZoneSpec`'s mountKinds
+      // filter usually catches this. The render-time check is the
+      // belt-and-braces against type-bypass paths (a selector returns
+      // a dynamic id, an `as never` cast, an `any`-typed module map):
+      // a journey-only entry mounted into a composition would
+      // silently drop `exit` calls without it.
+      content = renderError(
+        zone,
+        new Error(
+          `[@modular-react/compositions] Entry "${selection.module}.${selection.entry}" declares ` +
+            `mountKinds=${JSON.stringify(entry.mountKinds)} which does not include "composition". ` +
+            `Composition zones cannot mount journey-only entries — either widen the entry's mountKinds, ` +
+            `or pick a different module-entry in the selector.`,
+        ),
+        errorComponent,
+      );
     } else {
       const { Component: PanelComponent } = resolveEntryComponent(entry);
       const suspenseFallback = entry.fallback ?? loadingFallback ?? null;
@@ -881,6 +898,21 @@ function computeSelectionKey(
     return `journey:${selection.handle.id}:${idSuffix}`;
   }
   return "unknown";
+}
+
+/**
+ * Returns true iff the entry's `mountKinds` permits the
+ * `"composition"` host. Omitted `mountKinds` defaults to "every mount
+ * surface", so existing modules that never opted in still work.
+ *
+ * Mirrors the type-level `EntryNamesByMountKindOf` filter applied to
+ * `CompositionZoneSpec`: the type-side check is the primary
+ * enforcement, this is the runtime backstop against type-bypass paths
+ * (any-typed module maps, dynamic ids, `as never` casts).
+ */
+function entryAllowsCompositionMount(entry: { readonly mountKinds?: readonly string[] }): boolean {
+  if (!Array.isArray(entry.mountKinds)) return true;
+  return entry.mountKinds.includes("composition");
 }
 
 // Panels rendered inside compositions don't have a direct exit channel —

@@ -369,6 +369,41 @@ Two additive (optional) fields on `ModuleDescriptor`:
 
 Exits are **module-level, not per-entry** - every entry on a module shares the same `exitPoints` vocabulary. The journey's transition map (not the module) decides which exits a given entry actually uses, so two entries on the same module can map the same exit name to entirely different next steps.
 
+### `mountKinds` — opting an entry out of journeys
+
+Some entries belong to a single host surface. A panel designed for a composition zone reads composition state via `useCompositionDispatch` / `useCompositionEmit` and has no use for `exit`/`goBack`/`goForward` — mounting it as a journey step would silently strand the user. Conversely, a journey-shaped step has nowhere to dispatch composition events from a composition zone.
+
+`defineEntry({ mountKinds: [...] })` lets an entry declare which hosts it accepts:
+
+```ts
+defineEntry({
+  component: CheckoutStep,
+  input: schema<{ amount: number }>(),
+  mountKinds: ["journey"], // journey only — composition selectors reject this entry
+});
+
+defineEntry({
+  component: EditorPanel,
+  input: schema<{ documentId: string }>(),
+  mountKinds: ["composition"], // composition only — journey transitions reject this entry
+});
+
+defineEntry({
+  component: SharedHeader,
+  input: schema<void>(),
+  mountKinds: ["journey", "composition"], // both — the default if omitted
+});
+```
+
+Enforcement runs in two places:
+
+1. **Compile time** — `StepSpec<TModules>` filters out entries that don't include `"journey"`. A transition handler returning `{ module, entry, input }` for a composition-only entry is a type error at the transition site; the diagnostic enumerates the entries that ARE journey-mountable on that module.
+2. **Render time** — if a step ever resolves to a composition-only entry through a type-bypass path (a dynamic id, an `as never` cast), the journey outlet renders a clear error fallback instead of mounting the wrong-surface panel.
+
+Backward compatibility: omitting `mountKinds` is treated as "every surface" — pre-v1.5 modules continue to work in journeys and compositions without changes.
+
+The annotation captures _intent_, not _capability_: a module can declare `mountKinds: ["journey", "composition"]` and still ship a component that crashes outside a journey. The compile-time filter trusts the declaration; a panel that calls `exit(...)` inside a composition zone gets a separate dev-warn (see the compositions package).
+
 ### `allowBack` - three values
 
 Declared per entry on the module, opted-in per transition on the journey. Both must agree for `goBack` to appear.

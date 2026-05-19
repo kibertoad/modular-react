@@ -9,6 +9,7 @@ import type {
   LazyModuleEntryPoint,
   ModuleDescriptor,
   ModuleEntryPoint,
+  MountKind,
   StandardSchemaLike,
 } from "./types.js";
 
@@ -23,13 +24,30 @@ export const schema = <T>(): InputSchema<T> => ({}) as InputSchema<T>;
  * Identity helper used to preserve inference of `TInput` on a single
  * {@link ModuleEntryPoint}. The descriptor types only flow through correctly
  * when the entry is a typed const value. Overloaded so eager and lazy entries
- * keep their narrow union member through the call.
+ * keep their narrow union member through the call, AND so the literal
+ * `mountKinds` tuple is captured when the caller supplies it.
+ *
+ * Why two overloads per shape (with / without `mountKinds`):
+ * a `const TMountKinds` generic only captures literally when the
+ * corresponding field is non-optional. Splitting into a "mountKinds is
+ * required here" overload and a "mountKinds is absent here" overload
+ * makes the const inference fire for the former while keeping ergonomic
+ * default-wide behavior for the latter. Without the split, an optional
+ * `mountKinds?: TMountKinds` widens TMountKinds to the constraint
+ * (`readonly MountKind[]`) regardless of the argument, defeating the
+ * Tier-3 per-host filtering.
  */
+export function defineEntry<TInput, const TMountKinds extends readonly MountKind[]>(
+  entry: EagerModuleEntryPoint<TInput> & { readonly mountKinds: TMountKinds },
+): EagerModuleEntryPoint<TInput> & { readonly mountKinds: TMountKinds };
+export function defineEntry<TInput, const TMountKinds extends readonly MountKind[]>(
+  entry: LazyModuleEntryPoint<TInput> & { readonly mountKinds: TMountKinds },
+): LazyModuleEntryPoint<TInput> & { readonly mountKinds: TMountKinds };
 export function defineEntry<TInput>(
-  entry: EagerModuleEntryPoint<TInput>,
+  entry: EagerModuleEntryPoint<TInput> & { readonly mountKinds?: undefined },
 ): EagerModuleEntryPoint<TInput>;
 export function defineEntry<TInput>(
-  entry: LazyModuleEntryPoint<TInput>,
+  entry: LazyModuleEntryPoint<TInput> & { readonly mountKinds?: undefined },
 ): LazyModuleEntryPoint<TInput>;
 export function defineEntry<TInput>(entry: ModuleEntryPoint<TInput>): ModuleEntryPoint<TInput> {
   return entry;

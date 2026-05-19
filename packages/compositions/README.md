@@ -347,6 +347,46 @@ type CompositionZoneResolution =
 
 `TModules` constrains the `module` field to ids the composition's typed module map declares, so a typo is a compile error.
 
+### Mount kinds — opting an entry out of compositions
+
+Some module entries belong to one host surface only. A panel typed for a journey step receives `exit`, `goBack`, and `goForward` — calling those inside a composition zone is a silent drop, because the composition has no exit channel (panels dispatch via `useCompositionDispatch` / `useCompositionEmit` instead). To surface that mismatch at the right moment, an entry can declare which hosts may mount it:
+
+```typescript
+defineEntry({
+  component: CheckoutStep,
+  input: schema<{ amount: number }>(),
+  mountKinds: ["journey"], // journey only — composition selectors reject this entry
+});
+
+defineEntry({
+  component: EditorPanel,
+  input: schema<{ documentId: string }>(),
+  mountKinds: ["composition"], // composition only — journey transitions reject this entry
+});
+
+defineEntry({
+  component: SharedHeader,
+  input: schema<void>(),
+  mountKinds: ["journey", "composition"], // both — explicit form of the default
+});
+
+defineEntry({
+  component: AgnosticPanel,
+  input: schema<void>(),
+  // mountKinds omitted → defaults to every surface; works as before.
+});
+```
+
+The framework enforces this in three places:
+
+1. **Compile time** — a composition selector that returns a `module-entry` resolution targeting a journey-only entry is a type error at the selector call site. The diagnostic enumerates the entries that ARE composition-mountable on that module, so the author can pick a different one. Symmetric on the journey side: a `StepSpec` returning a composition-only entry is a type error in the transition handler.
+2. **Render time** — if a resolution somehow bypasses the type filter (a dynamic id, an `as never` cast, an `any`-typed module map), the composition outlet renders a clear error fallback naming the entry, its declared `mountKinds`, and why the mismatch was rejected.
+3. **Dev warn** — independently, the `exit` prop wired into a composition-mounted panel is a no-op stub that logs once per exit name in dev. So even if `mountKinds` is omitted on a journey-shaped panel reused in a composition, a panel that calls `exit(...)` still surfaces the silent drop loudly enough to investigate.
+
+Backward compatibility: omitting `mountKinds` (the v0.1.0 behavior) is treated as "every surface" — every existing module continues to work in both journeys and compositions without changes. The opt-in is a tightening, not a default shift.
+
+The annotation captures _intent_, not _capability_: a module can declare `mountKinds: ["journey", "composition"]` while its component still imports `useJourneyExit` and crashes outside a journey. The dev-warn covers that case; the structural-purity solution (a discriminated `ModuleEntryProps` per mount) is a heavier refactor that the framework intentionally has not taken so panel reuse stays cheap.
+
 ### Selectors are pure
 
 Selectors run on every state change. They must be pure functions of `(state, deps)` — no I/O, no `setState`, no time-based behavior. The runtime reads the resolution and decides whether to remount the panel (when `module`/`entry` change), keep the existing panel and update `input` (when only `input` changes), or skip rendering (when the resolution is structurally identical to the previous one).

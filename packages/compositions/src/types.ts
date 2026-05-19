@@ -1,7 +1,7 @@
 import type {
   CatalogMeta,
   EntryInputOf,
-  EntryNamesOf,
+  EntryNamesByMountKindOf,
   ExitContract,
   JourneyHandleRef,
   ModuleTypeMap,
@@ -74,10 +74,24 @@ type IsAny<T> = 0 extends 1 & T ? true : false;
 
 /**
  * Strong `module-entry` arm — discriminated union over every reachable
- * `(module, entry)` pair in `TModules`, with `input` narrowed to the
- * target entry's declared schema. Falls back to the loose runtime shape
- * when `TModules` is `any` so internal generic-erased paths
- * (`CompositionZoneSelector<any, any>` etc.) keep type-checking.
+ * `(module, entry)` pair in `TModules` whose entry supports the
+ * `"composition"` mount kind. `input` is narrowed to the target
+ * entry's declared schema.
+ *
+ * Filtering by mount kind is what makes Tier 3 of the mount-kind
+ * encoding work: an entry that declares `mountKinds: ["journey"]` is
+ * excluded from this union, so a selector that returns
+ * `{ kind: "module-entry", module: "x", entry: "y" }` for a
+ * journey-only `(x, y)` produces a compile error at the selector
+ * call site — no need to wait for runtime to surface the mismatch.
+ *
+ * Entries without a `mountKinds` declaration default to every
+ * surface (see {@link MountKindsOf}), keeping existing modules
+ * usable in compositions without any opt-in.
+ *
+ * Falls back to the loose runtime shape when `TModules` is `any` so
+ * internal generic-erased paths (`CompositionZoneSelector<any, any>`
+ * etc.) keep type-checking.
  */
 type ModuleEntryArm<TModules extends ModuleTypeMap> =
   IsAny<TModules> extends true
@@ -89,13 +103,13 @@ type ModuleEntryArm<TModules extends ModuleTypeMap> =
       }
     : {
         [M in keyof TModules & string]: {
-          [E in EntryNamesOf<TModules[M]> & string]: {
+          [E in EntryNamesByMountKindOf<TModules[M], "composition"> & string]: {
             readonly kind: "module-entry";
             readonly module: M;
             readonly entry: E;
             readonly input: EntryInputOf<TModules[M], E>;
           };
-        }[EntryNamesOf<TModules[M]> & string];
+        }[EntryNamesByMountKindOf<TModules[M], "composition"> & string];
       }[keyof TModules & string];
 
 /**

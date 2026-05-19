@@ -112,10 +112,19 @@ export default defineModule({
     main: defineEntry({
       component: EditorMain,
       input: schema<EditorMainInput>(),
+      // Composition-only: the input shape requires a
+      // `WritableStore<SourceId | null>` only the composition
+      // selector provides. A journey step that tried to mount this
+      // entry would have nowhere to source the store from, so the
+      // framework filters it out of `StepSpec` at compile time.
+      mountKinds: ["composition"],
     }),
     inspector: defineEntry({
       component: InspectorPanel,
       input: schema<InspectorInput>(),
+      // Same reasoning — readable stores are injected by the
+      // composition selector.
+      mountKinds: ["composition"],
     }),
   },
 });
