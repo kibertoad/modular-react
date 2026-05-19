@@ -22,7 +22,7 @@ Routes, slots, navigation, workspaces - none of that changes. Journeys sit **on 
 - [Quickstart shortcut: scaffold the journey package](#quickstart-shortcut-scaffold-the-journey-package) - `create journey` if you bootstrapped with the modular-react CLI
 - [Quickstart](#quickstart) - the 5-step path from zero to a running journey
 - [Core concepts](#core-concepts) - entries, exits, `allowBack`, lifecycle, statuses, keys
-- [Authoring patterns](#authoring-patterns) - module entries, exits, loading flows, `goBack` opt-in, **lazy entry-points (code-splitting)**
+- [Authoring patterns](#authoring-patterns) - module entries, exits, loading flows, **event-driven waits (websocket / SSE + polling + timeout)**, `goBack` opt-in, **lazy entry-points (code-splitting)**
 - [Journey definition patterns](#journey-definition-patterns) - branching, `selectModule` dispatch, terminals, state rewrites, bounded history, module compatibility, **`defineTransition` (auto-preload + narrowed handler return)**, **wildcard transitions + shared exit contracts**
 - [Composing journeys (invoke / resume)](#composing-journeys-invoke--resume) - call out to a child journey mid-flow and resume on its outcome
   - [Cycle and recursion safety](#cycle-and-recursion-safety) - cycle / depth / undeclared-child / bounce-limit guards and how to tune them
@@ -592,6 +592,82 @@ transitions: {
 ```
 
 The cancellation flag matters: if the user clicks `goBack` before the fetch resolves, the component unmounts and the step token advances. A stale `exit('reportReady', …)` would be dropped by the runtime anyway (see [step tokens](#errors-races-and-edge-cases)), but explicit cancellation avoids the race and spurious network work.
+
+### Pattern - event-driven wait with timeout
+
+When the next step depends on an event the backend pushes — a websocket message, an SSE frame, a long-poll resolution, anything outside the plain request/response cycle — the shape is the loading-entry pattern above with two additions: a polling fallback in case the push channel drops a message, and a timeout that decides what happens when nothing arrives. The wait still lives inside a step component that fires an exit; the journey owns what each exit means.
+
+```tsx
+// modules/projects/src/WaitForTranslationProcess.tsx
+export function WaitForTranslationProcess({
+  input,
+  exit,
+}: ModuleEntryProps<{ projectId: string }, WaitExits>) {
+  useEffect(() => {
+    let settled = false;
+    const settle = (fire: () => void) => {
+      if (settled) return;
+      settled = true;
+      fire();
+    };
+
+    // Push channel — websocket, SSE, push notification: whichever transport
+    // the app uses. The journey doesn't care.
+    const unsubscribe = events.on(
+      `translation-process:${input.projectId}`,
+      (process) => settle(() => exit("ready", { process })),
+    );
+
+    // Polling fallback for missed push frames.
+    const poll = setInterval(async () => {
+      const process = await api.getTranslationProcess(input.projectId);
+      if (process) settle(() => exit("ready", { process }));
+    }, 3000);
+
+    // Timeout fallback — the journey decides whether that's a recoverable
+    // exit ("editor opens with no preloaded process") or an abort arm.
+    const timeout = setTimeout(
+      () => settle(() => exit("timedOut")),
+      60_000,
+    );
+
+    return () => {
+      settled = true;
+      unsubscribe();
+      clearInterval(poll);
+      clearTimeout(timeout);
+    };
+  }, [input.projectId]);
+
+  return <Spinner label="Preparing translation…" />;
+}
+```
+
+```ts
+// journey - both exits transition forward; the journey decides whether to
+// branch on the timeout or treat both arms identically.
+transitions: {
+  projects: {
+    waitForTranslationProcess: {
+      ready: ({ output }) => ({
+        next: { module: "editor", entry: "open", input: { process: output.process } },
+      }),
+      timedOut: () => ({
+        next: { module: "editor", entry: "open", input: { process: null } },
+      }),
+    },
+  },
+}
+```
+
+What the journey shape gives you that a "submit, then `useEffect(() => navigate(...), [...])` in shell code" hand-roll does not:
+
+- **Single owner of the transition.** Step tokens (see [Errors, races, and edge cases](#errors-races-and-edge-cases)) guarantee the first exit wins; later dispatches from any channel are dropped by the runtime. A push frame that arrives after the timeout, a poll tick that races the push, a stale callback from a previous instance — all dropped. The hand-rolled equivalent has to maintain its own `settled` flag _and_ make sure no effect re-fires after navigation: easy to get wrong when a router commit churns the `navigate` reference back through the effect's dep array, or when a stale "timed out" flag survives from a previous submission.
+- **No side effects in query callbacks.** The push subscription and the polling fallback live inside a `useEffect`, not inside a react-query `refetchInterval` callback. RQ invokes that callback during render-phase scheduling and requires it to be pure; calling `navigate` (or any side effect) from there is the contract violation that turns "advance once" into "re-fire on every commit."
+- **Fresh latches per attempt.** Each push of `waitForTranslationProcess` mounts a fresh component with fresh latches. There is no journey-scoped equivalent of "the previous submission's `timedOut` flag is still set, so the next submission navigates instantly."
+- **Cycle / bounce guards.** Even if a transition handler is buggy and re-enters the same step, `maxResumeBouncesPerStep` (default 8) aborts the parent with `resume-bounce-limit` instead of leaving React to detect a #185 update-depth crash.
+
+If the journey would treat `ready` and `timedOut` identically (no branching, same next module + input shape), collapse them into one exit. Two exits are only worth it when the journey's downstream — state writes, next module, telemetry — diverges between the success and timeout paths.
 
 ### Pattern - optional exits (entries that don't emit every exit)
 

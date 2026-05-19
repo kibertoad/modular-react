@@ -530,6 +530,8 @@ The five channels above cover module-to-shell communication at a single point in
 
 [Journeys](../packages/journeys/README.md) are the dedicated abstraction for this case: modules declare typed entry/exit vocabularies, a journey declares the transitions between them, and the shell mounts a `<JourneyOutlet>` inside whatever container it already uses (tab, modal, route element). Journey state is serializable, so mid-flow reload recovery and cross-device hand-off work without any shell-level plumbing. Nothing about the channels above changes — journeys are additive and only relevant if your app actually has multi-module workflows.
 
+Beyond the literal multi-module case, the same abstraction fits any flow whose state machine must own a "wait for an async backend event, advance exactly once" transition — websocket / SSE / push-notification waits with a polling fallback and a timeout. The obvious shortcut is a `useEffect(() => navigate(...), [data, ...])` hook in shell code, and it works until it doesn't: router commits can churn the `navigate` reference back through the effect's dep array, "timed out" flags leak across re-submissions, and side effects inside `refetchInterval` violate react-query's render-phase contract. The journey shape forecloses all three. See [Pattern - event-driven wait with timeout](../packages/journeys/README.md#pattern---event-driven-wait-with-timeout).
+
 ## Where to go next
 
 - [Shell Patterns for React Router](shell-patterns-react-router.md): route-level zones via `handle`, `authenticatedRoute` with `loader`, `shellRoutes`, module route shape.
