@@ -1,5 +1,5 @@
 /**
- * Runtime guard tests for the mountKinds Tier-3 encoding.
+ * Runtime guard tests for the mountKinds compile-time encoding.
  *
  * Type-level filtering in `CompositionZoneSpec` is the primary
  * enforcement — see `mount-kinds.test-d.ts` for that. But authors

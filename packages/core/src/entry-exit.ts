@@ -35,7 +35,7 @@ export const schema = <T>(): InputSchema<T> => ({}) as InputSchema<T>;
  * default-wide behavior for the latter. Without the split, an optional
  * `mountKinds?: TMountKinds` widens TMountKinds to the constraint
  * (`readonly MountKind[]`) regardless of the argument, defeating the
- * Tier-3 per-host filtering.
+ * compile-time per-host filtering downstream consumers rely on.
  */
 export function defineEntry<TInput, const TMountKinds extends readonly MountKind[]>(
   entry: EagerModuleEntryPoint<TInput> & { readonly mountKinds: TMountKinds },

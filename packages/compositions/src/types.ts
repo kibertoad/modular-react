@@ -78,8 +78,8 @@ type IsAny<T> = 0 extends 1 & T ? true : false;
  * `"composition"` mount kind. `input` is narrowed to the target
  * entry's declared schema.
  *
- * Filtering by mount kind is what makes Tier 3 of the mount-kind
- * encoding work: an entry that declares `mountKinds: ["journey"]` is
+ * Filtering by mount kind is what makes the mountKinds compile-time
+ * check work: an entry that declares `mountKinds: ["journey"]` is
  * excluded from this union, so a selector that returns
  * `{ kind: "module-entry", module: "x", entry: "y" }` for a
  * journey-only `(x, y)` produces a compile error at the selector

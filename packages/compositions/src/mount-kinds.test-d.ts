@@ -1,5 +1,5 @@
 /**
- * Type-level coverage for the `mountKinds` Tier-3 enforcement.
+ * Type-level coverage for the `mountKinds` compile-time enforcement.
  *
  * `defineEntry({ mountKinds: […] })` records the literal mount-kind
  * tuple on the entry's type. `CompositionZoneSpec` filters out
@@ -240,8 +240,8 @@ describe("CompositionZoneSpec rejects journey-only resolutions", () => {
   });
 
   it("a wrong-shaped input on a valid (module, entry) is not assignable to Spec", () => {
-    // Input narrowing still holds — Tier-3 didn't accidentally loosen
-    // the per-(module, entry) input check.
+    // Input narrowing still holds — adding the mountKinds filter
+    // didn't accidentally loosen the per-(module, entry) input check.
     type WrongInputResolution = {
       readonly kind: "module-entry";
       readonly module: "fixture";
