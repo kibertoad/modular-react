@@ -14,11 +14,16 @@ afterEach(() => {
 });
 
 /**
- * Tests for the prop-driven panel pattern: panels receive callbacks via
- * `input` instead of using `useCompositionState`/`useCompositionDispatch`.
- * The composition's selector closes over `ctx.dispatch` to wire panel
- * callbacks back into composition state. Verifies:
+ * Tests `ZoneSelectorCtx.dispatch` — the framework field selectors close
+ * over when they bake imperative callbacks into a panel's `input`
+ * (`onClose`, `onSubmit`, emit-style fire-and-forget triggers, etc.).
  *
+ * Note: state-coordination across panels is usually expressed via
+ * `ctx.stores.writable(...)` projections (see `stores.test.ts`), which
+ * give slice-level subscription. `ctx.dispatch` remains useful for
+ * one-off callbacks that don't warrant a full store contract.
+ *
+ * Verifies:
  *   - `ctx.dispatch` is referentially stable across re-renders so
  *     `React.memo`'d panels can compare `input.onX` by identity.
  *   - Invoking the callback updates state; the next selector pass picks
