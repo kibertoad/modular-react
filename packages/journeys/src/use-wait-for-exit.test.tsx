@@ -1,6 +1,6 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createElement } from "react";
+import { createElement, StrictMode } from "react";
 import type { ExitFn } from "@modular-react/core";
 import { defineExit } from "@modular-react/core";
 
@@ -117,7 +117,7 @@ describe("useWaitForExit", () => {
       expect(exit).toHaveBeenCalledExactlyOnceWith("ready", { token: "T-poll" });
     });
 
-    it("drops poll ticks after the latch has fired", () => {
+    it("tears down the interval inside resolve so check stops firing", () => {
       const exit = vi.fn<ExitFn<WaitExits>>();
       const check = vi.fn((resolve: ExitFn<WaitExits>) => {
         resolve("ready", { token: "T-poll" });
@@ -127,11 +127,11 @@ describe("useWaitForExit", () => {
       act(() => {
         vi.advanceTimersByTime(200);
       });
+      // First tick: check runs, resolve fires, the interval is cleared
+      // inside resolve. Subsequent timer advances find no live interval,
+      // so check is invoked exactly once and exit exactly once.
       expect(exit).toHaveBeenCalledTimes(1);
-      // check ran on the first tick (settled), and subsequent ticks may
-      // still invoke `check` before the early-return latch is consulted;
-      // the contract is that `exit` (the user's dispatcher) is called
-      // at most once, not that `check` is.
+      expect(check).toHaveBeenCalledTimes(1);
     });
 
     it("swallows synchronous throws from poll.check", () => {
@@ -268,15 +268,16 @@ describe("useWaitForExit", () => {
       vi.useRealTimers();
     });
 
-    it("subscribe winning prevents poll and timeout from firing", () => {
+    it("subscribe winning tears down poll and timeout immediately", () => {
       const exit = vi.fn<ExitFn<WaitExits>>();
       let pushReady: ((token: string) => void) | undefined;
       const pollCheck = vi.fn();
+      const unsubscribe = vi.fn();
 
       renderHarness(exit, {
         subscribe: (resolve) => {
           pushReady = (token) => resolve("ready", { token });
-          return () => {};
+          return unsubscribe;
         },
         poll: { intervalMs: 50, check: pollCheck },
         timeout: { ms: 100, fire: "timedOut" },
@@ -285,15 +286,19 @@ describe("useWaitForExit", () => {
       act(() => pushReady?.("T-push"));
       expect(exit).toHaveBeenCalledExactlyOnceWith("ready", { token: "T-push" });
 
-      const ticksAtWin = pollCheck.mock.calls.length;
+      // The subscribe channel is the winner — its own unsubscribe is not
+      // called by resolve (only the *losing* channels are torn down). It
+      // is still called on unmount via the normal cleanup path.
+      const pollTicksAtWin = pollCheck.mock.calls.length;
+      const unsubsAtWin = unsubscribe.mock.calls.length;
       act(() => {
         vi.advanceTimersByTime(500);
       });
       expect(exit).toHaveBeenCalledTimes(1);
-      // Poll interval keeps ticking until unmount; `check` may run again
-      // but the latch keeps `exit` at one call. The contract is exit-once,
-      // not check-never.
-      expect(pollCheck.mock.calls.length).toBeGreaterThanOrEqual(ticksAtWin);
+      // Poll interval was torn down inside resolve, so no further ticks.
+      expect(pollCheck.mock.calls.length).toBe(pollTicksAtWin);
+      // Subscribe's own unsubscribe is deferred to unmount.
+      expect(unsubscribe.mock.calls.length).toBe(unsubsAtWin);
     });
 
     it("poll winning prevents timeout from firing", () => {
@@ -415,6 +420,141 @@ describe("useWaitForExit", () => {
       const exit = vi.fn<ExitFn<WaitExits>>();
       const { unmount } = renderHarness(exit, {});
       unmount();
+      expect(exit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("sync subscribe-resolve", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("does not arm poll/timeout when subscribe resolves synchronously", () => {
+      const exit = vi.fn<ExitFn<WaitExits>>();
+      const pollCheck = vi.fn();
+      const unsubscribe = vi.fn();
+
+      renderHarness(exit, {
+        subscribe: (resolve) => {
+          resolve("ready", { token: "T-sync" });
+          return unsubscribe;
+        },
+        poll: { intervalMs: 50, check: pollCheck },
+        timeout: { ms: 100, fire: "timedOut" },
+      });
+
+      expect(exit).toHaveBeenCalledExactlyOnceWith("ready", { token: "T-sync" });
+      // Subscribe sync-resolved during setup; the subscribe's own
+      // unsubscribe is called immediately (it was returned after resolve
+      // had already drained the teardown list, so it doesn't go in the
+      // deferred-cleanup queue).
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+
+      // Advance well past both poll and timeout schedules — neither
+      // should fire because they were never armed.
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(exit).toHaveBeenCalledTimes(1);
+      expect(pollCheck).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("StrictMode", () => {
+    it("survives the dev double-mount sequence (setup → cleanup → setup)", () => {
+      // StrictMode double-invokes the effect in dev. The hook's
+      // per-effect-run `settled` latch and teardown list are local to
+      // each run, so cleanup releases the first run's resources before
+      // the second run arms them.
+      const exit = vi.fn<ExitFn<WaitExits>>();
+      let pushReady: ((token: string) => void) | undefined;
+
+      render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(Harness, {
+            exit,
+            channels: {
+              subscribe: (resolve) => {
+                pushReady = (token) => resolve("ready", { token });
+                return () => {
+                  // The previous mount's pushReady reference is
+                  // overwritten by the second setup; this teardown nulls
+                  // it out only if the latest closure is the active one.
+                };
+              },
+            },
+          }),
+        ),
+      );
+
+      // The most recently committed mount's subscribe is the live one;
+      // firing through it fires the exit exactly once.
+      act(() => pushReady?.("T-strict"));
+      expect(exit).toHaveBeenCalledExactlyOnceWith("ready", { token: "T-strict" });
+    });
+  });
+
+  describe("poll.check return-value handling", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("treats a truthy non-thenable return as a sync check (no .catch crash)", () => {
+      const exit = vi.fn<ExitFn<WaitExits>>();
+      let answer: string | null = null;
+      renderHarness(exit, {
+        poll: {
+          intervalMs: 50,
+          // Returning a non-undefined / non-thenable value (e.g. a sentinel
+          // some test doubles use) must not be treated as a Promise.
+          check: (resolve) => {
+            if (answer) resolve("ready", { token: answer });
+            return 42 as unknown as void;
+          },
+        },
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+      expect(exit).not.toHaveBeenCalled();
+
+      answer = "ok";
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+      expect(exit).toHaveBeenCalledExactlyOnceWith("ready", { token: "ok" });
+    });
+
+    it("does not depend on the returned thenable having a .catch method", async () => {
+      const exit = vi.fn<ExitFn<WaitExits>>();
+      // A thenable without `.catch` — the implementation routes through
+      // Promise.resolve so this should still be safely handled.
+      const bareThenable: PromiseLike<void> = {
+        then(_resolve, reject) {
+          reject?.(new Error("flake"));
+        },
+      };
+      renderHarness(exit, {
+        poll: {
+          intervalMs: 50,
+          check: () => bareThenable,
+        },
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60);
+      });
+      // Rejection from the bare thenable is swallowed; no exit fires,
+      // no unhandled-rejection crash.
       expect(exit).not.toHaveBeenCalled();
     });
   });

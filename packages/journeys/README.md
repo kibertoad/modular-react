@@ -592,24 +592,7 @@ transitions: {
 }
 ```
 
-Returning `() => controller.abort()` from `subscribe` tears down the in-flight request if the user clicks `goBack` before the fetch resolves. The runtime would drop a stale `exit('reportReady', …)` via step tokens anyway (see [step tokens](#errors-races-and-edge-cases)), and `useWaitForExit`'s latch would drop a late `resolve(...)`, but cancelling the network work avoids the spurious request. `useWaitForExit` is the helper the next pattern leans on more heavily; for a single in-flight fetch, the manual form below is equivalent and equally valid:
-
-```tsx
-useEffect(() => {
-  let cancelled = false;
-  (async () => {
-    try {
-      const report = await api.fetchRiskReport(input.customerId);
-      if (!cancelled) exit("reportReady", { report });
-    } catch (err) {
-      if (!cancelled) exit("failed", { reason: String(err) });
-    }
-  })();
-  return () => {
-    cancelled = true;
-  };
-}, [input.customerId]);
-```
+Returning `() => controller.abort()` from `subscribe` tears down the in-flight request if the user clicks `goBack` before the fetch resolves. The runtime would drop a stale `exit('reportReady', …)` via step tokens anyway (see [step tokens](#errors-races-and-edge-cases)), and `useWaitForExit`'s latch would drop a late `resolve(...)`, but cancelling the network work avoids the spurious request. The next pattern leans on the same helper to combine a push channel, a polling fallback, and a deadline — that's where the helper earns its keep — but the single-fetch shape above is the canonical form for the simple case too.
 
 ### Pattern - event-driven wait with timeout
 
@@ -666,10 +649,9 @@ transitions: {
 
 What this shape gives you that a "submit, then `useEffect(() => navigate(...), [...])` in shell code" hand-roll does not:
 
-- **Single owner of the transition.** `useWaitForExit` latches on the first dispatched exit; later resolutions from any channel are dropped. Step tokens (see [Errors, races, and edge cases](#errors-races-and-edge-cases)) are the runtime-level backstop: an exit fired after the step has advanced is dropped even if the local latch were missing. The hand-rolled equivalent has to maintain its own `settled` flag _and_ make sure no effect re-fires after navigation — easy to get wrong when a router commit churns the `navigate` reference back through the effect's dep array, or when a stale "timed out" flag survives from a previous submission.
-- **No side effects in query callbacks.** The push subscription and the polling fallback live inside `useWaitForExit`'s effect, not inside a react-query `refetchInterval` callback. RQ invokes that callback during render-phase scheduling and requires it to be pure; calling `navigate` (or any side effect) from there is the contract violation that turns "advance once" into "re-fire on every commit."
+- **Single owner of the transition.** `useWaitForExit` latches on the first dispatched exit and immediately tears down the losing channels; later resolutions are dropped. The hand-rolled equivalent has to maintain its own `settled` flag _and_ make sure no effect re-fires after navigation — easy to get wrong when a router commit churns the `navigate` reference back through the effect's dep array, or when a stale "timed out" flag survives from a previous submission. Step tokens (see [Errors, races, and edge cases](#errors-races-and-edge-cases)) are a runtime-level backstop that protects both forms equally; the helper's contribution is making the local latch declarative.
+- **Push / poll live outside of query callbacks.** The push subscription and the polling fallback live inside `useWaitForExit`'s effect, which is a fine place for side effects. The hand-rolled equivalent often ends up putting `navigate(...)` (or other side effects) inside a react-query `refetchInterval` callback — RQ schedules that callback during render-phase work and expects it to be pure, so a side effect there is what turns "advance once" into "re-fire on every commit."
 - **Fresh latches per attempt.** Each push of `waitForTranslationProcess` mounts a fresh component with a fresh latch. There is no journey-scoped equivalent of "the previous submission's `timedOut` flag is still set, so the next submission navigates instantly."
-- **Cycle / bounce guards.** Even if a transition handler is buggy and re-enters the same step, `maxResumeBouncesPerStep` (default 8) aborts the parent with `resume-bounce-limit` instead of leaving React to detect a #185 update-depth crash.
 
 `useWaitForExit`'s timeout has two forms: pass `fire: "exitName"` when the deadline dispatches a no-payload exit (the common case), or `fire: (resolve) => resolve("fallback", payload)` when the deadline needs to compute its output. The named form is constrained at the type level to exits whose schema declares a `void` output, so an exit that needs a payload won't compile in the named form.
 

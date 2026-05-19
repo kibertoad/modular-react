@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { ExitFn, ExitPointMap, ExitPointSchema } from "@modular-react/core";
+import { isDevEnv, type ExitFn, type ExitPointMap, type ExitPointSchema } from "@modular-react/core";
 
 /**
  * Exit names whose schema declares a `void` output. The named-exit form
@@ -19,17 +19,42 @@ type VoidExitName<TExits extends ExitPointMap> = {
 /**
  * One channel that races against the others. `resolve` is the wrapped exit
  * dispatcher: calling it fires the named exit if no other channel has fired
- * yet, and is a no-op otherwise. The subscriber returns its own teardown.
+ * yet, and is a no-op otherwise. The subscriber returns its own teardown,
+ * which the hook calls **immediately** when any channel wins (not just on
+ * unmount) so the losing channels stop doing wakeups between dispatch and
+ * unmount.
+ *
+ * @example
+ * ```ts
+ * subscribe: (resolve) => {
+ *   const handler = (msg: WsFrame) => {
+ *     if (msg.type === "process-ready") resolve("ready", { process: msg.payload });
+ *   };
+ *   ws.on("message", handler);
+ *   return () => ws.off("message", handler);
+ * }
+ * ```
  */
 export type WaitForExitSubscribeChannel<TExits extends ExitPointMap> = (
   resolve: ExitFn<TExits>,
 ) => () => void;
 
 /**
- * Periodic check that fires when the answer is ready. The runtime guarantees
- * a tick that arrives after another channel has already won is a no-op
- * (whatever it calls on `resolve` is dropped by the latch), but `check`
- * should still cancel its own outstanding work on unmount where applicable.
+ * Periodic check that fires when the answer is ready. The interval is torn
+ * down the moment any channel wins, so `check` is not invoked again after
+ * settle. `check` itself should still cancel its own outstanding async
+ * work on unmount where applicable (e.g. via `AbortController`).
+ *
+ * @example
+ * ```ts
+ * poll: {
+ *   intervalMs: 3000,
+ *   check: async (resolve) => {
+ *     const process = await api.getTranslationProcess(projectId);
+ *     if (process) resolve("ready", { process });
+ *   },
+ * }
+ * ```
  */
 export interface WaitForExitPollChannel<TExits extends ExitPointMap> {
   readonly intervalMs: number;
@@ -41,6 +66,18 @@ export interface WaitForExitPollChannel<TExits extends ExitPointMap> {
  * arbitrary code (e.g. dispatches a different exit based on `input`). Pass
  * `0` or a negative `ms` to disable the timeout for a render without
  * conditionally calling the hook.
+ *
+ * @example
+ * ```ts
+ * // Named form — exit must have a `void` output schema.
+ * timeout: { ms: 60_000, fire: "timedOut" }
+ *
+ * // Function form — choose the exit (and its payload) at deadline time.
+ * timeout: {
+ *   ms: 60_000,
+ *   fire: (resolve) => resolve("failed", { reason: "deadline-exceeded" }),
+ * }
+ * ```
  */
 export type WaitForExitTimeoutChannel<TExits extends ExitPointMap> = {
   readonly ms: number;
@@ -85,12 +122,33 @@ export interface WaitForExitChannels<TExits extends ExitPointMap> {
  * - The hook does not own the journey-level "what does each exit mean"
  *   decision. That lives in the journey's `transitions` map. The hook
  *   only marshals the channels.
+ *
+ * - **First-wins teardown is immediate.** When any channel calls
+ *   `resolve`, the *other* channels' teardowns run before the exit
+ *   dispatches. A subscribe that synchronously calls `resolve` during
+ *   setup still has its `unsubscribe` invoked; poll / timeout are not
+ *   armed at all in that case.
+ *
+ * - The effect is monolithic: changing any scalar dep (`pollInterval`,
+ *   `timeoutMs`, the timeout's named-exit form) tears down *all* live
+ *   channels and re-arms them. Callers that need independent per-channel
+ *   lifecycles should split into multiple `useWaitForExit` calls or
+ *   manage that channel themselves.
+ *
+ * Implementation note: the latest-callback refs are written in render
+ * (not in a layout effect or via `useEffectEvent`). Writes to a ref's
+ * `.current` during render are safe — they don't trigger re-renders, and
+ * idempotent overwrites of "the latest user-passed callback" are fine
+ * even under Concurrent React's render replays.
  */
 export function useWaitForExit<TExits extends ExitPointMap>(
   exit: ExitFn<TExits>,
   channels: WaitForExitChannels<TExits>,
 ): void {
   // Latest-callback refs so changing identities don't churn the effect.
+  // `useRef(undefined)` on first render is fine — we overwrite `.current`
+  // unconditionally on every render below, so the initial value is never
+  // read by the effect.
   const exitRef = useRef(exit);
   const subscribeRef = useRef(channels.subscribe);
   const pollCheckRef = useRef(channels.poll?.check);
@@ -116,45 +174,81 @@ export function useWaitForExit<TExits extends ExitPointMap>(
 
   useEffect(() => {
     let settled = false;
+    const teardowns: Array<() => void> = [];
 
-    // The latched dispatcher every channel calls. `args` is typed loosely
-    // here because `ExitFn` is variadic on the schema — the surrounding
-    // `ExitFn<TExits>` signature gives consumers the strict type.
+    const safeTeardown = (td: () => void) => {
+      try {
+        td();
+      } catch (err) {
+        if (isDevEnv()) {
+          // A misbehaving channel teardown shouldn't block sibling teardowns
+          // or prevent unmount — but it's almost always a bug worth flagging
+          // in dev so the author sees it.
+          // eslint-disable-next-line no-console
+          console.warn("[useWaitForExit] channel teardown threw:", err);
+        }
+      }
+    };
+
+    const drainTeardowns = () => {
+      // Drain so a user-supplied teardown never runs twice — websocket
+      // close / AbortController.abort / unsubscribe-from-emitter are not
+      // always idempotent.
+      const list = teardowns.splice(0);
+      for (const td of list) safeTeardown(td);
+    };
+
+    // First-wins latched dispatcher. On the winning call we tear down
+    // every *other* channel before dispatching, so the losing channels
+    // can't do wakeups between dispatch and unmount.
     const resolve: ExitFn<TExits> = ((name: Parameters<ExitFn<TExits>>[0], ...args: unknown[]) => {
       if (settled) return;
       settled = true;
+      drainTeardowns();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (exitRef.current as (n: any, ...a: unknown[]) => void)(name, ...args);
     }) as ExitFn<TExits>;
 
-    const teardowns: Array<() => void> = [];
+    const registerTeardown = (td: () => void) => {
+      // A subscribe that synchronously called `resolve` will have drained
+      // the (empty-at-that-moment) teardown list before its unsubscribe
+      // was returned. We still need to release that listener, just not
+      // via the list.
+      if (settled) safeTeardown(td);
+      else teardowns.push(td);
+    };
 
     if (hasSubscribe) {
       const unsubscribe = subscribeRef.current?.(resolve);
-      if (typeof unsubscribe === "function") teardowns.push(unsubscribe);
+      if (typeof unsubscribe === "function") registerTeardown(unsubscribe);
     }
 
-    if (hasPoll && pollInterval !== undefined && pollInterval > 0) {
+    // If a synchronous subscribe-resolve already won, don't arm the
+    // fallback channels at all — the wait is already over.
+    if (!settled && hasPoll && pollInterval !== undefined && pollInterval > 0) {
       const id = setInterval(() => {
         if (settled) return;
         try {
           const result = pollCheckRef.current?.(resolve);
-          if (result && typeof (result as Promise<void>).then === "function") {
-            (result as Promise<void>).catch(() => {
+          if (result && typeof (result as PromiseLike<void>).then === "function") {
+            // `Promise.resolve` adopts the thenable into a real Promise,
+            // so we don't depend on the user's value having a `.catch`.
+            Promise.resolve(result as PromiseLike<void>).catch(() => {
               // Polling failures are non-fatal: the next tick gets another
-              // chance, and the push channel / timeout still race. Swallowing
-              // here mirrors the runtime's stance on transition-handler
-              // throws being instance-level concerns, not per-tick fatal.
+              // chance, and the push / timeout channels still race.
+              // Swallowing here mirrors the runtime's stance on
+              // transition-handler throws being instance-level concerns,
+              // not per-tick fatal.
             });
           }
         } catch {
           // Sync-throw from `check` — same rationale as the async catch.
         }
       }, pollInterval);
-      teardowns.push(() => clearInterval(id));
+      registerTeardown(() => clearInterval(id));
     }
 
-    if (hasTimeout && timeoutMs !== undefined && timeoutMs > 0) {
+    if (!settled && hasTimeout && timeoutMs !== undefined && timeoutMs > 0) {
       const id = setTimeout(() => {
         if (settled) return;
         const fire = timeoutFireRef.current;
@@ -168,20 +262,12 @@ export function useWaitForExit<TExits extends ExitPointMap>(
           fire(resolve);
         }
       }, timeoutMs);
-      teardowns.push(() => clearTimeout(id));
+      registerTeardown(() => clearTimeout(id));
     }
 
     return () => {
       settled = true;
-      for (const td of teardowns) {
-        try {
-          td();
-        } catch {
-          // A misbehaving channel teardown shouldn't block sibling teardowns
-          // or prevent unmount. Swallowed for the same reason `setInterval`
-          // errors are: the wait is over either way.
-        }
-      }
+      drainTeardowns();
     };
     // The named-exit form of `timeout.fire` is part of the dep set because
     // changing it changes what the deadline fires; the function form is
