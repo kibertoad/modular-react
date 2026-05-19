@@ -1,5 +1,10 @@
 import { useEffect, useRef } from "react";
-import { isDevEnv, type ExitFn, type ExitPointMap, type ExitPointSchema } from "@modular-react/core";
+import {
+  isDevEnv,
+  type ExitFn,
+  type ExitPointMap,
+  type ExitPointSchema,
+} from "@modular-react/core";
 
 /**
  * Exit names whose schema declares a `void` output. The named-exit form

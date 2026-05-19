@@ -22,7 +22,7 @@ Routes, slots, navigation, workspaces - none of that changes. Journeys sit **on 
 - [Quickstart shortcut: scaffold the journey package](#quickstart-shortcut-scaffold-the-journey-package) - `create journey` if you bootstrapped with the modular-react CLI
 - [Quickstart](#quickstart) - the 5-step path from zero to a running journey
 - [Core concepts](#core-concepts) - entries, exits, `allowBack`, lifecycle, statuses, keys
-- [Authoring patterns](#authoring-patterns) - module entries, exits, loading flows, **event-driven waits (websocket / SSE + polling + timeout)**, `goBack` opt-in, **lazy entry-points (code-splitting)**
+- [Authoring patterns](#authoring-patterns) - module entries, exits, loading flows, **event-driven wait (websocket / SSE + polling + timeout)**, `goBack` opt-in, **lazy entry-points (code-splitting)**
 - [Journey definition patterns](#journey-definition-patterns) - branching, `selectModule` dispatch, terminals, state rewrites, bounded history, module compatibility, **`defineTransition` (auto-preload + narrowed handler return)**, **wildcard transitions + shared exit contracts**
 - [Composing journeys (invoke / resume)](#composing-journeys-invoke--resume) - call out to a child journey mid-flow and resume on its outcome
   - [Cycle and recursion safety](#cycle-and-recursion-safety) - cycle / depth / undeclared-child / bounce-limit guards and how to tune them
@@ -596,7 +596,7 @@ Returning `() => controller.abort()` from `subscribe` tears down the in-flight r
 
 ### Pattern - event-driven wait with timeout
 
-When the next step depends on an event the backend pushes — a websocket message, an SSE frame, a long-poll resolution, anything outside the plain request/response cycle — the shape is the loading-entry pattern above with two additions: a polling fallback in case the push channel drops a message, and a deadline that decides what happens when nothing arrives. The wait still lives inside a step component that fires an exit; the journey owns what each exit means. `useWaitForExit` composes the three channels so the call site stays declarative.
+When the next step depends on an event the backend pushes — a websocket message, an SSE frame, a long-poll resolution, anything outside the plain request/response cycle — the shape is the [loading-entry pattern above](#pattern---a-loading-entry-point-for-async-work) with two additions: a polling fallback in case the push channel drops a message, and a deadline that decides what happens when nothing arrives. The wait still lives inside a step component that fires an exit; the journey owns what each exit means. `useWaitForExit` composes the three channels so the call site stays declarative.
 
 ```tsx
 // modules/projects/src/WaitForTranslationProcess.tsx
