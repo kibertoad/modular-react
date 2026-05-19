@@ -1,5 +1,8 @@
 import { defineEntry, defineModule, schema } from "@modular-react/core";
-import { createEditorHooks, type EditorState } from "@example-tsr-editor-composition/app-shared";
+import {
+  createEditorHooks,
+  type EditorState,
+} from "@example-tsr-editor-composition/editor-composition";
 
 const { useState: useEditorState, useDispatch: useEditorDispatch } = createEditorHooks();
 

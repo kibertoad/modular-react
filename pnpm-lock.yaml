@@ -308,29 +308,29 @@ importers:
         version: 8.0.11(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
 
   examples/react-router/editor-composition/app-shared:
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/editor-composition/compositions/editor:
     dependencies:
       '@modular-react/compositions':
         specifier: workspace:*
-        version: link:../../../../packages/compositions
+        version: link:../../../../../packages/compositions
       '@modular-react/core':
         specifier: workspace:*
-        version: link:../../../../packages/core
+        version: link:../../../../../packages/core
     devDependencies:
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.14
-      react:
-        specifier: ^19.0.0
-        version: 19.2.6
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
 
   examples/react-router/editor-composition/modules/contentful:
     dependencies:
-      '@example-rr-editor-composition/app-shared':
+      '@example-rr-editor-composition/editor-composition':
         specifier: workspace:*
-        version: link:../../app-shared
+        version: link:../../compositions/editor
       '@modular-react/compositions':
         specifier: workspace:*
         version: link:../../../../../packages/compositions
@@ -350,9 +350,9 @@ importers:
 
   examples/react-router/editor-composition/modules/editor:
     dependencies:
-      '@example-rr-editor-composition/app-shared':
+      '@example-rr-editor-composition/editor-composition':
         specifier: workspace:*
-        version: link:../../app-shared
+        version: link:../../compositions/editor
       '@modular-react/compositions':
         specifier: workspace:*
         version: link:../../../../../packages/compositions
@@ -372,9 +372,9 @@ importers:
 
   examples/react-router/editor-composition/modules/strapi:
     dependencies:
-      '@example-rr-editor-composition/app-shared':
+      '@example-rr-editor-composition/editor-composition':
         specifier: workspace:*
-        version: link:../../app-shared
+        version: link:../../compositions/editor
       '@modular-react/compositions':
         specifier: workspace:*
         version: link:../../../../../packages/compositions
@@ -403,6 +403,9 @@ importers:
       '@example-rr-editor-composition/editor':
         specifier: workspace:*
         version: link:../modules/editor
+      '@example-rr-editor-composition/editor-composition':
+        specifier: workspace:*
+        version: link:../compositions/editor
       '@example-rr-editor-composition/strapi':
         specifier: workspace:*
         version: link:../modules/strapi
@@ -1236,29 +1239,29 @@ importers:
         version: 8.0.11(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
 
   examples/tanstack-router/editor-composition/app-shared:
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/tanstack-router/editor-composition/compositions/editor:
     dependencies:
       '@modular-react/compositions':
         specifier: workspace:*
-        version: link:../../../../packages/compositions
+        version: link:../../../../../packages/compositions
       '@modular-react/core':
         specifier: workspace:*
-        version: link:../../../../packages/core
+        version: link:../../../../../packages/core
     devDependencies:
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.14
-      react:
-        specifier: ^19.0.0
-        version: 19.2.6
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
 
   examples/tanstack-router/editor-composition/modules/contentful:
     dependencies:
-      '@example-tsr-editor-composition/app-shared':
+      '@example-tsr-editor-composition/editor-composition':
         specifier: workspace:*
-        version: link:../../app-shared
+        version: link:../../compositions/editor
       '@modular-react/compositions':
         specifier: workspace:*
         version: link:../../../../../packages/compositions
@@ -1278,9 +1281,9 @@ importers:
 
   examples/tanstack-router/editor-composition/modules/editor:
     dependencies:
-      '@example-tsr-editor-composition/app-shared':
+      '@example-tsr-editor-composition/editor-composition':
         specifier: workspace:*
-        version: link:../../app-shared
+        version: link:../../compositions/editor
       '@modular-react/compositions':
         specifier: workspace:*
         version: link:../../../../../packages/compositions
@@ -1300,9 +1303,9 @@ importers:
 
   examples/tanstack-router/editor-composition/modules/strapi:
     dependencies:
-      '@example-tsr-editor-composition/app-shared':
+      '@example-tsr-editor-composition/editor-composition':
         specifier: workspace:*
-        version: link:../../app-shared
+        version: link:../../compositions/editor
       '@modular-react/compositions':
         specifier: workspace:*
         version: link:../../../../../packages/compositions
@@ -1331,6 +1334,9 @@ importers:
       '@example-tsr-editor-composition/editor':
         specifier: workspace:*
         version: link:../modules/editor
+      '@example-tsr-editor-composition/editor-composition':
+        specifier: workspace:*
+        version: link:../compositions/editor
       '@example-tsr-editor-composition/strapi':
         specifier: workspace:*
         version: link:../modules/strapi

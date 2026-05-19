@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@example-rr-editor-composition/app-shared": "workspace:*",
+    "@example-rr-editor-composition/editor-composition": "workspace:*",
     "@modular-react/compositions": "workspace:*",
     "@modular-react/core": "workspace:*"
   },

@@ -1,10 +1,6 @@
-import {
-  createCompositionContext,
-  defineComposition,
-  defineCompositionHandle,
-} from "@modular-react/compositions";
+import { defineComposition, defineCompositionHandle } from "@modular-react/compositions";
 import type { ModuleDescriptor } from "@modular-react/core";
-import type { EditorState } from "./app-types.js";
+import type { EditorState } from "./state.js";
 
 /** See RR sibling for rationale on `type` vs `interface`. */
 type EditorModuleMap = {
@@ -55,5 +51,3 @@ export const editorComposition = defineComposition<EditorModuleMap, EditorState>
 export const editorCompositionHandle = defineCompositionHandle<"editor", { documentId: string }>({
   id: "editor",
 });
-
-export const createEditorHooks = () => createCompositionContext<EditorState>();

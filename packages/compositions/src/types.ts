@@ -1,5 +1,7 @@
 import type {
   CatalogMeta,
+  EntryInputOf,
+  EntryNamesOf,
   ExitContract,
   JourneyHandleRef,
   ModuleTypeMap,
@@ -21,8 +23,7 @@ export type CompositionStatus = "active" | "disposed";
 // ---------------------------------------------------------------------------
 
 /**
- * The discriminated union a zone's selector returns on every state change.
- * Three arms:
+ * Runtime form of what a zone selector returns. Three arms:
  *
  *   - `module-entry`: render the named module's entry point. The runtime
  *     looks the entry up in the registry-supplied module map and feeds
@@ -38,7 +39,9 @@ export type CompositionStatus = "active" | "disposed";
  *
  * `TModules` keeps `module` constrained to ids that participate in the
  * composition's typed module map, so a typo or a module that isn't
- * registered fails at compile time.
+ * registered fails at compile time. For *strong* per-`(module, entry)`
+ * input checking — i.e. selectors that fail compile when `input` doesn't
+ * match the target entry's declared schema — see {@link ZoneSpec}.
  */
 export type ZoneResolution<TModules extends ModuleTypeMap = ModuleTypeMap> =
   | {
@@ -47,6 +50,69 @@ export type ZoneResolution<TModules extends ModuleTypeMap = ModuleTypeMap> =
       readonly entry: string;
       readonly input?: unknown;
     }
+  | {
+      readonly kind: "journey";
+      readonly handle: JourneyHandleRef<string, any, any>;
+      readonly input?: unknown;
+      readonly instanceId?: CompositionInstanceId;
+    }
+  | { readonly kind: "empty" };
+
+/**
+ * Internal helper: detects `any` at the type level so {@link ZoneSpec} can
+ * fall back to the loose {@link ZoneResolution} shape when no concrete
+ * `TModules` is supplied. Without this gate, the mapped-type expansion
+ * collapses `module-entry` to `never` (a known TS quirk with `any` in
+ * mapped-key positions) and breaks the framework's own
+ * `ZoneSelector<any, any>` paths.
+ */
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
+/**
+ * Strong `module-entry` arm — discriminated union over every reachable
+ * `(module, entry)` pair in `TModules`, with `input` narrowed to the
+ * target entry's declared schema. Falls back to the loose runtime shape
+ * when `TModules` is `any` so internal generic-erased paths
+ * (`ZoneSelector<any, any>` etc.) keep type-checking.
+ */
+type ModuleEntryArm<TModules extends ModuleTypeMap> =
+  IsAny<TModules> extends true
+    ? {
+        readonly kind: "module-entry";
+        readonly module: string;
+        readonly entry: string;
+        readonly input?: unknown;
+      }
+    : {
+        [M in keyof TModules & string]: {
+          [E in EntryNamesOf<TModules[M]> & string]: {
+            readonly kind: "module-entry";
+            readonly module: M;
+            readonly entry: E;
+            readonly input: EntryInputOf<TModules[M], E>;
+          };
+        }[EntryNamesOf<TModules[M]> & string];
+      }[keyof TModules & string];
+
+/**
+ * Author-facing zone specification — strong per-`(module, entry)`
+ * discriminated union for the `module-entry` arm. Mirrors
+ * `StepSpec<TModules>` from `@modular-react/journeys`: narrowing on
+ * `module` + `entry` picks the corresponding `input` type, so a selector
+ * that returns a wrong-shaped input fails at compile time.
+ *
+ * Selectors authored against {@link ZoneSelector} return this form;
+ * the runtime stores resolutions in the looser {@link ZoneResolution}
+ * shape so internal paths don't pay per-generic mapped-type cost.
+ *
+ * Authors who want input type-checking must supply concrete module
+ * descriptors in their `TModules` type — typically via `import type
+ * editorModule from "@my-org/editor"` and a `typeof` map. With a wide
+ * `TModules` (default or `any`), `ZoneSpec` falls back to the loose
+ * resolution shape via the {@link ModuleEntryArm} fallback.
+ */
+export type ZoneSpec<TModules extends ModuleTypeMap> =
+  | ModuleEntryArm<TModules>
   | {
       readonly kind: "journey";
       readonly handle: JourneyHandleRef<string, any, any>;
@@ -68,10 +134,15 @@ export interface ZoneSelectorCtx<TState> {
   readonly deps: Readonly<Record<string, unknown>>;
 }
 
-/** Pure projection of composition state into a zone resolution. */
+/**
+ * Pure projection of composition state into a zone resolution. Returns
+ * {@link ZoneSpec} (strong per-`(module, entry)` typing) so wrong-shaped
+ * `input` fails at compile time when `TModules` is concrete; assignable
+ * to {@link ZoneResolution} for runtime storage.
+ */
 export type ZoneSelector<TModules extends ModuleTypeMap, TState> = (
   ctx: ZoneSelectorCtx<TState>,
-) => ZoneResolution<TModules>;
+) => ZoneSpec<TModules>;
 
 /**
  * Author-facing zone descriptor. The author registers `select` (mandatory)

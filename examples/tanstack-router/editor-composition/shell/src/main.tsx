@@ -4,7 +4,7 @@ import { compositionsPlugin } from "@modular-react/compositions";
 import editorModule from "@example-tsr-editor-composition/editor";
 import contentfulModule from "@example-tsr-editor-composition/contentful";
 import strapiModule from "@example-tsr-editor-composition/strapi";
-import { editorComposition } from "@example-tsr-editor-composition/app-shared";
+import { editorComposition } from "@example-tsr-editor-composition/editor-composition";
 import type { AppDependencies, AppSlots } from "@example-tsr-editor-composition/app-shared";
 
 import { Layout } from "./components/Layout.js";

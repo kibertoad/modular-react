@@ -1,5 +1,5 @@
 {
-  "name": "@example-tsr-editor-composition/app-shared",
+  "name": "@example-tsr-editor-composition/editor-composition",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,6 +13,10 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modular-react/compositions": "workspace:*",
+    "@modular-react/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^6.0.2"

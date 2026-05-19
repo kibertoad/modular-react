@@ -7,3 +7,16 @@ pnpm --filter @example-tsr-editor-composition/shell dev
 ```
 
 Opens `http://localhost:5196`.
+
+## Layout
+
+```text
+app-shared/         — contract panels consume (state types, branded ids, typed hooks)
+compositions/
+  editor/           — composition definition + typed handle (depends on app-shared)
+modules/            — editor / contentful / strapi panel modules (depend on app-shared)
+shell/              — registry, root route, CompositionOutlet wiring, e2e
+```
+
+Same module-layout argument as the RR sibling: panel modules depend on `app-shared`
+only, not on the composition definition package.

@@ -268,6 +268,23 @@ Pass typed hooks down per-composition with the `createCompositionContext<TState>
 
 ## Core concepts
 
+### Composition zones vs `module.zones`
+
+The framework has two distinct primitives that both use the word "zone." They are unrelated.
+
+| | `module.zones` (existing) | composition zones (this package) |
+|---|---|---|
+| Declared by | `defineModule({ zones: { ... } })` and the router's route `staticData` | `defineComposition({ zones: { ... } })` |
+| Populated by | The *active route's* module — at most one component per zone | The composition's per-zone `select(ctx)`, which can target any registered module |
+| Cardinality | One contribution per zone at a time (most-recent active wins) | Many panels mounted in parallel, one per declared zone |
+| Layout owner | The shell — `useZones` / `useActiveZones` read the merged map | The host — `<CompositionOutlet>`'s render-prop arranges zones however it wants |
+| Authoring shape | String → React component | String → `select(ctx) → ZoneResolution` |
+| Use when | A module needs to contribute a header chip, command, or one-shot slot to the active screen | Several modules need to render side-by-side on a single screen with shared coordination state |
+
+A composition does **not** participate in `module.zones`. The shell's `useZones`/`useActiveZones` will not see anything from a `<CompositionOutlet>`. The two systems are orthogonal — a screen can use both at once (e.g., a route uses `module.zones` for the header chip + a `<CompositionOutlet>` for the multi-panel body).
+
+Inside a composition zone, **the composition definition owns the zone name and the selector** (what renders here, driven by state); **the host owns the layout** (where the zone appears on screen). The framework wraps each zone in `<Suspense>` + a per-zone error boundary before handing the `ReactNode` to the host's render-prop.
+
 ### Zones
 
 A zone is a named projection of state into one of three resolutions, declared per-render by the zone's `select(ctx)`:

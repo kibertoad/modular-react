@@ -3,7 +3,7 @@ import {
   createEditorHooks,
   type EditorState,
   type SourceId,
-} from "@example-rr-editor-composition/app-shared";
+} from "@example-rr-editor-composition/editor-composition";
 
 const { useState: useEditorState, useDispatch: useEditorDispatch } = createEditorHooks();
 

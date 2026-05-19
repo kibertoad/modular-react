@@ -33,7 +33,15 @@ Then open `http://localhost:5197`.
 ## Layout
 
 ```text
-app-shared/   — types + the composition definition
-modules/      — editor / contentful / strapi panel modules
-shell/        — registry, root route, CompositionOutlet wiring, e2e
+app-shared/         — contract panels consume (state types, branded ids, typed hooks)
+compositions/
+  editor/           — composition definition + typed handle (depends on app-shared)
+modules/            — editor / contentful / strapi panel modules (depend on app-shared)
+shell/              — registry, root route, CompositionOutlet wiring, e2e
 ```
+
+Mirrors how journey examples place each journey under `journeys/<journey-id>/`. Panel
+modules depend on `app-shared` only — never on `compositions/editor` — so the
+composition's runtime definition is not transitively pulled into a panel's bundle and
+the boundary "modules don't know which composition hosts them" is structural, not just
+a convention.

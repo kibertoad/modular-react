@@ -1,10 +1,6 @@
-import {
-  createCompositionContext,
-  defineComposition,
-  defineCompositionHandle,
-} from "@modular-react/compositions";
+import { defineComposition, defineCompositionHandle } from "@modular-react/compositions";
 import type { ModuleDescriptor } from "@modular-react/core";
-import type { EditorState } from "./app-types.js";
+import type { EditorState } from "./state.js";
 
 /**
  * Typed module map the composition references in its selectors. Modeled
@@ -12,6 +8,14 @@ import type { EditorState } from "./app-types.js";
  * `Record<string, ModuleDescriptor<…>>` shape that `ModuleTypeMap`
  * declares — an `interface` with concrete keys is missing the implicit
  * string index signature `Record` requires.
+ *
+ * Kept loose (`ModuleDescriptor<any, …>`) on purpose so the composition
+ * package does not import panel-module types — modules depend on this
+ * package for typed hooks; importing them back would create a cycle. For
+ * strong per-`(module, entry)` input type-checking, the composition can
+ * declare a concrete `import type` map (mirroring how journey definitions
+ * import each module). See the package README's "Composition zones vs
+ * `module.zones`" section for the trade-off.
  */
 type EditorModuleMap = {
   readonly editor: ModuleDescriptor<any, any, any, any>;
@@ -68,10 +72,3 @@ export const editorComposition = defineComposition<EditorModuleMap, EditorState>
 export const editorCompositionHandle = defineCompositionHandle<"editor", { documentId: string }>({
   id: "editor",
 });
-
-/**
- * Pre-typed hook bundle so foreign panel modules don't have to spell
- * `<EditorState>` at every call site. Export from this single place so
- * panels stay consistent across the codebase.
- */
-export const createEditorHooks = () => createCompositionContext<EditorState>();
