@@ -57,6 +57,18 @@ export {
   useJourneyState,
 } from "./use-journey-state.js";
 
+// Authoring helper for step components that wait on an async backend event
+// (websocket / SSE / push notification) before firing an exit. Encapsulates
+// the subscribe + poll + timeout + first-wins-latch pattern that loading
+// entries would otherwise hand-roll in `useEffect`.
+export { useWaitForExit } from "./use-wait-for-exit.js";
+export type {
+  WaitForExitChannels,
+  WaitForExitPollChannel,
+  WaitForExitSubscribeChannel,
+  WaitForExitTimeoutChannel,
+} from "./use-wait-for-exit.js";
+
 // Plugin — pass `journeysPlugin()` to `createRegistry({ plugins: [...] })`
 // to enable journey registration and outlet rendering.
 export { journeysPlugin } from "./plugin.js";
