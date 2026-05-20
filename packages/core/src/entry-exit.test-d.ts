@@ -154,3 +154,56 @@ test("buildInputFor's wrapper enforces the contextually-expected TInput when one
   }));
   void bad;
 });
+
+// -----------------------------------------------------------------------------
+// `defineEntry` — `buildInput` presence survives into the return type as a
+// REQUIRED member. That required member is what `StepSpec`'s
+// `EntryDeclaresBuildInput` check keys on to make a transition's `input`
+// optional for self-building entries. The buildInput-absent overloads return
+// the plain shape, where the base interface's `buildInput?:` stays optional.
+// -----------------------------------------------------------------------------
+
+// A maximally-permissive required `buildInput` member: any concrete
+// `(state: unknown) => TInput` is assignable to `(state: never) => unknown`.
+type DeclaresBuildInput = { readonly buildInput: (state: never) => unknown };
+
+test("defineEntry preserves `buildInput` as a required member when supplied", () => {
+  const entry = defineEntry({
+    component: Component,
+    input: schema<MyInput>(),
+    buildInput: (): MyInput => ({ id: "x" }),
+  });
+  expectTypeOf(entry).toMatchTypeOf<DeclaresBuildInput>();
+});
+
+test("defineEntry does NOT expose a required `buildInput` member when absent", () => {
+  const entry = defineEntry({ component: Component, input: schema<MyInput>() });
+  // Only the base interface's optional `buildInput?:` survives — an optional
+  // member does not match a required one.
+  expectTypeOf(entry).not.toMatchTypeOf<DeclaresBuildInput>();
+});
+
+test("defineEntry preserves `buildInput` and the literal `mountKinds` tuple together", () => {
+  const entry = defineEntry({
+    component: Component,
+    input: schema<MyInput>(),
+    mountKinds: ["journey"],
+    buildInput: (): MyInput => ({ id: "x" }),
+  });
+  expectTypeOf(entry).toMatchTypeOf<DeclaresBuildInput>();
+  // `toMatchTypeOf` (not `toEqualTypeOf`): the looked-up `mountKinds` is the
+  // intersection `(readonly MountKind[] | undefined) & readonly ["journey"]`,
+  // equivalent to but not identity-equal with the bare tuple. Matching the
+  // tuple still proves the `const` literal capture survived the buildInput
+  // overload split — a widened `readonly MountKind[]` would fail this.
+  expectTypeOf(entry.mountKinds).toMatchTypeOf<readonly ["journey"]>();
+});
+
+test("a `buildInputFor`-wrapped factory is still detected as a declared `buildInput`", () => {
+  const entry = defineEntry({
+    component: Component,
+    input: schema<MyInput>(),
+    buildInput: buildInputFor<ProjectState>()((state): MyInput => ({ id: state.draftName })),
+  });
+  expectTypeOf(entry).toMatchTypeOf<DeclaresBuildInput>();
+});

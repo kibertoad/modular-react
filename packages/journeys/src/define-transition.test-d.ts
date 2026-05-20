@@ -6,7 +6,7 @@
 // returned handler shape.
 
 import { expectTypeOf, test } from "vitest";
-import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
+import { buildInputFor, defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 
 import {
   type AnnotatedTransitionHandler,
@@ -338,4 +338,55 @@ test("both forms produce values assignable to AnnotatedTransitionHandler", () =>
       )[]
     >
   >();
+});
+
+// -----------------------------------------------------------------------------
+// `buildInput` entries — `next.input` is optional in the handler return, since
+// the runtime re-derives it from journey state and discards whatever a
+// transition stamps.
+// -----------------------------------------------------------------------------
+
+const welcome = defineModule({
+  id: "welcome",
+  version: "1.0.0",
+  exitPoints: { shown: defineExit() } as const,
+  entryPoints: {
+    greet: defineEntry({
+      component: (() => null) as never,
+      input: schema<{ readonly name: string }>(),
+      buildInput: buildInputFor<State>()((state) => ({ name: state.customerId })),
+    }),
+  },
+});
+
+type BuildInputModules = {
+  readonly welcome: typeof welcome;
+  readonly plan: typeof plan;
+};
+
+const biTransition = defineTransition<BuildInputModules, State>();
+
+test("curried form: `next.input` may be omitted for a buildInput entry", () => {
+  biTransition({
+    targets: [{ module: "welcome", entry: "greet" }],
+    handle: () => ({ next: { module: "welcome", entry: "greet" } }),
+  });
+});
+
+test("curried form: `next.input` is still required for a non-buildInput entry", () => {
+  biTransition({
+    targets: [{ module: "plan", entry: "choose" }],
+    // @ts-expect-error — plan.choose has no buildInput; `input` is required.
+    handle: () => ({ next: { module: "plan", entry: "choose" } }),
+  });
+});
+
+test("curried form: a stamped `next.input` is still shape-checked for a buildInput entry", () => {
+  biTransition({
+    targets: [{ module: "welcome", entry: "greet" }],
+    handle: () => ({
+      // @ts-expect-error — `wrong` is not the declared input shape `{ name: string }`.
+      next: { module: "welcome", entry: "greet", input: { wrong: 1 } },
+    }),
+  });
 });

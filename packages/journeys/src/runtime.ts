@@ -265,7 +265,11 @@ export function createJourneyRuntime(
     return reg;
   }
 
-  function stepFromSpec(spec: StepSpec<ModuleTypeMap>): JourneyStep {
+  // `StepSpec<any>` — the loose erased shape: `input` is optional, since a
+  // transition targeting a `buildInput` entry may omit it (the runtime
+  // re-derives it via `withBuiltInput`). `spec.input` is then `undefined`,
+  // which the step entry path already handles.
+  function stepFromSpec(spec: StepSpec<any>): JourneyStep {
     return { moduleId: spec.module, entry: spec.entry, input: spec.input };
   }
 
@@ -305,8 +309,9 @@ export function createJourneyRuntime(
    * Dev-mode warning fired only when the *handler's* original `input`
    * (literally `result.next.input` for the next arm, `def.start(...).input`
    * for the initial start) differs from what `buildInput` derived.
-   * Skipped when the handler stamped `undefined` (the documented "I'm
-   * letting buildInput handle it" placeholder). Not called from
+   * Skipped when the handler omitted `input` or stamped `undefined` (the
+   * documented "I'm letting buildInput handle it" placeholder — `StepSpec`
+   * makes `input` optional for `buildInput` entries). Not called from
    * `dispatchGoBack` / same-step rebuild — those have no handler-original
    * to compare against.
    */
@@ -319,7 +324,7 @@ export function createJourneyRuntime(
     if (handlerInput === undefined) return;
     if (shallowEqual(handlerInput, derivedInput)) return;
     console.warn(
-      `[@modular-react/journeys] Entry "${step.moduleId}.${step.entry}" declared \`buildInput\` but the transition handler also supplied a different \`input\`. The handler's value is discarded — stamp \`input: undefined\` (or drop the field once the type allows it) to mark the override explicit.`,
+      `[@modular-react/journeys] Entry "${step.moduleId}.${step.entry}" declared \`buildInput\` but the transition handler also supplied a different \`input\`. The handler's value is discarded — omit \`input\` (or stamp \`input: undefined\`) for \`buildInput\` entries to mark the override explicit.`,
     );
   }
 
