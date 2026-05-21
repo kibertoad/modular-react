@@ -207,3 +207,50 @@ test("a `buildInputFor`-wrapped factory is still detected as a declared `buildIn
   });
   expectTypeOf(entry).toMatchTypeOf<DeclaresBuildInput>();
 });
+
+// -----------------------------------------------------------------------------
+// `defineEntry` — catch-all overload. Every precise arm pins `buildInput` to a
+// required function or `?: undefined`; a pretyped entry (optional `buildInput`)
+// or a conditionally-typed `buildInput` (`fn | undefined`) matches neither.
+// The trailing eager/lazy catch-all keeps such callers compiling, returning the
+// plain shape with `buildInput` presence erased.
+// -----------------------------------------------------------------------------
+
+test("defineEntry accepts a pretyped eager entry (optional `buildInput`)", () => {
+  // Declared as `EagerModuleEntryPoint` → `buildInput` is the base interface's
+  // OPTIONAL member, assignable to neither the required-`buildInput` arm nor
+  // `buildInput?: undefined`. Without the catch-all this would not compile.
+  const pretyped: EagerModuleEntryPoint<MyInput> = {
+    component: Component,
+    input: schema<MyInput>(),
+  };
+  const entry = defineEntry(pretyped);
+  expectTypeOf(entry).toMatchTypeOf<EagerModuleEntryPoint<MyInput>>();
+  // Presence is erased on the catch-all path — no required `buildInput`.
+  expectTypeOf(entry).not.toMatchTypeOf<DeclaresBuildInput>();
+});
+
+test("defineEntry accepts a pretyped lazy entry (optional `buildInput`)", () => {
+  const pretyped: LazyModuleEntryPoint<MyInput> = {
+    lazy: () => Promise.resolve({ default: Component }),
+    input: schema<MyInput>(),
+  };
+  const entry = defineEntry(pretyped);
+  expectTypeOf(entry).toMatchTypeOf<LazyModuleEntryPoint<MyInput>>();
+  expectTypeOf(entry).not.toMatchTypeOf<EagerModuleEntryPoint<MyInput>>();
+});
+
+test("defineEntry accepts an entry whose `buildInput` is conditionally typed", () => {
+  // `((state: unknown) => MyInput) | undefined` — assignable to neither a
+  // required function nor `undefined`, so it lands on the catch-all.
+  const maybeBuild: ((state: unknown) => MyInput) | undefined =
+    Math.random() > 0.5 ? () => ({ id: "x" }) : undefined;
+  const entry = defineEntry({
+    component: Component,
+    input: schema<MyInput>(),
+    buildInput: maybeBuild,
+  });
+  expectTypeOf(entry).toMatchTypeOf<EagerModuleEntryPoint<MyInput>>();
+  // Conditional presence can't be statically proven → not required.
+  expectTypeOf(entry).not.toMatchTypeOf<DeclaresBuildInput>();
+});

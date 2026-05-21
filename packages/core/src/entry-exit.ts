@@ -59,8 +59,21 @@ type BuildInputFn<TInput> = (state: unknown) => TInput;
  * plain shape, keeping `input` required for ordinary entries.
  *
  * Eager/lazy × mountKinds(present/absent) × buildInput(present/absent) =
- * eight overloads; mountKinds-present pairs come first so `const`
+ * eight precise overloads; mountKinds-present pairs come first so `const`
  * capture still fires, present-before-absent within each pair.
+ *
+ * **Why a trailing eager/lazy catch-all pair**: every precise arm pins
+ * `buildInput` to either a required {@link BuildInputFn} or `?: undefined`.
+ * A caller whose entry is *pretyped* (declared as `EagerModuleEntryPoint`
+ * / `LazyModuleEntryPoint`, where `buildInput` is the base interface's
+ * optional member) or whose `buildInput` is conditionally typed
+ * (`((state: unknown) => TInput) | undefined`) is assignable to *neither*
+ * arm — so without a fallback those callers would be a hard compile
+ * error, a regression from the pre-`buildInput` single overload. The
+ * catch-all accepts the plain shape and returns it unchanged: `buildInput`
+ * presence is **erased**, so `StepSpec`'s `input` stays required for them
+ * (the safe default). Definite literals never reach the catch-all — they
+ * match a precise arm first and keep their `buildInput` presence.
  */
 // -- eager, mountKinds present --
 export function defineEntry<TInput, const TMountKinds extends readonly MountKind[]>(
@@ -119,6 +132,15 @@ export function defineEntry<TInput>(
     readonly mountKinds?: undefined;
     readonly buildInput?: undefined;
   },
+): LazyModuleEntryPoint<TInput>;
+// -- catch-all: pretyped entries / conditionally-typed `buildInput` --
+// Falls through here when `buildInput` is neither a definite function nor
+// definitely absent (see the JSDoc above). Returns the plain shape.
+export function defineEntry<TInput>(
+  entry: EagerModuleEntryPoint<TInput>,
+): EagerModuleEntryPoint<TInput>;
+export function defineEntry<TInput>(
+  entry: LazyModuleEntryPoint<TInput>,
 ): LazyModuleEntryPoint<TInput>;
 export function defineEntry<TInput>(entry: ModuleEntryPoint<TInput>): ModuleEntryPoint<TInput> {
   return entry;
