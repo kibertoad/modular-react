@@ -104,6 +104,20 @@ export type EntryInputOf<TMod, TEntry> = TMod extends { readonly entryPoints?: i
     : never
   : never;
 
+/**
+ * The entry-point *type* for a specific entry name on a module — mirrors
+ * {@link EntryInputOf}'s structure but yields the whole entry value type,
+ * not just its input. Lets callers inspect entry-level facts such as
+ * `buildInput` presence or `mountKinds` (see {@link StepInputSlot}).
+ */
+export type EntryAt<TMod, TEntry> = TMod extends { readonly entryPoints?: infer TEntries }
+  ? TEntries extends EntryPointMap
+    ? TEntry extends keyof TEntries
+      ? TEntries[TEntry]
+      : never
+    : never
+  : never;
+
 /** Output type for a specific exit name on a module. `void` when none. */
 export type ExitOutputOf<TMod, TExit> = TMod extends { readonly exitPoints?: infer TExits }
   ? TExits extends ExitPointMap
@@ -120,25 +134,78 @@ export type ExitOutputOf<TMod, TExit> = TMod extends { readonly exitPoints?: inf
 // -----------------------------------------------------------------------------
 
 /**
+ * Internal helper: detects `any` at the type level so {@link StepSpec} can
+ * fall back to a loose shape when no concrete `TModules` is supplied
+ * (the generic-erased `AnyJourneyDefinition` path). Without this gate the
+ * conditional inside {@link StepInputSlot} distributes over `any` to
+ * `boolean` and the mapped expansion collapses — the same TS quirk
+ * `@modular-react/compositions` guards in `CompositionZoneSpec`.
+ */
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
+/**
+ * Internal helper: `true` when an entry type declares a `buildInput`
+ * factory. Keys on a **required** `buildInput` member — `defineEntry`'s
+ * buildInput-present overloads stamp exactly that, while an entry without
+ * `buildInput` exposes only the base interface's *optional* `buildInput?:`,
+ * which does not extend a required member.
+ */
+type EntryDeclaresBuildInput<TEntry> = TEntry extends {
+  readonly buildInput: (state: never) => unknown;
+}
+  ? true
+  : false;
+
+/**
+ * The `input` slot of a {@link StepSpec} / {@link JourneyStepFor}-style
+ * step member for one `(module, entry)` pair.
+ *
+ * - Entry **without** `buildInput` → `input` is **required**: the runtime
+ *   uses whatever the transition stamps, so it must be supplied.
+ * - Entry **with** `buildInput` → `input` is **optional** (and accepts an
+ *   explicit `undefined`): the runtime ignores the stamped value and
+ *   re-derives the input from journey state on every step entry, so the
+ *   field is dead data. Authors may omit it. Stamping a real value still
+ *   type-checks (the runtime discards it and, in `debug` mode, warns once
+ *   on drift) — which keeps this a non-breaking widening.
+ *
+ * The explicit `| undefined` keeps `input: undefined` legal even under a
+ * consumer's `exactOptionalPropertyTypes`.
+ */
+export type StepInputSlot<TMod, E> =
+  EntryDeclaresBuildInput<EntryAt<TMod, E>> extends true
+    ? { readonly input?: EntryInputOf<TMod, E> | undefined }
+    : { readonly input: EntryInputOf<TMod, E> };
+
+/**
  * Discriminated union of every valid "next step" across the journey's
  * module map. Narrowing on `module` + `entry` picks the correct `input`
  * type; that's how `StepSpec` enforces input correctness per transition.
+ *
+ * `input` is **required** for ordinary entries and **optional** for
+ * entries that declare `buildInput` (the runtime re-derives those from
+ * state — see {@link StepInputSlot}).
  *
  * Entries whose {@link MountKindsOf} excludes `"journey"` (e.g. an entry
  * declared `mountKinds: ["composition"]`) are filtered out of this
  * union. A transition that returns a composition-only `(module, entry)`
  * is a compile error at the call site — the symmetric counterpart to
  * compositions' `CompositionZoneSpec` filter on `"composition"`.
+ *
+ * Falls back to a loose shape when `TModules` is `any` so generic-erased
+ * paths (`AnyJourneyDefinition`, the registry) keep type-checking.
  */
-export type StepSpec<TModules extends ModuleTypeMap> = {
-  [M in keyof TModules & string]: {
-    [E in EntryNamesByMountKindOf<TModules[M], "journey"> & string]: {
-      readonly module: M;
-      readonly entry: E;
-      readonly input: EntryInputOf<TModules[M], E>;
-    };
-  }[EntryNamesByMountKindOf<TModules[M], "journey"> & string];
-}[keyof TModules & string];
+export type StepSpec<TModules extends ModuleTypeMap> =
+  IsAny<TModules> extends true
+    ? { readonly module: string; readonly entry: string; readonly input?: unknown }
+    : {
+        [M in keyof TModules & string]: {
+          [E in EntryNamesByMountKindOf<TModules[M], "journey"> & string]: {
+            readonly module: M;
+            readonly entry: E;
+          } & StepInputSlot<TModules[M], E>;
+        }[EntryNamesByMountKindOf<TModules[M], "journey"> & string];
+      }[keyof TModules & string];
 
 /**
  * Snapshot of a single step in a journey's history / current position.

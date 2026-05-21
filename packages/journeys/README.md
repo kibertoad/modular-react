@@ -794,7 +794,7 @@ const nameModule = defineModule({
 });
 ```
 
-The transition handler still has to stamp some `input` value on `next` (the `StepSpec` shape requires it) — the runtime just ignores it whenever `buildInput` is declared and (in `debug` mode) warns once when the handler's value would have differed from `buildInput`'s output, so the divergence is observable. Treat the handler's `input` as a placeholder when you opt into `buildInput`.
+Because `buildInput` owns the input, `StepSpec` makes the transition's `input` field **optional** for an entry that declares it — omit it entirely. Stamping a value still type-checks (handy mid-migration), but the runtime ignores it whenever `buildInput` is declared and, in `debug` mode, warns once when the stamped value would have differed from `buildInput`'s output, so the divergence is observable. The optionality applies everywhere a step is produced: inline `{ next }` literals, `journey.start`, `defineTransition`, and `selectModule`.
 
 ```ts
 transitions: {
@@ -803,8 +803,9 @@ transitions: {
       allowBack: true,
       next: ({ state, output }) => ({
         state: { ...state, draftSourceLang: output.lang },
-        // `previousName` will be overwritten by `buildInput` at entry time.
-        next: { module: "name", entry: "edit", input: { previousName: "" } },
+        // `name.edit` declares `buildInput`, so `input` is optional here —
+        // omit it; the runtime derives `previousName` from state on entry.
+        next: { module: "name", entry: "edit" },
       }),
     },
   },

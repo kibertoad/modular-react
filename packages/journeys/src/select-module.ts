@@ -1,4 +1,4 @@
-import type { EntryInputOf, EntryNamesOf, ModuleTypeMap, StepSpec } from "@modular-react/core";
+import type { EntryNamesOf, ModuleTypeMap, StepInputSlot, StepSpec } from "@modular-react/core";
 
 /**
  * One case in a `selectModule` map: an entry name on module `M` plus the
@@ -7,10 +7,7 @@ import type { EntryInputOf, EntryNamesOf, ModuleTypeMap, StepSpec } from "@modul
  * union over the module's entries (the same shape `StepSpec` uses).
  */
 type StepCaseFor<TModules extends ModuleTypeMap, M extends keyof TModules & string> = {
-  [E in EntryNamesOf<TModules[M]> & string]: {
-    readonly entry: E;
-    readonly input: EntryInputOf<TModules[M], E>;
-  };
+  [E in EntryNamesOf<TModules[M]> & string]: { readonly entry: E } & StepInputSlot<TModules[M], E>;
 }[EntryNamesOf<TModules[M]> & string];
 
 /**
@@ -175,10 +172,14 @@ export const selectModuleOrDefault =
  * `{ module: key, entry: branch.entry, input: branch.input }` aligns with
  * the discriminated `StepSpec` union — but the cases-object constraint
  * (StepCaseFor<TModules, M>) guarantees the alignment per branch.
+ *
+ * `branch.input` is optional: a `buildInput` entry's case may omit it (the
+ * runtime re-derives it from state). `branch.input` is then `undefined`,
+ * which the step entry path already handles.
  */
 function moduleStep<TModules extends ModuleTypeMap>(
   key: string,
-  branch: { readonly entry: string; readonly input: unknown },
+  branch: { readonly entry: string; readonly input?: unknown },
 ): StepSpec<TModules> {
   return {
     module: key,

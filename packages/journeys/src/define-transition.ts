@@ -1,9 +1,9 @@
 import type {
-  EntryInputOf,
   EntryNamesOf,
   ExitCtx,
   InvokeSpec,
   ModuleTypeMap,
+  StepInputSlot,
   TransitionResult,
 } from "@modular-react/core";
 
@@ -69,11 +69,7 @@ type StepSpecFromRef<TModules extends ModuleTypeMap, TRef> = TRef extends {
 }
   ? M extends keyof TModules & string
     ? E extends EntryNamesOf<TModules[M]> & string
-      ? {
-          readonly module: M;
-          readonly entry: E;
-          readonly input: EntryInputOf<TModules[M], E>;
-        }
+      ? { readonly module: M; readonly entry: E } & StepInputSlot<TModules[M], E>
       : never
     : never
   : never;

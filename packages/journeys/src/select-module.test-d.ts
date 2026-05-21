@@ -7,7 +7,14 @@
 // directives plus `expectTypeOf` on the return shape.
 
 import { expectTypeOf, test } from "vitest";
-import { defineEntry, defineExit, defineModule, schema, type StepSpec } from "@modular-react/core";
+import {
+  buildInputFor,
+  defineEntry,
+  defineExit,
+  defineModule,
+  schema,
+  type StepSpec,
+} from "@modular-react/core";
 import { selectModule, selectModuleOrDefault } from "./select-module.js";
 
 // -----------------------------------------------------------------------------
@@ -177,4 +184,51 @@ test("selectModuleOrDefault returns a StepSpec narrowed to the journey's module 
     { module: "generic", entry: "configure", input: { workspaceId: "w", kind: "k" } },
   );
   expectTypeOf(result).toEqualTypeOf<StepSpec<Modules>>();
+});
+
+// -----------------------------------------------------------------------------
+// buildInput entries — a `selectModule` case may omit `input`, since the
+// runtime re-derives it from journey state.
+// -----------------------------------------------------------------------------
+
+const wizard = defineModule({
+  id: "wizard",
+  version: "1.0.0",
+  exitPoints: { saved: defineExit<{ ref: string }>() } as const,
+  entryPoints: {
+    step: defineEntry({
+      component: (() => null) as never,
+      input: schema<{ readonly seeded: string }>(),
+      buildInput: buildInputFor<{ readonly seed: string }>()((state) => ({
+        seeded: state.seed,
+      })),
+    }),
+  },
+});
+
+type WizardModules = { readonly github: typeof github; readonly wizard: typeof wizard };
+const selectWizard = selectModule<WizardModules>();
+declare const wizardKey: "github" | "wizard";
+
+test("selectModule case may omit `input` for a buildInput entry", () => {
+  selectWizard(wizardKey, {
+    github: { entry: "configure", input: { workspaceId: "w", repo: "r" } },
+    wizard: { entry: "step" },
+  });
+});
+
+test("selectModule case still requires `input` for a non-buildInput entry", () => {
+  selectWizard(wizardKey, {
+    // @ts-expect-error — github.configure has no buildInput; `input` is required.
+    github: { entry: "configure" },
+    wizard: { entry: "step" },
+  });
+});
+
+test("selectModule case still shape-checks a stamped `input` for a buildInput entry", () => {
+  selectWizard(wizardKey, {
+    github: { entry: "configure", input: { workspaceId: "w", repo: "r" } },
+    // @ts-expect-error — `wrong` is not wizard.step's input shape `{ seeded: string }`.
+    wizard: { entry: "step", input: { wrong: 1 } },
+  });
 });

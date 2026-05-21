@@ -100,6 +100,37 @@ const journey = defineJourney<Modules, FormState>()({
   },
 });
 
+// A second journey whose `start` and `next` transitions OMIT the `input`
+// field entirely — both `enter` entries declare `buildInput`, so `StepSpec`
+// makes `input` optional. This fixture is simultaneously a runtime test and
+// a type test: it would not compile if `StepSpec` still required `input`.
+const journeyNoInput = defineJourney<Modules, FormState>()({
+  id: "form-no-input",
+  version: "1.0.0",
+  initialState: () => ({ draftName: "", draftEmail: "" }),
+  start: () => ({ module: "name", entry: "enter" }),
+  transitions: {
+    name: {
+      enter: {
+        allowBack: true,
+        next: ({ state, output }) => ({
+          state: { ...state, draftName: output.name ?? state.draftName },
+          next: { module: "email", entry: "enter" },
+        }),
+      },
+    },
+    email: {
+      enter: {
+        allowBack: true,
+        next: ({ state, output }) => ({
+          state: { ...state, draftEmail: output.email ?? state.draftEmail },
+          complete: undefined,
+        }),
+      },
+    },
+  },
+});
+
 describe("defineEntry({ buildInput })", () => {
   it("derives the initial step's input from journey state instead of the handler-supplied value", () => {
     const sim = simulateJourney(journey, undefined, {
@@ -112,6 +143,27 @@ describe("defineEntry({ buildInput })", () => {
       entry: "enter",
       input: { previousName: "" },
     });
+  });
+
+  it("derives input when start and transitions omit the `input` field entirely", () => {
+    const sim = simulateJourney(journeyNoInput, undefined, {
+      modules: { name: nameModule, email: emailModule },
+    });
+    // `start` omitted `input` — buildInput derived it from the empty initial state.
+    expect(sim.currentStep).toEqual({
+      moduleId: "name",
+      entry: "enter",
+      input: { previousName: "" },
+    });
+
+    // The `next` transition also omitted `input`; buildInput derives it.
+    sim.fireExit("next", { name: "Ada" });
+    expect(sim.currentStep.moduleId).toBe("email");
+    expect(sim.currentStep.input).toEqual({ previousEmail: "" });
+
+    // Back-nav re-runs buildInput against the accumulated state.
+    sim.goBack();
+    expect(sim.currentStep.input).toEqual({ previousName: "Ada" });
   });
 
   it("rebuilds input from state when navigating back", () => {

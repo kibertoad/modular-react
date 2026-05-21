@@ -21,13 +21,23 @@ import type {
 export const schema = <T>(): InputSchema<T> => ({}) as InputSchema<T>;
 
 /**
+ * The factory shape an entry's `buildInput` must have — `state` is typed
+ * `unknown` at the module surface (modules don't know their host journey;
+ * see {@link buildInputFor}). Aliased so the `defineEntry` overloads can
+ * both *require* it (buildInput-present) and re-state it on the return
+ * type as a non-optional member.
+ */
+type BuildInputFn<TInput> = (state: unknown) => TInput;
+
+/**
  * Identity helper used to preserve inference of `TInput` on a single
  * {@link ModuleEntryPoint}. The descriptor types only flow through correctly
  * when the entry is a typed const value. Overloaded so eager and lazy entries
- * keep their narrow union member through the call, AND so the literal
- * `mountKinds` tuple is captured when the caller supplies it.
+ * keep their narrow union member through the call, the literal `mountKinds`
+ * tuple is captured when the caller supplies it, AND the *presence* of
+ * `buildInput` survives into the return type.
  *
- * Why two overloads per shape (with / without `mountKinds`):
+ * **Why two overloads per shape for `mountKinds`** (with / without):
  * a `const TMountKinds` generic only captures literally when the
  * corresponding field is non-optional. Splitting into a "mountKinds is
  * required here" overload and a "mountKinds is absent here" overload
@@ -36,18 +46,101 @@ export const schema = <T>(): InputSchema<T> => ({}) as InputSchema<T>;
  * `mountKinds?: TMountKinds` widens TMountKinds to the constraint
  * (`readonly MountKind[]`) regardless of the argument, defeating the
  * compile-time per-host filtering downstream consumers rely on.
+ *
+ * **Why two overloads per shape for `buildInput`** (present / absent):
+ * `buildInput` is declared optional on {@link ModuleEntryPointBase}, so a
+ * plain return type of `EagerModuleEntryPoint<TInput>` *erases* whether the
+ * caller actually supplied it — an optional member is structurally
+ * indistinguishable from an absent one. The buildInput-present overloads
+ * re-state `buildInput` as a **required** member on the return type; that
+ * required member is what `StepSpec`'s `EntryDeclaresBuildInput` check keys
+ * on to make a transition's `input` optional for self-building entries.
+ * The buildInput-absent overloads (`buildInput?: undefined`) return the
+ * plain shape, keeping `input` required for ordinary entries.
+ *
+ * Eager/lazy × mountKinds(present/absent) × buildInput(present/absent) =
+ * eight precise overloads; mountKinds-present pairs come first so `const`
+ * capture still fires, present-before-absent within each pair.
+ *
+ * **Why a trailing eager/lazy catch-all pair**: every precise arm pins
+ * `buildInput` to either a required {@link BuildInputFn} or `?: undefined`.
+ * A caller whose entry is *pretyped* (declared as `EagerModuleEntryPoint`
+ * / `LazyModuleEntryPoint`, where `buildInput` is the base interface's
+ * optional member) or whose `buildInput` is conditionally typed
+ * (`((state: unknown) => TInput) | undefined`) is assignable to *neither*
+ * arm — so without a fallback those callers would be a hard compile
+ * error, a regression from the pre-`buildInput` single overload. The
+ * catch-all accepts the plain shape and returns it unchanged: `buildInput`
+ * presence is **erased**, so `StepSpec`'s `input` stays required for them
+ * (the safe default). Definite literals never reach the catch-all — they
+ * match a precise arm first and keep their `buildInput` presence.
  */
+// -- eager, mountKinds present --
 export function defineEntry<TInput, const TMountKinds extends readonly MountKind[]>(
-  entry: EagerModuleEntryPoint<TInput> & { readonly mountKinds: TMountKinds },
+  entry: EagerModuleEntryPoint<TInput> & {
+    readonly mountKinds: TMountKinds;
+    readonly buildInput: BuildInputFn<TInput>;
+  },
+): EagerModuleEntryPoint<TInput> & {
+  readonly mountKinds: TMountKinds;
+  readonly buildInput: BuildInputFn<TInput>;
+};
+export function defineEntry<TInput, const TMountKinds extends readonly MountKind[]>(
+  entry: EagerModuleEntryPoint<TInput> & {
+    readonly mountKinds: TMountKinds;
+    readonly buildInput?: undefined;
+  },
 ): EagerModuleEntryPoint<TInput> & { readonly mountKinds: TMountKinds };
+// -- lazy, mountKinds present --
 export function defineEntry<TInput, const TMountKinds extends readonly MountKind[]>(
-  entry: LazyModuleEntryPoint<TInput> & { readonly mountKinds: TMountKinds },
+  entry: LazyModuleEntryPoint<TInput> & {
+    readonly mountKinds: TMountKinds;
+    readonly buildInput: BuildInputFn<TInput>;
+  },
+): LazyModuleEntryPoint<TInput> & {
+  readonly mountKinds: TMountKinds;
+  readonly buildInput: BuildInputFn<TInput>;
+};
+export function defineEntry<TInput, const TMountKinds extends readonly MountKind[]>(
+  entry: LazyModuleEntryPoint<TInput> & {
+    readonly mountKinds: TMountKinds;
+    readonly buildInput?: undefined;
+  },
 ): LazyModuleEntryPoint<TInput> & { readonly mountKinds: TMountKinds };
+// -- eager, mountKinds absent --
 export function defineEntry<TInput>(
-  entry: EagerModuleEntryPoint<TInput> & { readonly mountKinds?: undefined },
+  entry: EagerModuleEntryPoint<TInput> & {
+    readonly mountKinds?: undefined;
+    readonly buildInput: BuildInputFn<TInput>;
+  },
+): EagerModuleEntryPoint<TInput> & { readonly buildInput: BuildInputFn<TInput> };
+export function defineEntry<TInput>(
+  entry: EagerModuleEntryPoint<TInput> & {
+    readonly mountKinds?: undefined;
+    readonly buildInput?: undefined;
+  },
+): EagerModuleEntryPoint<TInput>;
+// -- lazy, mountKinds absent --
+export function defineEntry<TInput>(
+  entry: LazyModuleEntryPoint<TInput> & {
+    readonly mountKinds?: undefined;
+    readonly buildInput: BuildInputFn<TInput>;
+  },
+): LazyModuleEntryPoint<TInput> & { readonly buildInput: BuildInputFn<TInput> };
+export function defineEntry<TInput>(
+  entry: LazyModuleEntryPoint<TInput> & {
+    readonly mountKinds?: undefined;
+    readonly buildInput?: undefined;
+  },
+): LazyModuleEntryPoint<TInput>;
+// -- catch-all: pretyped entries / conditionally-typed `buildInput` --
+// Falls through here when `buildInput` is neither a definite function nor
+// definitely absent (see the JSDoc above). Returns the plain shape.
+export function defineEntry<TInput>(
+  entry: EagerModuleEntryPoint<TInput>,
 ): EagerModuleEntryPoint<TInput>;
 export function defineEntry<TInput>(
-  entry: LazyModuleEntryPoint<TInput> & { readonly mountKinds?: undefined },
+  entry: LazyModuleEntryPoint<TInput>,
 ): LazyModuleEntryPoint<TInput>;
 export function defineEntry<TInput>(entry: ModuleEntryPoint<TInput>): ModuleEntryPoint<TInput> {
   return entry;

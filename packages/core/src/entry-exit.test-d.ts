@@ -154,3 +154,103 @@ test("buildInputFor's wrapper enforces the contextually-expected TInput when one
   }));
   void bad;
 });
+
+// -----------------------------------------------------------------------------
+// `defineEntry` — `buildInput` presence survives into the return type as a
+// REQUIRED member. That required member is what `StepSpec`'s
+// `EntryDeclaresBuildInput` check keys on to make a transition's `input`
+// optional for self-building entries. The buildInput-absent overloads return
+// the plain shape, where the base interface's `buildInput?:` stays optional.
+// -----------------------------------------------------------------------------
+
+// A maximally-permissive required `buildInput` member: any concrete
+// `(state: unknown) => TInput` is assignable to `(state: never) => unknown`.
+type DeclaresBuildInput = { readonly buildInput: (state: never) => unknown };
+
+test("defineEntry preserves `buildInput` as a required member when supplied", () => {
+  const entry = defineEntry({
+    component: Component,
+    input: schema<MyInput>(),
+    buildInput: (): MyInput => ({ id: "x" }),
+  });
+  expectTypeOf(entry).toMatchTypeOf<DeclaresBuildInput>();
+});
+
+test("defineEntry does NOT expose a required `buildInput` member when absent", () => {
+  const entry = defineEntry({ component: Component, input: schema<MyInput>() });
+  // Only the base interface's optional `buildInput?:` survives — an optional
+  // member does not match a required one.
+  expectTypeOf(entry).not.toMatchTypeOf<DeclaresBuildInput>();
+});
+
+test("defineEntry preserves `buildInput` and the literal `mountKinds` tuple together", () => {
+  const entry = defineEntry({
+    component: Component,
+    input: schema<MyInput>(),
+    mountKinds: ["journey"],
+    buildInput: (): MyInput => ({ id: "x" }),
+  });
+  expectTypeOf(entry).toMatchTypeOf<DeclaresBuildInput>();
+  // `toMatchTypeOf` (not `toEqualTypeOf`): the looked-up `mountKinds` is the
+  // intersection `(readonly MountKind[] | undefined) & readonly ["journey"]`,
+  // equivalent to but not identity-equal with the bare tuple. Matching the
+  // tuple still proves the `const` literal capture survived the buildInput
+  // overload split — a widened `readonly MountKind[]` would fail this.
+  expectTypeOf(entry.mountKinds).toMatchTypeOf<readonly ["journey"]>();
+});
+
+test("a `buildInputFor`-wrapped factory is still detected as a declared `buildInput`", () => {
+  const entry = defineEntry({
+    component: Component,
+    input: schema<MyInput>(),
+    buildInput: buildInputFor<ProjectState>()((state): MyInput => ({ id: state.draftName })),
+  });
+  expectTypeOf(entry).toMatchTypeOf<DeclaresBuildInput>();
+});
+
+// -----------------------------------------------------------------------------
+// `defineEntry` — catch-all overload. Every precise arm pins `buildInput` to a
+// required function or `?: undefined`; a pretyped entry (optional `buildInput`)
+// or a conditionally-typed `buildInput` (`fn | undefined`) matches neither.
+// The trailing eager/lazy catch-all keeps such callers compiling, returning the
+// plain shape with `buildInput` presence erased.
+// -----------------------------------------------------------------------------
+
+test("defineEntry accepts a pretyped eager entry (optional `buildInput`)", () => {
+  // Declared as `EagerModuleEntryPoint` → `buildInput` is the base interface's
+  // OPTIONAL member, assignable to neither the required-`buildInput` arm nor
+  // `buildInput?: undefined`. Without the catch-all this would not compile.
+  const pretyped: EagerModuleEntryPoint<MyInput> = {
+    component: Component,
+    input: schema<MyInput>(),
+  };
+  const entry = defineEntry(pretyped);
+  expectTypeOf(entry).toMatchTypeOf<EagerModuleEntryPoint<MyInput>>();
+  // Presence is erased on the catch-all path — no required `buildInput`.
+  expectTypeOf(entry).not.toMatchTypeOf<DeclaresBuildInput>();
+});
+
+test("defineEntry accepts a pretyped lazy entry (optional `buildInput`)", () => {
+  const pretyped: LazyModuleEntryPoint<MyInput> = {
+    lazy: () => Promise.resolve({ default: Component }),
+    input: schema<MyInput>(),
+  };
+  const entry = defineEntry(pretyped);
+  expectTypeOf(entry).toMatchTypeOf<LazyModuleEntryPoint<MyInput>>();
+  expectTypeOf(entry).not.toMatchTypeOf<EagerModuleEntryPoint<MyInput>>();
+});
+
+test("defineEntry accepts an entry whose `buildInput` is conditionally typed", () => {
+  // `((state: unknown) => MyInput) | undefined` — assignable to neither a
+  // required function nor `undefined`, so it lands on the catch-all.
+  const maybeBuild: ((state: unknown) => MyInput) | undefined =
+    Math.random() > 0.5 ? () => ({ id: "x" }) : undefined;
+  const entry = defineEntry({
+    component: Component,
+    input: schema<MyInput>(),
+    buildInput: maybeBuild,
+  });
+  expectTypeOf(entry).toMatchTypeOf<EagerModuleEntryPoint<MyInput>>();
+  // Conditional presence can't be statically proven → not required.
+  expectTypeOf(entry).not.toMatchTypeOf<DeclaresBuildInput>();
+});
