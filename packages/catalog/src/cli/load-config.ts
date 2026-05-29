@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "pathe";
-import { createServer } from "vite";
 import type { CatalogConfig } from "../config/types.js";
+import { createCatalogSsrServer } from "../harvester/ssr-server.js";
 
 const DEFAULT_CONFIG_NAMES = [
   "catalog.config.ts",
@@ -12,9 +12,10 @@ const DEFAULT_CONFIG_NAMES = [
 
 /**
  * Locate and load a `catalog.config.{ts,js,mts,mjs}` file from the given cwd.
- * Reuses Vite SSR for TS support, then closes the server immediately —
- * config loading is a one-shot operation, distinct from the long-lived
- * harvester server.
+ * Reuses Vite SSR for TS support (via the shared catalog SSR server, so its
+ * optimizer is disabled the same way the harvester's is), then closes the
+ * server immediately — config loading is a one-shot operation, distinct from
+ * the long-lived harvester server.
  *
  * `explicitPath` overrides the autodiscovery and is interpreted relative
  * to `cwd`. Throws when no config can be found, so callers can surface a
@@ -37,14 +38,9 @@ export async function loadCatalogConfig(
     throw new Error(`Catalog config not found at ${configPath}.`);
   }
 
-  const server = await createServer({
-    root: cwd,
-    server: { middlewareMode: true, hmr: false },
-    appType: "custom",
-    logLevel: "error",
-    configFile: false,
-    plugins: [],
-  });
+  // No resolve config here — it lives inside the config we're about to load,
+  // and the config file itself only needs to import `@modular-react/catalog`.
+  const server = await createCatalogSsrServer(cwd);
   try {
     const mod = (await server.ssrLoadModule(configPath)) as {
       default?: CatalogConfig;
