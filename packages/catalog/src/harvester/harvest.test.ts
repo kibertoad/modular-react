@@ -140,6 +140,52 @@ describe("harvest", () => {
     expect(entries[0]!.meta.ownerTeam).toBe("enriched-owner");
   });
 
+  it("resolves imports through a configured path alias (object form, relative replacement)", async () => {
+    const { entries, errors } = await harvest(
+      {
+        roots: [{ name: "aliased", pattern: "aliased/modules/*.ts", resolver: "defaultExport" }],
+        // Relative replacement is anchored to the config dir (FIXTURES).
+        resolve: { alias: { "@shared": "./aliased/shared" } },
+      },
+      FIXTURES,
+    );
+
+    expect(errors).toEqual([]);
+    const aliased = entries.find((e) => e.id === "aliased");
+    expect(aliased).toBeDefined();
+    // ownerTeam comes from the value imported through `@shared`, proving the
+    // alias resolved at load time rather than being type-erased.
+    expect(aliased!.meta.ownerTeam).toBe("platform-team");
+  });
+
+  it("accepts the array form with a RegExp find and an absolute replacement", async () => {
+    const { entries, errors } = await harvest(
+      {
+        roots: [{ name: "aliased", pattern: "aliased/modules/*.ts", resolver: "defaultExport" }],
+        resolve: {
+          alias: [{ find: /^@shared\//, replacement: `${resolve(FIXTURES, "aliased/shared")}/` }],
+        },
+      },
+      FIXTURES,
+    );
+
+    expect(errors).toEqual([]);
+    expect(entries.map((e) => e.id)).toEqual(["aliased"]);
+  });
+
+  it("reports an aliased import as a non-fatal load error when no alias is configured", async () => {
+    const { entries, errors } = await harvest(
+      {
+        roots: [{ name: "aliased", pattern: "aliased/modules/*.ts", resolver: "defaultExport" }],
+      },
+      FIXTURES,
+    );
+
+    expect(entries).toEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.message).toContain("@shared/meta");
+  });
+
   it("collects load errors without aborting the whole scan", async () => {
     const { errors, entries } = await harvest(
       {

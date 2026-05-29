@@ -6,6 +6,8 @@ export type {
   CatalogConfig,
   CatalogRoot,
   ResolverStyle,
+  CatalogResolve,
+  CatalogAlias,
   CatalogTheme,
   CatalogEnrichHook,
   CatalogEntry,

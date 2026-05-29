@@ -53,6 +53,47 @@ export interface CatalogRoot {
 }
 
 /**
+ * A single path-alias entry, mirroring one element of Vite's array-form
+ * `resolve.alias`. `find` is matched against import specifiers (string =
+ * prefix match, `RegExp` = pattern match); `replacement` is substituted in.
+ */
+export interface CatalogAlias {
+  /** Specifier (or pattern) to rewrite. */
+  readonly find: string | RegExp;
+  /** Value to rewrite it to. A relative path (starting with `.`) resolves against the config directory. */
+  readonly replacement: string;
+}
+
+/**
+ * Module-resolution overrides forwarded to the harvester's Vite SSR loader.
+ *
+ * The harvester loads source files with `configFile: false`, so it never sees
+ * your project's own `vite.config`. Codebases that resolve imports through
+ * path aliases (e.g. `@app/ui` → `packages/ui/src`) must mirror those aliases
+ * here, or the files that use them fail to load. A focused subset of Vite's
+ * `resolve` options — enough for the common alias / dedupe cases without
+ * coupling the public config to Vite's full surface.
+ */
+export interface CatalogResolve {
+  /**
+   * Path aliases applied when loading source files. Accepts either the object
+   * form (`{ "@app/ui": "./packages/ui/src" }`) or the array form
+   * (`[{ find: /^@app\//, replacement: "/abs/path/" }]`), matching Vite's
+   * `resolve.alias`. String replacements that start with `.` are resolved
+   * against the config directory; absolute paths and bare specifiers (e.g.
+   * `react` → `preact/compat`) are passed through unchanged.
+   */
+  readonly alias?: Readonly<Record<string, string>> | readonly CatalogAlias[];
+
+  /**
+   * Package names to force-resolve to a single copy, mirroring Vite's
+   * `resolve.dedupe`. Useful when loading component files pulls in two copies
+   * of a singleton like `react`.
+   */
+  readonly dedupe?: readonly string[];
+}
+
+/**
  * Theme tokens consumed by the prebuilt SPA at build time. The CLI emits a
  * tiny `theme.json` next to `catalog.json`, plus a CSS file injecting the
  * matching custom properties. Apps that need anything beyond these tokens
@@ -142,6 +183,12 @@ export interface CatalogConfig {
 
   /** Scan roots. The harvester runs each root in declaration order. */
   readonly roots: readonly CatalogRoot[];
+
+  /**
+   * Module-resolution overrides for the harvester's Vite SSR loader. Mirror
+   * your project's path aliases here so files that import through them load.
+   */
+  readonly resolve?: CatalogResolve;
 
   /** Theme tokens injected as CSS custom properties at build time. */
   readonly theme?: CatalogTheme;

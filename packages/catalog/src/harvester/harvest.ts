@@ -1,7 +1,12 @@
-import { resolve } from "pathe";
+import { isAbsolute, resolve } from "pathe";
 import { glob } from "tinyglobby";
-import { createServer, type ViteDevServer } from "vite";
-import type { CatalogConfig, CatalogEntry, CatalogJourneyEntry } from "../config/types.js";
+import { createServer, type Alias, type InlineConfig, type ViteDevServer } from "vite";
+import type {
+  CatalogConfig,
+  CatalogEntry,
+  CatalogJourneyEntry,
+  CatalogResolve,
+} from "../config/types.js";
 import { extractTransitionDestinations } from "./ast-destinations.js";
 import { isJourneyDefinition, isModuleDescriptor } from "./detect.js";
 import { extractJourneyEntry, extractModuleEntry } from "./extract.js";
@@ -31,7 +36,7 @@ export interface HarvestResult {
  * patterns). Roots may override this per-root via `root.cwd`.
  */
 export async function harvest(config: CatalogConfig, cwd: string): Promise<HarvestResult> {
-  const server = await createSsrServer(cwd);
+  const server = await createSsrServer(cwd, config.resolve);
   const entries: CatalogEntry[] = [];
   const errors: HarvestError[] = [];
 
@@ -109,16 +114,69 @@ export async function harvest(config: CatalogConfig, cwd: string): Promise<Harve
   return { entries, errors };
 }
 
-async function createSsrServer(cwd: string): Promise<ViteDevServer> {
+async function createSsrServer(
+  cwd: string,
+  resolveConfig?: CatalogResolve,
+): Promise<ViteDevServer> {
   return createServer({
     root: cwd,
     server: { middlewareMode: true, hmr: false },
     appType: "custom",
     logLevel: "error",
-    optimizeDeps: { noDiscovery: true },
-    // The harvester only ever calls ssrLoadModule, so configFile / plugins
-    // from the user's project would be irrelevant noise. Disable both.
+    // The harvester only ever calls ssrLoadModule, so it never needs the
+    // dependency optimizer. `noDiscovery` disables on-the-fly discovery and
+    // an empty `entries` list stops the initial scan from crawling the
+    // project for HTML entry points (which otherwise surfaces noisy, harmless
+    // "server is being restarted or closed" errors when the server closes).
+    optimizeDeps: { noDiscovery: true, entries: [] },
+    // The user's own configFile / plugins are irrelevant to ssrLoadModule and
+    // only add noise, so they stay disabled. Resolution is the exception:
+    // projects that use path aliases must be able to mirror them here, since
+    // otherwise the harvester can't load any file that imports through one.
     configFile: false,
     plugins: [],
+    ...buildResolve(cwd, resolveConfig),
   });
+}
+
+/**
+ * Translate the catalog's `resolve` config into the `resolve` slice of a Vite
+ * inline config. Alias replacements that are relative paths are resolved
+ * against the config directory so authors can write `./packages/ui/src`
+ * instead of an absolute path. Returns an empty object when nothing is
+ * configured, so spreading it into the inline config is a no-op.
+ */
+function buildResolve(cwd: string, resolveConfig?: CatalogResolve): Pick<InlineConfig, "resolve"> {
+  if (!resolveConfig) return {};
+
+  const resolveOptions: NonNullable<InlineConfig["resolve"]> = {};
+
+  if (resolveConfig.alias) {
+    resolveOptions.alias = normalizeAlias(cwd, resolveConfig.alias);
+  }
+  if (resolveConfig.dedupe) {
+    resolveOptions.dedupe = [...resolveConfig.dedupe];
+  }
+
+  return { resolve: resolveOptions };
+}
+
+/**
+ * Normalize the object- or array-form alias map into Vite's array form,
+ * resolving relative-path replacements against the config directory.
+ */
+function normalizeAlias(cwd: string, alias: NonNullable<CatalogResolve["alias"]>): Alias[] {
+  const entries: ReadonlyArray<readonly [string | RegExp, string]> = Array.isArray(alias)
+    ? alias.map((a) => [a.find, a.replacement] as const)
+    : Object.entries(alias);
+
+  return entries.map(([find, replacement]) => ({
+    find,
+    // Bare specifiers (e.g. `react` → `preact/compat`) and already-absolute
+    // paths pass through; only relative paths get anchored to the config dir.
+    replacement:
+      replacement.startsWith(".") && !isAbsolute(replacement)
+        ? resolve(cwd, replacement)
+        : replacement,
+  }));
 }
