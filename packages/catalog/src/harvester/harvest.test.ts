@@ -1,7 +1,7 @@
 import { resolve } from "pathe";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { harvest } from "./harvest.js";
+import { buildResolve, harvest } from "./harvest.js";
 
 const FIXTURES = resolve(fileURLToPath(import.meta.url), "..", "..", "..", "test", "fixtures");
 
@@ -200,5 +200,49 @@ describe("harvest", () => {
     expect(errors[0]!.filePath).toContain("broken.ts");
     expect(errors[0]!.message).toContain("broken fixture load failure");
     expect(entries.length).toBe(1);
+  });
+});
+
+describe("buildResolve", () => {
+  const CWD = "/project";
+
+  it("returns an empty object when no resolve config is given", () => {
+    expect(buildResolve(CWD)).toEqual({});
+  });
+
+  it("forwards dedupe verbatim into the resolve slice", () => {
+    expect(buildResolve(CWD, { dedupe: ["react", "react-dom"] })).toEqual({
+      resolve: { dedupe: ["react", "react-dom"] },
+    });
+  });
+
+  it("anchors `.`-prefixed alias replacements to the config dir and passes others through", () => {
+    const result = buildResolve(CWD, {
+      alias: {
+        "@ui": "./packages/ui/src", // relative → anchored
+        react: "preact/compat", // bare specifier → unchanged
+        "@abs": "/already/absolute", // absolute → unchanged
+      },
+    });
+
+    expect(result).toEqual({
+      resolve: {
+        alias: [
+          { find: "@ui", replacement: resolve(CWD, "./packages/ui/src") },
+          { find: "react", replacement: "preact/compat" },
+          { find: "@abs", replacement: "/already/absolute" },
+        ],
+      },
+    });
+  });
+
+  it("preserves a RegExp find from the array form", () => {
+    const result = buildResolve(CWD, {
+      alias: [{ find: /^@app\//, replacement: "/abs/src/" }],
+    });
+
+    expect(result).toEqual({
+      resolve: { alias: [{ find: /^@app\//, replacement: "/abs/src/" }] },
+    });
   });
 });

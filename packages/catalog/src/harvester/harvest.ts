@@ -1,4 +1,4 @@
-import { isAbsolute, resolve } from "pathe";
+import { resolve } from "pathe";
 import { glob } from "tinyglobby";
 import { createServer, type Alias, type InlineConfig, type ViteDevServer } from "vite";
 import type {
@@ -145,8 +145,14 @@ async function createSsrServer(
  * against the config directory so authors can write `./packages/ui/src`
  * instead of an absolute path. Returns an empty object when nothing is
  * configured, so spreading it into the inline config is a no-op.
+ *
+ * Exported for unit testing — the alias normalization and dedupe forwarding
+ * are easier to assert here than through a live Vite SSR load.
  */
-function buildResolve(cwd: string, resolveConfig?: CatalogResolve): Pick<InlineConfig, "resolve"> {
+export function buildResolve(
+  cwd: string,
+  resolveConfig?: CatalogResolve,
+): Pick<InlineConfig, "resolve"> {
   if (!resolveConfig) return {};
 
   const resolveOptions: NonNullable<InlineConfig["resolve"]> = {};
@@ -172,11 +178,9 @@ function normalizeAlias(cwd: string, alias: NonNullable<CatalogResolve["alias"]>
 
   return entries.map(([find, replacement]) => ({
     find,
-    // Bare specifiers (e.g. `react` → `preact/compat`) and already-absolute
-    // paths pass through; only relative paths get anchored to the config dir.
-    replacement:
-      replacement.startsWith(".") && !isAbsolute(replacement)
-        ? resolve(cwd, replacement)
-        : replacement,
+    // Only `.`-prefixed paths are anchored to the config dir. Bare specifiers
+    // (e.g. `react` → `preact/compat`) and absolute paths pass through — and a
+    // `.`-prefixed string can never be absolute, so no extra guard is needed.
+    replacement: replacement.startsWith(".") ? resolve(cwd, replacement) : replacement,
   }));
 }
