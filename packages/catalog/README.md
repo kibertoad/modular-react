@@ -190,6 +190,51 @@ roots: [
 
 `depth` caps how deep `pattern` is allowed to recurse — useful for keeping scans bounded in deep monorepos.
 
+## Resolving project imports (path aliases)
+
+The harvester loads each source file through a Vite SSR server it creates with
+`configFile: false` — it deliberately ignores your project's own `vite.config`
+so unrelated plugins and dev-server settings don't leak into the scan. The
+trade-off: if your modules import through **path aliases** (e.g. `@app/ui`,
+`@shared/*`), the harvester doesn't know about them and those files fail to
+load. The failures are non-fatal `HarvestError`s, so the build still completes —
+but the affected descriptors are missing from the catalog.
+
+Mirror your aliases under `resolve.alias` to fix this:
+
+```ts
+export default defineCatalogConfig({
+  roots: [{ name: "modules", pattern: "packages/modules/*/src/index.ts" }],
+  resolve: {
+    // Object form — keys are matched as a prefix, just like Vite. Relative
+    // replacements (starting with `.`) are resolved against this config's
+    // directory; absolute paths and bare specifiers pass through unchanged.
+    alias: {
+      "@ui": "./packages/ui/src",
+      "@shared": "./packages/shared/src",
+    },
+    // Force a single copy of singletons that get pulled in when component
+    // files load under SSR (mirrors Vite's `resolve.dedupe`).
+    dedupe: ["react", "react-dom"],
+  },
+});
+```
+
+The array form is also accepted for pattern matching:
+
+```ts
+resolve: {
+  alias: [
+    { find: /^@app\//, replacement: new URL("./src/", import.meta.url).pathname },
+  ],
+}
+```
+
+Only `alias` and `dedupe` are forwarded; both are global Vite `resolve` options,
+so they apply to the SSR load the harvester performs. If a file still fails to
+load, check the reported `HarvestError` — the message includes the unresolved
+specifier.
+
 ## Enrich hook
 
 Inject org-specific metadata that the descriptor authors didn't (or couldn't) write themselves:
