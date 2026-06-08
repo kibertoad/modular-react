@@ -1979,6 +1979,22 @@ onHydrate: (blob) => {
 
 If migration would be destructive or the blob is no longer trusted, let `onHydrate` throw - the runtime discards the blob via `persistence.remove(key)` and mints a fresh instance under the same key. That's usually preferable to resuming into a malformed state.
 
+### Stale steps (renamed or removed modules)
+
+Versioning guards the _shape_ of a blob, but a blob can go stale in a subtler way: its saved **active step** can name a `(moduleId, entry)` that no longer exists - the module was renamed or removed, or the flow was relocated to a different module - while the blob's `version` still matches. Hydrating that step as-is would only render the outlet's "no entry on the registered modules" notice, with no path forward.
+
+The runtime reconciles the (post-`onHydrate`) blob's active step against the registered modules and treats an unresolvable step exactly like a version mismatch:
+
+- **`runtime.start()`** discards the blob via `persistence.remove(key)` and mints a fresh instance under the same key. This is the default - no `onHydrate` required. With `debug: true` the runtime logs a one-line warning naming the unresolved step so a clean restart doesn't read as silent data loss.
+- **`runtime.hydrate()`** throws a `JourneyHydrationError` naming the offending step. It's persistence-unlinked, so it can't restart on its own - the caller decides whether to drop the instance or `start()` a fresh one.
+
+Two caveats:
+
+- The check is scoped to the **active step**. History entries (which drive `goBack`) are left untouched - discarding an otherwise-valid in-flight journey because a _past_ step was renamed is more disruptive than the stale back-button it would guard against.
+- It only runs when the runtime was created with a module map; a module-less runtime has nothing to validate against and trusts the blob.
+
+Restarting on a stale step is the right default for most apps - journeys are typically persisted for convenience, not as a source of truth. If you do need to preserve in-flight journeys across a rename, rewrite the step in `onHydrate` (it runs first, so a rewritten step that resolves is kept as-is).
+
 ### Rehydrating shell-level work (tabs, task queues, drafts)
 
 Shells that persist user work outside the journey (tabs pointing at journey instances, a task queue, a draft list) need a rehydration pass on boot. The shape is inherently app-specific - every shell has a different "persisted work" concept - so the runtime doesn't ship a helper. Write the loop yourself, but discriminate failure modes:

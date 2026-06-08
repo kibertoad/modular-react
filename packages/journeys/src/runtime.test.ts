@@ -377,6 +377,163 @@ describe("createJourneyRuntime — hydration", () => {
   });
 });
 
+describe("createJourneyRuntime — unresolvable step reconciliation", () => {
+  // A persisted blob whose active step names a module that has since been
+  // renamed/removed (here "legacyAccount" was relocated to "account"). The
+  // version still matches the current definition, so without reconciliation
+  // it would hydrate as-is and wedge the outlet at its "no entry" box.
+  const staleStepBlob = (overrides: Record<string, unknown> = {}) => ({
+    definitionId: "collect",
+    version: journey.version,
+    instanceId: "ji_stale",
+    status: "active" as const,
+    step: { moduleId: "legacyAccount", entry: "review", input: { customerId: "C-1" } },
+    history: [],
+    state: { customerId: "C-1", attempts: 3 },
+    startedAt: "2024-01-01T00:00:00.000Z",
+    updatedAt: "2024-01-01T00:00:00.000Z",
+    ...overrides,
+  });
+
+  it("explicit hydrate() rejects a blob whose active step no longer resolves", () => {
+    const rt = freshRuntime();
+    expect(() => rt.hydrate("collect", staleStepBlob())).toThrow(JourneyHydrationError);
+    expect(() => rt.hydrate("collect", staleStepBlob())).toThrow(
+      /does not resolve to a registered module entry/,
+    );
+  });
+
+  it("the hydrate() error names the offending step so the cause is obvious", () => {
+    const rt = freshRuntime();
+    expect(() => rt.hydrate("collect", staleStepBlob())).toThrow(/legacyAccount\.review/);
+  });
+
+  it("onHydrate gets first crack — a migrator that rewrites the step lets hydrate succeed", () => {
+    const def = {
+      ...journey,
+      onHydrate: (blob: any) => ({
+        ...blob,
+        version: journey.version,
+        step: { ...blob.step, moduleId: "account" },
+      }),
+    };
+    const rt = createJourneyRuntime([{ definition: def, options: undefined }], {
+      modules: { account: accountModule, debts: debtsModule },
+      debug: false,
+    });
+    const id = rt.hydrate("collect", staleStepBlob({ version: "0.0.0" }));
+    const inst = rt.getInstance(id)!;
+    // The migrator's rewritten step resolves, so the in-flight state is kept.
+    expect(inst.step!.moduleId).toBe("account");
+    expect(inst.step!.entry).toBe("review");
+    expect((inst.state as State).attempts).toBe(3);
+  });
+
+  it("a resolvable step still hydrates normally (no false positive)", () => {
+    const rt = freshRuntime();
+    const id = rt.hydrate(
+      "collect",
+      staleStepBlob({
+        step: { moduleId: "account", entry: "review", input: { customerId: "C-1" } },
+      }),
+    );
+    expect(rt.getInstance(id)!.step!.moduleId).toBe("account");
+  });
+
+  it("a module-less runtime cannot validate and hydrates the step as-is", () => {
+    // Mirrors the documented fallback where no module map is supplied: there
+    // is nothing to reconcile against, so the runtime trusts the blob.
+    const rt = createJourneyRuntime([{ definition: journey, options: undefined }], {
+      debug: false,
+    });
+    const id = rt.hydrate("collect", staleStepBlob());
+    expect(rt.getInstance(id)!.step!.moduleId).toBe("legacyAccount");
+  });
+
+  it("start() discards a sync-loaded stale-step blob and starts fresh", () => {
+    const store = new Map<string, unknown>([["k:stale", staleStepBlob()]]);
+    const removed: string[] = [];
+    const persistence = {
+      keyFor: () => "k:stale",
+      load: (k: string) => (store.get(k) as any) ?? null,
+      save: (k: string, b: any) => {
+        store.set(k, b);
+      },
+      remove: (k: string) => {
+        store.delete(k);
+        removed.push(k);
+      },
+    };
+    const rt = freshRuntime({ options: { persistence: persistence as any } });
+    const id = rt.start("collect", { customerId: "C-1" });
+    const inst = rt.getInstance(id)!;
+    expect(inst.status).toBe("active");
+    // Landed on the journey's declared start step, not the stale persisted one.
+    expect(inst.step).toEqual({
+      moduleId: "account",
+      entry: "review",
+      input: { customerId: "C-1" },
+    });
+    expect((inst.state as State).attempts).toBe(0);
+    // The stale blob was discarded so it can't wedge future loads.
+    expect(removed).toContain("k:stale");
+  });
+
+  it("start() discards an async-loaded stale-step blob and starts fresh", async () => {
+    const store = new Map<string, unknown>([["k:stale-async", staleStepBlob()]]);
+    const persistence = {
+      keyFor: () => "k:stale-async",
+      load: async (k: string) => (store.get(k) as any) ?? null,
+      save: async (k: string, b: any) => {
+        store.set(k, b);
+      },
+      remove: async (k: string) => {
+        store.delete(k);
+      },
+    };
+    const rt = freshRuntime({ options: { persistence: persistence as any } });
+    const id = rt.start("collect", { customerId: "C-1" });
+    // Settle the async probe → migration-fail → startFresh chain.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const inst = rt.getInstance(id)!;
+    expect(inst.status).toBe("active");
+    expect(inst.step).toEqual({
+      moduleId: "account",
+      entry: "review",
+      input: { customerId: "C-1" },
+    });
+    expect((inst.state as State).attempts).toBe(0);
+  });
+
+  it("logs a dev warning explaining the discard when debug is on", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const store = new Map<string, unknown>([["k:warn", staleStepBlob()]]);
+      const persistence = {
+        keyFor: () => "k:warn",
+        load: (k: string) => (store.get(k) as any) ?? null,
+        save: (k: string, b: any) => {
+          store.set(k, b);
+        },
+        remove: (k: string) => {
+          store.delete(k);
+        },
+      };
+      const rt = createJourneyRuntime(
+        [{ definition: journey, options: { persistence: persistence as any } }],
+        { modules: { account: accountModule, debts: debtsModule }, debug: true },
+      );
+      rt.start("collect", { customerId: "C-1" });
+      const messages = warn.mock.calls.map((c) => String(c[0]));
+      expect(messages.some((m) => m.includes("Discarding persisted journey"))).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
 describe("createJourneyRuntime — lifecycle extras", () => {
   it("forget() drops terminal instances but refuses active ones", () => {
     const rt = freshRuntime();

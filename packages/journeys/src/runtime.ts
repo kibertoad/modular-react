@@ -2364,7 +2364,51 @@ export function createJourneyRuntime(
   type MigrateResult =
     | { ok: true; blob: SerializedJourney<unknown> }
     | { ok: false; reason: "version-mismatch" }
+    | { ok: false; reason: "unresolvable-step"; step: JourneyStep }
     | { ok: false; reason: "on-hydrate-threw"; cause: unknown };
+
+  /**
+   * Return the active step of `blob` when it names a module/entry that is
+   * not present in the runtime's module map, or `null` when the step
+   * resolves (or cannot be checked). Used by {@link migrateBlob} to reject
+   * blobs whose current step would render the outlet's "no entry on the
+   * registered modules" box — the common cause is a module/entry rename
+   * landing on an in-flight, persisted journey.
+   *
+   * Scoped to the *active* step only: history entries drive `goBack`, but
+   * discarding an otherwise-valid in-flight journey because a past step was
+   * renamed is more disruptive than the stale back-button it would guard
+   * against. Terminal blobs are never mounted, so their step (if any) is
+   * left untouched.
+   *
+   * No-op when the runtime was created without a module map — there is
+   * nothing to validate against, which mirrors `resolveManifest()` and the
+   * dynamic-transition warning guard that also skip when modules are absent.
+   */
+  function unresolvableActiveStep(blob: SerializedJourney<unknown>): JourneyStep | null {
+    if (blob.status !== "active") return null;
+    const step = blob.step;
+    if (!step) return null;
+    if (Object.keys(moduleMap).length === 0) return null;
+    const entry = moduleMap[step.moduleId]?.entryPoints?.[step.entry];
+    return entry ? null : step;
+  }
+
+  /**
+   * Emit a dev-only explanation when a persisted journey is discarded and
+   * restarted because its saved step no longer resolves. Without this the
+   * journey silently restarts from the beginning, which reads as data loss
+   * to anyone who doesn't know a rename happened.
+   */
+  function warnDiscardUnresolvable(reg: RegisteredJourney, result: MigrateResult) {
+    if (debug && !result.ok && result.reason === "unresolvable-step") {
+      console.warn(
+        `[@modular-react/journeys] Discarding persisted journey "${reg.definition.id}" and ` +
+          `starting fresh: its saved step "${result.step.moduleId}.${result.step.entry}" no longer ` +
+          `resolves to a registered module entry (renamed or removed?).`,
+      );
+    }
+  }
 
   function migrateBlob(reg: RegisteredJourney, blob: SerializedJourney<unknown>): MigrateResult {
     let migrated: SerializedJourney<unknown> = blob;
@@ -2393,13 +2437,25 @@ export function createJourneyRuntime(
         return { ok: false, reason: "on-hydrate-threw", cause: err };
       }
     }
-    if (ranAny) {
-      return { ok: true, blob: migrated };
-    }
-    if (blob.version !== reg.definition.version) {
+    // A migrator (definition- or registration-level) takes ownership of
+    // version compatibility, so when one ran we trust its output and skip
+    // the version gate. Otherwise the persisted version must match.
+    if (!ranAny && blob.version !== reg.definition.version) {
       return { ok: false, reason: "version-mismatch" };
     }
-    return { ok: true, blob };
+    // Reconcile the accepted blob's active step against the live module map.
+    // A persisted step can name a module/entry that has since been renamed
+    // or moved (e.g. a flow relocated from one module to another); hydrating
+    // it as-is would wedge the outlet at its "no entry" box with no path
+    // forward. Treat it like a version mismatch — discard + startFresh on
+    // start(), throw on explicit hydrate(). A migrator is given the chance
+    // to rewrite the step first (it ran above), so this only fires when the
+    // step is *still* unresolvable afterwards.
+    const unresolved = unresolvableActiveStep(migrated);
+    if (unresolved) {
+      return { ok: false, reason: "unresolvable-step", step: unresolved };
+    }
+    return { ok: true, blob: migrated };
   }
 
   // ---------------------------------------------------------------------------
@@ -2468,6 +2524,7 @@ export function createJourneyRuntime(
               }
               const migrated = migrateBlob(reg, blob);
               if (!migrated.ok) {
+                warnDiscardUnresolvable(reg, migrated);
                 discardBlob(persistence as JourneyPersistence<unknown>, key);
                 startFresh(reg, input, record);
                 return;
@@ -2531,8 +2588,10 @@ export function createJourneyRuntime(
             notify(record);
             return instanceId;
           }
-          // Migration failed: discard the stale blob so it doesn't get
-          // re-fetched forever.
+          // Migration failed (version mismatch, migrator throw, or a step
+          // that no longer resolves): discard the stale blob so it doesn't
+          // get re-fetched forever, then fall through to startFresh.
+          warnDiscardUnresolvable(reg, migrated);
           discardBlob(persistence as JourneyPersistence<unknown>, key);
         } else if (blob) {
           // Terminal blob — drop it before reusing the key for a fresh run.
@@ -2563,6 +2622,18 @@ export function createJourneyRuntime(
           throw new JourneyHydrationError(
             `onHydrate threw while migrating blob for "${journeyId}" (blob=${blob.version} def=${reg.definition.version}).`,
             { cause: migrated.cause },
+          );
+        }
+        if (migrated.reason === "unresolvable-step") {
+          // The blob's active step names a module/entry that isn't in the
+          // runtime's module map (typically renamed or removed since the
+          // blob was saved). Hydrating it would only render the outlet's
+          // "no entry" box, so refuse loudly here and let the caller decide
+          // whether to drop the instance or migrate it via onHydrate.
+          throw new JourneyHydrationError(
+            `Cannot hydrate journey "${journeyId}": active step "${migrated.step.moduleId}.${migrated.step.entry}" ` +
+              `does not resolve to a registered module entry (it may have been renamed or removed since the blob ` +
+              `was saved). Provide onHydrate to migrate the step, or start() a fresh instance.`,
           );
         }
         throw new JourneyHydrationError(
