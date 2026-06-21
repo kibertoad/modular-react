@@ -1,4 +1,5 @@
 import type { CliPreset } from "../preset.js";
+import { RUNTIME_VERSIONS } from "../runtime-versions.js";
 
 export function modulePackageJson(params: {
   scope: string;
@@ -21,7 +22,7 @@ export function modulePackageJson(params: {
         },
       },
       dependencies: {
-        "@modular-react/core": "^1.0.0",
+        "@modular-react/core": RUNTIME_VERSIONS.core,
         [core]: "^2.0.0",
         [`${params.scope}/app-shared`]: "workspace:*",
         "@lokalise/frontend-http-client": "^7.0.0",

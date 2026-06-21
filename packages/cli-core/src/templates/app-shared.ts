@@ -1,9 +1,10 @@
 import type { CliPreset } from "../preset.js";
+import { RUNTIME_VERSIONS } from "../runtime-versions.js";
 
 export function appSharedPackageJson(params: { scope: string; preset: CliPreset }): string {
   const extra = params.preset.templates.appSharedExtraDeps;
   const dependencies = {
-    "@modular-react/core": "^1.0.0",
+    "@modular-react/core": RUNTIME_VERSIONS.core,
     [params.preset.packages.core]: "^2.0.0",
     "@lokalise/api-contracts": "^6.0.0",
     "@lokalise/frontend-http-client": "^7.0.0",

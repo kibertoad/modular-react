@@ -450,3 +450,58 @@ describe("react-router-modules dashed names", { sequential: true }, () => {
     expect(test).not.toContain("'Customer-orders'");
   });
 });
+describe("create catalog / init --with-catalog", { sequential: true }, () => {
+  const files = new FileTestHelper({ basePath: TMP, maxRetries: 5, retryDelay: 200 });
+
+  beforeEach(() => {
+    mkdirSync(TMP, { recursive: true });
+  });
+
+  afterEach(() => {
+    files.cleanup();
+  });
+
+  it("scaffolds catalog.config.ts and wires the root package.json via init --with-catalog", async () => {
+    files.registerGlobForCleanup(`${TMP}/cat-app/**`);
+    files.registerGlobForCleanup(`${TMP}/cat-app`);
+
+    await execCommand(`node ${CLI} init cat-app --scope @cat --module dashboard --with-catalog`, {
+      expectedOutput: "Project created",
+      baseDir: TMP,
+    });
+
+    files.fileExists("cat-app/catalog.config.ts");
+
+    const config = readFileSync(resolve(TMP, "cat-app/catalog.config.ts"), "utf-8");
+    expect(config).toContain("defineCatalogConfig");
+    expect(config).toContain("modules/*/src/index.ts");
+    expect(config).toContain("journeys/*/src/index.ts");
+    expect(config).toContain("@cat/app-shared");
+
+    const rootPkg = JSON.parse(readFileSync(resolve(TMP, "cat-app/package.json"), "utf-8"));
+    expect(rootPkg.scripts["catalog:build"]).toBe("modular-react-catalog build");
+    expect(rootPkg.scripts["catalog:serve"]).toBe("modular-react-catalog serve dist-catalog");
+    expect(rootPkg.devDependencies["@modular-react/catalog"]).toBeTruthy();
+  });
+
+  it("wires catalog into an existing project and refuses to do it twice", async () => {
+    files.registerGlobForCleanup(`${TMP}/cat-retrofit/**`);
+    files.registerGlobForCleanup(`${TMP}/cat-retrofit`);
+
+    await execCommand(`node ${CLI} init cat-retrofit --scope @cat --module home`, {
+      baseDir: TMP,
+    });
+
+    await execCommand(`node ${CLI} create catalog`, {
+      expectedOutput: "Catalog configured",
+      baseDir: resolve(TMP, "cat-retrofit"),
+    });
+
+    files.fileExists("cat-retrofit/catalog.config.ts");
+
+    await execCommand(`node ${CLI} create catalog`, {
+      expectedErrorMessage: "already configured",
+      baseDir: resolve(TMP, "cat-retrofit"),
+    });
+  });
+});

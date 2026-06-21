@@ -28,6 +28,7 @@ import {
   shellHome,
 } from "../templates/shell.js";
 import { modulePackageJson, moduleTsconfig } from "../templates/module.js";
+import { bootstrapCatalog } from "./create-catalog.js";
 
 export function createInitCommand(preset: CliPreset) {
   return defineCommand({
@@ -48,6 +49,11 @@ export function createInitCommand(preset: CliPreset) {
       module: {
         type: "string",
         description: "First module name (e.g. dashboard)",
+      },
+      "with-catalog": {
+        type: "boolean",
+        description:
+          "Also scaffold a catalog.config.ts and wire @modular-react/catalog into the workspace root",
       },
     },
     async run({ args }) {
@@ -134,11 +140,23 @@ export function createInitCommand(preset: CliPreset) {
         importName,
       });
 
+      const withCatalog = args["with-catalog"] === true;
+      if (withCatalog) {
+        bootstrapCatalog({ root, projectName, scope });
+      }
+
       if (!isNonInteractive) {
-        p.note(`cd ${projectName}\npnpm install\npnpm dev`, "Next steps");
+        const nextSteps = [`cd ${projectName}`, "pnpm install", "pnpm dev"];
+        if (withCatalog) {
+          nextSteps.push("pnpm catalog:build   # harvest modules + journeys");
+        }
+        p.note(nextSteps.join("\n"), "Next steps");
         p.outro("Project created!");
       } else {
         console.log(`Project created at ${root}`);
+        if (withCatalog) {
+          console.log(`Catalog configured at ${resolve(root, "catalog.config.ts")}`);
+        }
       }
     },
   });

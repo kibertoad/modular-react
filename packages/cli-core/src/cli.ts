@@ -4,6 +4,7 @@ import { createInitCommand } from "./commands/init.js";
 import { createCreateModuleCommand } from "./commands/create-module.js";
 import { createCreateStoreCommand } from "./commands/create-store.js";
 import { createCreateJourneyCommand } from "./commands/create-journey.js";
+import { createCreateCatalogCommand } from "./commands/create-catalog.js";
 
 /**
  * Build the top-level command tree for a router-specific CLI from a
@@ -13,12 +14,13 @@ export function buildCli(preset: CliPreset) {
   const create = defineCommand({
     meta: {
       name: "create",
-      description: "Create a new module, store, or journey",
+      description: "Create a new module, store, journey, or catalog",
     },
     subCommands: {
       module: createCreateModuleCommand(preset),
       store: createCreateStoreCommand(preset),
       journey: createCreateJourneyCommand(preset),
+      catalog: createCreateCatalogCommand(preset),
     },
   });
 

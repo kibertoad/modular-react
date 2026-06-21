@@ -10,7 +10,7 @@ import {
   moduleTest,
 } from "./templates/module.js";
 
-const ROUTER_VERSION = "^1.120.0";
+const ROUTER_VERSION = "^1.168.0";
 
 // Source the CLI version from this package's own `package.json` so
 // `--version` stays in sync with the published package across releases.
@@ -35,8 +35,8 @@ export const tanstackRouterPreset: CliPreset = {
     appSharedExtraDeps: {
       // Required so app-shared can augment `@tanstack/router-core`'s
       // `StaticDataRouteOption` interface with AppZones.
-      dependencies: { "@tanstack/router-core": "^1.120.0" },
-      devDependencies: { "@tanstack/router-core": "^1.120.0" },
+      dependencies: { "@tanstack/router-core": "^1.168.0" },
+      devDependencies: { "@tanstack/router-core": "^1.168.0" },
     },
     shellMain,
     shellRootLayout,
