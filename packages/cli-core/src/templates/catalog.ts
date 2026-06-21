@@ -8,10 +8,13 @@
  * Journeys re-export a named `<journey>Journey` binding -> `"namedExport"`.
  */
 export function catalogConfig(params: { projectName: string; scope: string }): string {
+  // Escape single quotes so a name like `O'Reilly` can't break out of the
+  // single-quoted string literal in the generated config.
+  const title = `${params.projectName} Catalog`.replace(/'/g, "\\'");
   return `import { defineCatalogConfig } from '@modular-react/catalog'
 
 export default defineCatalogConfig({
-  title: '${params.projectName} Catalog',
+  title: '${title}',
   out: 'dist-catalog',
   roots: [
     {

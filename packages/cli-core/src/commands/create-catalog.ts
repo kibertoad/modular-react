@@ -12,8 +12,10 @@ import { catalogConfig, CATALOG_CONFIG_FILENAME } from "../templates/catalog.js"
  * Write `catalog.config.ts` at the workspace root and wire
  * `@modular-react/catalog` (devDependency + `catalog:build`/`catalog:serve`
  * scripts) into the root `package.json`. Shared by `create catalog` and
- * `init --with-catalog`. Returns `false` (without touching anything) when a
- * catalog config already exists, so callers can report "already configured".
+ * `init --with-catalog`. Returns `false` when a catalog config already
+ * existed (so callers can report "already configured") — but still
+ * reconciles the root `package.json` wiring, which is idempotent and
+ * self-heals a workspace whose config survived a previous partial run.
  */
 export function bootstrapCatalog(args: {
   root: string;
@@ -21,15 +23,22 @@ export function bootstrapCatalog(args: {
   scope: string;
 }): boolean {
   const configPath = resolve(args.root, CATALOG_CONFIG_FILENAME);
-  if (existsSync(configPath)) {
+  const alreadyConfigured = existsSync(configPath);
+
+  // Always reconcile the root package.json wiring first. It's idempotent,
+  // so a run whose previous attempt wrote the config but failed before
+  // updating package.json can repair itself on the next invocation.
+  addCatalogToRootPackageJson(args.root);
+
+  if (alreadyConfigured) {
     return false;
   }
 
   writeFileSync(configPath, catalogConfig({ projectName: args.projectName, scope: args.scope }));
-  addCatalogToRootPackageJson(args.root);
   return true;
 }
 
+/** Best-effort workspace name: the root `package.json` `name`, else the directory name. */
 function detectProjectName(root: string): string {
   try {
     const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf-8"));

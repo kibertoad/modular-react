@@ -60,7 +60,7 @@ export function createInitCommand(preset: CliPreset) {
       // Treat the run as non-interactive when *any* flag is supplied so we
       // never silently fall back to a TTY prompt in CI. Missing flags are
       // surfaced as errors rather than as blocking reads on stdin.
-      const hasAnyFlag = Boolean(args.name || args.scope || args.module);
+      const hasAnyFlag = Boolean(args.name || args.scope || args.module || args["with-catalog"]);
       const hasAllFlags = Boolean(args.name && args.scope && args.module);
       const isNonInteractive = hasAnyFlag && hasAllFlags;
       const partialFlags = hasAnyFlag && !hasAllFlags;
