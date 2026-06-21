@@ -324,6 +324,33 @@ export function ensureJourneysInWorkspace(projectRoot: string): void {
   writeFileSync(workspacePath, lines.join("\n"));
 }
 
+/**
+ * Wire `@modular-react/catalog` into the workspace root `package.json`:
+ * add it as a devDependency and register `catalog:build` / `catalog:serve`
+ * scripts pointing at the `modular-react-catalog` binary. Idempotent — only
+ * fills in the bits that are missing, so re-running never duplicates.
+ */
+export function addCatalogToRootPackageJson(root: string): void {
+  const pkgPath = resolve(root, "package.json");
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+
+  pkg.scripts = pkg.scripts || {};
+  if (!pkg.scripts["catalog:build"]) {
+    pkg.scripts["catalog:build"] = "modular-react-catalog build";
+  }
+  if (!pkg.scripts["catalog:serve"]) {
+    pkg.scripts["catalog:serve"] = "modular-react-catalog serve dist-catalog";
+  }
+
+  pkg.devDependencies = pkg.devDependencies || {};
+  if (!pkg.devDependencies["@modular-react/catalog"]) {
+    pkg.devDependencies["@modular-react/catalog"] = RUNTIME_VERSIONS.catalog;
+    pkg.devDependencies = sortObject(pkg.devDependencies);
+  }
+
+  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+}
+
 function findLastImportIndex(lines: readonly string[]): number {
   let lastImportIndex = -1;
   for (let i = 0; i < lines.length; i++) {

@@ -6,9 +6,11 @@
  */
 export const RUNTIME_VERSIONS = {
   /** `@modular-react/core` — module-author-facing core. */
-  core: "^1.0.0",
+  core: "^2.0.0",
   /** `@modular-react/react` — React bindings. */
-  react: "^1.0.0",
+  react: "^2.0.0",
   /** `@modular-react/journeys` — multi-module flow runtime. */
-  journeys: "^0.1.0",
+  journeys: "^1.0.0",
+  /** `@modular-react/catalog` — static catalog generator (dev tool). */
+  catalog: "^1.0.0",
 } as const;

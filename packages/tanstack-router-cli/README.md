@@ -1,12 +1,13 @@
 # @tanstack-react-modules/cli
 
-Scaffolding CLI for modular-react (TanStack Router integration). Creates projects, modules, stores, and journeys with full wiring.
+Scaffolding CLI for modular-react (TanStack Router integration). Creates projects, modules, stores, journeys, and a catalog with full wiring.
 
 ## Commands
 
 ```bash
 # Bootstrap a new pnpm workspace with shell + first module.
-tanstack-react-modules init <name> --scope @myorg --module dashboard
+# Add --with-catalog to also scaffold a catalog.config.ts.
+tanstack-react-modules init <name> --scope @myorg --module dashboard [--with-catalog]
 
 # Add a routed module and wire it into the shell + package.json.
 tanstack-react-modules create module <name> [--route ROUTE] [--nav-group GROUP]
@@ -16,6 +17,9 @@ tanstack-react-modules create store <name>
 
 # Scaffold a typed multi-module workflow (see @modular-react/journeys).
 tanstack-react-modules create journey <name> [--modules a,b,c] [--persistence]
+
+# Wire @modular-react/catalog into an existing workspace.
+tanstack-react-modules create catalog
 ```
 
 `create journey` produces a `journeys/<name>/` package with a journey
@@ -24,6 +28,12 @@ adapter under `shell/src/`. It also installs `journeysPlugin()` on the
 shell's registry and registers the journey, so the only thing you need
 to write yourself is the per-step transitions and module entry/exit
 contracts (see [`@modular-react/journeys`](https://github.com/kibertoad/modular-react/blob/main/packages/journeys/README.md)).
+
+`create catalog` (and `init --with-catalog`) writes a root `catalog.config.ts`
+that scans `modules/*` and `journeys/*`, and adds `@modular-react/catalog`
+plus `catalog:build` / `catalog:serve` scripts to the workspace root. Run
+`pnpm catalog:build` to harvest descriptors into a static `dist-catalog/`
+site (see [`@modular-react/catalog`](https://github.com/kibertoad/modular-react/blob/main/packages/catalog/README.md)).
 
 All commands support interactive (prompts) and non-interactive (flags)
 modes — pass any required positional/flag and the CLI runs without

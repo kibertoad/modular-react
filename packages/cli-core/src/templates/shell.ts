@@ -1,4 +1,5 @@
 import type { CliPreset } from "../preset.js";
+import { RUNTIME_VERSIONS } from "../runtime-versions.js";
 
 export function shellPackageJson(params: {
   scope: string;
@@ -19,8 +20,8 @@ export function shellPackageJson(params: {
         preview: "vite preview",
       },
       dependencies: {
-        "@modular-react/core": "^1.0.0",
-        "@modular-react/react": "^1.0.0",
+        "@modular-react/core": RUNTIME_VERSIONS.core,
+        "@modular-react/react": RUNTIME_VERSIONS.react,
         [core]: "^2.0.0",
         [runtime]: "^2.0.0",
         [`${params.scope}/app-shared`]: "workspace:*",

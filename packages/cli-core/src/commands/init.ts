@@ -28,6 +28,7 @@ import {
   shellHome,
 } from "../templates/shell.js";
 import { modulePackageJson, moduleTsconfig } from "../templates/module.js";
+import { bootstrapCatalog } from "./create-catalog.js";
 
 export function createInitCommand(preset: CliPreset) {
   return defineCommand({
@@ -49,12 +50,17 @@ export function createInitCommand(preset: CliPreset) {
         type: "string",
         description: "First module name (e.g. dashboard)",
       },
+      "with-catalog": {
+        type: "boolean",
+        description:
+          "Also scaffold a catalog.config.ts and wire @modular-react/catalog into the workspace root",
+      },
     },
     async run({ args }) {
       // Treat the run as non-interactive when *any* flag is supplied so we
       // never silently fall back to a TTY prompt in CI. Missing flags are
       // surfaced as errors rather than as blocking reads on stdin.
-      const hasAnyFlag = Boolean(args.name || args.scope || args.module);
+      const hasAnyFlag = Boolean(args.name || args.scope || args.module || args["with-catalog"]);
       const hasAllFlags = Boolean(args.name && args.scope && args.module);
       const isNonInteractive = hasAnyFlag && hasAllFlags;
       const partialFlags = hasAnyFlag && !hasAllFlags;
@@ -134,11 +140,23 @@ export function createInitCommand(preset: CliPreset) {
         importName,
       });
 
+      const withCatalog = args["with-catalog"] === true;
+      if (withCatalog) {
+        bootstrapCatalog({ root, projectName, scope });
+      }
+
       if (!isNonInteractive) {
-        p.note(`cd ${projectName}\npnpm install\npnpm dev`, "Next steps");
+        const nextSteps = [`cd ${projectName}`, "pnpm install", "pnpm dev"];
+        if (withCatalog) {
+          nextSteps.push("pnpm catalog:build   # harvest modules + journeys");
+        }
+        p.note(nextSteps.join("\n"), "Next steps");
         p.outro("Project created!");
       } else {
         console.log(`Project created at ${root}`);
+        if (withCatalog) {
+          console.log(`Catalog configured at ${resolve(root, "catalog.config.ts")}`);
+        }
       }
     },
   });

@@ -34,8 +34,9 @@
     "@playwright/test": "^1.58.2",
     "@types/node": "^25.6.0",
     "cli-testlab": "^6.0.1",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.0"
+    "rimraf": "^6.0.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
   },
   "engines": {
     "node": ">=22.0.0"

@@ -15,10 +15,11 @@ This package's public surface is intentionally tiny — `buildCli`,
 `runCli`, and the `CliPreset` types in `src/index.ts`. Everything else
 is internal machinery the commands rely on:
 
-- Command implementations under `src/commands/`: `init`, `create module`,
-  `create store`, `create journey`. Each is a factory that takes a
-  `CliPreset` and returns a [`citty`](https://github.com/unjs/citty)
-  command. Wired together by `buildCli`.
+- Command implementations under `src/commands/`: `init` (with an opt-in
+  `--with-catalog` flag), `create module`, `create store`, `create journey`,
+  and `create catalog`. Each is a factory that takes a `CliPreset` and
+  returns a [`citty`](https://github.com/unjs/citty) command. Wired together
+  by `buildCli`.
 - Project layout detection (`utils/resolve-project.ts`) and scope
   detection (`utils/detect-scope.ts`).
 - File transforms (`utils/transform.ts`) that edit `shell/src/main.tsx`,
@@ -30,7 +31,7 @@ is internal machinery the commands rely on:
   bump in one place to refresh every generated `package.json`.
 - Router-agnostic templates under `src/templates/`: workspace files,
   `app-shared` package metadata, store stub, journey package +
-  definition + persistence.
+  definition + persistence, and the root `catalog.config.ts`.
 
 ## Adding a router integration
 
