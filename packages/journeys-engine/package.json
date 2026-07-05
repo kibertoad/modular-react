@@ -1,11 +1,11 @@
 {
-  "name": "@modular-react/journeys",
+  "name": "@modular-frontend/journeys-engine",
   "version": "1.7.1",
-  "description": "Typed, serializable workflows that compose multiple modules. A journey declares entry/exit transitions between modules and owns shared state; modules stay journey-unaware.",
+  "description": "Framework-neutral journey engine: runtime, validation, persistence, authoring helpers, handles, and types for typed, serializable multi-module workflows. No UI-framework dependency — the outlet and hooks live in a binding package.",
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
-    "directory": "packages/journeys"
+    "directory": "packages/journeys-engine"
   },
   "files": [
     "dist"
@@ -30,34 +30,19 @@
     "build": "vite build",
     "dev": "vite build --watch",
     "test": "vitest run",
-    "bench": "vitest bench --run bench",
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modular-frontend/journeys-engine": "workspace:*"
+    "@modular-frontend/core": "workspace:*"
   },
   "devDependencies": {
-    "@modular-react/core": "workspace:*",
-    "@modular-react/react": "workspace:*",
-    "@modular-react/testing": "workspace:*",
-    "@testing-library/react": "^16.3.2",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.9.0",
     "oxfmt": "^0.51.0",
     "oxlint": "^1.66.0",
-    "react": "^19.2.6",
-    "react-dom": "^19.0.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.11",
     "vite-plugin-dts": "^4.5.4",
     "vitest": "^4.1.5"
-  },
-  "peerDependencies": {
-    "@modular-react/core": "^2.4.0",
-    "@modular-react/react": "^2.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
   }
 }

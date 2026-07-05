@@ -6,9 +6,9 @@ import type { Mock } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import type { ModuleEntryProps } from "@modular-react/core";
 
-import { defineJourney } from "./define-journey.js";
-import { defineTransition } from "./define-transition.js";
-import { createJourneyRuntime } from "./runtime.js";
+import { defineJourney } from "@modular-frontend/journeys-engine";
+import { defineTransition } from "@modular-frontend/journeys-engine";
+import { createJourneyRuntime } from "@modular-frontend/journeys-engine";
 import { JourneyOutlet } from "./outlet.js";
 
 // Capture once at import time so afterEach can restore whatever the host

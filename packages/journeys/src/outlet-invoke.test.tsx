@@ -12,9 +12,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import type { ModuleEntryProps } from "@modular-react/core";
-import { defineJourney } from "./define-journey.js";
-import { defineJourneyHandle, invoke } from "./handle.js";
-import { createJourneyRuntime } from "./runtime.js";
+import { defineJourney } from "@modular-frontend/journeys-engine";
+import { defineJourneyHandle, invoke } from "@modular-frontend/journeys-engine";
+import { createJourneyRuntime } from "@modular-frontend/journeys-engine";
 import { JourneyOutlet, useJourneyCallStack } from "./outlet.js";
 
 afterEach(() => {

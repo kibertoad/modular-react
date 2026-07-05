@@ -12,15 +12,7 @@ export default defineConfig({
       formats: ["es"],
     },
     rollupOptions: {
-      external: [
-        "react",
-        "react/jsx-runtime",
-        "react-dom",
-        "@modular-react/core",
-        "@modular-react/react",
-        "@modular-frontend/journeys-engine",
-        "@modular-frontend/journeys-engine/testing",
-      ],
+      external: ["@modular-frontend/core"],
     },
     sourcemap: true,
   },

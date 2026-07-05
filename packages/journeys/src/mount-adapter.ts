@@ -1,6 +1,6 @@
 import type { RuntimeMountAdapter } from "@modular-react/core";
 import { JourneyOutlet } from "./outlet.js";
-import type { JourneyRuntime } from "./types.js";
+import type { JourneyRuntime } from "@modular-frontend/journeys-engine";
 
 /**
  * Adapt a {@link JourneyRuntime} to the generic

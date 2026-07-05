@@ -11,8 +11,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 
-import { defineJourney } from "./define-journey.js";
-import { createJourneyRuntime } from "./runtime.js";
+import { defineJourney } from "@modular-frontend/journeys-engine";
+import { createJourneyRuntime } from "@modular-frontend/journeys-engine";
 import { JourneyOutlet } from "./outlet.js";
 
 afterEach(() => {

@@ -3,23 +3,26 @@
 // Authors import `defineJourney` (and types) from here; shells import the
 // runtime factory + `JourneyOutlet`. Modules import nothing from this package.
 
-export { defineJourney } from "./define-journey.js";
+export { defineJourney } from "@modular-frontend/journeys-engine";
 export {
   defineJourneyPersistence,
   createWebStoragePersistence,
   createMemoryPersistence,
-} from "./persistence.js";
+} from "@modular-frontend/journeys-engine";
 export type {
   WebStoragePersistenceOptions,
   MemoryPersistenceOptions,
   MemoryPersistence,
   SyncJourneyPersistence,
-} from "./persistence.js";
+} from "@modular-frontend/journeys-engine";
 // `getInternals` intentionally omitted from the public surface — test code
 // that used to reach through it should migrate to `createTestHarness` in
 // `@modular-react/journeys/testing`. The symbol is still exported from
 // `./runtime.js` for internal use (the outlet, the test harness itself).
-export { createJourneyRuntime, type JourneyRuntimeOptions } from "./runtime.js";
+export {
+  createJourneyRuntime,
+  type JourneyRuntimeOptions,
+} from "@modular-frontend/journeys-engine";
 export {
   JourneyValidationError,
   JourneyHydrationError,
@@ -27,7 +30,7 @@ export {
   validateJourneyContracts,
   validateJourneyDefinition,
   validateJourneyGraph,
-} from "./validation.js";
+} from "@modular-frontend/journeys-engine";
 // Public semver surface. The implementation now lives in
 // `@modular-react/core` so both journeys and compositions can share it
 // without one depending on the other; the journeys package re-exports
@@ -81,12 +84,15 @@ export type {
 
 // Handles — export a handle from each journey package so modules and shells
 // open journeys with typed `input` without importing the journey's runtime.
-export { defineJourneyHandle, invoke } from "./handle.js";
-export type { JourneyHandle } from "./handle.js";
+export { defineJourneyHandle, invoke } from "@modular-frontend/journeys-engine";
+export type { JourneyHandle } from "@modular-frontend/journeys-engine";
 
 // Authoring helpers — exhaustive (and fallback) state-driven dispatch.
-export { selectModule, selectModuleOrDefault } from "./select-module.js";
-export type { SelectModuleCases, SelectModuleCasesPartial } from "./select-module.js";
+export { selectModule, selectModuleOrDefault } from "@modular-frontend/journeys-engine";
+export type {
+  SelectModuleCases,
+  SelectModuleCasesPartial,
+} from "@modular-frontend/journeys-engine";
 
 // Authoring helpers — annotate a transition handler with the entry points it
 // can advance into. Read by `<JourneyOutlet preload="precise">` (the default)
@@ -95,8 +101,12 @@ export {
   defineTransition,
   isAnnotatedTransition,
   isTerminalSentinel,
-} from "./define-transition.js";
-export type { AnnotatedTransitionHandler, StepRef, TerminalSentinel } from "./define-transition.js";
+} from "@modular-frontend/journeys-engine";
+export type {
+  AnnotatedTransitionHandler,
+  StepRef,
+  TerminalSentinel,
+} from "@modular-frontend/journeys-engine";
 
 export type {
   AbandonCtx,
@@ -146,6 +156,6 @@ export type {
   WildcardExitOutputForEntry,
   WildcardExitOutputOf,
   WildcardTransitionMap,
-} from "./types.js";
+} from "@modular-frontend/journeys-engine";
 
 export { isJourneySystemAbort } from "@modular-react/core";

@@ -5,12 +5,12 @@ import type {
   NavigationItemBase,
   RegistryPlugin,
 } from "@modular-react/core";
-import { createJourneyRuntime } from "./runtime.js";
+import { createJourneyRuntime } from "@modular-frontend/journeys-engine";
 import {
   JourneyValidationError,
   validateJourneyContracts,
   validateJourneyDefinition,
-} from "./validation.js";
+} from "@modular-frontend/journeys-engine";
 import { JourneyProvider } from "./provider.js";
 import type {
   AnyJourneyDefinition,
@@ -18,7 +18,7 @@ import type {
   JourneyNavContribution,
   JourneyRegisterOptions,
   RegisteredJourney,
-} from "./types.js";
+} from "@modular-frontend/journeys-engine";
 
 /**
  * Methods the journeys plugin contributes to the registry. Registered

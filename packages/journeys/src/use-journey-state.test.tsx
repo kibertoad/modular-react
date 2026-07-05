@@ -2,11 +2,11 @@ import { act, cleanup, render } from "@testing-library/react";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { defineJourney } from "./define-journey.js";
-import { defineJourneyHandle } from "./handle.js";
+import { defineJourney } from "@modular-frontend/journeys-engine";
+import { defineJourneyHandle } from "@modular-frontend/journeys-engine";
 import { JourneyProvider } from "./provider.js";
-import { createJourneyRuntime } from "./runtime.js";
-import { createTestHarness } from "./testing.js";
+import { createJourneyRuntime } from "@modular-frontend/journeys-engine";
+import { createTestHarness } from "@modular-frontend/journeys-engine/testing";
 import {
   useActiveLeafJourneyInstance,
   useActiveLeafJourneyState,
