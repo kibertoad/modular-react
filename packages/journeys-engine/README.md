@@ -19,7 +19,6 @@ Most apps depend on a binding (`@modular-react/journeys`) rather than on this pa
 - **Persistence**: `defineJourneyPersistence`, `createWebStoragePersistence`, `createMemoryPersistence`.
 - **Authoring helpers**: `defineJourney`, `defineTransition`, `isAnnotatedTransition`, `isTerminalSentinel`, `selectModule`, `selectModuleOrDefault`.
 - **Handles**: `defineJourneyHandle`, `invoke`.
-- **Mount adapter**: `createJourneyMountAdapter` (embed a journey runtime through the generic `RuntimeMountAdapter` shape).
 - **Types**: the full journey type surface (`JourneyDefinition`, `JourneyInstance`, `JourneyStep`, `TransitionMap`, wildcard maps, and the rest).
 
 ### `@modular-frontend/journeys-engine/testing`
