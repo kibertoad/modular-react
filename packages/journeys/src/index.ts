@@ -18,7 +18,8 @@ export type {
 // `getInternals` intentionally omitted from the public surface — test code
 // that used to reach through it should migrate to `createTestHarness` in
 // `@modular-react/journeys/testing`. The symbol is still exported from
-// `./runtime.js` for internal use (the outlet, the test harness itself).
+// `@modular-frontend/journeys-engine` for internal use (the outlet, the test
+// harness itself).
 export {
   createJourneyRuntime,
   type JourneyRuntimeOptions,

@@ -36,12 +36,12 @@ Ship a Vue 3 + vue-router package family with feature parity to `@react-router-m
 | `@vue-router-modules/testing` | `@react-router-modules/testing`              | `renderModule`, `renderJourney`, mock store                                                                                                                                            |
 | `@vue-router-modules/cli`     | `@react-router-modules/cli`                  | `cli-core` preset + SFC templates                                                                                                                                                      |
 
-Shared engine packages extracted in Phase 0 under the `@modular-frontend` scope (decision D2, resolved):
+Shared engine packages under the `@modular-frontend` scope (decision D2, resolved). `journeys-engine` is extracted; `compositions-engine` is still planned (PR-03):
 
-| New package                            | Extracted from                | Contents                                                                                                                                                                          |
-| -------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@modular-frontend/journeys-engine`    | `@modular-react/journeys`     | `runtime.ts`, `validation.ts`, `define-journey.ts`, `define-transition.ts`, `persistence.ts`, `select-module.ts`, `simulate-journey.ts`, `handle.ts`, `types.ts`, `testing.ts`   |
-| `@modular-frontend/compositions-engine` | `@modular-react/compositions` | `runtime.ts`, `stores.ts`, `validation.ts`, `define-composition.ts`, `types.ts`                                                                                                  |
+| New package                             | Extracted from                | Contents                                                                                                                                                                       |
+| --------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@modular-frontend/journeys-engine`     | `@modular-react/journeys`     | `runtime.ts`, `validation.ts`, `define-journey.ts`, `define-transition.ts`, `persistence.ts`, `select-module.ts`, `simulate-journey.ts`, `handle.ts`, `types.ts`, `testing.ts` |
+| `@modular-frontend/compositions-engine` | `@modular-react/compositions` | `runtime.ts`, `stores.ts`, `validation.ts`, `define-composition.ts`, `types.ts`                                                                                                |
 
 `mount-adapter.ts` stays in `@modular-react/journeys`, not the engine: `createJourneyMountAdapter` supplies `Outlet: JourneyOutlet` (a React component), so it is binding-specific glue over the neutral `RuntimeMountAdapter` seam rather than engine logic.
 
@@ -51,14 +51,14 @@ Shared engine packages extracted in Phase 0 under the `@modular-frontend` scope 
 
 Record the outcome inline when made. Blockers are marked per PR.
 
-| ID  | Decision                                                                                                                                                                     | Recommendation                                                                                                                                                                                  | Status |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| D1  | npm scopes for the Vue family (`@modular-vue`, `@vue-router-modules`) and repo positioning (does the `modular-react` repo host Vue packages, or does it get a neutral name?) | Keep this repo, add the scopes, soften the README tagline. Reserve both scopes on npm before any code PR.                                                                                       | open   |
+| ID  | Decision                                                                                                                                                                     | Recommendation                                                                                                                                                                                  | Status                                                                            |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| D1  | npm scopes for the Vue family (`@modular-vue`, `@vue-router-modules`) and repo positioning (does the `modular-react` repo host Vue packages, or does it get a neutral name?) | Keep this repo, add the scopes, soften the README tagline. Reserve both scopes on npm before any code PR.                                                                                       | open                                                                              |
 | D2  | Scope and name for the extracted engines                                                                                                                                     | A neutral scope shared by both families, e.g. `@modular-frontend`, holding `journeys-engine` and `compositions-engine`. Avoid putting "react" or "vue" in the name.                             | resolved: `@modular-frontend` (core extracted in #54; `journeys-engine` in PR-02) |
-| D3  | Store story for Vue templates: core store vs Pinia                                                                                                                           | Scaffold with the core `createStore` (zustand-shaped, already the framework contract) and document Pinia interop in a guide section. Do not take a Pinia dependency in runtime packages.        | open   |
-| D4  | Authoring style inside Vue library packages: SFC vs `defineComponent` + render functions                                                                                     | `defineComponent` + `h()` for library internals (no `@vitejs/plugin-vue` needed in package builds, better generics); SFCs in CLI templates and the example app, since that is what users write. | open   |
-| D5  | Minimum supported versions                                                                                                                                                   | Vue ^3.5, vue-router ^4.5, Node 22+, aligned with the React 19 / Node 22 baseline.                                                                                                              | open   |
-| D6  | Is Nuxt in scope for 1.0?                                                                                                                                                    | No. Ship SPA-first, gauge demand, then decide on PR-52.                                                                                                                                         | open   |
+| D3  | Store story for Vue templates: core store vs Pinia                                                                                                                           | Scaffold with the core `createStore` (zustand-shaped, already the framework contract) and document Pinia interop in a guide section. Do not take a Pinia dependency in runtime packages.        | open                                                                              |
+| D4  | Authoring style inside Vue library packages: SFC vs `defineComponent` + render functions                                                                                     | `defineComponent` + `h()` for library internals (no `@vitejs/plugin-vue` needed in package builds, better generics); SFCs in CLI templates and the example app, since that is what users write. | open                                                                              |
+| D5  | Minimum supported versions                                                                                                                                                   | Vue ^3.5, vue-router ^4.5, Node 22+, aligned with the React 19 / Node 22 baseline.                                                                                                              | open                                                                              |
+| D6  | Is Nuxt in scope for 1.0?                                                                                                                                                    | No. Ship SPA-first, gauge demand, then decide on PR-52.                                                                                                                                         | open                                                                              |
 
 ## Phase plan
 
@@ -216,32 +216,32 @@ Parallelizable tracks once Phase 0 lands: (a) PR-10..12 binding layer, (b) PR-30
 
 Update the Status column as PRs move: `todo` → `in progress` → `in review` → `done` (link the PR).
 
-| PR    | Title                                       | Size | Depends on          | Status |
-| ----- | ------------------------------------------- | ---- | ------------------- | ------ |
+| PR    | Title                                       | Size | Depends on          | Status     |
+| ----- | ------------------------------------------- | ---- | ------------------- | ---------- |
 | PR-01 | Neutralize renderable types in core         | S    | —                   | done (#54) |
-| PR-02 | Extract journeys engine                     | L    | D2                  | done   |
-| PR-03 | Extract compositions engine                 | L    | D2                  | todo   |
-| PR-04 | cli-core framework-pluggable templates      | M    | —                   | todo   |
-| PR-05 | CI/publish plumbing, scope reservation      | S    | D1                  | todo   |
-| PR-10 | @modular-vue/vue: stores and context        | M    | PR-01               | todo   |
-| PR-11 | @modular-vue/vue: rendering pieces          | M    | PR-10               | todo   |
-| PR-12 | @modular-vue/testing                        | S    | PR-11               | todo   |
-| PR-20 | @vue-router-modules/core                    | M    | PR-10               | todo   |
-| PR-21 | runtime: registry                           | M    | PR-20               | todo   |
-| PR-22 | runtime: route building, app plugin, guards | M    | PR-21               | todo   |
-| PR-23 | runtime: zones and route data               | M    | PR-22               | todo   |
-| PR-24 | @vue-router-modules/testing                 | S    | PR-23               | todo   |
-| PR-30 | vue journeys: provider and composables      | M    | PR-02, PR-10        | todo   |
-| PR-31 | vue journeys: outlet                        | L    | PR-30               | todo   |
-| PR-32 | journeys wired into runtime + renderJourney | M    | PR-22, PR-31        | todo   |
-| PR-33 | vue compositions: provider and composables  | M    | PR-03, PR-10        | todo   |
-| PR-34 | vue compositions: outlet                    | L    | PR-33               | todo   |
-| PR-40 | examples/vue-router                         | L    | PR-23, PR-32, PR-34 | todo   |
-| PR-41 | Documentation                               | M    | PR-40               | todo   |
-| PR-42 | Parity audit, promote to 1.0                | S    | PR-40               | todo   |
-| PR-50 | @vue-router-modules/cli                     | M    | PR-04, PR-40        | todo   |
-| PR-51 | Catalog Vue support                         | S    | PR-40               | todo   |
-| PR-52 | Nuxt module (stretch)                       | L    | D6, 1.0             | todo   |
+| PR-02 | Extract journeys engine                     | L    | D2                  | done (#55) |
+| PR-03 | Extract compositions engine                 | L    | D2                  | todo       |
+| PR-04 | cli-core framework-pluggable templates      | M    | —                   | todo       |
+| PR-05 | CI/publish plumbing, scope reservation      | S    | D1                  | todo       |
+| PR-10 | @modular-vue/vue: stores and context        | M    | PR-01               | todo       |
+| PR-11 | @modular-vue/vue: rendering pieces          | M    | PR-10               | todo       |
+| PR-12 | @modular-vue/testing                        | S    | PR-11               | todo       |
+| PR-20 | @vue-router-modules/core                    | M    | PR-10               | todo       |
+| PR-21 | runtime: registry                           | M    | PR-20               | todo       |
+| PR-22 | runtime: route building, app plugin, guards | M    | PR-21               | todo       |
+| PR-23 | runtime: zones and route data               | M    | PR-22               | todo       |
+| PR-24 | @vue-router-modules/testing                 | S    | PR-23               | todo       |
+| PR-30 | vue journeys: provider and composables      | M    | PR-02, PR-10        | todo       |
+| PR-31 | vue journeys: outlet                        | L    | PR-30               | todo       |
+| PR-32 | journeys wired into runtime + renderJourney | M    | PR-22, PR-31        | todo       |
+| PR-33 | vue compositions: provider and composables  | M    | PR-03, PR-10        | todo       |
+| PR-34 | vue compositions: outlet                    | L    | PR-33               | todo       |
+| PR-40 | examples/vue-router                         | L    | PR-23, PR-32, PR-34 | todo       |
+| PR-41 | Documentation                               | M    | PR-40               | todo       |
+| PR-42 | Parity audit, promote to 1.0                | S    | PR-40               | todo       |
+| PR-50 | @vue-router-modules/cli                     | M    | PR-04, PR-40        | todo       |
+| PR-51 | Catalog Vue support                         | S    | PR-40               | todo       |
+| PR-52 | Nuxt module (stretch)                       | L    | D6, 1.0             | todo       |
 
 ## Working agreements
 
