@@ -2275,9 +2275,6 @@ importers:
         specifier: workspace:*
         version: link:../frontend-core
     devDependencies:
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.14
       oxfmt:
         specifier: ^0.51.0
         version: 0.51.0

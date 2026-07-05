@@ -31,11 +31,13 @@ Most apps depend on a framework binding (`@modular-react/core`, and downstream `
 The core never renders, calls, or inspects a component — it only carries them as values on descriptors (`component`, `zones`, entry-point `component`, `NavigationItem.icon`). So instead of depending on any UI framework, those positions use two neutral aliases:
 
 ```typescript
-export type UiComponent<P = any> = (props: P) => any;
-export type UiNode = unknown;
+export type UiComponent<P = any> = ((props: P) => any) | (new (props: P) => any);
+export type UiNode = any;
 ```
 
-`UiComponent<P>` defaults to a function-component signature, which a React function component satisfies directly, so authoring against `@modular-react/core` keeps full props-checking against `ModuleEntryProps` with no React dependency in this package. A Vue binding narrows the same alias to Vue's component type.
+`UiComponent<P>` is "callable or constructable with props `P`", which admits React's full `ComponentType` (function components via the call arm, class components via the construct arm) as well as any other function/constructor component, and stays usable as a JSX element type in a React binding without pulling in `@types/react`. The call arm keeps function components props-checked against `ModuleEntryProps`. A Vue binding narrows the same alias to Vue's component type.
+
+`UiNode` stays `any` rather than `unknown` so a binding can pass these values straight into its framework's render slots (e.g. a React `<Suspense fallback>`), which `unknown` would reject.
 
 ## Usage
 
