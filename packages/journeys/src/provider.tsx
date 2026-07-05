@@ -2,7 +2,7 @@ import { createContext, createElement, useContext } from "react";
 import type { ReactNode } from "react";
 import { ModuleExitProvider, type ModuleExitEvent } from "@modular-react/react";
 
-import type { JourneyRuntime } from "./types.js";
+import type { JourneyRuntime } from "@modular-frontend/journeys-engine";
 
 /**
  * Shell-level context read by `<JourneyOutlet>` so callers don't have to

@@ -3,9 +3,9 @@ import type { ComponentType, ReactNode } from "react";
 import type { ModuleDescriptor, ModuleEntryPoint } from "@modular-react/core";
 import { resolveEntryComponent } from "@modular-react/react";
 
-import { getInternals } from "./runtime.js";
+import { getInternals } from "@modular-frontend/journeys-engine";
 import { useJourneyContext } from "./provider.js";
-import { isAnnotatedTransition } from "./define-transition.js";
+import { isAnnotatedTransition } from "@modular-frontend/journeys-engine";
 import { useCallChain, useInstanceSnapshot, useLeafId } from "./instance-hooks.js";
 import type {
   AnyJourneyDefinition,
@@ -13,7 +13,7 @@ import type {
   JourneyRuntime,
   JourneyStep,
   TerminalOutcome,
-} from "./types.js";
+} from "@modular-frontend/journeys-engine";
 
 export type JourneyStepErrorPolicy = "abort" | "retry" | "ignore";
 
