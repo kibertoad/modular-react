@@ -12,7 +12,7 @@ Always run oxfmt over the entire repo. Never target individual files or a
 subpath (`oxfmt --write packages/foo`, `oxfmt src/x.ts`). Run from the repo root
 against `.` only:
 
-```
+```bash
 oxfmt --write .    # or: pnpm lint:fix
 ```
 
