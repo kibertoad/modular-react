@@ -1,11 +1,11 @@
 {
-  "name": "@modular-react/core",
-  "version": "2.6.0",
-  "description": "React binding facade over @modular-frontend/core. Re-exports the framework-neutral primitives (types, slots, navigation, validation, journey contracts, store) for modular React applications.",
+  "name": "@modular-frontend/core",
+  "version": "0.1.0",
+  "description": "Framework-neutral primitives for modular frontend applications: module descriptors, slots, navigation, validation, journey contracts, and a lightweight store. No UI-framework dependency — components are carried as opaque values.",
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
-    "directory": "packages/core"
+    "directory": "packages/frontend-core"
   },
   "files": [
     "dist"
@@ -25,12 +25,12 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modular-frontend/core": "workspace:*"
+    "@standard-schema/spec": "^1.0.0"
   },
   "devDependencies": {
     "oxfmt": "^0.51.0",

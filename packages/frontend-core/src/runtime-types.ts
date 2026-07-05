@@ -1,4 +1,5 @@
 import type { Store } from "./store.js";
+import type { UiComponent } from "./ui-types.js";
 import type {
   ModuleDescriptor,
   NavigationItem,
@@ -68,10 +69,10 @@ export interface ModuleEntry {
   readonly version: string;
   /** Catalog metadata (description, icon, category, etc.) */
   readonly meta?: Readonly<Record<string, unknown>>;
-  /** A React component the shell can render outside of routes */
-  readonly component?: React.ComponentType<any>;
+  /** A component the shell can render outside of routes */
+  readonly component?: UiComponent;
   /** Zone components contributed when this module is active in a workspace tab */
-  readonly zones?: Readonly<Record<string, React.ComponentType<any>>>;
+  readonly zones?: Readonly<Record<string, UiComponent>>;
 }
 
 /**
@@ -121,7 +122,7 @@ export function runLifecycleHooks<TSharedDependencies extends Record<string, any
       mod.lifecycle?.onRegister?.(deps);
     } catch (err) {
       throw new Error(
-        `[@modular-react/core] Module "${mod.id}" lifecycle.onRegister() failed: ${err instanceof Error ? err.message : String(err)}`,
+        `[@modular-frontend/core] Module "${mod.id}" lifecycle.onRegister() failed: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
       );
     }

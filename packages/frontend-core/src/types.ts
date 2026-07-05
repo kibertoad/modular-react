@@ -1,4 +1,5 @@
 import type { CatalogMeta } from "./catalog-meta.js";
+import type { UiComponent, UiNode } from "./ui-types.js";
 
 /**
  * A reactive external source that components can subscribe to.
@@ -96,7 +97,7 @@ export type SlotMapOf<T> = { [K in keyof T]: readonly unknown[] };
  * Unlike SlotMap (arrays concatenated across all modules), ZoneMap values are
  * single components contributed by the currently matched route.
  */
-export type ZoneMap = Record<string, React.ComponentType<any> | undefined>;
+export type ZoneMap = Record<string, UiComponent | undefined>;
 
 /**
  * F-bounded constraint that accepts interfaces without index signatures.
@@ -108,7 +109,7 @@ export type ZoneMap = Record<string, React.ComponentType<any> | undefined>;
  *
  * This accepts `interface AppZones { contextualPanel?: ComponentType }` directly.
  */
-export type ZoneMapOf<T> = { [K in keyof T]: React.ComponentType<any> | undefined };
+export type ZoneMapOf<T> = { [K in keyof T]: UiComponent | undefined };
 
 /**
  * Describes a module — a self-contained piece of UI that declares
@@ -185,13 +186,13 @@ export interface ModuleDescriptor<
   };
 
   /**
-   * A React component the shell can render outside of routes — in a tab,
-   * modal, panel, or any other container. Use this for workspace-style apps
-   * where modules are rendered by the shell rather than by the router.
+   * A component the shell can render outside of routes — in a tab, modal,
+   * panel, or any other container. Use this for workspace-style apps where
+   * modules are rendered by the shell rather than by the router.
    *
    * Route-based modules use createRoutes instead (or both).
    */
-  readonly component?: React.ComponentType<any>;
+  readonly component?: UiComponent;
 
   /**
    * Zone components this module contributes to the shell when it is active.
@@ -200,12 +201,12 @@ export interface ModuleDescriptor<
    * `useActiveZones(activeModuleId)`.
    *
    * Keys match the app's zone names (e.g. "contextualPanel", "headerActions").
-   * Values are React components rendered by the shell in the corresponding
-   * layout region.
+   * Values are components rendered by the shell in the corresponding layout
+   * region.
    *
    * Route-based modules use route handles/staticData instead.
    */
-  readonly zones?: Readonly<Record<string, React.ComponentType<any>>>;
+  readonly zones?: Readonly<Record<string, UiComponent>>;
 
   /**
    * Catalog metadata — descriptive information the shell uses for discovery
@@ -268,8 +269,8 @@ export interface InputSchema<T> {
  * runtime to also accept a module that exports the component directly.
  */
 export type LazyEntryComponent<TInput> = () => Promise<
-  | { default: React.ComponentType<ModuleEntryProps<TInput, any>> }
-  | React.ComponentType<ModuleEntryProps<TInput, any>>
+  | { default: UiComponent<ModuleEntryProps<TInput, any>> }
+  | UiComponent<ModuleEntryProps<TInput, any>>
 >;
 
 /**
@@ -345,7 +346,7 @@ interface ModuleEntryPointBase<TInput> {
  */
 export interface EagerModuleEntryPoint<TInput> extends ModuleEntryPointBase<TInput> {
   /** Component to render when this entry is opened. Receives `ModuleEntryProps<TInput, …>`. */
-  readonly component: React.ComponentType<ModuleEntryProps<TInput, any>>;
+  readonly component: UiComponent<ModuleEntryProps<TInput, any>>;
   readonly lazy?: never;
   readonly fallback?: never;
 }
@@ -364,7 +365,7 @@ export interface LazyModuleEntryPoint<TInput> extends ModuleEntryPointBase<TInpu
    * the resolved component in `<Suspense fallback={fallback ?? null}>`. Only
    * meaningful for lazy entries — eager entries don't suspend.
    */
-  readonly fallback?: React.ReactNode;
+  readonly fallback?: UiNode;
 }
 
 /**
@@ -550,8 +551,8 @@ export interface NavigationItem<
    */
   readonly to: TContext extends void ? string : string | ((ctx: TContext) => string);
 
-  /** Icon — either a string identifier or a React component */
-  readonly icon?: string | React.ComponentType<{ className?: string }>;
+  /** Icon — either a string identifier or a component */
+  readonly icon?: string | UiComponent<{ className?: string }>;
 
   /** Grouping key for organizing nav items (e.g. "finance", "admin") */
   readonly group?: string;

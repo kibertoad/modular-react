@@ -16,7 +16,7 @@ export function validateEntryExitShape(modules: readonly ModuleDescriptor[]): vo
   }
   if (errors.length > 0) {
     throw new Error(
-      `[@modular-react/core] Invalid entry/exit declarations:\n  - ${errors.join("\n  - ")}`,
+      `[@modular-frontend/core] Invalid entry/exit declarations:\n  - ${errors.join("\n  - ")}`,
     );
   }
 }
@@ -29,7 +29,7 @@ export function validateNoDuplicateIds(
   for (const mod of modules) {
     if (ids.has(mod.id)) {
       throw new Error(
-        `[@modular-react/core] Duplicate module ID "${mod.id}". Each module must have a unique ID.`,
+        `[@modular-frontend/core] Duplicate module ID "${mod.id}". Each module must have a unique ID.`,
       );
     }
     ids.add(mod.id);
@@ -37,7 +37,7 @@ export function validateNoDuplicateIds(
   for (const mod of lazyModules) {
     if (ids.has(mod.id)) {
       throw new Error(
-        `[@modular-react/core] Duplicate module ID "${mod.id}". Each module must have a unique ID.`,
+        `[@modular-frontend/core] Duplicate module ID "${mod.id}". Each module must have a unique ID.`,
       );
     }
     ids.add(mod.id);
@@ -53,7 +53,7 @@ export function validateDependencies(
       const missing = mod.requires.filter((key) => !availableKeys.has(key as string));
       if (missing.length > 0) {
         throw new Error(
-          `[@modular-react/core] Module "${mod.id}" requires dependencies not provided by the registry: ` +
+          `[@modular-frontend/core] Module "${mod.id}" requires dependencies not provided by the registry: ` +
             `${missing.map(String).join(", ")}. ` +
             `Available: ${[...availableKeys].join(", ") || "(none)"}`,
         );
@@ -64,7 +64,7 @@ export function validateDependencies(
       const missing = mod.optionalRequires.filter((key) => !availableKeys.has(key as string));
       if (missing.length > 0) {
         console.warn(
-          `[@modular-react/core] Module "${mod.id}" has optional dependencies not provided: ` +
+          `[@modular-frontend/core] Module "${mod.id}" has optional dependencies not provided: ` +
             `${missing.map(String).join(", ")}. The module will still load but may have reduced functionality.`,
         );
       }

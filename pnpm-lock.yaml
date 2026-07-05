@@ -2271,13 +2271,35 @@ importers:
 
   packages/core:
     dependencies:
+      '@modular-frontend/core':
+        specifier: workspace:*
+        version: link:../frontend-core
+    devDependencies:
+      oxfmt:
+        specifier: ^0.51.0
+        version: 0.51.0
+      oxlint:
+        specifier: ^1.66.0
+        version: 1.66.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vite:
+        specifier: ^8.0.11
+        version: 8.0.11(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
+      vite-plugin-dts:
+        specifier: ^4.5.0
+        version: 4.5.4(@types/node@25.6.2)(rollup@4.60.3)(typescript@6.0.3)(vite@8.0.11(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@types/node@25.6.2)(happy-dom@20.9.0)(msw@2.14.5(@types/node@25.6.2)(typescript@6.0.3))(vite@8.0.11(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))
+
+  packages/frontend-core:
+    dependencies:
       '@standard-schema/spec':
         specifier: ^1.0.0
         version: 1.1.0
     devDependencies:
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.14
       oxfmt:
         specifier: ^0.51.0
         version: 0.51.0

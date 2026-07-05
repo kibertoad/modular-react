@@ -120,12 +120,12 @@ export function resolveNavHref<TContext>(
   if (typeof to === "function") {
     if (context === undefined) {
       throw new Error(
-        `[@modular-react/core] resolveNavHref: navigation item "${item.label}" has a function \`to\` but no context was provided.`,
+        `[@modular-frontend/core] resolveNavHref: navigation item "${item.label}" has a function \`to\` but no context was provided.`,
       );
     }
     return (to as (ctx: TContext) => string)(context);
   }
   throw new Error(
-    `[@modular-react/core] resolveNavHref: navigation item "${item.label}" has an invalid \`to\` field (expected string or function, got ${typeof to}).`,
+    `[@modular-frontend/core] resolveNavHref: navigation item "${item.label}" has an invalid \`to\` field (expected string or function, got ${typeof to}).`,
   );
 }

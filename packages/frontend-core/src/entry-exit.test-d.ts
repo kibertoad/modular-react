@@ -8,7 +8,6 @@
 //     entries don't suspend, so the field would be silently ignored)
 
 import { expectTypeOf, test } from "vitest";
-import type { ComponentType, ReactNode } from "react";
 
 import { buildInputFor, defineEntry, schema } from "./entry-exit.js";
 import type {
@@ -18,11 +17,14 @@ import type {
   ModuleEntryPoint,
   ModuleEntryProps,
 } from "./types.js";
+import type { UiComponent, UiNode } from "./ui-types.js";
 
 interface MyInput {
   readonly id: string;
 }
-const Component = ((_props: ModuleEntryProps<MyInput, any>) => null) as ComponentType<
+// Neutral component/node stand-ins — the framework binding refines these,
+// but the entry-point discrimination is exercised against the seam itself.
+const Component = ((_props: ModuleEntryProps<MyInput, any>) => null) as UiComponent<
   ModuleEntryProps<MyInput, any>
 >;
 
@@ -70,7 +72,7 @@ test("`fallback` is allowed only on lazy entries", () => {
   // OK on lazy entries.
   defineEntry({
     lazy: () => Promise.resolve({ default: Component }),
-    fallback: null as ReactNode,
+    fallback: null as UiNode,
   });
 });
 
@@ -79,19 +81,19 @@ test("`fallback` is allowed only on lazy entries", () => {
 // direct-export module shapes.
 // -----------------------------------------------------------------------------
 
-test("LazyEntryComponent accepts a `() => Promise<{ default: ComponentType<...> }>`", () => {
+test("LazyEntryComponent accepts a `() => Promise<{ default: UiComponent<...> }>`", () => {
   const importer: LazyEntryComponent<MyInput> = () => Promise.resolve({ default: Component });
   expectTypeOf(importer).returns.resolves.toMatchTypeOf<
-    | { default: ComponentType<ModuleEntryProps<MyInput, any>> }
-    | ComponentType<ModuleEntryProps<MyInput, any>>
+    | { default: UiComponent<ModuleEntryProps<MyInput, any>> }
+    | UiComponent<ModuleEntryProps<MyInput, any>>
   >();
 });
 
-test("LazyEntryComponent also accepts a `() => Promise<ComponentType<...>>` (direct export)", () => {
+test("LazyEntryComponent also accepts a `() => Promise<UiComponent<...>>` (direct export)", () => {
   const importer: LazyEntryComponent<MyInput> = () => Promise.resolve(Component);
   expectTypeOf(importer).returns.resolves.toMatchTypeOf<
-    | { default: ComponentType<ModuleEntryProps<MyInput, any>> }
-    | ComponentType<ModuleEntryProps<MyInput, any>>
+    | { default: UiComponent<ModuleEntryProps<MyInput, any>> }
+    | UiComponent<ModuleEntryProps<MyInput, any>>
   >();
 });
 
@@ -127,7 +129,7 @@ test("buildInputFor wraps cleanly into defineEntry({ buildInput })", () => {
   interface NameInput {
     readonly previousName: string;
   }
-  const NameComponent = ((_props: ModuleEntryProps<NameInput, any>) => null) as ComponentType<
+  const NameComponent = ((_props: ModuleEntryProps<NameInput, any>) => null) as UiComponent<
     ModuleEntryProps<NameInput, any>
   >;
   const entry = defineEntry({

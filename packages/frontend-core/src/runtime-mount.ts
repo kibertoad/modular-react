@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from "react";
+import type { UiComponent, UiNode } from "./ui-types.js";
 
 /**
  * Generic seam for embedding an external runtime as a child of another
@@ -12,7 +12,7 @@ import type { ComponentType, ReactNode } from "react";
  * needs to expose "give me an instance id from this definition id +
  * input" and "render the running instance".
  *
- * Lives in `@modular-react/core` so cross-plugin integration points
+ * Lives in `@modular-frontend/core` so cross-plugin integration points
  * (compositions ↔ journeys; future compositions ↔ remote modules; future
  * composition-in-composition) share one shape without one plugin
  * package taking a hard dependency on another.
@@ -39,9 +39,9 @@ export interface RuntimeMountAdapter<TInput = unknown> {
    * `loadingFallback` propagates through `Suspense` boundaries inside
    * the embedded runtime (e.g. while a lazy step chunk loads).
    */
-  Outlet: ComponentType<{
+  Outlet: UiComponent<{
     instanceId: string;
-    loadingFallback?: ReactNode;
+    loadingFallback?: UiNode;
   }>;
 
   /**
