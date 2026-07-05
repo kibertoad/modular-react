@@ -1,5 +1,5 @@
-import type { ComponentType, ReactNode } from "react";
 import type { ModuleDescriptor, NavigationItemBase } from "./types.js";
+import type { UiComponent, UiNode } from "./ui-types.js";
 
 /**
  * Plugin contract — plugins extend the registry without forcing runtime
@@ -59,9 +59,7 @@ export interface RegistryPlugin<
    * Contribute React providers to the provider stack. Applied after user
    * providers; first element is outermost.
    */
-  readonly providers?: (
-    ctx: PluginProvidersCtx<TRuntime>,
-  ) => ComponentType<{ children: ReactNode }>[];
+  readonly providers?: (ctx: PluginProvidersCtx<TRuntime>) => UiComponent<{ children: UiNode }>[];
 }
 
 export interface PluginExtendCtx {

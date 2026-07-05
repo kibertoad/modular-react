@@ -12,16 +12,16 @@ The value question is more nuanced. There is a real gap in the Vue ecosystem for
 
 The repo layers into a router-agnostic foundation and two parallel router families. The React coupling per package:
 
-| Package | Source LOC (non-test) | React coupling | Port implication |
-| --- | --- | --- | --- |
-| `@modular-react/core` | ~6,700 | None (two type-only imports) | Reuse as-is |
-| `@modular-react/react` | ~2,100 | Total; this is the binding layer | Rewrite as `@modular-vue/vue` |
-| `@modular-react/journeys` | ~7,100 | ~20% (outlet, hooks, provider) | Reuse the 3,000-line state machine; rewrite ~1,400 LOC of UI |
-| `@modular-react/compositions` | ~3,600 | ~45% (outlet.tsx, hooks) | Reuse runtime/stores/validation; rewrite ~1,600 LOC |
-| `@modular-react/catalog` | ~2,400 | None (zero `.tsx` files) | Reuse; adjust descriptor detection and the SPA bundle |
-| `@modular-react/cli-core` | ~2,200 | Templates only | Reuse the command engine; swap template bodies |
-| `@modular-react/testing` | ~400 | Thin | Light port |
-| Router family (core + runtime + testing + cli), per router | ~3,100 each | Heavy | Write one `@vue-router-modules/*` family |
+| Package                                                    | Source LOC (non-test) | React coupling                   | Port implication                                             |
+| ---------------------------------------------------------- | --------------------- | -------------------------------- | ------------------------------------------------------------ |
+| `@modular-react/core`                                      | ~6,700                | None (two type-only imports)     | Reuse as-is                                                  |
+| `@modular-react/react`                                     | ~2,100                | Total; this is the binding layer | Rewrite as `@modular-vue/vue`                                |
+| `@modular-react/journeys`                                  | ~7,100                | ~20% (outlet, hooks, provider)   | Reuse the 3,000-line state machine; rewrite ~1,400 LOC of UI |
+| `@modular-react/compositions`                              | ~3,600                | ~45% (outlet.tsx, hooks)         | Reuse runtime/stores/validation; rewrite ~1,600 LOC          |
+| `@modular-react/catalog`                                   | ~2,400                | None (zero `.tsx` files)         | Reuse; adjust descriptor detection and the SPA bundle        |
+| `@modular-react/cli-core`                                  | ~2,200                | Templates only                   | Reuse the command engine; swap template bodies               |
+| `@modular-react/testing`                                   | ~400                  | Thin                             | Light port                                                   |
+| Router family (core + runtime + testing + cli), per router | ~3,100 each           | Heavy                            | Write one `@vue-router-modules/*` family                     |
 
 The single most important portability fact is `core/src/store.ts`: the `Store<T>` interface matches zustand's `StoreApi<T>` (`getState`/`setState`/`subscribe`) and ships a dependency-free implementation. All state in journeys, compositions, and the registries flows through this interface. React consumes it via `useSyncExternalStore`; nothing below the hook layer knows React exists.
 

@@ -1,7 +1,7 @@
 /**
  * Minimal semver subset for module-compatibility checks.
  *
- * Lives in `@modular-react/core` because multiple plugin packages
+ * Lives in `@modular-frontend/core` because multiple plugin packages
  * (`@modular-react/journeys`, `@modular-react/compositions`) need to
  * range-check module versions against author-declared compat ranges, and
  * pulling either plugin in as a dependency of the other purely for semver
@@ -82,7 +82,7 @@ export interface ParsedRange {
 
 export class SemverParseError extends Error {
   constructor(message: string) {
-    super(`[@modular-react/core] semver: ${message}`);
+    super(`[@modular-frontend/core] semver: ${message}`);
     this.name = "SemverParseError";
   }
 }

@@ -137,7 +137,7 @@ export function mergeRemoteManifests<
   for (const manifest of manifests) {
     if (seen.has(manifest.id)) {
       throw new Error(
-        `[@modular-react/core] mergeRemoteManifests: duplicate remote manifest id "${manifest.id}". Each remote manifest must have a unique id.`,
+        `[@modular-frontend/core] mergeRemoteManifests: duplicate remote manifest id "${manifest.id}". Each remote manifest must have a unique id.`,
       );
     }
     seen.add(manifest.id);

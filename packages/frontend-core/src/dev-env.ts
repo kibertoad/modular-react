@@ -1,4 +1,4 @@
-// Local ambient declaration — `@modular-react/core` doesn't depend on
+// Local ambient declaration — `@modular-frontend/core` doesn't depend on
 // `@types/node`, but we deliberately reference the literal
 // `process.env.NODE_ENV` token below so bundlers can statically replace
 // it. The declare is scoped to this module file (it has imports/exports,

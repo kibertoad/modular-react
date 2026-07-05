@@ -9,9 +9,6 @@ export default defineConfig({
       formats: ["es"],
       fileName: "index",
     },
-    rollupOptions: {
-      external: ["@modular-frontend/core"],
-    },
     sourcemap: true,
   },
 });
