@@ -144,7 +144,29 @@ describe("mergeRouteStaticData", () => {
         nextValue: "ChildTitle",
         previousMatch: parent,
         nextMatch: child,
+        // Positions in the matched hierarchy — the always-unique identifier
+        // the warner uses to disambiguate matches with a shared router id.
+        previousIndex: 0,
+        nextIndex: 1,
       });
+    });
+
+    it("reports each match's hierarchy position, skipping matches that contribute no data", () => {
+      const onOverride = vi.fn<(info: RouteStaticDataOverrideInfo) => void>();
+      // The intermediate match (index 1) has no handle, so the override is
+      // between index 0 and index 2 — the counter still advances per match.
+      const matches: RRMatch[] = [
+        { id: "/", handle: { HeaderTitle: "Root" } },
+        { id: "/layout" },
+        { id: "/layout/leaf", handle: { HeaderTitle: "Leaf" } },
+      ];
+
+      mergeRouteStaticData(matches, getHandle, { onOverride });
+
+      expect(onOverride).toHaveBeenCalledTimes(1);
+      expect(onOverride).toHaveBeenCalledWith(
+        expect.objectContaining({ previousIndex: 0, nextIndex: 2 }),
+      );
     });
 
     it("does not fire when a deeper match contributes a brand-new key", () => {

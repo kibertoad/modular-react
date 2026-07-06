@@ -13,6 +13,16 @@ export interface RouteStaticDataOverrideInfo {
   previousMatch: unknown;
   /** The deeper match that contributed `nextValue`. */
   nextMatch: unknown;
+  /**
+   * Zero-based position of `previousMatch` in the matched hierarchy
+   * (root = 0). A stable, always-unique identifier for the match within a
+   * single merge pass — unlike the router-specific id, which is not unique
+   * for vue-router nameless index routes (they share their parent's `path`).
+   * `undefined` only when the info is hand-constructed (e.g. in tests).
+   */
+  previousIndex?: number;
+  /** Zero-based position of `nextMatch` in the matched hierarchy. */
+  nextIndex?: number;
 }
 
 export interface MergeRouteStaticDataOptions {
@@ -63,9 +73,15 @@ export function mergeRouteStaticData<T extends object>(
   const merged: Record<string, unknown> = {};
   // Only allocate the source-tracking map when a caller actually wants
   // override notifications; the common production path has no overhead.
-  const sources: Record<string, unknown> | null = options?.onOverride ? {} : null;
+  // Track each key's contributing match *and its position* — the position
+  // is the only always-unique identifier (vue-router nameless index routes
+  // share their parent's `path`, so router ids can collide).
+  const sources: Record<string, { match: unknown; index: number }> | null = options?.onOverride
+    ? {}
+    : null;
   const onOverride = options?.onOverride;
 
+  let index = 0;
   for (const match of matches) {
     const data = getData(match);
     // `typeof null === "object"` is the well-known JS footgun — the truthiness
@@ -80,19 +96,23 @@ export function mergeRouteStaticData<T extends object>(
             // `null` is the documented "explicit clear" escape hatch —
             // skip onOverride for it so the canonical intentional path
             // is silent and only real value-replacing overrides warn.
+            const previous = sources[key];
             onOverride!({
               key,
               previousValue: merged[key],
               nextValue: value,
-              previousMatch: sources[key],
+              previousMatch: previous.match,
               nextMatch: match,
+              previousIndex: previous.index,
+              nextIndex: index,
             });
           }
           merged[key] = value;
-          if (sources) sources[key] = match;
+          if (sources) sources[key] = { match, index };
         }
       }
     }
+    index++;
   }
   return merged as Partial<T>;
 }

@@ -116,6 +116,48 @@ describe("createRouteDataOverrideWarner", () => {
       expect(message).toContain("/parent/leaf");
     });
 
+    it("falls back to vue-router record name, then path, when id/routeId are absent", () => {
+      process.env.NODE_ENV = "development";
+      const warn = createRouteDataOverrideWarner("@modular-vue/runtime", "useZones", "meta")!;
+
+      // Ancestor has a named route; descendant only has a path.
+      warn({
+        key: "DetailPanel",
+        previousValue: "A",
+        nextValue: "B",
+        previousMatch: { name: "billing" },
+        nextMatch: { path: "/billing/:id" },
+      });
+
+      const message = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(message).toContain("[@modular-vue/runtime]");
+      expect(message).toContain("meta");
+      expect(message).toContain("billing");
+      expect(message).toContain("/billing/:id");
+    });
+
+    it("disambiguates the message by match position when two records share the same id", () => {
+      // vue-router nameless index routes report the same `path` as their
+      // parent, so prevId === nextId. Without the position the message reads
+      // as a route overriding itself; with it the two records are distinct.
+      process.env.NODE_ENV = "development";
+      const warn = createRouteDataOverrideWarner("@modular-vue/runtime", "useZones", "meta")!;
+
+      warn({
+        key: "HeaderActions",
+        previousValue: "A",
+        nextValue: "B",
+        previousMatch: { path: "/dashboard" },
+        nextMatch: { path: "/dashboard" },
+        previousIndex: 0,
+        nextIndex: 1,
+      });
+
+      const message = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(message).toContain("/dashboard (match 1)");
+      expect(message).toContain("/dashboard (match 0)");
+    });
+
     it("uses <unknown> when neither id nor routeId is present", () => {
       process.env.NODE_ENV = "development";
       const warn = createRouteDataOverrideWarner(
@@ -223,6 +265,35 @@ describe("createRouteDataOverrideWarner", () => {
         nextValue: "B",
         previousMatch: { id: "/q" },
         nextMatch: { id: "/q/c" },
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not collapse distinct overrides that share an id but sit at different positions", () => {
+      // Two nameless index routes both resolve to `/dashboard`, so readMatchId
+      // returns the same id for each override site. Folding the match position
+      // into the dedup key keeps the second real clobber from being silenced.
+      process.env.NODE_ENV = "development";
+      const warn = createRouteDataOverrideWarner("@modular-vue/runtime", "useZones", "meta")!;
+
+      warn({
+        key: "HeaderActions",
+        previousValue: "A",
+        nextValue: "B",
+        previousMatch: { path: "/dashboard" },
+        nextMatch: { path: "/dashboard" },
+        previousIndex: 0,
+        nextIndex: 1,
+      });
+      warn({
+        key: "HeaderActions",
+        previousValue: "B",
+        nextValue: "C",
+        previousMatch: { path: "/dashboard" },
+        nextMatch: { path: "/dashboard" },
+        previousIndex: 1,
+        nextIndex: 2,
       });
 
       expect(warnSpy).toHaveBeenCalledTimes(2);
