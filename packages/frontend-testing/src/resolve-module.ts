@@ -25,7 +25,7 @@ export interface ResolveModuleResult<TSlots> {
  * (static + dynamic) and lifecycle hooks, returning the resolved contributions.
  *
  * Use this for headless modules (no component, no routes) that can't
- * be tested with renderModule().
+ * be tested by rendering with a UI-framework binding.
  *
  * When the module has `dynamicSlots`, they are evaluated with the
  * provided `deps` snapshot and merged with static slot contributions.

@@ -132,18 +132,19 @@ Deviations from the plan, all forced by the framework:
 Acceptance: met. 36 new tests across `resolve-entry.test.ts` (+`.test-d.ts`), `error-boundary.test.ts`, `module-exit.test.ts`, `module-route.test.ts` port the React suites case-for-case (React-only StrictMode / Suspense-fallback-flash cases excepted). Full package suite is 69 tests; workspace typecheck and `vite build` (JS + dts) pass. `@modular-vue/vue` keeps its `@modular-frontend/core` + `vue ^3.5` peer surface.
 
 **PR-12 (S): `@modular-vue/testing`.** Done.
-New `packages/vue-testing` (`@modular-vue/testing`, `0.1.0`) with the repo's standard package skeleton (`vite build` + `rolldown-plugin-dts`, `vitest`, `tsc --noEmit`), mirroring `@modular-react/testing`. Depends on `@modular-frontend/core` plus `@modular-vue/vue` (the binding, for the preload path) and a `vue ^3.5` peer. Ported files, each the analog of the same-named React source:
+New `packages/vue-testing` (`@modular-vue/testing`, `0.1.0`) with the repo's standard package skeleton (`vite build` + `rolldown-plugin-dts`, `vitest`, `tsc --noEmit`), mirroring `@modular-react/testing`. Depends on `@modular-frontend/core`, `@modular-frontend/testing`, and `@modular-vue/vue` (the binding, for the preload path) plus a `vue ^3.5` peer.
 
-- `mock-store.ts` — `createMockStore`, an identical `createStore` alias over `@modular-frontend/core`.
-- `resolve-module.ts` — `resolveModule` / `ResolveModuleOptions` / `ResolveModuleResult`, byte-identical to the React version (it is pure: slot merging, dynamic-slot evaluation, `onRegister`, `ModuleEntry` assembly, all framework-neutral).
-- `preload-entries.ts` — `preloadEntries` walks each module's `entryPoints` and calls `preloadEntry` (re-exported from `@modular-vue/vue`) for every `lazy:` entry, `Promise.all`-ing them so a single rejection doesn't leak sibling unhandled rejections.
+Rather than duplicate the framework-neutral helpers per binding, the port extracted them into a shared package:
+
+- `@modular-frontend/testing` (`0.1.0`, new) holds `createMockStore` and `resolveModule` (+ `ResolveModuleOptions` / `ResolveModuleResult`). Both are pure over `@modular-frontend/core` (slot merging, dynamic-slot evaluation, `onRegister`, `ModuleEntry` assembly) with no UI-framework dependency. `@modular-react/testing` and `@modular-vue/testing` re-export them, so a fix to slot resolution or the mock store lands in one place. This mirrors the earlier `journeys-engine` / `compositions-engine` extractions.
+- `preload-entries.ts` stays per-binding: `preloadEntries` walks each module's `entryPoints` and calls `preloadEntry` (re-exported from `@modular-vue/vue`) for every `lazy:` entry, `Promise.all`-ing them so a single rejection doesn't leak sibling unhandled rejections. This is the only file that touches the binding layer.
 
 Deviation from the React source, forced by the framework:
 
 - The doc comment and the "resolves synchronously" test drop React.lazy's synchronous-thenable trick, matching the PR-11 `resolve-entry.ts` deviation. Vue's `defineAsyncComponent` resolves through its own async state on mount, so `preloadEntries` warms the resolver's `WeakMap` cache (saving the re-import) but not the extra microtask. The React `preloadEntries` test that asserts synchronous resolution is replaced by one asserting the post-preload cached path replays without re-importing; the `vi.mock` test asserts on the normalized component's `displayName` directly (Vue's `preload()` resolves to the unwrapped `default`, where React's resolved to the `{ default }` module record).
 
 Error-free surface: `createMockStore`, `resolveModule` (+ its option/result types), `preloadEntries`, and a re-exported `preloadEntry` for a single import surface.
-Acceptance: met. 15 tests across `resolve-module.test.ts` (6, verbatim port) and `preload-entries.test.ts` (9, ported case-for-case bar the React-only synchronous-thenable case) pass; typecheck and `vite build` (JS + dts) pass.
+Acceptance: met. 15 tests total — `resolve-module.test.ts` (6) now lives in `@modular-frontend/testing`, and each binding's `preload-entries.test.ts` (9) is ported case-for-case bar the React-only synchronous-thenable case. Typecheck and `vite build` (JS + dts) pass for all three packages.
 
 ### Phase 2: vue-router family
 

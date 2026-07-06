@@ -30,6 +30,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@modular-frontend/testing": "workspace:*",
     "@modular-react/core": "workspace:*",
     "@modular-react/react": "workspace:*",
     "@types/react": "^19.0.0",
@@ -44,6 +45,7 @@
     "vitest": "^4.1.10"
   },
   "peerDependencies": {
+    "@modular-frontend/testing": "^0.1.0",
     "@modular-react/core": "^2.0.0",
     "@modular-react/react": "^2.0.0",
     "react": "^19.0.0",

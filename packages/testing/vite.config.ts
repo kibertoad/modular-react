@@ -13,6 +13,7 @@ export default defineConfig(({ command }) => ({
         "react",
         "react/jsx-runtime",
         "react-dom",
+        "@modular-frontend/testing",
         "@modular-react/core",
         "@modular-react/react",
       ],

@@ -9,7 +9,7 @@ export default defineConfig(({ command }) => ({
       formats: ["es"],
     },
     rollupOptions: {
-      external: ["vue", "@modular-frontend/core", "@modular-frontend/testing", "@modular-vue/vue"],
+      external: ["@modular-frontend/core"],
     },
     sourcemap: true,
   },
