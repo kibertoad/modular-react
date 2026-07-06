@@ -2,6 +2,25 @@ import { onScopeDispose, shallowRef, type ShallowRef } from "vue";
 import type { ReactiveService, Store } from "@modular-frontend/core";
 
 /**
+ * Shared bridge for any "subscribe + read snapshot" source: seed a
+ * `shallowRef` with the current value, push a fresh read on every change, and
+ * tear the subscription down on scope dispose (component unmount). Both
+ * {@link storeRef} and {@link reactiveServiceRef} are thin wrappers over this;
+ * keeping the leak-sensitive subscribe/teardown in one place.
+ */
+function subscribeRef<T>(
+  read: () => T,
+  subscribe: (onChange: () => void) => () => void,
+): ShallowRef<T> {
+  const state = shallowRef(read());
+  const unsubscribe = subscribe(() => {
+    state.value = read();
+  });
+  onScopeDispose(unsubscribe);
+  return state;
+}
+
+/**
  * Bridges an external, framework-neutral `Store<T>` into Vue reactivity.
  *
  * Mirrors what `useSyncExternalStore` does for the React binding: a
@@ -22,12 +41,7 @@ export function storeRef<T>(
   selector?: (state: T) => unknown,
 ): ShallowRef<unknown> {
   const read = selector ? () => selector(store.getState()) : () => store.getState();
-  const state = shallowRef(read());
-  const unsubscribe = store.subscribe(() => {
-    state.value = read();
-  });
-  onScopeDispose(unsubscribe);
-  return state;
+  return subscribeRef(read, (onChange) => store.subscribe(onChange));
 }
 
 /**
@@ -46,10 +60,5 @@ export function reactiveServiceRef<T>(
   selector?: (state: T) => unknown,
 ): ShallowRef<unknown> {
   const read = selector ? () => selector(rs.getSnapshot()) : () => rs.getSnapshot();
-  const state = shallowRef(read());
-  const unsubscribe = rs.subscribe(() => {
-    state.value = read();
-  });
-  onScopeDispose(unsubscribe);
-  return state;
+  return subscribeRef(read, (onChange) => rs.subscribe(onChange));
 }

@@ -15,7 +15,7 @@ import type {
   SlotFilter,
   Store,
 } from "@modular-frontend/core";
-import { evaluateDynamicSlots } from "@modular-frontend/core";
+import { buildDepsSnapshot, evaluateDynamicSlots } from "@modular-frontend/core";
 
 /**
  * Injection key holding the resolved slot contributions. Always a `Ref` so
@@ -42,6 +42,12 @@ export function provideSlots(slots: object | Ref<object>): void {
 /**
  * Access the collected slot contributions from all registered modules as a
  * reactive `Ref`. Must be used within a modular app provider tree.
+ *
+ * @remarks
+ * This name intentionally mirrors the React binding's `useSlots`, but it
+ * collides with Vue's own `useSlots` from `@vue/runtime-core`. In a component
+ * that needs both, import this one under an alias to avoid shadowing the
+ * built-in — e.g. `import { useSlots as useModuleSlots } from '@modular-vue/vue'`.
  *
  * @example
  * const slots = useSlots<AppSlots>()
@@ -129,16 +135,13 @@ export const DynamicSlotsProvider = defineComponent({
   setup(props, { slots: renderSlots }) {
     // Props are stable references created once at resolve() time.
     function computeSlots(): object {
-      const deps: Record<string, unknown> = {};
-      for (const [key, store] of Object.entries(props.stores)) {
-        deps[key] = store.getState();
-      }
-      for (const [key, service] of Object.entries(props.services)) {
-        deps[key] = service;
-      }
-      for (const [key, rs] of Object.entries(props.reactiveServices)) {
-        deps[key] = rs.getSnapshot();
-      }
+      // Same snapshot contract as the runtime uses at resolve() time — reads
+      // store state and reactive-service snapshots, passes services through.
+      const deps = buildDepsSnapshot<Record<string, unknown>>({
+        stores: props.stores,
+        services: props.services,
+        reactiveServices: props.reactiveServices,
+      });
       return evaluateDynamicSlots(props.baseSlots as any, props.factories, deps, props.filter);
     }
 

@@ -2827,11 +2827,10 @@ importers:
         version: 4.1.5(@types/node@25.6.2)(happy-dom@20.9.0)(msw@2.14.5(@types/node@25.6.2)(typescript@6.0.3))(vite@8.0.11(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))
 
   packages/vue:
-    dependencies:
+    devDependencies:
       '@modular-frontend/core':
         specifier: workspace:*
         version: link:../frontend-core
-    devDependencies:
       '@vue/test-utils':
         specifier: ^2.4.6
         version: 2.4.11(@vue/compiler-dom@3.5.39)(@vue/server-renderer@3.5.39(vue@3.5.39(typescript@6.0.3)))(vue@3.5.39(typescript@6.0.3))

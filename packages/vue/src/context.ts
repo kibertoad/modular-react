@@ -49,10 +49,34 @@ function allKeys(ctx: SharedDependenciesContextValue): string {
 }
 
 function suggestComposable(key: string, ctx: SharedDependenciesContextValue): string | null {
-  if (ctx.stores[key]) return `Use useStore('${key}') instead.`;
-  if (ctx.services[key]) return `Use useService('${key}') instead.`;
-  if (ctx.reactiveServices[key]) return `Use useReactiveService('${key}') instead.`;
+  if (key in ctx.stores) return `Use useStore('${key}') instead.`;
+  if (key in ctx.services) return `Use useService('${key}') instead.`;
+  if (key in ctx.reactiveServices) return `Use useReactiveService('${key}') instead.`;
   return null;
+}
+
+/**
+ * Look up `key` in one dependency bucket, or throw a helpful error. Uses `in`
+ * (not a truthy check) so a legitimately falsy plain-service value — `0`,
+ * `false`, `""` — is still returned rather than misreported as unregistered.
+ */
+function requireDep<T>(
+  ctx: SharedDependenciesContextValue,
+  bucket: "stores" | "services" | "reactiveServices",
+  label: string,
+  key: string,
+): T {
+  const map = ctx[bucket] as Record<string, unknown>;
+  if (key in map) {
+    return map[key] as T;
+  }
+  const hint = suggestComposable(key, ctx);
+  if (hint) {
+    throw new Error(`[@modular-vue/vue] "${key}" is not a ${label}. ${hint}`);
+  }
+  throw new Error(
+    `[@modular-vue/vue] "${key}" is not registered. Available dependencies: ${allKeys(ctx)}`,
+  );
 }
 
 /**
@@ -94,16 +118,7 @@ export function createSharedComposables<TSharedDependencies extends Record<strin
     selector?: (state: any) => unknown,
   ): Ref<unknown> {
     const ctx = useSharedDependencies();
-    const store = ctx.stores[key];
-    if (!store) {
-      const hint = suggestComposable(key, ctx);
-      if (hint) {
-        throw new Error(`[@modular-vue/vue] "${key}" is not a store. ${hint}`);
-      }
-      throw new Error(
-        `[@modular-vue/vue] "${key}" is not registered. Available dependencies: ${allKeys(ctx)}`,
-      );
-    }
+    const store = requireDep<Store<unknown>>(ctx, "stores", "store", key);
     return selector ? storeRef(store, selector) : storeRef(store);
   }
 
@@ -111,17 +126,7 @@ export function createSharedComposables<TSharedDependencies extends Record<strin
     key: K,
   ): TSharedDependencies[K] {
     const ctx = useSharedDependencies();
-    const service = ctx.services[key];
-    if (!service) {
-      const hint = suggestComposable(key, ctx);
-      if (hint) {
-        throw new Error(`[@modular-vue/vue] "${key}" is not a service. ${hint}`);
-      }
-      throw new Error(
-        `[@modular-vue/vue] "${key}" is not registered. Available dependencies: ${allKeys(ctx)}`,
-      );
-    }
-    return service as TSharedDependencies[K];
+    return requireDep<TSharedDependencies[K]>(ctx, "services", "service", key);
   }
 
   /**
@@ -144,16 +149,12 @@ export function createSharedComposables<TSharedDependencies extends Record<strin
     selector?: (state: any) => unknown,
   ): Ref<unknown> {
     const ctx = useSharedDependencies();
-    const rs = ctx.reactiveServices[key];
-    if (!rs) {
-      const hint = suggestComposable(key, ctx);
-      if (hint) {
-        throw new Error(`[@modular-vue/vue] "${key}" is not a reactive service. ${hint}`);
-      }
-      throw new Error(
-        `[@modular-vue/vue] "${key}" is not registered. Available dependencies: ${allKeys(ctx)}`,
-      );
-    }
+    const rs = requireDep<ReactiveService<unknown>>(
+      ctx,
+      "reactiveServices",
+      "reactive service",
+      key,
+    );
     return selector ? reactiveServiceRef(rs, selector) : reactiveServiceRef(rs);
   }
 
