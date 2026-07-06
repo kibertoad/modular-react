@@ -11,6 +11,24 @@ allowBuilds:
   esbuild: false
   msw: false
 
+overrides:
+  # Guard: pin the rolldown backend that rolldown-plugin-dts resolves to a
+  # single version. pnpm's peer resolution otherwise picks whatever rolldown
+  # is in the tree, so a package pulling an older vite (older bundled rolldown)
+  # would make dts generate through a different backend than the rest of the
+  # workspace. Keeps every package's plugin on vite 8.1.x's rolldown@1.1.4.
+  rolldown-plugin-dts>rolldown: 1.1.4
+
+minimumReleaseAgeExclude:
+  - "@vitest/expect@4.1.10"
+  - "@vitest/mocker@4.1.10"
+  - "@vitest/pretty-format@4.1.10"
+  - "@vitest/runner@4.1.10"
+  - "@vitest/snapshot@4.1.10"
+  - "@vitest/spy@4.1.10"
+  - "@vitest/utils@4.1.10"
+  - vitest@4.1.10
+
 onlyBuiltDependencies:
   - esbuild
   - msw

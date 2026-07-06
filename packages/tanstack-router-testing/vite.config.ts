@@ -1,13 +1,12 @@
 import { defineConfig } from "vite";
-import dts from "vite-plugin-dts";
+import { dts } from "rolldown-plugin-dts";
 
-export default defineConfig({
-  plugins: [dts({ rollupTypes: true })],
+export default defineConfig(({ command }) => ({
+  plugins: command === "build" ? [dts()] : [],
   build: {
     lib: {
-      entry: "src/index.ts",
+      entry: { index: "src/index.ts" },
       formats: ["es"],
-      fileName: "index",
     },
     rollupOptions: {
       external: [
@@ -28,4 +27,7 @@ export default defineConfig({
     },
     sourcemap: true,
   },
-});
+  oxc: {
+    exclude: [/\.js$/, /\.d\.[cm]?ts$/],
+  },
+}));
