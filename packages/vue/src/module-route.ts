@@ -1,4 +1,4 @@
-import { defineComponent, h, type PropType, type VNode } from "vue";
+import { computed, defineComponent, h, type PropType, type VNode } from "vue";
 import type {
   EagerModuleEntryPoint,
   ModuleDescriptor,
@@ -70,33 +70,50 @@ export const ModuleRoute = defineComponent({
     },
   },
   setup(props) {
-    const mod = props.module;
-    const entryPoints = mod.entryPoints;
-    const entryNames = entryPoints ? Object.keys(entryPoints) : [];
+    // Resolve reactively: `setup` runs once, but a `<router-view>`-hosted
+    // `<ModuleRoute>` can be reused across navigation (Vue patches props on the
+    // same instance when no `:key` differs), so `module` / `entry` may change
+    // in place. A `computed` re-resolves on those changes instead of freezing
+    // the first route's entry — the React analog re-runs its body every render.
+    const resolution = computed(() => {
+      const mod = props.module;
+      const entryPoints = mod.entryPoints;
+      const entryNames = entryPoints ? Object.keys(entryPoints) : [];
 
-    let resolvedName: string | undefined = props.entry;
-    let missingEntryNotice: string | null = null;
-    if (props.entry === undefined) {
-      if (entryNames.length === 1) {
-        resolvedName = entryNames[0];
-      } else if (entryNames.length > 1) {
-        missingEntryNotice = `Module "${mod.id}" exposes multiple entries (${entryNames.join(", ")}); pass the \`entry\` prop to disambiguate.`;
+      let resolvedName: string | undefined = props.entry;
+      let missingEntryNotice: string | null = null;
+      if (props.entry === undefined) {
+        if (entryNames.length === 1) {
+          resolvedName = entryNames[0];
+        } else if (entryNames.length > 1) {
+          missingEntryNotice = `Module "${mod.id}" exposes multiple entries (${entryNames.join(", ")}); pass the \`entry\` prop to disambiguate.`;
+        }
+      } else if (entryPoints && !(props.entry in entryPoints)) {
+        missingEntryNotice = `Module "${mod.id}" has no entry "${props.entry}". Registered: ${entryNames.join(", ") || "(none)"}.`;
+      } else if (!entryPoints) {
+        resolvedName = undefined;
+        missingEntryNotice = `Module "${mod.id}" has no entry points; \`entry="${props.entry}"\` cannot be resolved.`;
       }
-    } else if (entryPoints && !(props.entry in entryPoints)) {
-      missingEntryNotice = `Module "${mod.id}" has no entry "${props.entry}". Registered: ${entryNames.join(", ") || "(none)"}.`;
-    } else if (!entryPoints) {
-      resolvedName = undefined;
-      missingEntryNotice = `Module "${mod.id}" has no entry points; \`entry="${props.entry}"\` cannot be resolved.`;
-    }
 
-    const entryPoint = resolvedName ? entryPoints?.[resolvedName] : undefined;
-
-    const exit = useModuleExit(mod.id, resolvedName ?? "", {
-      routeId: props.routeId,
-      localOnExit: props.onExit,
+      const entryPoint = resolvedName ? entryPoints?.[resolvedName] : undefined;
+      return { resolvedName, missingEntryNotice, entryPoint };
     });
 
+    // Bind the exit to getters over the live props so an in-place navigation
+    // (new `routeId` / `onExit` / resolved entry) dispatches with current
+    // values rather than the ones captured at first mount.
+    const exit = useModuleExit(
+      () => props.module.id,
+      () => resolution.value.resolvedName ?? "",
+      {
+        routeId: () => props.routeId,
+        localOnExit: () => props.onExit,
+      },
+    );
+
     return () => {
+      const { missingEntryNotice, entryPoint } = resolution.value;
+      const mod = props.module;
       let content: VNode;
       if (missingEntryNotice) {
         content = h("div", { style: noticeStyle }, missingEntryNotice);

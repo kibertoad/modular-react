@@ -77,13 +77,21 @@ export function resolveEntryComponent(entry: ModuleEntryPoint<any>): ResolvedEnt
       // try/catch converts a sync-throwing importer into a cached rejected
       // promise — without it, a sync throw would skip the assignment and the
       // next call would re-invoke the broken importer instead of replaying
-      // the failure.
+      // the failure. A synchronous throw is a hard authoring bug (broken
+      // importer), so it stays cached; an *async* rejection is often transient
+      // (a chunk-fetch network blip), so we clear `inflight` on rejection and
+      // let a later call retry — otherwise the poisoned promise would replay
+      // forever and defeat `defineAsyncComponent`'s own remount-retry path.
       try {
         inflight = Promise.resolve(importer())
           .then(normalize)
           .then((c) => {
             cached = c;
             return c;
+          })
+          .catch((err: unknown) => {
+            inflight = undefined;
+            throw err;
           });
       } catch (err) {
         inflight = Promise.reject(err);

@@ -1,4 +1,12 @@
-import { defineComponent, inject, provide, type InjectionKey, type PropType } from "vue";
+import {
+  defineComponent,
+  inject,
+  provide,
+  toValue,
+  type InjectionKey,
+  type MaybeRefOrGetter,
+  type PropType,
+} from "vue";
 import type { ExitFn, ExitPointMap } from "@modular-frontend/core";
 
 /**
@@ -30,11 +38,14 @@ export interface ModuleExitEvent {
 export type ModuleExitHandler = (event: ModuleExitEvent) => void;
 
 /**
- * Injection key holding the nearest module-exit dispatcher. Absent when no
- * {@link ModuleExitProvider} is mounted; `useModuleExitDispatcher` then reads
- * `undefined`.
+ * Injection key holding a *getter* for the nearest module-exit dispatcher.
+ * A getter (rather than the handler value) keeps the injection reactive: the
+ * provider can swap its `onExit` prop after mount and descendants read the
+ * current handler — the React analog re-provides a memoized context value
+ * whenever `onExit` changes. Absent when no {@link ModuleExitProvider} is
+ * mounted; `useModuleExitDispatcher` then reads `undefined`.
  */
-export const moduleExitKey: InjectionKey<ModuleExitHandler | undefined> =
+export const moduleExitKey: InjectionKey<() => ModuleExitHandler | undefined> =
   Symbol("modular-vue.moduleExit");
 
 /**
@@ -46,9 +57,10 @@ export const moduleExitKey: InjectionKey<ModuleExitHandler | undefined> =
  * workspace, start a journey). Authored with `defineComponent` + a render
  * function (no SFC compiler in the package build; see decision D4).
  *
- * The handler is provided by identity as captured at setup — a stable value
- * for the lifetime of the provider, matching how the other injection contexts
- * (modules, navigation) are set once at resolve time.
+ * The dispatcher is provided as a getter over the live `onExit` prop, so
+ * swapping the handler after mount (e.g. `:onExit="isAuthed ? a : b"`) is
+ * visible to descendant hosts — matching the React provider, which re-memoizes
+ * its context value whenever `onExit` changes.
  */
 export const ModuleExitProvider = defineComponent({
   name: "ModuleExitProvider",
@@ -61,14 +73,16 @@ export const ModuleExitProvider = defineComponent({
     onExit: { type: Function as PropType<ModuleExitHandler>, default: undefined },
   },
   setup(props, { slots }) {
-    provide(moduleExitKey, props.onExit);
+    // Provide a getter (not the raw value) so a later `onExit` swap reaches
+    // descendants; a raw value would snapshot at setup and go stale.
+    provide(moduleExitKey, () => props.onExit);
     return () => slots.default?.();
   },
 });
 
 /** Read the current module-exit dispatcher, or `undefined` when none is mounted. */
 export function useModuleExitDispatcher(): ModuleExitHandler | undefined {
-  return inject(moduleExitKey, undefined);
+  return inject(moduleExitKey, undefined)?.();
 }
 
 /**
@@ -81,30 +95,38 @@ export function useModuleExitDispatcher(): ModuleExitHandler | undefined {
  * is a route. At most one of the two should be supplied; the event shape
  * allows both to be absent for ad-hoc callers.
  *
- * The dispatcher is resolved once via `inject` at setup time (composables must
- * run synchronously in `setup`), so the returned callback is a stable closure.
+ * `moduleId`, `entry`, and the options accept a plain value, a ref, or a
+ * getter ({@link MaybeRefOrGetter}). Because `setup` runs once, a host whose
+ * `(moduleId, entry, routeId, onExit)` can change on the *same* instance
+ * (e.g. a `<router-view>`-hosted route reused across navigation) should pass
+ * getters so the emitted event and the local handler track the current props —
+ * the React analog rebinds via its `useMemo` dependency list. Plain values
+ * still work unchanged for hosts whose binding is fixed for the mount.
+ *
+ * The dispatcher getter is resolved once via `inject` at setup time
+ * (composables must run synchronously in `setup`) but is *invoked* on each
+ * exit, so a swapped provider handler is picked up too.
  */
 export function useModuleExit<TExits extends ExitPointMap = ExitPointMap>(
-  moduleId: string,
-  entry: string,
+  moduleId: MaybeRefOrGetter<string>,
+  entry: MaybeRefOrGetter<string>,
   options: {
-    readonly tabId?: string;
-    readonly routeId?: string;
-    readonly localOnExit?: ModuleExitHandler;
+    readonly tabId?: MaybeRefOrGetter<string | undefined>;
+    readonly routeId?: MaybeRefOrGetter<string | undefined>;
+    readonly localOnExit?: MaybeRefOrGetter<ModuleExitHandler | undefined>;
   } = {},
 ): ExitFn<TExits> {
-  const { tabId, routeId, localOnExit } = options;
-  const globalOnExit = useModuleExitDispatcher();
+  const dispatcher = inject(moduleExitKey, undefined);
   return ((exitName: string, output?: unknown) => {
     const event: ModuleExitEvent = {
-      moduleId,
-      entry,
+      moduleId: toValue(moduleId),
+      entry: toValue(entry),
       exit: exitName,
       output,
-      tabId,
-      routeId,
+      tabId: toValue(options.tabId),
+      routeId: toValue(options.routeId),
     };
-    localOnExit?.(event);
-    globalOnExit?.(event);
+    toValue(options.localOnExit)?.(event);
+    dispatcher?.()?.(event);
   }) as ExitFn<TExits>;
 }

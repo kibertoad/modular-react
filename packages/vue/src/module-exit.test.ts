@@ -124,4 +124,45 @@ describe("ModuleExitProvider / useModuleExit", () => {
     });
     expect(seen).toBe(onExit);
   });
+
+  it("descendants pick up a swapped provider `onExit` prop", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const wrapper = mount(ModuleExitProvider, {
+      props: { onExit: first },
+      slots: {
+        default: () => h(Trigger, { moduleId: "m1", entry: "default", exitName: "done" }),
+      },
+    });
+    await wrapper.get("[data-testid=fire]").trigger("click");
+    expect(first).toHaveBeenCalledTimes(1);
+
+    // The provider provides a getter over the live prop, so a later swap is
+    // visible to the same mounted descendant.
+    await wrapper.setProps({ onExit: second });
+    await wrapper.get("[data-testid=fire]").trigger("click");
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).toHaveBeenCalledTimes(1);
+  });
+
+  it("tracks a `localOnExit` getter across prop changes", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const GetterTrigger = defineComponent({
+      props: { localOnExit: { type: Function as PropType<ModuleExitHandler>, default: undefined } },
+      setup(props) {
+        const exit = useModuleExit("m1", "default", { localOnExit: () => props.localOnExit });
+        return () =>
+          h("button", { "data-testid": "fire", onClick: () => exit("done" as never) }, "fire");
+      },
+    });
+    const wrapper = mount(GetterTrigger, { props: { localOnExit: first } });
+    await wrapper.get("[data-testid=fire]").trigger("click");
+    expect(first).toHaveBeenCalledTimes(1);
+
+    await wrapper.setProps({ localOnExit: second });
+    await wrapper.get("[data-testid=fire]").trigger("click");
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).toHaveBeenCalledTimes(1);
+  });
 });

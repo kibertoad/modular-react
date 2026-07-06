@@ -131,4 +131,19 @@ describe("resolveEntryComponent — invalid input", () => {
     await expect(preload()).rejects.toBe(failure);
     expect(importer).toHaveBeenCalledTimes(1);
   });
+
+  it("retries a transient async import rejection on the next call", async () => {
+    const failure = new Error("network blip");
+    const importer = vi
+      .fn<() => Promise<{ default: typeof Lazy }>>()
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce({ default: Lazy });
+    const entry: LazyModuleEntryPoint<{ value: string }> = { lazy: importer };
+    const { preload } = resolveEntryComponent(entry);
+    // A transient async rejection is not cached — the slot is cleared so the
+    // next call re-imports (unlike a synchronous throw, which stays cached).
+    await expect(preload()).rejects.toBe(failure);
+    await expect(preload()).resolves.toBeDefined();
+    expect(importer).toHaveBeenCalledTimes(2);
+  });
 });

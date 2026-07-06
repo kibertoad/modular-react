@@ -188,4 +188,53 @@ describe("ModuleRoute", () => {
     await wrapper.get("[data-testid=back]").trigger("click");
     expect(goBack).toHaveBeenCalledTimes(1);
   });
+
+  it("re-resolves the entry when the `entry` prop changes on a reused instance", async () => {
+    const onExit = vi.fn();
+    const multiMod = defineModule({
+      id: "multi",
+      version: "1.0.0",
+      exitPoints: exits,
+      entryPoints: {
+        review: defineEntry({ component: Review, input: schema<{ customerId: string }>() }),
+        other: defineEntry({ component: Review, input: schema<{ customerId: string }>() }),
+      },
+    });
+    const wrapper = mount(ModuleRoute, {
+      props: {
+        module: multiMod,
+        entry: "review",
+        input: { customerId: "C-1" },
+        routeId: "r1",
+        onExit,
+      },
+    });
+    // Same instance, props patched in place (as a keyless <router-view> would).
+    await wrapper.setProps({ entry: "other", routeId: "r2" });
+    await wrapper.get("[data-testid=confirm]").trigger("click");
+    expect(onExit).toHaveBeenCalledWith(
+      expect.objectContaining({ moduleId: "multi", entry: "other", routeId: "r2" }),
+    );
+  });
+
+  it("swaps to the error notice when `entry` changes to an unknown name in place", async () => {
+    const wrapper = mount(ModuleRoute, {
+      props: { module: mod, entry: "review", input: { customerId: "C-1" } },
+    });
+    expect(wrapper.get("[data-testid=cid]").text()).toBe("C-1");
+    await wrapper.setProps({ entry: "ghost" });
+    expect(wrapper.text()).toContain('no entry "ghost"');
+  });
+
+  it("dispatches exits with the current `onExit` after the handler prop is swapped", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const wrapper = mount(ModuleRoute, {
+      props: { module: mod, entry: "review", input: { customerId: "C-1" }, onExit: first },
+    });
+    await wrapper.setProps({ onExit: second });
+    await wrapper.get("[data-testid=confirm]").trigger("click");
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
 });
