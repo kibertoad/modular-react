@@ -116,6 +116,26 @@ describe("createRouteDataOverrideWarner", () => {
       expect(message).toContain("/parent/leaf");
     });
 
+    it("falls back to vue-router record name, then path, when id/routeId are absent", () => {
+      process.env.NODE_ENV = "development";
+      const warn = createRouteDataOverrideWarner("@modular-vue/runtime", "useZones", "meta")!;
+
+      // Ancestor has a named route; descendant only has a path.
+      warn({
+        key: "DetailPanel",
+        previousValue: "A",
+        nextValue: "B",
+        previousMatch: { name: "billing" },
+        nextMatch: { path: "/billing/:id" },
+      });
+
+      const message = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(message).toContain("[@modular-vue/runtime]");
+      expect(message).toContain("meta");
+      expect(message).toContain("billing");
+      expect(message).toContain("/billing/:id");
+    });
+
     it("uses <unknown> when neither id nor routeId is present", () => {
       process.env.NODE_ENV = "development";
       const warn = createRouteDataOverrideWarner(

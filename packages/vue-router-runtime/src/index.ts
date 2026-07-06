@@ -55,3 +55,8 @@ export {
   ModuleErrorBoundary,
 } from "@modular-vue/vue";
 export type { SlotsSignal } from "@modular-vue/vue";
+
+// Zones and route data (router-specific) — read over `useRoute().matched`
+export { useZones } from "./zones.js";
+export { useActiveZones } from "./active-zones.js";
+export { useRouteData } from "./route-data.js";

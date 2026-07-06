@@ -9,13 +9,14 @@ import type { RouteStaticDataOverrideInfo } from "./route-data.js";
  */
 export type RouteDataRuntimeLabel =
   | "@react-router-modules/runtime"
-  | "@tanstack-react-modules/runtime";
+  | "@tanstack-react-modules/runtime"
+  | "@modular-vue/runtime";
 
 /** Hook surfacing the warning. Closed set: the two route-data hooks. */
 export type RouteDataHookName = "useZones" | "useRouteData";
 
 /** Human label for the merged field — router-specific. */
-export type RouteDataFieldLabel = "handle" | "staticData";
+export type RouteDataFieldLabel = "handle" | "staticData" | "meta";
 
 /**
  * Build an `onOverride` callback for `mergeRouteStaticData` that logs a
@@ -29,8 +30,9 @@ export type RouteDataFieldLabel = "handle" | "staticData";
  *
  * Dedup key is `(key, previousMatchId, nextMatchId)` so the warning fires
  * once per unique override per process — not once per render. Match `id`s
- * are read off the match object at warn time; both React Router and
- * TanStack Router expose a stable `id` field on `useMatches()` entries.
+ * are read off the match object at warn time: React Router and TanStack
+ * Router expose a stable `id`/`routeId` on `useMatches()` entries, and
+ * vue-router's matched records fall back to their `name` or `path`.
  *
  * Dedup state lives on the returned closure, not module-globally — under
  * dev HMR each module re-evaluation allocates a fresh warner, so a
@@ -81,9 +83,13 @@ export function createRouteDataOverrideWarner(
 
 function readMatchId(match: unknown): string {
   if (match && typeof match === "object") {
-    const m = match as { id?: unknown; routeId?: unknown };
+    const m = match as { id?: unknown; routeId?: unknown; name?: unknown; path?: unknown };
     if (typeof m.id === "string") return m.id;
     if (typeof m.routeId === "string") return m.routeId;
+    // vue-router matched records carry no `id`; their `name` (when set) or
+    // `path` is the stable identifier.
+    if (typeof m.name === "string") return m.name;
+    if (typeof m.path === "string") return m.path;
   }
   return "<unknown>";
 }
