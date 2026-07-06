@@ -38,7 +38,7 @@ import {
   schema,
   type EntryNamesByMountKindOf,
   type MountKindsOf,
-} from "@modular-react/core";
+} from "@modular-frontend/core";
 
 import { defineComposition } from "./define-composition.js";
 import type { CompositionZoneResolution, CompositionZoneSpec } from "./types.js";

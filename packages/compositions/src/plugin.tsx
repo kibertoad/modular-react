@@ -1,13 +1,13 @@
 import type { ComponentType, ReactNode } from "react";
 import type { ModuleTypeMap, RegistryPlugin } from "@modular-react/core";
 
-import { createCompositionRuntime } from "./runtime.js";
+import { createCompositionRuntime } from "@modular-frontend/compositions-engine";
 import { CompositionsProvider } from "./provider.js";
 import {
   CompositionValidationError,
   validateCompositionContracts,
   validateCompositionDefinition,
-} from "./validation.js";
+} from "@modular-frontend/compositions-engine";
 import type {
   AnyCompositionDefinition,
   CompositionDefinition,
@@ -15,7 +15,7 @@ import type {
   CompositionRuntime,
   RegisteredComposition,
   CompositionZoneMap,
-} from "./types.js";
+} from "@modular-frontend/compositions-engine";
 
 /**
  * Methods the compositions plugin contributes to the registry. Registered

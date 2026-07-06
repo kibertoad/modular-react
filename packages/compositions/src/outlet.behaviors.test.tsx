@@ -8,13 +8,13 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
 import type { RuntimeMountAdapter } from "@modular-react/core";
 
-import { defineComposition } from "./define-composition.js";
-import { createCompositionRuntime } from "./runtime.js";
+import { defineComposition } from "@modular-frontend/compositions-engine";
+import { createCompositionRuntime } from "@modular-frontend/compositions-engine";
 import { CompositionOutlet } from "./outlet.js";
 import { CompositionsProvider } from "./provider.js";
 import { CompositionInstanceContext, useCompositionState } from "./hooks.js";
 import type { CompositionContextValue } from "./hooks.js";
-import type { RegisteredComposition } from "./types.js";
+import type { RegisteredComposition } from "@modular-frontend/compositions-engine";
 
 afterEach(() => {
   cleanup();

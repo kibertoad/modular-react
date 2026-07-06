@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
+import { defineEntry, defineExit, defineModule, schema } from "@modular-frontend/core";
 import { defineComposition } from "./define-composition.js";
 import { createCompositionRuntime, getInternals } from "./runtime.js";
 import type { RegisteredComposition } from "./types.js";

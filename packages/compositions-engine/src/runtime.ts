@@ -1,5 +1,5 @@
-import { createStore, isDevEnv } from "@modular-react/core";
-import type { ModuleDescriptor, RuntimeMountAdapter, Store } from "@modular-react/core";
+import { createStore, isDevEnv } from "@modular-frontend/core";
+import type { ModuleDescriptor, RuntimeMountAdapter, Store } from "@modular-frontend/core";
 import type {
   CompositionDefinitionSummary,
   CompositionHandleRef,

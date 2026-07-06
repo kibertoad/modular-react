@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo } from "react";
 import type { ReactNode } from "react";
 
-import type { CompositionRuntime } from "./types.js";
+import type { CompositionRuntime } from "@modular-frontend/compositions-engine";
 
 /**
  * Shell-level context read by `<CompositionOutlet>` so callers don't have

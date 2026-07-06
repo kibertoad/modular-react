@@ -6,10 +6,11 @@ import type {
   JourneyHandleRef,
   ModuleTypeMap,
   RuntimeMountAdapter,
-} from "@modular-react/core";
+  UiComponent,
+} from "@modular-frontend/core";
 import type { CompositionZoneStores } from "./stores.js";
 
-export type { ReadableStore, WritableStore } from "@modular-react/core";
+export type { ReadableStore, WritableStore } from "@modular-frontend/core";
 export type { CompositionZoneStores } from "./stores.js";
 
 /** Opaque id minted by the composition runtime. Prefixed `ci_` to disambiguate from `ji_`. */
@@ -154,7 +155,7 @@ export type CompositionZoneSpec<TModules extends ModuleTypeMap> =
  *     contracts that panel modules consume via their `input`. Panels
  *     read with `useSyncExternalStore(store.subscribe, store.getSnapshot)`
  *     and write with `store.set(value)`; they import only the
- *     interface from `@modular-react/core` and stay unaware of the
+ *     interface from `@modular-frontend/core` and stay unaware of the
  *     composition's state shape.
  *
  * Selectors are pure functions — they MUST NOT mutate `state` or fire
@@ -206,7 +207,7 @@ export interface CompositionZoneDescriptor<
 > {
   readonly select: CompositionZoneSelector<TModules, TState>;
   readonly contract?: ExitContract<TContract>;
-  readonly fallback?: React.ComponentType;
+  readonly fallback?: UiComponent;
   readonly preload?: "lazy" | "eager";
 }
 

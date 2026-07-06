@@ -1,5 +1,5 @@
 import { assertType, describe, expectTypeOf, it } from "vitest";
-import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
+import { defineEntry, defineExit, defineModule, schema } from "@modular-frontend/core";
 import { defineComposition, defineCompositionHandle } from "./define-composition.js";
 import type { CompositionZoneResolution } from "./types.js";
 

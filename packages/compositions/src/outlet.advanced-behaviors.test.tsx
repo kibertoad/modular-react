@@ -30,17 +30,21 @@ import {
   schema,
 } from "@modular-react/core";
 
-import { defineComposition } from "./define-composition.js";
-import { createCompositionRuntime, getInternals, hydrateComposition } from "./runtime.js";
+import { defineComposition } from "@modular-frontend/compositions-engine";
+import {
+  createCompositionRuntime,
+  getInternals,
+  hydrateComposition,
+} from "@modular-frontend/compositions-engine";
 import { CompositionOutlet } from "./outlet.js";
 import { CompositionsProvider } from "./provider.js";
 import { useComposition, useCompositionOptions, useCompositionState } from "./hooks.js";
-import { validateCompositionContracts } from "./validation.js";
+import { validateCompositionContracts } from "@modular-frontend/compositions-engine";
 import type {
   CompositionInstanceId,
   RegisteredComposition,
   SerializedComposition,
-} from "./types.js";
+} from "@modular-frontend/compositions-engine";
 
 afterEach(() => {
   cleanup();

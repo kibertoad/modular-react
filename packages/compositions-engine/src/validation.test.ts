@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defineExitContract, defineModule } from "@modular-react/core";
+import { defineExitContract, defineModule } from "@modular-frontend/core";
 import { defineComposition } from "./define-composition.js";
 import {
   CompositionValidationError,
