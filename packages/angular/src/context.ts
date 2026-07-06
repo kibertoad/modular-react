@@ -1,7 +1,8 @@
-import { inject, InjectionToken, type Provider, signal, type Signal } from "@angular/core";
+import { InjectionToken, type Provider, signal, type Signal } from "@angular/core";
 import type { ReactiveService, Store } from "@modular-frontend/core";
 import {
   type InjectionContextOptions,
+  injectRequired,
   runInContext,
   splitSelectorOptions,
 } from "./injection-context.js";
@@ -35,14 +36,11 @@ export function provideSharedDependencies(value: SharedDependenciesContextValue)
 }
 
 function requireSharedDependencies(): SharedDependenciesContextValue {
-  const ctx = inject(SHARED_DEPENDENCIES, { optional: true });
-  if (!ctx) {
-    throw new Error(
-      "[@modular-angular/angular] injectStore/injectService/injectReactiveService must be used within a modular app. " +
-        "Make sure the injector installs the providers that provideSharedDependencies() (or provideModularApp) contributes.",
-    );
-  }
-  return ctx;
+  return injectRequired(
+    SHARED_DEPENDENCIES,
+    "[@modular-angular/angular] injectStore/injectService/injectReactiveService must be used within a modular app. " +
+      "Make sure the injector installs the providers that provideSharedDependencies() (or provideModularApp) contributes.",
+  );
 }
 
 function allKeys(ctx: SharedDependenciesContextValue): string {
@@ -55,16 +53,19 @@ function allKeys(ctx: SharedDependenciesContextValue): string {
 }
 
 function suggestInjector(key: string, ctx: SharedDependenciesContextValue): string | null {
-  if (key in ctx.stores) return `Use injectStore('${key}') instead.`;
-  if (key in ctx.services) return `Use injectService('${key}') instead.`;
-  if (key in ctx.reactiveServices) return `Use injectReactiveService('${key}') instead.`;
+  if (Object.hasOwn(ctx.stores, key)) return `Use injectStore('${key}') instead.`;
+  if (Object.hasOwn(ctx.services, key)) return `Use injectService('${key}') instead.`;
+  if (Object.hasOwn(ctx.reactiveServices, key))
+    return `Use injectReactiveService('${key}') instead.`;
   return null;
 }
 
 /**
- * Look up `key` in one dependency bucket, or throw a helpful error. Uses `in`
- * (not a truthy check) so a legitimately falsy plain-service value — `0`,
- * `false`, `""` — is still returned rather than misreported as unregistered.
+ * Look up `key` in one dependency bucket, or throw a helpful error. Uses
+ * `Object.hasOwn` (not a truthy check) so a legitimately falsy plain-service
+ * value — `0`, `false`, `""` — is still returned rather than misreported as
+ * unregistered, while a key that collides with an `Object.prototype` member
+ * (`constructor`, `toString`, …) is not mistaken for a registered dependency.
  */
 function requireDep<T>(
   ctx: SharedDependenciesContextValue,
@@ -73,7 +74,7 @@ function requireDep<T>(
   key: string,
 ): T {
   const map = ctx[bucket] as Record<string, unknown>;
-  if (key in map) {
+  if (Object.hasOwn(map, key)) {
     return map[key] as T;
   }
   const hint = suggestInjector(key, ctx);
@@ -198,20 +199,23 @@ export function createSharedInjectors<TSharedDependencies extends Record<string,
     return runInContext(options, injectOptional, () => {
       const { stores, services, reactiveServices } = requireSharedDependencies();
 
-      const store = stores[key] as Store<unknown> | undefined;
-      if (store) {
-        return storeSignal(store) as Signal<TSharedDependencies[K] | null>;
+      // `Object.hasOwn` (not a truthy check) so a key colliding with an
+      // `Object.prototype` member is not mistaken for a registered dependency.
+      if (Object.hasOwn(stores, key)) {
+        return storeSignal(stores[key] as Store<unknown>) as Signal<TSharedDependencies[K] | null>;
       }
 
-      const rs = reactiveServices[key] as ReactiveService<unknown> | undefined;
-      if (rs) {
-        return reactiveServiceSignal(rs) as Signal<TSharedDependencies[K] | null>;
+      if (Object.hasOwn(reactiveServices, key)) {
+        return reactiveServiceSignal(reactiveServices[key] as ReactiveService<unknown>) as Signal<
+          TSharedDependencies[K] | null
+        >;
       }
 
-      const service = services[key];
-      const value = (service ?? null) as TSharedDependencies[K] | null;
       // Plain services (and the missing case) are static — wrap the value in a
       // signal so callers always read `()`, no subscription needed.
+      const value = (Object.hasOwn(services, key) ? services[key] : null) as
+        | TSharedDependencies[K]
+        | null;
       return signal(value).asReadonly();
     });
   }

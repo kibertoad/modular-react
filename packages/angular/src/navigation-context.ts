@@ -1,10 +1,10 @@
-import { inject, InjectionToken, type Provider } from "@angular/core";
+import { InjectionToken, type Provider } from "@angular/core";
 import type {
   NavigationItem,
   NavigationItemBase,
   NavigationManifest,
 } from "@modular-frontend/core";
-import { type InjectionContextOptions, runInContext } from "./injection-context.js";
+import { type InjectionContextOptions, injectRequired, runInContext } from "./injection-context.js";
 
 /** Injection token holding the auto-generated navigation manifest. */
 export const NAVIGATION = new InjectionToken<NavigationManifest<NavigationItemBase>>(
@@ -38,13 +38,13 @@ export function provideNavigation(nav: NavigationManifest<NavigationItemBase>): 
 export function injectNavigation<TNavItem extends NavigationItemBase = NavigationItem>(
   options?: InjectionContextOptions,
 ): NavigationManifest<TNavItem> {
-  return runInContext(options, injectNavigation, () => {
-    const nav = inject(NAVIGATION, { optional: true });
-    if (!nav) {
-      throw new Error(
+  return runInContext(
+    options,
+    injectNavigation,
+    () =>
+      injectRequired(
+        NAVIGATION,
         "[@modular-angular/angular] injectNavigation must be used within a modular app.",
-      );
-    }
-    return nav as NavigationManifest<TNavItem>;
-  });
+      ) as NavigationManifest<TNavItem>,
+  );
 }

@@ -1,5 +1,4 @@
 import {
-  DestroyRef,
   inject,
   InjectionToken,
   isSignal,
@@ -14,7 +13,8 @@ import type {
   Store,
 } from "@modular-frontend/core";
 import { buildDepsSnapshot, evaluateDynamicSlots } from "@modular-frontend/core";
-import { type InjectionContextOptions, runInContext } from "./injection-context.js";
+import { type InjectionContextOptions, injectRequired, runInContext } from "./injection-context.js";
+import { subscribeSignal } from "./store-signal.js";
 
 /**
  * Injection token holding the resolved slot contributions. Always a `Signal` so
@@ -50,13 +50,15 @@ export function provideSlots(slots: object | Signal<object>): Provider {
 export function injectSlots<TSlots extends { [K in keyof TSlots]: readonly unknown[] }>(
   options?: InjectionContextOptions,
 ): Signal<TSlots> {
-  return runInContext(options, injectSlots, () => {
-    const slots = inject(SLOTS, { optional: true });
-    if (!slots) {
-      throw new Error("[@modular-angular/angular] injectSlots must be used within a modular app.");
-    }
-    return slots as Signal<TSlots>;
-  });
+  return runInContext(
+    options,
+    injectSlots,
+    () =>
+      injectRequired(
+        SLOTS,
+        "[@modular-angular/angular] injectSlots must be used within a modular app.",
+      ) as Signal<TSlots>,
+  );
 }
 
 /**
@@ -143,26 +145,27 @@ export interface DynamicSlotsConfig {
  * writable signal, and tears its subscription down via `DestroyRef.onDestroy`.
  */
 export function provideDynamicSlots(config: DynamicSlotsConfig): Provider {
+  const computeSlots = (): object => {
+    // Same snapshot contract the runtime uses at resolve() time — reads store
+    // state and reactive-service snapshots, passes services through.
+    const deps = buildDepsSnapshot<Record<string, unknown>>({
+      stores: config.stores,
+      services: config.services,
+      reactiveServices: config.reactiveServices,
+    });
+    return evaluateDynamicSlots(config.baseSlots as any, config.factories, deps, config.filter);
+  };
+
   return {
     provide: SLOTS,
-    useFactory: () => {
-      const computeSlots = (): object => {
-        // Same snapshot contract the runtime uses at resolve() time — reads
-        // store state and reactive-service snapshots, passes services through.
-        const deps = buildDepsSnapshot<Record<string, unknown>>({
-          stores: config.stores,
-          services: config.services,
-          reactiveServices: config.reactiveServices,
-        });
-        return evaluateDynamicSlots(config.baseSlots as any, config.factories, deps, config.filter);
-      };
-
-      const resolved = signal(computeSlots());
-      const unsubscribe = config.signal.subscribe(() => {
-        resolved.set(computeSlots());
-      });
-      inject(DestroyRef).onDestroy(unsubscribe);
-      return resolved.asReadonly();
-    },
+    // Reuse the shared subscribe + `DestroyRef.onDestroy` teardown bridge so the
+    // leak-sensitive subscription lives in one place (see {@link subscribeSignal}):
+    // seed from `computeSlots`, re-read whenever the recalculate signal fires.
+    useFactory: () =>
+      subscribeSignal(
+        computeSlots,
+        (onChange) => config.signal.subscribe(onChange),
+        undefined,
+      ) as Signal<object>,
   };
 }

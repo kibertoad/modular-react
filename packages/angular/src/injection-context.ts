@@ -1,4 +1,10 @@
-import { assertInInjectionContext, type Injector, runInInjectionContext } from "@angular/core";
+import {
+  assertInInjectionContext,
+  inject,
+  type Injector,
+  type ProviderToken,
+  runInInjectionContext,
+} from "@angular/core";
 
 /**
  * Escape hatch present on every `inject*` accessor and signal bridge in this
@@ -7,10 +13,32 @@ import { assertInInjectionContext, type Injector, runInInjectionContext } from "
  * React hooks / Vue composables will otherwise hit NG0203-style errors. Passing
  * an explicit `injector` lets an accessor run outside those places (an event
  * handler, an async callback), mirroring how the runtime documents the rule.
+ *
+ * Prefer to call an accessor once per injector — a field initializer. The
+ * reactive bridges (`injectStore`/`injectReactiveService`/`injectOptional`/
+ * scoped stores) open a subscription that is released only when the owning
+ * injector is destroyed, so calling an accessor repeatedly (inside an event
+ * handler or a loop) via `{ injector }` accumulates one live subscription per
+ * call. Capture the signal once and read it, rather than re-injecting.
  */
 export interface InjectionContextOptions {
   /** Injector to run in when the caller is outside an ambient injection context. */
   injector?: Injector;
+}
+
+/**
+ * Inject a required context token or throw a uniform "within a modular app"
+ * error. Uses `{ optional: true }` so a missing provider surfaces the given
+ * package-prefixed message instead of a raw NG0201. Shared by the `inject*`
+ * context accessors (modules, navigation, slots, shared dependencies) so the
+ * null-check and error prefix live in one place.
+ */
+export function injectRequired<T>(token: ProviderToken<T>, message: string): T {
+  const value = inject(token, { optional: true });
+  if (value == null) {
+    throw new Error(message);
+  }
+  return value;
 }
 
 /**

@@ -1,6 +1,6 @@
-import { inject, InjectionToken, type Provider } from "@angular/core";
+import { InjectionToken, type Provider } from "@angular/core";
 import type { ModuleEntry } from "@modular-frontend/core";
-import { type InjectionContextOptions, runInContext } from "./injection-context.js";
+import { type InjectionContextOptions, injectRequired, runInContext } from "./injection-context.js";
 
 /** Injection token holding the list of registered modules. */
 export const MODULES = new InjectionToken<readonly ModuleEntry[]>("modular-angular.modules");
@@ -25,15 +25,12 @@ export function provideModules(modules: readonly ModuleEntry[]): Provider {
  * readonly journeys = this.modules.filter(m => m.meta?.category === 'payments')
  */
 export function injectModules(options?: InjectionContextOptions): readonly ModuleEntry[] {
-  return runInContext(options, injectModules, () => {
-    const modules = inject(MODULES, { optional: true });
-    if (!modules) {
-      throw new Error(
-        "[@modular-angular/angular] injectModules must be used within a modular app.",
-      );
-    }
-    return modules;
-  });
+  return runInContext(options, injectModules, () =>
+    injectRequired(
+      MODULES,
+      "[@modular-angular/angular] injectModules must be used within a modular app.",
+    ),
+  );
 }
 
 /**

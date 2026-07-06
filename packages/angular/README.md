@@ -54,6 +54,12 @@ Signal bridges tear their store subscription down via `DestroyRef.onDestroy`
 when the owning injector is destroyed, so there is no listener leak. Suites run
 zoneless (AD9); no `zone.js`.
 
+The escape hatch is for a one-shot read, not repeated calls. Each reactive
+accessor opens a subscription released only when the injector is destroyed, so
+capture the signal once (in a field initializer) and read it — do not call an
+accessor on every event or inside a loop via `{ injector }`, or you accumulate
+one live subscription per call.
+
 ## Store bridge
 
 `storeSignal` seeds a `signal()` with the current snapshot and pushes new

@@ -19,8 +19,11 @@ import {
  * free — re-selecting the same value from an unrelated update does not wake
  * dependents. Runs inside an injection context (the caller's field initializer,
  * or `runInContext`'s wrapper), so `inject(DestroyRef)` resolves.
+ *
+ * Exported for reuse by other bridges in this package (e.g. the dynamic-slots
+ * provider factory) so the leak-sensitive subscribe/teardown stays in one place.
  */
-function subscribeSignal<T>(
+export function subscribeSignal<T>(
   read: () => T,
   subscribe: (onChange: () => void) => () => void,
   selector: ((state: T) => unknown) | undefined,
@@ -64,7 +67,14 @@ export function storeSignal<T>(
 ): Signal<unknown> {
   const { selector, options } = splitSelectorOptions<T>(selectorOrOptions, maybeOptions);
   return runInContext(options, storeSignal, () =>
-    subscribeSignal(() => store.getState(), store.subscribe, selector),
+    // Wrap `subscribe` in an arrow so the store keeps its `this` binding — a
+    // class-based `Store` impl whose `subscribe` reads `this` would otherwise
+    // break when handed the bare method reference.
+    subscribeSignal(
+      () => store.getState(),
+      (onChange) => store.subscribe(onChange),
+      selector,
+    ),
   );
 }
 
@@ -90,6 +100,12 @@ export function reactiveServiceSignal<T>(
 ): Signal<unknown> {
   const { selector, options } = splitSelectorOptions<T>(selectorOrOptions, maybeOptions);
   return runInContext(options, reactiveServiceSignal, () =>
-    subscribeSignal(() => rs.getSnapshot(), rs.subscribe, selector),
+    // Wrap `subscribe` so the reactive service keeps its `this` binding (see
+    // the note in `storeSignal`).
+    subscribeSignal(
+      () => rs.getSnapshot(),
+      (onChange) => rs.subscribe(onChange),
+      selector,
+    ),
   );
 }

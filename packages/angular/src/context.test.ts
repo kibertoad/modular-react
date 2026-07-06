@@ -130,6 +130,19 @@ describe("injectOptional", () => {
     const { result } = renderInContext(() => injectOptional("auth"), provideDeps({}));
     expect(result()).toBeNull();
   });
+
+  it("returns null for a key that collides with an Object.prototype member", () => {
+    const { result } = renderInContext(() => injectOptional("toString" as any), provideDeps({}));
+    expect(result()).toBeNull();
+  });
+});
+
+describe("prototype-member keys", () => {
+  it("treats an Object.prototype member name as not registered", () => {
+    expect(() =>
+      renderInContext(() => injectService("constructor" as any), provideDeps({})),
+    ).toThrow(/not registered/);
+  });
 });
 
 describe("injectOptional reactivity", () => {

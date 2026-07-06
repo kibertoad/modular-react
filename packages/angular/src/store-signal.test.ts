@@ -48,6 +48,38 @@ describe("storeSignal", () => {
     expect(result()).toBe("bob");
   });
 
+  it("preserves the store's `this` binding when subscribing (method-based Store)", () => {
+    // A Store whose `subscribe`/`getState` are `this`-using methods (not the
+    // closure-based built-in). If the bridge passed `store.subscribe` bare it
+    // would lose `this` and crash / never subscribe.
+    const store = {
+      listeners: new Set<() => void>(),
+      state: { n: 0 },
+      getState() {
+        return this.state;
+      },
+      getInitialState() {
+        return this.state;
+      },
+      setState(next: { n: number }) {
+        this.state = next;
+        for (const l of this.listeners) l();
+      },
+      subscribe(listener: () => void) {
+        this.listeners.add(listener);
+        return () => {
+          this.listeners.delete(listener);
+        };
+      },
+    } as unknown as Store<{ n: number }> & { setState(next: { n: number }): void };
+
+    const { result } = renderInContext(() => storeSignal(store, (s) => s.n));
+    expect(result()).toBe(0);
+
+    store.setState({ n: 3 });
+    expect(result()).toBe(3);
+  });
+
   it("throws NG0203-style error outside an injection context", () => {
     const authStore = createStore({ user: "alice" });
     expect(() => storeSignal(authStore)).toThrow(/injection context/i);

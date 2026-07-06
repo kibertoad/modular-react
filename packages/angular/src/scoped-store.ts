@@ -1,6 +1,10 @@
 import type { Signal } from "@angular/core";
 import { createStore, type Store } from "@modular-frontend/core";
-import { type InjectionContextOptions, splitSelectorOptions } from "./injection-context.js";
+import {
+  type InjectionContextOptions,
+  runInContext,
+  splitSelectorOptions,
+} from "./injection-context.js";
 import { storeSignal } from "./store-signal.js";
 
 export interface ScopedStore<TState> {
@@ -111,9 +115,13 @@ export function createScopedStore<TState>(initializer: () => TState): ScopedStor
     maybeOptions?: InjectionContextOptions,
   ): Signal<unknown> {
     const { selector, options } = splitSelectorOptions<TState>(selectorOrOptions, maybeOptions);
-    const store = getOrCreate(scopeId);
-    // `storeSignal` handles the injection-context guard / `{ injector }` hatch.
-    return selector ? storeSignal(store, selector, options) : storeSignal(store, options);
+    // Guard the injection context up front so a call that ultimately fails the
+    // NG0203 check does not create and leak a scope as a side effect. The inner
+    // `storeSignal` re-enters the same context (nested `runInContext` is safe).
+    return runInContext(options, injectScoped, () => {
+      const store = getOrCreate(scopeId);
+      return selector ? storeSignal(store, selector, options) : storeSignal(store, options);
+    });
   }
 
   return { getOrCreate, has, remove, clear, injectScoped };
