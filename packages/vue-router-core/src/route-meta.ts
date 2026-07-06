@@ -40,7 +40,7 @@ export type ModuleRouteMeta<TZones extends ZoneMapOf<TZones> = Record<never, nev
  * an app-level `.d.ts` (or `app-shared`):
  *
  * ```ts
- * import type { ModuleRouteMeta } from '@vue-router-modules/core'
+ * import type { ModuleRouteMeta } from '@modular-vue/core'
  * import type { AppZones } from '@myorg/app-shared'
  *
  * declare module 'vue-router' {

@@ -5,7 +5,7 @@ import * as core from "./index.js";
 // the detection helpers from @modular-frontend/core; their behavior is tested
 // in those packages. This suite only asserts the re-export wiring resolves, so
 // a broken barrel is caught here rather than downstream.
-describe("@vue-router-modules/core public surface", () => {
+describe("@modular-vue/core public surface", () => {
   it("re-exports the module-definition helpers", () => {
     expect(core.defineModule).toBeTypeOf("function");
     expect(core.defineSlots).toBeTypeOf("function");

@@ -24,7 +24,7 @@ first package of the [Vue support initiative](../../docs/vue-support-tracker.md)
 
 Rendering pieces (lazy entry resolution, module host/exit, error capture) land
 in PR-11; the runtime plugin that installs these contexts lands with the
-`@vue-router-modules` family.
+`@modular-vue/*` family.
 
 ## Store bridge
 
