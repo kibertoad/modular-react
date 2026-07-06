@@ -94,10 +94,16 @@ export interface ModuleRegistry<
 
 /**
  * Internal — the resolved assembly shared by the current (and future) entry
- * points. Computed once, cached. The `slotsSignal` / `dynamicSlotFactories` /
- * `slotFilter` fields feed the dynamic-slots provider stack that PR-22 wires;
- * they are carried here so that PR-22 threads the same signal instance the
- * `recalculateSlots` closure notifies.
+ * points. Computed once, cached.
+ *
+ * `resolveManifest()` reads only `modules` / `moduleDescriptors` / `navigation`
+ * / `slots` / `extensions` / `recalculateSlots` off this shape. The remaining
+ * fields — `stores`, `services`, `reactiveServices`, `dynamicSlotFactories`,
+ * `slotsSignal`, `slotFilter` — are inert in PR-21: they feed the provider
+ * stack and dynamic-slots wiring that PR-22 adds. They are assembled here (not
+ * deferred to PR-22) so PR-22 threads the same store maps and the same signal
+ * instance the `recalculateSlots` closure notifies, keeping the assembly the
+ * single source of truth across both entry points.
  */
 interface CommonAssembly<
   TSlots extends SlotMapOf<TSlots>,
@@ -176,6 +182,19 @@ export function createRegistry<
     );
     validateDependencies(modules as BaseModuleDescriptor[], availableKeys);
     validateEntryExitShape(modules as BaseModuleDescriptor[]);
+
+    // Lazy modules are accepted and checked for duplicate IDs, but the
+    // route-builder that grafts their subtree via `router.addRoute()` lands in
+    // PR-22. Until then a registered lazy module contributes nothing to the
+    // resolved manifest — no routes, no nav, no descriptor — so warn rather
+    // than let it vanish silently.
+    if (lazyModules.length > 0 && isDevEnv()) {
+      console.warn(
+        `[@vue-router-modules/runtime] ${lazyModules.length} lazy module(s) registered ` +
+          `(${lazyModules.map((m) => `"${m.id}"`).join(", ")}), but lazy-module routing is not wired ` +
+          `until PR-22. They are validated for duplicate IDs but contribute nothing to this manifest.`,
+      );
+    }
 
     for (const plugin of plugins) {
       plugin.validate?.({ modules: modules as BaseModuleDescriptor[] });
@@ -314,7 +333,11 @@ export function createRegistry<
       const extension = plugin.extend({ markDirty: () => {} });
       const entries = Object.entries(extension);
       for (const [key] of entries) {
-        if (key in registry) {
+        // Own-property check only — `key in registry` would also match names
+        // inherited from Object.prototype (`toString`, `hasOwnProperty`,
+        // `valueOf`, ...), falsely rejecting a plugin that contributes a method
+        // by one of those names when no registry method actually owns it.
+        if (Object.hasOwn(registry, key)) {
           throw new Error(
             `[@vue-router-modules/runtime] Plugin "${plugin.name}" attempted to overwrite registry method "${key}".`,
           );

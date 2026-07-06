@@ -130,6 +130,19 @@ describe("registry plugin machinery", () => {
       /Cannot register modules after resolveManifest/,
     );
   });
+
+  it("accepts a plugin method whose name is inherited from Object.prototype", () => {
+    // The collision guard must compare against the registry's own methods, not
+    // names like `toString` / `hasOwnProperty` inherited from Object.prototype —
+    // no registry method owns those, so contributing one must not be rejected.
+    const protoPlugin: RegistryPlugin<"proto", { toString: () => string }, undefined> = {
+      name: "proto",
+      extend: () => ({ toString: () => "custom" }),
+    };
+    const registry = createRegistry({});
+    expect(() => registry.use(protoPlugin)).not.toThrow();
+    expect((registry as unknown as { toString: () => string }).toString()).toBe("custom");
+  });
 });
 
 describe("plugin-contributed navigation", () => {

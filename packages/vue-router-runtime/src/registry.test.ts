@@ -285,4 +285,31 @@ describe("createRegistry", () => {
     const manifest = registry.resolveManifest({ onModuleExit });
     expect(manifest.onModuleExit).toBe(onModuleExit);
   });
+
+  it("warns that registered lazy modules are not yet wired into the manifest", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const registry = createRegistry<TestDeps, TestSlots>({
+      stores: { auth: createTestAuthStore() },
+      services: { api: { baseUrl: "http://test" } },
+    });
+
+    registry.registerLazy({
+      id: "lazy-billing",
+      basePath: "/billing",
+      load: async () => ({ default: { id: "lazy-billing", version: "1.0.0" } }),
+    });
+
+    const manifest = registry.resolveManifest();
+
+    // Lazy modules contribute nothing to the resolved manifest in PR-21 …
+    expect(manifest.modules).toEqual([]);
+    expect(manifest.moduleDescriptors["lazy-billing"]).toBeUndefined();
+    // … but they do not vanish silently.
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("lazy-module routing is not wired"),
+    );
+
+    warnSpy.mockRestore();
+  });
 });
