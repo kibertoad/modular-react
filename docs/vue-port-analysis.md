@@ -21,7 +21,7 @@ The repo layers into a router-agnostic foundation and two parallel router famili
 | `@modular-react/catalog`                                   | ~2,400                | None (zero `.tsx` files)         | Reuse; adjust descriptor detection and the SPA bundle        |
 | `@modular-react/cli-core`                                  | ~2,200                | Templates only                   | Reuse the command engine; swap template bodies               |
 | `@modular-react/testing`                                   | ~400                  | Thin                             | Light port                                                   |
-| Router family (core + runtime + testing + cli), per router | ~3,100 each           | Heavy                            | Write one `@vue-router-modules/*` family                     |
+| Router family (core + runtime + testing + cli), per router | ~3,100 each           | Heavy                            | Write one `@modular-vue/*` family                            |
 
 The single most important portability fact is `core/src/store.ts`: the `Store<T>` interface matches zustand's `StoreApi<T>` (`getState`/`setState`/`subscribe`) and ships a dependency-free implementation. All state in journeys, compositions, and the registries flows through this interface. React consumes it via `useSyncExternalStore`; nothing below the hook layer knows React exists.
 
@@ -38,7 +38,7 @@ One binding package and one router family, mirroring the existing structure:
    - `React.lazy` + `Suspense` → `defineAsyncComponent`, which handles loading and error states natively without needing Suspense at all.
    - The class-based error boundary → a small wrapper component using `onErrorCaptured`.
    - Zone/slot rendering → `<component :is>` over the contribution lists.
-3. `@vue-router-modules/{core,runtime,testing,cli}` (~2.5-3k LOC): the router bridge. This is where Vue is actively easier than either existing family:
+3. `@modular-vue/{router-core,router-runtime,testing,router-cli}` (~2.5-3k LOC): the router bridge. This is where Vue is actively easier than either existing family:
    - Vue Router is the single dominant router. One integration family covers the ecosystem where React needed two; the whole reason the repo maintains parallel `react-router-*` and `tanstack-router-*` trees disappears.
    - `router.addRoute()` registers routes at runtime as a first-class API. The TanStack runtime carries real complexity because its route tree freezes at `createRouter` time (the `IGNORED_TANSTACK_LAZY_FIELDS` warn-list, the `basePath/$` catch-all workaround for lazy modules); React Router needs a pathless-layout trick for auth. Vue Router needs neither.
    - Route metadata is native. `handle` (React Router) and `staticData` (TanStack) map onto Vue Router's built-in `meta`, typed via `RouteMeta` interface augmentation, and `useRoute().matched` gives the matched-record chain, so core's `mergeRouteStaticData` deepest-wins merge and the `useZones`/`useRouteData` channels port directly.
@@ -57,7 +57,7 @@ One binding package and one router family, mirroring the existing structure:
 
 ### Effort estimate
 
-New code: ~8-10k source LOC (binding layer ~2k, router family ~3k, journeys/compositions UI ~3k, CLI templates and testing ~1-2k), plus ports of the UI-facing test suites and a full docs rewrite (the docs are a large fraction of this repo's value; every guide references router-specific idioms). Against the existing repo, that is roughly a third of the original build effort, benefiting from the hardest parts (journey state machine, compositions runtime, catalog harvester, validation) being finished and tested. For one person familiar with both codebase and Vue, a working `@vue-router-modules` family with ported guides is plausibly 4-8 weeks; the Nuxt integration is extra and less predictable.
+New code: ~8-10k source LOC (binding layer ~2k, router family ~3k, journeys/compositions UI ~3k, CLI templates and testing ~1-2k), plus ports of the UI-facing test suites and a full docs rewrite (the docs are a large fraction of this repo's value; every guide references router-specific idioms). Against the existing repo, that is roughly a third of the original build effort, benefiting from the hardest parts (journey state machine, compositions runtime, catalog harvester, validation) being finished and tested. For one person familiar with both codebase and Vue, a working `@modular-vue` router family with ported guides is plausibly 4-8 weeks; the Nuxt integration is extra and less predictable.
 
 The larger cost is not the port but the steady state: a third family means every core change is validated against three integration surfaces, and API parity drift becomes a permanent tax. The existing two-family structure at least shares React; Vue shares only core.
 

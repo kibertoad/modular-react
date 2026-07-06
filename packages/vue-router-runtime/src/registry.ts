@@ -26,7 +26,7 @@ import type {
 } from "@modular-frontend/core";
 import { createSlotsSignal } from "@modular-vue/vue";
 import type { SlotsSignal } from "@modular-vue/vue";
-import type { ModuleDescriptor, LazyModuleDescriptor } from "@vue-router-modules/core";
+import type { ModuleDescriptor, LazyModuleDescriptor } from "@modular-vue/core";
 import type { ResolveManifestOptions, ResolvedManifest } from "./types.js";
 
 /**
@@ -168,7 +168,7 @@ export function createRegistry<
   function assertCanRegister() {
     if (registrationLocked) {
       throw new Error(
-        "[@vue-router-modules/runtime] Cannot register modules after resolveManifest() has been called.",
+        "[@modular-vue/runtime] Cannot register modules after resolveManifest() has been called.",
       );
     }
   }
@@ -190,7 +190,7 @@ export function createRegistry<
     // than let it vanish silently.
     if (lazyModules.length > 0 && isDevEnv()) {
       console.warn(
-        `[@vue-router-modules/runtime] ${lazyModules.length} lazy module(s) registered ` +
+        `[@modular-vue/runtime] ${lazyModules.length} lazy module(s) registered ` +
           `(${lazyModules.map((m) => `"${m.id}"`).join(", ")}), but lazy-module routing is not wired ` +
           `until PR-22. They are validated for duplicate IDs but contribute nothing to this manifest.`,
       );
@@ -211,7 +211,7 @@ export function createRegistry<
           // half-registered state is still better than a double-registered one.
           onRegisterRan = true;
           throw new Error(
-            `[@vue-router-modules/runtime] Module "${mod.id}" lifecycle.onRegister() failed: ${err instanceof Error ? err.message : String(err)}`,
+            `[@modular-vue/runtime] Module "${mod.id}" lifecycle.onRegister() failed: ${err instanceof Error ? err.message : String(err)}`,
             { cause: err },
           );
         }
@@ -319,7 +319,7 @@ export function createRegistry<
       assertCanRegister();
       if (seenPluginNames.has(plugin.name)) {
         throw new Error(
-          `[@vue-router-modules/runtime] Duplicate plugin name "${plugin.name}" — each plugin may be registered at most once.`,
+          `[@modular-vue/runtime] Duplicate plugin name "${plugin.name}" — each plugin may be registered at most once.`,
         );
       }
 
@@ -339,7 +339,7 @@ export function createRegistry<
         // by one of those names when no registry method actually owns it.
         if (Object.hasOwn(registry, key)) {
           throw new Error(
-            `[@vue-router-modules/runtime] Plugin "${plugin.name}" attempted to overwrite registry method "${key}".`,
+            `[@modular-vue/runtime] Plugin "${plugin.name}" attempted to overwrite registry method "${key}".`,
           );
         }
       }
@@ -362,7 +362,7 @@ export function createRegistry<
         // — the captured options win either way.
         if (options !== undefined) {
           throw new Error(
-            "[@vue-router-modules/runtime] resolveManifest() has already been called — options may only be passed on the first call. Extract the manifest into a shared module and import it from both sites.",
+            "[@modular-vue/runtime] resolveManifest() has already been called — options may only be passed on the first call. Extract the manifest into a shared module and import it from both sites.",
           );
         }
         if (cachedManifest) return cachedManifest;

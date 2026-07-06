@@ -1,4 +1,4 @@
-# @vue-router-modules/runtime
+# @modular-vue/runtime
 
 Runtime registry for `@modular-vue` modules on vue-router. Collects registered
 modules, validates their dependencies, runs lifecycle hooks, drives the plugin
@@ -12,7 +12,7 @@ everything that does not need a router or a Vue render tree.
 ## Installation
 
 ```bash
-npm install @vue-router-modules/runtime
+npm install @modular-vue/runtime
 ```
 
 ## What's included
@@ -33,7 +33,7 @@ npm install @vue-router-modules/runtime
 ## Usage
 
 ```ts
-import { createRegistry } from "@vue-router-modules/runtime";
+import { createRegistry } from "@modular-vue/runtime";
 import { billingModule } from "@myorg/billing";
 
 export const registry = createRegistry<AppDeps, AppSlots>({

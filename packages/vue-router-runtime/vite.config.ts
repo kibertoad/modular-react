@@ -14,7 +14,7 @@ export default defineConfig(({ command }) => ({
         "vue-router",
         "@modular-frontend/core",
         "@modular-vue/vue",
-        "@vue-router-modules/core",
+        "@modular-vue/core",
       ],
     },
     sourcemap: true,

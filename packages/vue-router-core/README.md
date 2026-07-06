@@ -1,11 +1,11 @@
-# @vue-router-modules/core
+# @modular-vue/core
 
 Core types and utilities for defining modules using vue-router. Provides `defineModule`, the shared composables and scoped stores from `@modular-vue/vue`, and all shared type definitions.
 
 ## Installation
 
 ```bash
-npm install @vue-router-modules/core
+npm install @modular-vue/core
 ```
 
 ## What's included
@@ -20,7 +20,7 @@ npm install @vue-router-modules/core
 ## Usage
 
 ```typescript
-import { defineModule } from "@vue-router-modules/core";
+import { defineModule } from "@modular-vue/core";
 
 export default defineModule<AppDependencies, AppSlots>({
   id: "billing",
@@ -62,7 +62,7 @@ global `RouteMeta` once in your app to get typed access everywhere the runtime
 reads it:
 
 ```typescript
-import type { ModuleRouteMeta } from "@vue-router-modules/core";
+import type { ModuleRouteMeta } from "@modular-vue/core";
 import type { AppZones } from "@myorg/app-shared";
 
 declare module "vue-router" {

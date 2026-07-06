@@ -2933,12 +2933,12 @@ importers:
       '@modular-frontend/core':
         specifier: workspace:*
         version: link:../frontend-core
+      '@modular-vue/core':
+        specifier: workspace:*
+        version: link:../vue-router-core
       '@modular-vue/vue':
         specifier: workspace:*
         version: link:../vue
-      '@vue-router-modules/core':
-        specifier: workspace:*
-        version: link:../vue-router-core
       oxfmt:
         specifier: ^0.51.0
         version: 0.51.0

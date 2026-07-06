@@ -1,5 +1,5 @@
 {
-  "name": "@vue-router-modules/core",
+  "name": "@modular-vue/core",
   "version": "0.1.0",
   "description": "vue-router core for @modular-vue modules: defineModule with createRoutes(): RouteRecordRaw[], defineSlots, shared composables, scoped stores, and the RouteMeta convention.",
   "repository": {
