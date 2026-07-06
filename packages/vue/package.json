@@ -1,0 +1,48 @@
+{
+  "name": "@modular-vue/vue",
+  "version": "0.1.0",
+  "description": "Vue 3 bindings for @modular-frontend/core: store composables, scoped stores, and injection-key contexts for modules, navigation, and slots.",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kibertoad/modular-react.git",
+    "directory": "packages/vue"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@modular-frontend/core": "workspace:*",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^20.9.0",
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.66.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.1.5",
+    "vue": "^3.5.13"
+  },
+  "peerDependencies": {
+    "@modular-frontend/core": "^0.1.0",
+    "vue": "^3.5.0"
+  }
+}
