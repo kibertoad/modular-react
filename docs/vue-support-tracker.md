@@ -136,7 +136,7 @@ New `packages/vue-testing` (`@modular-vue/testing`, `0.1.0`) with the repo's sta
 
 Rather than duplicate the framework-neutral helpers per binding, the port extracted them into a shared package:
 
-- `@modular-frontend/testing` (`0.1.0`, new) holds `createMockStore` and `resolveModule` (+ `ResolveModuleOptions` / `ResolveModuleResult`). Both are pure over `@modular-frontend/core` (slot merging, dynamic-slot evaluation, `onRegister`, `ModuleEntry` assembly) with no UI-framework dependency. `@modular-react/testing` and `@modular-vue/testing` re-export them, so a fix to slot resolution or the mock store lands in one place. This mirrors the earlier `journeys-engine` / `compositions-engine` extractions.
+- `@modular-frontend/testing` (`0.1.0`, new) holds `createMockStore` and `resolveModule` (+ `ResolveModuleOptions` / `ResolveModuleResult`). Both are pure over `@modular-frontend/core` (slot merging, dynamic-slot evaluation, `onRegister`, `ModuleEntry` assembly) with no UI-framework dependency. `@modular-react/testing` and `@modular-vue/testing` re-export both; `@react-router-modules/testing` and `@tanstack-react-modules/testing` re-export `resolveModule` (their `createMockStore` stays local — it wraps zustand's `createStore`, not the core store). So a fix to slot resolution lands in one place. This mirrors the earlier `journeys-engine` / `compositions-engine` extractions.
 - `preload-entries.ts` stays per-binding: `preloadEntries` walks each module's `entryPoints` and calls `preloadEntry` (re-exported from `@modular-vue/vue`) for every `lazy:` entry, `Promise.all`-ing them so a single rejection doesn't leak sibling unhandled rejections. This is the only file that touches the binding layer.
 
 Deviation from the React source, forced by the framework:

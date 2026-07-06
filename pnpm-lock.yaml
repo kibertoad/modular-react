@@ -2608,6 +2608,9 @@ importers:
 
   packages/react-router-testing:
     devDependencies:
+      '@modular-frontend/testing':
+        specifier: workspace:*
+        version: link:../frontend-testing
       '@modular-react/core':
         specifier: workspace:*
         version: link:../core
@@ -2765,6 +2768,9 @@ importers:
 
   packages/tanstack-router-testing:
     devDependencies:
+      '@modular-frontend/testing':
+        specifier: workspace:*
+        version: link:../frontend-testing
       '@modular-react/core':
         specifier: workspace:*
         version: link:../core

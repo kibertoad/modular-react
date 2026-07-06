@@ -19,6 +19,7 @@ export default defineConfig(({ command }) => ({
         "zustand",
         "@react-router-modules/core",
         "@react-router-modules/runtime",
+        "@modular-frontend/testing",
         "@modular-react/core",
         "@modular-react/journeys",
         "@modular-react/journeys/testing",
