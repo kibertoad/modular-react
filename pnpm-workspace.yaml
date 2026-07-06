@@ -12,12 +12,11 @@ allowBuilds:
   msw: false
 
 overrides:
-  # Pin the rolldown backend that rolldown-plugin-dts resolves to a single
-  # version. Without this, pnpm's peer resolution picks the pre-release
-  # rolldown@1.0.0-rc.18 (still in the tree via the examples' vite 8.0.x) for
-  # some packages while others get 1.1.4, so dts is generated through two
-  # different backends. This forces every package's plugin onto vite 8.1.x's
-  # rolldown@1.1.4 without touching the examples' own vite.
+  # Guard: pin the rolldown backend that rolldown-plugin-dts resolves to a
+  # single version. pnpm's peer resolution otherwise picks whatever rolldown
+  # is in the tree, so a package pulling an older vite (older bundled rolldown)
+  # would make dts generate through a different backend than the rest of the
+  # workspace. Keeps every package's plugin on vite 8.1.x's rolldown@1.1.4.
   rolldown-plugin-dts>rolldown: 1.1.4
 
 minimumReleaseAgeExclude:
