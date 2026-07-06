@@ -136,7 +136,7 @@ describe("createRegistry", () => {
     registry.resolveManifest();
 
     expect(() => registry.register(headlessModule("late"))).toThrow(
-      /Cannot register modules after resolveManifest/,
+      /Cannot register modules after resolve/,
     );
   });
 
