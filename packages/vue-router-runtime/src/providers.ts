@@ -5,6 +5,7 @@ import {
   shallowRef,
   type App,
   type Component,
+  type InjectionKey,
   type Plugin,
 } from "vue";
 import { buildDepsSnapshot, evaluateDynamicSlots } from "@modular-frontend/core";
@@ -73,15 +74,24 @@ function computeDynamicSlots(config: ModularProvidersConfig): object {
   );
 }
 
-function provideSharedDeps(app: App, config: ModularProvidersConfig): void {
-  app.provide(sharedDependenciesKey, {
+/**
+ * Provide the four always-present modular contexts through either the app-level
+ * `app.provide` (plugin form) or the component-scoped `provide` (component
+ * form). Keeps the context set enumerated in one place so both forms expose an
+ * identical injection surface.
+ */
+function provideModularContexts(
+  provideFn: <T>(key: InjectionKey<T>, value: T) => void,
+  config: ModularProvidersConfig,
+): void {
+  provideFn(sharedDependenciesKey, {
     stores: config.stores,
     services: config.services,
     reactiveServices: config.reactiveServices,
   });
-  app.provide(navigationKey, config.navigation);
-  app.provide(modulesKey, config.modules);
-  app.provide(recalculateSlotsKey, config.recalculateSlots);
+  provideFn(navigationKey, config.navigation);
+  provideFn(modulesKey, config.modules);
+  provideFn(recalculateSlotsKey, config.recalculateSlots);
 }
 
 /**
@@ -93,8 +103,8 @@ function provideSharedDeps(app: App, config: ModularProvidersConfig): void {
  * `<router-view>`-mounted module component then injects them. Dynamic slots are
  * wired at install time: a `shallowRef` holds the resolved slots and the
  * registry's `slotsSignal` recomputes it on every `recalculateSlots()`. The
- * subscription lives for the app's lifetime by design (no scope to dispose at
- * the app root), matching how the manifest itself outlives any single view.
+ * subscription is disposed on `app.onUnmount`, so installing the manifest on
+ * more than one app (SSR, multiple roots) doesn't leak a listener per install.
  *
  * `userPlugins` are installed after the modular contexts so they can depend on
  * them, mirroring the React `providers` array (first element outermost).
@@ -105,13 +115,16 @@ export function createModularProvidersPlugin(
 ): { install: (app: App) => void } {
   return {
     install(app: App) {
-      provideSharedDeps(app, config);
+      provideModularContexts((key, value) => app.provide(key, value), config);
 
       if (hasDynamicSlots(config)) {
         const slotsRef = shallowRef(computeDynamicSlots(config));
-        config.slotsSignal.subscribe(() => {
+        const unsubscribe = config.slotsSignal.subscribe(() => {
           slotsRef.value = computeDynamicSlots(config);
         });
+        // Dispose on app unmount so a manifest installed on more than one app
+        // doesn't leak a subscription per install into the shared slotsSignal.
+        app.onUnmount(unsubscribe);
         app.provide(slotsKey, slotsRef);
       } else {
         app.provide(slotsKey, shallowRef(config.slots));
@@ -145,14 +158,7 @@ export function createModularProvidersComponent(
   return defineComponent({
     name: "ModularProviders",
     setup(_props, { slots: renderSlots }) {
-      provide(sharedDependenciesKey, {
-        stores: config.stores,
-        services: config.services,
-        reactiveServices: config.reactiveServices,
-      });
-      provide(navigationKey, config.navigation);
-      provide(modulesKey, config.modules);
-      provide(recalculateSlotsKey, config.recalculateSlots);
+      provideModularContexts((key, value) => provide(key, value), config);
       // Static slots are provided here; dynamic slots are provided by the
       // nested DynamicSlotsProvider in the render function below.
       if (!dynamic) provide(slotsKey, shallowRef(config.slots));

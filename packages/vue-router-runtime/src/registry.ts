@@ -34,7 +34,7 @@ import type {
   ResolveOptions,
   ResolvedManifest,
 } from "./types.js";
-import { graftModuleRoutes } from "./route-builder.js";
+import { collectEagerRoutes, graftModuleRoutes } from "./route-builder.js";
 import {
   createModularProvidersComponent,
   createModularProvidersPlugin,
@@ -338,18 +338,7 @@ export function createRegistry<
    * which only the router-owning `resolve()` has.
    */
   function buildModuleRoutesOnly(): RouteRecordRaw[] {
-    const collected: RouteRecordRaw[] = [];
-    for (const mod of modules) {
-      if (!mod.createRoutes) continue;
-      const routes = mod.createRoutes();
-      if (!routes) {
-        throw new Error(
-          `[@modular-vue/runtime] Module "${mod.id}" createRoutes() returned a falsy value.`,
-        );
-      }
-      collected.push(...(Array.isArray(routes) ? routes : [routes]));
-    }
-    return collected;
+    return collectEagerRoutes(modules as ModuleDescriptor<any, any, any, any>[]);
   }
 
   // Build the base registry object. Plugin `extend` merges onto it in-place when
@@ -413,10 +402,17 @@ export function createRegistry<
       if (mode === "resolve") {
         throw new Error("[@modular-vue/runtime] resolve() can only be called once.");
       }
+
+      // Build the assembly BEFORE committing to resolve-mode: a recoverable
+      // validation / dependency / onRegister failure must leave the registry
+      // retryable (matching resolveManifest's semantics), not permanently
+      // bricked. Only once assembly succeeds do we lock the mode — the grafting
+      // below mutates the live router and can't be safely retried, so a throw
+      // there correctly leaves the single-use registry closed.
+      const assembly = buildAssembly({ slotFilter: options.slotFilter });
+
       mode = "resolve";
       registrationLocked = true;
-
-      const assembly = buildAssembly({ slotFilter: options.slotFilter });
 
       // Graft every module's route subtree onto the host-created router, then
       // install the auth guard. vue-router registers routes at runtime, so no

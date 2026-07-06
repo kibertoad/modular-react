@@ -33,6 +33,29 @@ export function graftModuleRoutes(
   lazyModules: LazyModuleDescriptor<any, any, any, any>[],
   options?: RouteBuilderOptions,
 ): void {
+  for (const route of collectEagerRoutes(modules)) {
+    addRoute(router, route, options);
+  }
+
+  for (const lazyMod of lazyModules) {
+    addRoute(router, createLazyModuleRoute(router, lazyMod, options), options);
+  }
+}
+
+/**
+ * Flattens every eager module's `createRoutes()` output into a single route
+ * list. Modules without `createRoutes` are skipped (headless); a `createRoutes`
+ * that returns a falsy value throws with the module id.
+ *
+ * Shared by {@link graftModuleRoutes} (which adds these onto a live router) and
+ * the registry's framework-mode `resolveManifest()` (which hands them back for
+ * the host to spread into its own `createRouter`), so the skip / flatten /
+ * validate contract lives in exactly one place.
+ */
+export function collectEagerRoutes(
+  modules: ModuleDescriptor<any, any, any, any>[],
+): RouteRecordRaw[] {
+  const collected: RouteRecordRaw[] = [];
   for (const mod of modules) {
     if (!mod.createRoutes) continue;
     const routes = mod.createRoutes();
@@ -41,14 +64,9 @@ export function graftModuleRoutes(
         `[@modular-vue/runtime] Module "${mod.id}" createRoutes() returned a falsy value.`,
       );
     }
-    for (const route of Array.isArray(routes) ? routes : [routes]) {
-      addRoute(router, route, options);
-    }
+    collected.push(...(Array.isArray(routes) ? routes : [routes]));
   }
-
-  for (const lazyMod of lazyModules) {
-    addRoute(router, createLazyModuleRoute(router, lazyMod, options), options);
-  }
+  return collected;
 }
 
 function addRoute(router: Router, route: RouteRecordRaw, options?: RouteBuilderOptions): void {
@@ -64,7 +82,10 @@ function addRoute(router: Router, route: RouteRecordRaw, options?: RouteBuilderO
  * `basePath`, the `beforeEnter` guard loads the descriptor, grafts its
  * `createRoutes()` subtree onto the router, removes this placeholder, and
  * redirects to the same location so vue-router re-resolves into the real
- * routes.
+ * routes. A load that rejects is not cached: the guard resets its in-flight
+ * promise so the next navigation retries (a transient chunk 404 or offline
+ * blip must not brick the subtree). A descriptor that grafts no routes throws,
+ * rather than removing the placeholder and stranding the user on a dead route.
  *
  * vue-router's runtime `addRoute` makes this a straight port of intent from the
  * React `createLazyModuleRoute`, without React Router's `useRoutes` descendant
@@ -97,17 +118,32 @@ export function createLazyModuleRoute(
     component: { render: () => null },
     beforeEnter: async (to) => {
       loading ??= (async () => {
-        const { default: descriptor } = await lazyMod.load();
-        warnIgnoredLazyFields(descriptor as any, "@modular-vue/runtime");
-        if (descriptor.createRoutes) {
-          const routes = descriptor.createRoutes();
-          for (const route of Array.isArray(routes) ? routes : [routes]) {
-            addRoute(router, route, options);
+        try {
+          const { default: descriptor } = await lazyMod.load();
+          warnIgnoredLazyFields(descriptor as any, "@modular-vue/runtime");
+          const routes = descriptor.createRoutes?.();
+          const list = routes ? (Array.isArray(routes) ? routes : [routes]) : [];
+          if (list.length === 0) {
+            // A lazy module that grafts nothing would leave the user on a dead
+            // route once the placeholder is removed. Surface it instead.
+            throw new Error(
+              `[@modular-vue/runtime] Lazy module "${lazyMod.id}" loaded but contributed no ` +
+                `routes (its descriptor has no createRoutes()), so nothing can be grafted under ` +
+                `"${basePath}".`,
+            );
           }
+          for (const route of list) addRoute(router, route, options);
+          // Drop the placeholder so this guard never runs again and the redirect
+          // below resolves against the freshly grafted routes.
+          router.removeRoute(placeholderName);
+        } catch (err) {
+          // Reset the in-flight guard so a transient failure retries on the next
+          // navigation rather than caching the rejection forever. The placeholder
+          // is untouched here (only removed on success above), so the guard still
+          // intercepts the retry.
+          loading = null;
+          throw err;
         }
-        // Drop the placeholder so this guard never runs again and the redirect
-        // below resolves against the freshly grafted routes.
-        router.removeRoute(placeholderName);
       })();
       await loading;
       // Re-resolve the original target now that the real routes exist.
@@ -116,8 +152,14 @@ export function createLazyModuleRoute(
   };
 }
 
-/** Ensures a single leading slash and no trailing slash: `billing/` → `/billing`. */
+/**
+ * Ensures a single leading slash and no trailing slash: `billing/` → `/billing`.
+ * The root (`/` or empty) collapses to an empty string so the caller's
+ * `${basePath}/:pathMatch(.*)*` join stays single-slashed (`/:pathMatch(.*)*`)
+ * instead of producing a malformed `//:pathMatch(.*)*`.
+ */
 function normalizeBasePath(basePath: string): string {
   const trimmed = basePath.replace(/\/+$/, "");
+  if (trimmed === "") return "";
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }

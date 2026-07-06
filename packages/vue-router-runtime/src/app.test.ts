@@ -243,4 +243,18 @@ describe("resolve() single-use and mode exclusivity", () => {
       /Cannot register modules after resolve/,
     );
   });
+
+  it("stays retryable (not mode-locked) when resolve() fails during assembly", () => {
+    const registry = newRegistry();
+    registry.register(routedModule("dup", "Dup"));
+    registry.register(routedModule("dup", "Dup again")); // duplicate id → assembly throws
+
+    const router = createRouter({ history: createMemoryHistory(), routes: [] });
+
+    // The first call surfaces the real assembly error...
+    expect(() => registry.resolve({ router })).toThrow(/Duplicate module ID/);
+    // ...and because mode was never committed, a retry surfaces the SAME real
+    // error, not a misleading "resolve() can only be called once".
+    expect(() => registry.resolve({ router })).toThrow(/Duplicate module ID/);
+  });
 });

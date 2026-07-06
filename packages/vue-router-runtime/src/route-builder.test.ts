@@ -156,5 +156,64 @@ describe("graftModuleRoutes", () => {
 
       expect(load).toHaveBeenCalledOnce();
     });
+
+    it("retries the load after a failed first attempt", async () => {
+      const router = newRouter();
+      // Fail the first load (a transient chunk 404), succeed the second.
+      const load = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("network blip"))
+        .mockResolvedValueOnce({
+          default: {
+            id: "billing",
+            version: "1.0.0",
+            createRoutes: () => ({ path: "/billing", name: "billing", component: Stub }),
+          },
+        });
+      graftModuleRoutes(router, [], [{ id: "billing", basePath: "/billing", load }]);
+
+      // First visit rejects and the subtree is not grafted...
+      await expect(router.push("/billing")).rejects.toThrow(/network blip/);
+      expect(router.hasRoute("billing")).toBe(false);
+
+      // ...but the guard reset its in-flight promise, so a retry loads again
+      // and grafts the real subtree instead of caching the rejection forever.
+      await router.push("/billing");
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(router.hasRoute("billing")).toBe(true);
+      expect(router.currentRoute.value.name).toBe("billing");
+    });
+
+    it("throws when a loaded lazy descriptor contributes no routes", async () => {
+      const router = newRouter();
+      const load = vi.fn(async () => ({ default: { id: "headless", version: "1.0.0" } }));
+      graftModuleRoutes(router, [], [{ id: "headless", basePath: "/headless", load }]);
+
+      // Rather than silently remove the placeholder and strand the user on a
+      // dead route, the guard surfaces the misconfiguration.
+      await expect(router.push("/headless")).rejects.toThrow(
+        /Lazy module "headless" loaded but contributed no routes/,
+      );
+    });
+
+    it("grafts a root-mounted lazy module without a malformed double slash", async () => {
+      const router = newRouter();
+      graftModuleRoutes(
+        router,
+        [],
+        [
+          lazyModule("root", "/", () => ({
+            path: "/dashboard",
+            name: "dashboard",
+            component: Stub,
+          })),
+        ],
+      );
+
+      await router.push("/dashboard");
+
+      expect(router.hasRoute("dashboard")).toBe(true);
+      expect(router.currentRoute.value.name).toBe("dashboard");
+    });
   });
 });
