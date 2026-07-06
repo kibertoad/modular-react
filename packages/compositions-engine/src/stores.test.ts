@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { defineEntry, defineModule, schema } from "@modular-react/core";
-import type { ReadableStore, WritableStore } from "@modular-react/core";
-import type { ModuleEntryProps } from "@modular-react/core";
+import { defineEntry, defineModule, schema } from "@modular-frontend/core";
+import type { ReadableStore, WritableStore } from "@modular-frontend/core";
+import type { ModuleEntryProps } from "@modular-frontend/core";
 
 import { createCompositionRuntime } from "./runtime.js";
 import { defineComposition } from "./define-composition.js";

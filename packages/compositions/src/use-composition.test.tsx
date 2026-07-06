@@ -26,12 +26,12 @@ import {
 } from "@modular-react/core";
 import type { RuntimeMountAdapter } from "@modular-react/core";
 
-import { defineComposition } from "./define-composition.js";
-import { createCompositionRuntime } from "./runtime.js";
+import { defineComposition } from "@modular-frontend/compositions-engine";
+import { createCompositionRuntime } from "@modular-frontend/compositions-engine";
 import { CompositionOutlet } from "./outlet.js";
 import { CompositionsProvider } from "./provider.js";
-import { CompositionValidationError } from "./validation.js";
-import type { RegisteredComposition } from "./types.js";
+import { CompositionValidationError } from "@modular-frontend/compositions-engine";
+import type { RegisteredComposition } from "@modular-frontend/compositions-engine";
 
 afterEach(() => {
   cleanup();

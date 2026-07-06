@@ -1,5 +1,5 @@
-import { isDevEnv } from "@modular-react/core";
-import type { ReadableStore, WritableStore } from "@modular-react/core";
+import { isDevEnv } from "@modular-frontend/core";
+import type { ReadableStore, WritableStore } from "@modular-frontend/core";
 import type { CompositionInstanceId, CompositionRuntime } from "./types.js";
 
 /**

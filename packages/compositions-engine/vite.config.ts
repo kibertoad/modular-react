@@ -11,14 +11,7 @@ export default defineConfig({
       formats: ["es"],
     },
     rollupOptions: {
-      external: [
-        "react",
-        "react/jsx-runtime",
-        "react-dom",
-        "@modular-frontend/compositions-engine",
-        "@modular-react/core",
-        "@modular-react/react",
-      ],
+      external: ["@modular-frontend/core"],
     },
     sourcemap: true,
   },

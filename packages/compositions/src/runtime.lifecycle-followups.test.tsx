@@ -16,15 +16,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { defineEntry, defineModule, schema } from "@modular-react/core";
 
-import { defineComposition } from "./define-composition.js";
-import { createCompositionRuntime, hydrateComposition } from "./runtime.js";
+import { defineComposition } from "@modular-frontend/compositions-engine";
+import {
+  createCompositionRuntime,
+  hydrateComposition,
+} from "@modular-frontend/compositions-engine";
 import { CompositionOutlet, __resetNoopExitWarned } from "./outlet.js";
 import { CompositionsProvider } from "./provider.js";
 import type {
   CompositionInstanceId,
   RegisteredComposition,
   SerializedComposition,
-} from "./types.js";
+} from "@modular-frontend/compositions-engine";
 
 afterEach(() => {
   cleanup();

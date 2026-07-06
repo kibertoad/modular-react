@@ -1,4 +1,4 @@
-import type { CatalogMeta, ModuleTypeMap } from "@modular-react/core";
+import type { CatalogMeta, ModuleTypeMap } from "@modular-frontend/core";
 import type { CompositionDefinition, CompositionZoneMap } from "./types.js";
 
 /**

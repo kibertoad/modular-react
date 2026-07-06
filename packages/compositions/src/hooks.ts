@@ -12,7 +12,7 @@ import type {
   CompositionInstanceId,
   CompositionRuntime,
   CompositionZoneEvent,
-} from "./types.js";
+} from "@modular-frontend/compositions-engine";
 import { useCompositionsContext } from "./provider.js";
 
 /**

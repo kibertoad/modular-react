@@ -15,7 +15,7 @@ import { isDevEnv } from "@modular-react/core";
 import type { ModuleDescriptor } from "@modular-react/core";
 import { resolveEntryComponent } from "@modular-react/react";
 
-import { getInternals } from "./runtime.js";
+import { getInternals } from "@modular-frontend/compositions-engine";
 import { useCompositionsContext } from "./provider.js";
 import { CompositionInstanceContext } from "./hooks.js";
 import type { CompositionContextValue } from "./hooks.js";
@@ -26,12 +26,12 @@ import type {
   CompositionZoneEvent,
   CompositionZoneDescriptor,
   CompositionZoneResolution,
-} from "./types.js";
+} from "@modular-frontend/compositions-engine";
 import {
   createCompositionZoneStores,
   noopCompositionZoneStores,
   type CompositionZoneStores,
-} from "./stores.js";
+} from "@modular-frontend/compositions-engine";
 
 /** Default cap on automatic retries before a zone falls back. */
 const DEFAULT_RETRY_CAP = 2;
