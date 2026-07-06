@@ -127,7 +127,7 @@ describe("registry plugin machinery", () => {
     registry.register(moduleA);
     registry.resolveManifest();
     expect(() => registry.use(journeysLikePlugin())).toThrow(
-      /Cannot register modules after resolveManifest/,
+      /Cannot register modules after resolve/,
     );
   });
 

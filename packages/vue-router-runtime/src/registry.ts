@@ -26,8 +26,20 @@ import type {
 } from "@modular-frontend/core";
 import { createSlotsSignal } from "@modular-vue/vue";
 import type { SlotsSignal } from "@modular-vue/vue";
+import type { RouteRecordRaw } from "vue-router";
 import type { ModuleDescriptor, LazyModuleDescriptor } from "@modular-vue/core";
-import type { ResolveManifestOptions, ResolvedManifest } from "./types.js";
+import type {
+  ApplicationManifest,
+  ResolveManifestOptions,
+  ResolveOptions,
+  ResolvedManifest,
+} from "./types.js";
+import { collectEagerRoutes, graftModuleRoutes } from "./route-builder.js";
+import {
+  createModularProvidersComponent,
+  createModularProvidersPlugin,
+  type ModularProvidersConfig,
+} from "./providers.js";
 
 /**
  * Registry surface produced by `createRegistry`. Plugins attach via
@@ -36,11 +48,8 @@ import type { ResolveManifestOptions, ResolvedManifest } from "./types.js";
  * methods (e.g. a future `registerJourney`) on the returned reference.
  *
  * `TPlugins` tracks the current plugin tuple so `manifest.extensions` /
- * `manifest.journeys` are typed against plugin outputs after `resolveManifest`.
- *
- * This is the PR-21 (registry) surface. The router-owning `resolve()` entry and
- * the `Providers` context component land in PR-22, together with the
- * route-builder that grafts module routes via `router.addRoute()`.
+ * `manifest.journeys` are typed against plugin outputs after `resolve` /
+ * `resolveManifest`.
  */
 export interface ModuleRegistry<
   TSharedDependencies extends Record<string, any>,
@@ -59,8 +68,8 @@ export interface ModuleRegistry<
   /**
    * Register a lazily-loaded module. Only `createRoutes()` on the loaded
    * descriptor is honored — see {@link LazyModuleDescriptor} for the complete
-   * list of fields ignored at lazy-load time. The route-builder that grafts
-   * the loaded subtree in via `router.addRoute()` lands in PR-22.
+   * list of fields ignored at lazy-load time. The router-owning `resolve()`
+   * grafts the loaded subtree in via `router.addRoute()` on first visit.
    */
   registerLazy(descriptor: LazyModuleDescriptor<TSharedDependencies, TSlots, any, TNavItem>): void;
 
@@ -79,9 +88,22 @@ export interface ModuleRegistry<
     (TPlugin extends RegistryPlugin<any, infer TExt, any> ? TExt : object);
 
   /**
-   * Resolve all modules and produce the resolved manifest: the navigation
-   * manifest, resolved slots, module entries + descriptors, and any plugin
-   * extensions. Does NOT create or own a router.
+   * Resolve all modules and produce the application manifest: an installable
+   * Vue plugin (`app.use(manifest)`) that wires the modular contexts, plus the
+   * router with every module's `createRoutes()` subtree grafted on via
+   * `router.addRoute()` and the optional auth guard installed. Single-use —
+   * throws on a second call, and cannot be mixed with `resolveManifest()`.
+   */
+  resolve(
+    options: ResolveOptions<TSharedDependencies, TSlots>,
+  ): ApplicationManifest<TSlots, TNavItem, PluginRuntimesOf<TPlugins>>;
+
+  /**
+   * Resolve all modules for framework-mode integrations (the host owns the
+   * router). Returns a `Providers` component wrapping the full context stack,
+   * the eager module `routes` to spread into your own `createRouter`, the
+   * navigation manifest, resolved slots, module entries + descriptors, and any
+   * plugin extensions. Does NOT create or own a router.
    *
    * Idempotent — may be called multiple times (e.g. from a routes module and a
    * root layout). The first call does all work and caches the result; later
@@ -93,17 +115,11 @@ export interface ModuleRegistry<
 }
 
 /**
- * Internal — the resolved assembly shared by the current (and future) entry
- * points. Computed once, cached.
- *
- * `resolveManifest()` reads only `modules` / `moduleDescriptors` / `navigation`
- * / `slots` / `extensions` / `recalculateSlots` off this shape. The remaining
- * fields — `stores`, `services`, `reactiveServices`, `dynamicSlotFactories`,
- * `slotsSignal`, `slotFilter` — are inert in PR-21: they feed the provider
- * stack and dynamic-slots wiring that PR-22 adds. They are assembled here (not
- * deferred to PR-22) so PR-22 threads the same store maps and the same signal
- * instance the `recalculateSlots` closure notifies, keeping the assembly the
- * single source of truth across both entry points.
+ * Internal — everything `resolve()` / `resolveManifest()` need that doesn't
+ * depend on whether the runtime owns a router. Computed once, cached, and
+ * shared across both entry points so the provider stack, the store maps, and
+ * the `slotsSignal` the `recalculateSlots` closure notifies are the same
+ * instances everywhere.
  */
 interface CommonAssembly<
   TSlots extends SlotMapOf<TSlots>,
@@ -135,6 +151,12 @@ export function createRegistry<
   const plugins: RegistryPlugin<string, any, any>[] = [];
   const seenPluginNames = new Set<string>();
 
+  // A registry commits to one mode on first resolve:
+  //   - "resolve"          → library owns the router; single-use
+  //   - "resolveManifest"  → host owns the router; idempotent
+  //   - null               → neither has been called yet
+  type Mode = "resolve" | "resolveManifest";
+  let mode: Mode | null = null;
   let registrationLocked = false;
 
   // Cached manifest — populated on the first resolveManifest() call so later
@@ -168,7 +190,7 @@ export function createRegistry<
   function assertCanRegister() {
     if (registrationLocked) {
       throw new Error(
-        "[@modular-vue/runtime] Cannot register modules after resolveManifest() has been called.",
+        "[@modular-vue/runtime] Cannot register modules after resolve() or resolveManifest() has been called.",
       );
     }
   }
@@ -182,19 +204,6 @@ export function createRegistry<
     );
     validateDependencies(modules as BaseModuleDescriptor[], availableKeys);
     validateEntryExitShape(modules as BaseModuleDescriptor[]);
-
-    // Lazy modules are accepted and checked for duplicate IDs, but the
-    // route-builder that grafts their subtree via `router.addRoute()` lands in
-    // PR-22. Until then a registered lazy module contributes nothing to the
-    // resolved manifest — no routes, no nav, no descriptor — so warn rather
-    // than let it vanish silently.
-    if (lazyModules.length > 0 && isDevEnv()) {
-      console.warn(
-        `[@modular-vue/runtime] ${lazyModules.length} lazy module(s) registered ` +
-          `(${lazyModules.map((m) => `"${m.id}"`).join(", ")}), but lazy-module routing is not wired ` +
-          `until PR-22. They are validated for duplicate IDs but contribute nothing to this manifest.`,
-      );
-    }
 
     for (const plugin of plugins) {
       plugin.validate?.({ modules: modules as BaseModuleDescriptor[] });
@@ -302,6 +311,36 @@ export function createRegistry<
     };
   }
 
+  /**
+   * Project the shared assembly onto the config the provider layer consumes.
+   * `TNavItem extends NavigationItemBase`, so the narrowed navigation manifest
+   * widens cleanly; `slots` is the resolved `TSlots` treated as a plain object.
+   */
+  function toProvidersConfig(assembly: CommonAssembly<TSlots, TNavItem>): ModularProvidersConfig {
+    return {
+      stores: assembly.stores,
+      services: assembly.services,
+      reactiveServices: assembly.reactiveServices,
+      navigation: assembly.navigation,
+      slots: assembly.slots as object,
+      modules: assembly.modules,
+      dynamicSlotFactories: assembly.dynamicSlotFactories,
+      slotFilter: assembly.slotFilter,
+      slotsSignal: assembly.slotsSignal,
+      recalculateSlots: assembly.recalculateSlots,
+    };
+  }
+
+  /**
+   * Collect only the eager module route records for framework mode, where the
+   * host owns the router and spreads these into its own `createRouter`. Lazy
+   * modules are excluded — grafting their subtree needs a router reference,
+   * which only the router-owning `resolve()` has.
+   */
+  function buildModuleRoutesOnly(): RouteRecordRaw[] {
+    return collectEagerRoutes(modules as ModuleDescriptor<any, any, any, any>[]);
+  }
+
   // Build the base registry object. Plugin `extend` merges onto it in-place when
   // `use()` is called; the public return is the same reference, retyped.
   const registry: Record<string, unknown> = {
@@ -352,9 +391,69 @@ export function createRegistry<
       return registry as unknown as ModuleRegistry<TSharedDependencies, TSlots, TNavItem, any>;
     },
 
+    resolve(
+      options: ResolveOptions<TSharedDependencies, TSlots>,
+    ): ApplicationManifest<TSlots, TNavItem, Record<string, unknown>> {
+      if (mode === "resolveManifest") {
+        throw new Error(
+          "[@modular-vue/runtime] resolve() cannot be called after resolveManifest() — the registry is already in framework-mode.",
+        );
+      }
+      if (mode === "resolve") {
+        throw new Error("[@modular-vue/runtime] resolve() can only be called once.");
+      }
+
+      // Build the assembly BEFORE committing to resolve-mode: a recoverable
+      // validation / dependency / onRegister failure must leave the registry
+      // retryable (matching resolveManifest's semantics), not permanently
+      // bricked. Only once assembly succeeds do we lock the mode — the grafting
+      // below mutates the live router and can't be safely retried, so a throw
+      // there correctly leaves the single-use registry closed.
+      const assembly = buildAssembly({ slotFilter: options.slotFilter });
+
+      mode = "resolve";
+      registrationLocked = true;
+
+      // Graft every module's route subtree onto the host-created router, then
+      // install the auth guard. vue-router registers routes at runtime, so no
+      // frozen-tree composition or pathless-layout trick is needed.
+      graftModuleRoutes(
+        options.router,
+        modules as ModuleDescriptor<any, any, any, any>[],
+        lazyModules as LazyModuleDescriptor<any, any, any, any>[],
+        { parentName: options.parentRouteName },
+      );
+      if (options.authGuard) {
+        options.router.beforeEach(options.authGuard);
+      }
+
+      const plugin = createModularProvidersPlugin(toProvidersConfig(assembly), options.providers);
+
+      return {
+        install: plugin.install,
+        router: options.router,
+        navigation: assembly.navigation,
+        slots: assembly.slots,
+        modules: assembly.modules,
+        moduleDescriptors: assembly.moduleDescriptors,
+        extensions: assembly.extensions,
+        // See the matching comment in resolveManifest() — the public `.journeys`
+        // type comes from `PluginRuntimesOf<TPlugins>` via the outer cast.
+        journeys: assembly.extensions.journeys as never,
+        onModuleExit: options.onModuleExit,
+        recalculateSlots: assembly.recalculateSlots,
+      };
+    },
+
     resolveManifest(
       options?: ResolveManifestOptions<TSharedDependencies, TSlots>,
     ): ResolvedManifest<TSlots, TNavItem, Record<string, unknown>> {
+      if (mode === "resolve") {
+        throw new Error(
+          "[@modular-vue/runtime] resolveManifest() cannot be called after resolve() — the registry already owns a router.",
+        );
+      }
+
       if (firstCallCompleted) {
         // Idempotent: first call captured options; later calls must pass none.
         // Enforced here (rather than gated on `cachedManifest`) so that a retry
@@ -373,11 +472,35 @@ export function createRegistry<
         firstCallCompleted = true;
       }
 
+      mode = "resolveManifest";
       registrationLocked = true;
 
       const assembly = buildAssembly({ slotFilter: capturedOptions?.slotFilter });
 
+      // Framework mode doesn't own the router, so lazy modules can't self-graft
+      // their subtree (that needs a router reference). Warn rather than let a
+      // registered lazy module vanish silently — use resolve() to wire them.
+      if (lazyModules.length > 0 && isDevEnv()) {
+        console.warn(
+          `[@modular-vue/runtime] ${lazyModules.length} lazy module(s) registered ` +
+            `(${lazyModules.map((m) => `"${m.id}"`).join(", ")}), but lazy-module routing is not wired ` +
+            `in framework mode (resolveManifest). Use resolve() to own the router and graft lazy modules ` +
+            `via router.addRoute() on first visit.`,
+        );
+      }
+
+      const Providers = createModularProvidersComponent(
+        toProvidersConfig(assembly),
+        capturedOptions?.providers,
+      );
+      // `manifest.routes` is typed `readonly` — the cached manifest is shared by
+      // reference across callsites, so TypeScript is the guard against a
+      // callsite mutating the array out from under the other.
+      const routes: readonly RouteRecordRaw[] = buildModuleRoutesOnly();
+
       cachedManifest = {
+        Providers,
+        routes,
         navigation: assembly.navigation,
         slots: assembly.slots,
         modules: assembly.modules,
