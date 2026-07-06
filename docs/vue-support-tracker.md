@@ -1,6 +1,6 @@
 # Vue support initiative: plan and tracker
 
-Status: **Phase 2 in progress** (Phase 0: PR-01, PR-02, PR-03 landed; Phase 1: PR-10, PR-11, PR-12 landed; Phase 2: PR-20 landed). Last updated: 2026-07-06.
+Status: **Phase 2 in progress** (Phase 0: PR-01, PR-02, PR-03 landed; Phase 1: PR-10, PR-11, PR-12 landed; Phase 2: PR-20, PR-21 landed). Last updated: 2026-07-06.
 Background and feasibility reasoning: [vue-port-analysis.md](./vue-port-analysis.md).
 
 This document is the single source of truth for the multi-PR effort to bring the framework to Vue 3, including full Journeys and Compositions support. Update the status board and per-PR checkboxes as PRs land; record decision outcomes in the Decisions section.
@@ -162,9 +162,16 @@ Deviations from the plan, both structural, none behavioral:
 
 Acceptance: met. 15 tests — `define-slots.test.ts` (2, ported from the React source), `index.test.ts` (3, asserting the re-export barrel resolves at runtime), plus `.test-d.ts` descriptor-inference coverage (`define-module.test-d.ts`: 6, covering `createRoutes` narrowing to `RouteRecordRaw`, generic preservation, typed nav label / meta pass-through, `AnyModuleDescriptor` bivariance, and `LazyModuleDescriptor.load` resolution; `route-meta.test-d.ts`: 3). Full workspace typecheck (118 tasks) and `vite build` (JS + dts) pass; externals (`vue`, `vue-router`, `@modular-frontend/core`, `@modular-vue/vue`) stay unbundled.
 
-**PR-21 (M): `@vue-router-modules/runtime` part 1: registry.**
-Port `registry.ts`: `createRegistry`, module registration, dependency wiring and validation, journey registration hooks (interface only; wired in PR-32). Reuses core validation directly.
-Acceptance: port of `registry.test.tsx` and `registry-journeys.test.ts` (registry-level cases; rendering cases deferred to PR-22/PR-32).
+**PR-21 (M): `@vue-router-modules/runtime` part 1: registry.** Done.
+New `packages/vue-router-runtime` (`@vue-router-modules/runtime`, `0.1.0`) with the repo's standard skeleton (`vite build` + `rolldown-plugin-dts`, `vitest`, `tsc --noEmit`). Depends on `@modular-frontend/core`, `@modular-vue/vue`, `@vue-router-modules/core`, plus `vue ^3.5` / `vue-router ^4.5` peers. Ports `registry.ts` (React source: `react-router-runtime/src/registry.ts`): `createRegistry` with `register`, `registerLazy`, `use` (plugin machinery), and `resolveManifest`. Validation reuses the neutral core validators directly (`validateNoDuplicateIds`, `validateDependencies`, `validateEntryExitShape`); the deps snapshot uses `buildDepsSnapshot` rather than a local reimplementation. `resolveManifest()` keeps the React idempotency contract (first call captures options and caches; later calls return the cache and reject options) and the `onRegister`-once / flip-before-throw guard.
+
+Deviations from the plan, forced by the PR boundary and the Vue design:
+
+- The router-owning `resolve()` entry, the `Providers` context component, the `router.addRoute()` route-builder, and the auth guard are deferred to PR-22 (as the `@modular-vue/vue` `context.ts` note already anticipates: "the runtime plugin (PR-22) provides it at the app root"). PR-21's `resolveManifest()` therefore returns the resolved data surface (`navigation`, `slots`, `modules`, `moduleDescriptors`, `extensions` + the `journeys` alias, `onModuleExit`, `recalculateSlots`) but not `Providers` / `routes`. The registry-level `registry.test.tsx` cases port to `resolveManifest()` (idempotent) rather than `resolve()` (single-use); the rendering assertions are deferred with the router.
+- The Vue journeys plugin (`@modular-vue/journeys`) does not exist until PR-30, so `registry-journeys.test.ts` is ported as `registry-plugins.test.ts`: a synthetic journeys-shaped plugin exercises the registry's plugin machinery (extend / validate / contributeNavigation / onResolve, the `.extensions` bag, the `.journeys` alias, duplicate-name and method-collision guards, launcher nav contribution). Wiring the real journeys plugin end-to-end stays with PR-32. `plugin.providers()` (provider-stack contribution) is deferred to PR-22 with the provider stack.
+- `RegistryConfig` is re-exported from `@modular-frontend/core` (its `Store<T>` bucket already covers zustand and the core store), so the runtime does not redeclare a zustand-typed copy the way the React runtime does. `buildAssembly` carries `slotsSignal` / `dynamicSlotFactories` / `slotFilter` so PR-22 threads the same signal instance the `recalculateSlots` closure notifies. Error-message prefixes are `[@vue-router-modules/runtime]`.
+
+Acceptance: met for the registry scope. 30 tests across `registry.test.ts` (17: assembly, validation, onRegister-once, idempotency, `recalculateSlots` no-op vs live, `onModuleExit` forwarding, `moduleDescriptors`), `registry-plugins.test.ts` (9), and `registry.test-d.ts` (4: plugin-extend intersection, base-surface exclusion, `extensions` typing, `journeys`-alias-`never`). Full workspace typecheck (120 tasks) and `vite build` (JS + dts) pass; externals (`vue`, `vue-router`, `@modular-frontend/core`, `@modular-vue/vue`, `@vue-router-modules/core`) stay unbundled.
 
 **PR-22 (M): `@vue-router-modules/runtime` part 2: route building and app shell.**
 `route-builder.ts` using `router.addRoute()` (no frozen-tree or pathless-layout workarounds needed), `providers.ts`/`app.ts` as a Vue plugin (`app.use(createModularApp(...))`) that installs the injection contexts and registers routes, auth guard via `router.beforeEach` driven by module metadata. Port test intent from `route-builder.test.tsx`, `resolve-manifest.test.tsx`, `app.tsx` tests.
@@ -275,7 +282,7 @@ Update the Status column as PRs move: `todo` → `in progress` → `in review` �
 | PR-11 | @modular-vue/vue: rendering pieces          | M    | PR-10               | done       |
 | PR-12 | @modular-vue/testing                        | S    | PR-11               | done       |
 | PR-20 | @vue-router-modules/core                    | M    | PR-10               | done       |
-| PR-21 | runtime: registry                           | M    | PR-20               | todo       |
+| PR-21 | runtime: registry                           | M    | PR-20               | done       |
 | PR-22 | runtime: route building, app plugin, guards | M    | PR-21               | todo       |
 | PR-23 | runtime: zones and route data               | M    | PR-22               | todo       |
 | PR-24 | @vue-router-modules/testing                 | S    | PR-23               | todo       |
