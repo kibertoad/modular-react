@@ -67,3 +67,28 @@ export { navigationKey, provideNavigation, useNavigation } from "./navigation-co
 
 // Vue-specific: modules context + composables
 export { modulesKey, provideModules, useModules, getModuleMeta } from "./modules-context.js";
+
+// Vue-specific: error boundary
+export { ModuleErrorBoundary } from "./error-boundary.js";
+
+// Vue-specific: module-exit plumbing (hosted by ModuleRoute / tabs; the
+// "step 0" pattern — modules fire exits outside a journey, composition root
+// decides what they mean).
+export {
+  moduleExitKey,
+  ModuleExitProvider,
+  useModuleExit,
+  useModuleExitDispatcher,
+} from "./module-exit.js";
+export type { ModuleExitEvent, ModuleExitHandler } from "./module-exit.js";
+
+// Vue-specific: router-mode module host (step 0 outside a workspace tab).
+export { ModuleRoute } from "./module-route.js";
+export type { ModuleRouteExitEvent } from "./module-route.js";
+
+// Vue-specific: lazy entry-point resolution. Hosts call `resolveEntryComponent`
+// to obtain a renderable component + idempotent `preload()` for both eager
+// (`component:`) and lazy (`lazy:`) entries. `preloadEntry` is the convenience
+// prefetch helper.
+export { resolveEntryComponent, preloadEntry } from "./resolve-entry.js";
+export type { ResolvedEntry } from "./resolve-entry.js";
