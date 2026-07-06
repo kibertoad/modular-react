@@ -1,0 +1,48 @@
+{
+  "name": "@modular-vue/testing",
+  "version": "0.1.0",
+  "description": "Testing utilities for @modular-vue modules: mock stores, module resolution, and lazy-entry preloading.",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kibertoad/modular-react.git",
+    "directory": "packages/vue-testing"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@modular-frontend/core": "workspace:*",
+    "@modular-vue/vue": "workspace:*",
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.66.0",
+    "rolldown-plugin-dts": "^0.26.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.3",
+    "vitest": "^4.1.10",
+    "vue": "^3.5.13"
+  },
+  "peerDependencies": {
+    "@modular-frontend/core": "^0.1.0",
+    "@modular-vue/vue": "^0.1.0",
+    "vue": "^3.5.0"
+  }
+}
