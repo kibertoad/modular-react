@@ -39,10 +39,10 @@
     "oxlint": "^1.66.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "rolldown-plugin-dts": "^0.26.0",
     "typescript": "^6.0.3",
-    "vite": "^8.0.10",
-    "vite-plugin-dts": "^4.5.4",
-    "vitest": "^4.1.5"
+    "vite": "^8.1.3",
+    "vitest": "^4.1.10"
   },
   "peerDependencies": {
     "@modular-react/core": "^2.0.0",
