@@ -1,6 +1,6 @@
 # Angular support initiative: plan and tracker
 
-Status: **Proposed, not started.** Last updated: 2026-07-06.
+Status: **Proposed.** PR-A01 (seam documentation) in review; the rest of the board remains gated on the demand signal. Last updated: 2026-07-06.
 Background and feasibility reasoning: [angular-port-analysis.md](./angular-port-analysis.md).
 
 Per that analysis, this initiative is gated on a demand signal (issues asking for it, a design partner, or an internal consumer) and ranked behind finishing the Vue family ([vue-support-tracker.md](./vue-support-tracker.md)). The tracker exists so the plan is ready when the gate opens, and so the two spike PRs (PR-A02, PR-A03) can run early and cheaply if someone wants to de-risk the estimate before committing.
@@ -48,17 +48,17 @@ Angular Router is the only router, so there is one family where React needed two
 
 Record the outcome inline when made. Blockers are marked per PR. IDs are prefixed `AD` to avoid collision with the Vue tracker's `D` series.
 
-| ID  | Decision                                                                        | Recommendation                                                                                                                                                                                                                                                                                                       | Status |
-| --- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| AD1 | npm scopes (`@modular-angular`, `@angular-router-modules`) and repo positioning | Keep this repo, add the scopes, reserve them before any code PR. Community precedent for "angular" in scope names exists (`@angular-architects`, `@angular-eslint`); avoid anything that reads as official (`@angular/*` is Google's).                                                                               | open   |
-| AD2 | Minimum supported Angular version and CI matrix                                 | Floor = lowest in-support major at first code PR (v20 today: signal inputs v19, `effect`/`toSignal` v20, zoneless v20.2, `setInput` v14.1 are all inside it). CI matrix across all in-support majors; drop majors as they leave LTS.                                                                                 | open   |
-| AD3 | Which packages carry `@Component` code and get the ng-packagr/APF build         | Quarantine components (`@modular-angular/components`, the two outlets, testing harness hosts) into ng-packagr builds; everything else (tokens, bridges, registry, route builder) stays plain TS on rolldown. Validated by PR-A02.                                                                                    | open   |
-| AD4 | Component authoring style inside library packages                               | Standalone components, inline templates only (no external `.html`/styles), signal inputs, `OnPush`, no host bindings that need zone.js. SFC-analog of the Vue D4 decision.                                                                                                                                           | open   |
-| AD5 | Entry-component typing contract (the `UiComponent` narrowing)                   | Narrow to `Type<unknown>` at the binding boundary; entry components declare signal inputs matching `ModuleEntryProps` fields, checked by a `moduleEntry<TInput>(cmp)` authoring helper. Document the contract in `ui-types.ts` (PR-A01).                                                                             | open   |
-| AD6 | Error-isolation stance                                                          | Ship best-effort capture (instantiation + first render + lazy-load failures) and `provideModularErrorHandler` tagging; document plainly that steady-state CD errors escape to the global handler. Adopt subtree error handling if Angular ships it (angular#18509 is open, "under consideration"). Scoped by PR-A03. | open   |
-| AD7 | Store story for Angular templates: core store vs NgRx SignalStore               | Scaffold with the core `createStore` (already the framework contract) exposed through `storeSignal`; document NgRx SignalStore interop in a guide section. No NgRx dependency in runtime packages.                                                                                                                   | open   |
-| AD8 | CLI: `cli-core` templates vs real ng schematics                                 | Templates for 1.0 (cheap, reuses PR-04 plumbing); `ng add` + schematics as stretch (PR-A52) once there are users to justify the schematics toolchain.                                                                                                                                                                | open   |
-| AD9 | zone.js posture                                                                 | Signal-first design, no `NgZone` calls anywhere in library code; works identically in zoneful and zoneless apps (zoneless is the Angular default since v21). Test suites run zoneless.                                                                                                                               | open   |
+| ID  | Decision                                                                        | Recommendation                                                                                                                                                                                                                                                                                                       | Status                                                                                                             |
+| --- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| AD1 | npm scopes (`@modular-angular`, `@angular-router-modules`) and repo positioning | Keep this repo, add the scopes, reserve them before any code PR. Community precedent for "angular" in scope names exists (`@angular-architects`, `@angular-eslint`); avoid anything that reads as official (`@angular/*` is Google's).                                                                               | open                                                                                                               |
+| AD2 | Minimum supported Angular version and CI matrix                                 | Floor = lowest in-support major at first code PR (v20 today: signal inputs v19, `effect`/`toSignal` v20, zoneless v20.2, `setInput` v14.1 are all inside it). CI matrix across all in-support majors; drop majors as they leave LTS.                                                                                 | open                                                                                                               |
+| AD3 | Which packages carry `@Component` code and get the ng-packagr/APF build         | Quarantine components (`@modular-angular/components`, the two outlets, testing harness hosts) into ng-packagr builds; everything else (tokens, bridges, registry, route builder) stays plain TS on rolldown. Validated by PR-A02.                                                                                    | open                                                                                                               |
+| AD4 | Component authoring style inside library packages                               | Standalone components, inline templates only (no external `.html`/styles), signal inputs, `OnPush`, no host bindings that need zone.js. SFC-analog of the Vue D4 decision.                                                                                                                                           | open                                                                                                               |
+| AD5 | Entry-component typing contract (the `UiComponent` narrowing)                   | Narrow to `Type<unknown>` at the binding boundary; entry components declare signal inputs matching `ModuleEntryProps` fields, checked by a `moduleEntry<TInput>(cmp)` authoring helper. Document the contract in `ui-types.ts` (PR-A01).                                                                             | contract documented in `ui-types.ts` (PR-A01); `moduleEntry` helper + `Type<unknown>` binding land with PR-A10/A11 |
+| AD6 | Error-isolation stance                                                          | Ship best-effort capture (instantiation + first render + lazy-load failures) and `provideModularErrorHandler` tagging; document plainly that steady-state CD errors escape to the global handler. Adopt subtree error handling if Angular ships it (angular#18509 is open, "under consideration"). Scoped by PR-A03. | open                                                                                                               |
+| AD7 | Store story for Angular templates: core store vs NgRx SignalStore               | Scaffold with the core `createStore` (already the framework contract) exposed through `storeSignal`; document NgRx SignalStore interop in a guide section. No NgRx dependency in runtime packages.                                                                                                                   | open                                                                                                               |
+| AD8 | CLI: `cli-core` templates vs real ng schematics                                 | Templates for 1.0 (cheap, reuses PR-04 plumbing); `ng add` + schematics as stretch (PR-A52) once there are users to justify the schematics toolchain.                                                                                                                                                                | open                                                                                                               |
+| AD9 | zone.js posture                                                                 | Signal-first design, no `NgZone` calls anywhere in library code; works identically in zoneful and zoneless apps (zoneless is the Angular default since v21). Test suites run zoneless.                                                                                                                               | open                                                                                                               |
 
 ## Prerequisites from the Vue tracker
 
@@ -78,6 +78,7 @@ These are cheap, useful regardless of whether the initiative proceeds, and PR-A0
 **PR-A01 (S): Document the `UiComponent` narrowing contract for class-component frameworks.**
 Extend the doc comments in `frontend-core/src/ui-types.ts`: state that the construct arm admits zero-argument-constructor classes with the props type unchecked (verified against the repo's strict tsconfig), and that a class-component binding narrows to its framework's component type (`Type<unknown>` for Angular) plus an input-shape contract enforced by an authoring helper. No behavior change.
 Acceptance: doc-only; the existing `entry-exit.test-d.ts` assertions still pass; a new `.test-d.ts` case pins the zero-arg-class admission so a future seam change cannot silently break it.
+Delivered: `frontend-core/src/ui-types.ts` doc comment on `UiComponent` now spells out the call-arm/construct-arm asymmetry (function components stay props-checked; the construct arm admits zero-argument-constructor classes with the props type unconsulted) and the `Type<unknown>` + authoring-helper narrowing class-component bindings use (AD5). New `frontend-core/src/ui-types.test-d.ts` pins: zero-arg class admitted for any `P`, a DI-dependency-constructor class admitted, an incompatible-required-param class rejected (so the arm is not an unconditional pass-through), and the call arm still props-checks. No React/Vue analog file (this is a class-component-framework seam that React and Vue do not exercise). `pnpm --filter @modular-frontend/core test` green (274 tests).
 
 **PR-A02 (M, spike): Two-pipeline packaging proof.**
 A throwaway-quality but CI-wired proof: one plain-TS package built with the repo's rolldown pipeline (a `storeSignal` sketch importing only `@angular/core` types) and one minimal ng-packagr package with a single inline-template component, both consumed by a scratch AOT application build across the AD2 version matrix. Answers: does the plain-TS package need ngtsc at all (expected: no); does APF partial-Ivy output coexist with the workspace's turbo/pnpm layout; what does the CI matrix cost.
@@ -224,30 +225,30 @@ Parallelizable tracks once Phase A0 lands: (a) PR-A10..A12 binding layer, (b) PR
 
 Update the Status column as PRs move: `todo` → `in progress` → `in review` → `done` (link the PR). The whole board is gated on the demand signal except PR-A01..A03, which may run early.
 
-| PR     | Title                                         | Size | Depends on             | Status |
-| ------ | --------------------------------------------- | ---- | ---------------------- | ------ |
-| PR-A01 | Document UiComponent narrowing contract       | S    | none                   | todo   |
-| PR-A02 | Two-pipeline packaging spike                  | M    | none                   | todo   |
-| PR-A03 | Outlet error-capture spike                    | M    | none                   | todo   |
-| PR-A10 | @modular-angular/angular: store bridge and DI | M    | PR-A01                 | todo   |
-| PR-A11 | binding rendering pieces + components package | M    | PR-A10, PR-A02, PR-A03 | todo   |
-| PR-A12 | @modular-angular/testing                      | S    | PR-A11                 | todo   |
-| PR-A20 | @angular-router-modules/core                  | M    | PR-A10                 | todo   |
-| PR-A21 | runtime: registry                             | M    | PR-A20                 | todo   |
-| PR-A22 | runtime: route building, providers, guards    | M    | PR-A21                 | todo   |
-| PR-A23 | runtime: zones and route data                 | M    | PR-A22                 | todo   |
-| PR-A24 | @angular-router-modules/testing               | S    | PR-A23                 | todo   |
-| PR-A30 | angular journeys: provider and injectors      | M    | PR-A10                 | todo   |
-| PR-A31 | angular journeys: outlet                      | L    | PR-A30                 | todo   |
-| PR-A32 | journeys wired into runtime + renderJourney   | M    | PR-A22, PR-A31         | todo   |
-| PR-A33 | angular compositions: provider and injectors  | M    | PR-A10                 | todo   |
-| PR-A34 | angular compositions: outlet                  | L    | PR-A33                 | todo   |
-| PR-A40 | examples/angular                              | L    | PR-A23, PR-A32, PR-A34 | todo   |
-| PR-A41 | Documentation                                 | M    | PR-A40                 | todo   |
-| PR-A42 | Parity audit, promote to 1.0                  | S    | PR-A40                 | todo   |
-| PR-A50 | @angular-router-modules/cli                   | M    | PR-04, PR-A40          | todo   |
-| PR-A51 | Catalog Angular support                       | S    | PR-A40                 | todo   |
-| PR-A52 | ng add schematic (stretch)                    | M    | AD8, 1.0               | todo   |
+| PR     | Title                                         | Size | Depends on             | Status    |
+| ------ | --------------------------------------------- | ---- | ---------------------- | --------- |
+| PR-A01 | Document UiComponent narrowing contract       | S    | none                   | in review |
+| PR-A02 | Two-pipeline packaging spike                  | M    | none                   | todo      |
+| PR-A03 | Outlet error-capture spike                    | M    | none                   | todo      |
+| PR-A10 | @modular-angular/angular: store bridge and DI | M    | PR-A01                 | todo      |
+| PR-A11 | binding rendering pieces + components package | M    | PR-A10, PR-A02, PR-A03 | todo      |
+| PR-A12 | @modular-angular/testing                      | S    | PR-A11                 | todo      |
+| PR-A20 | @angular-router-modules/core                  | M    | PR-A10                 | todo      |
+| PR-A21 | runtime: registry                             | M    | PR-A20                 | todo      |
+| PR-A22 | runtime: route building, providers, guards    | M    | PR-A21                 | todo      |
+| PR-A23 | runtime: zones and route data                 | M    | PR-A22                 | todo      |
+| PR-A24 | @angular-router-modules/testing               | S    | PR-A23                 | todo      |
+| PR-A30 | angular journeys: provider and injectors      | M    | PR-A10                 | todo      |
+| PR-A31 | angular journeys: outlet                      | L    | PR-A30                 | todo      |
+| PR-A32 | journeys wired into runtime + renderJourney   | M    | PR-A22, PR-A31         | todo      |
+| PR-A33 | angular compositions: provider and injectors  | M    | PR-A10                 | todo      |
+| PR-A34 | angular compositions: outlet                  | L    | PR-A33                 | todo      |
+| PR-A40 | examples/angular                              | L    | PR-A23, PR-A32, PR-A34 | todo      |
+| PR-A41 | Documentation                                 | M    | PR-A40                 | todo      |
+| PR-A42 | Parity audit, promote to 1.0                  | S    | PR-A40                 | todo      |
+| PR-A50 | @angular-router-modules/cli                   | M    | PR-04, PR-A40          | todo      |
+| PR-A51 | Catalog Angular support                       | S    | PR-A40                 | todo      |
+| PR-A52 | ng add schematic (stretch)                    | M    | AD8, 1.0               | todo      |
 
 ## Working agreements
 
