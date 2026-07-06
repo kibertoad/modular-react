@@ -9,14 +9,7 @@ export default defineConfig(({ command }) => ({
       formats: ["es"],
     },
     rollupOptions: {
-      external: [
-        "react",
-        "react/jsx-runtime",
-        "react-dom",
-        "@modular-frontend/testing",
-        "@modular-react/core",
-        "@modular-react/react",
-      ],
+      external: ["vue", "@modular-frontend/core", "@modular-frontend/testing", "@modular-vue/vue"],
     },
     sourcemap: true,
   },

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { defineModule } from "@react-router-modules/core";
-import { resolveModule } from "./resolve-module.js";
+import { resolveModule } from "@modular-frontend/testing";
 
 interface TestSlots {
   commands: { id: string; label: string }[];

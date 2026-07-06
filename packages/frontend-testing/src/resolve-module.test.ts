@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { resolveModule } from "./resolve-module.js";
-import type { ModuleDescriptor } from "@modular-react/core";
+import type { ModuleDescriptor } from "@modular-frontend/core";
 
 interface TestSlots {
   commands: { id: string }[];

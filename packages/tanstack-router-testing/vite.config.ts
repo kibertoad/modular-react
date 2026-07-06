@@ -19,6 +19,7 @@ export default defineConfig(({ command }) => ({
         "zustand",
         "@tanstack-react-modules/core",
         "@tanstack-react-modules/runtime",
+        "@modular-frontend/testing",
         "@modular-react/core",
         "@modular-react/journeys",
         "@modular-react/journeys/testing",

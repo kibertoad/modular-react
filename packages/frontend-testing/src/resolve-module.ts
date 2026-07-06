@@ -1,6 +1,5 @@
-import type { ModuleDescriptor, SlotMap, SlotMapOf } from "@tanstack-react-modules/core";
-import type { ModuleEntry } from "@modular-react/core";
-import { buildSlotsManifest, evaluateDynamicSlots } from "@modular-react/core";
+import type { ModuleDescriptor, SlotMap, SlotMapOf, ModuleEntry } from "@modular-frontend/core";
+import { buildSlotsManifest, evaluateDynamicSlots } from "@modular-frontend/core";
 
 export interface ResolveModuleOptions<
   TSharedDependencies extends Record<string, any>,
@@ -26,7 +25,18 @@ export interface ResolveModuleResult<TSlots> {
  * (static + dynamic) and lifecycle hooks, returning the resolved contributions.
  *
  * Use this for headless modules (no component, no routes) that can't
- * be tested with renderModule().
+ * be tested by rendering with a UI-framework binding.
+ *
+ * When the module has `dynamicSlots`, they are evaluated with the
+ * provided `deps` snapshot and merged with static slot contributions.
+ *
+ * @example
+ * const { slots, entry } = resolveModule(externalSystemsModule, {
+ *   defaults: { systems: [], commands: [] },
+ *   deps: { auth: { user: { isAdmin: true } } },
+ * })
+ * expect(slots.systems).toHaveLength(1)
+ * expect(entry.id).toBe('external-systems')
  */
 export function resolveModule<
   TSharedDependencies extends Record<string, any>,
