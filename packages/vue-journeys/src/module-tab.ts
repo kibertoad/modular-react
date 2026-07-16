@@ -51,7 +51,7 @@ function resolveEntryName(
     } else if (entryNames.length > 1) {
       missingEntryNotice = `Module "${mod.id}" exposes multiple entries (${entryNames.join(", ")}); pass the \`entry\` prop to disambiguate.`;
     }
-  } else if (entryPoints && !(entry in entryPoints)) {
+  } else if (entryPoints && !Object.prototype.hasOwnProperty.call(entryPoints, entry)) {
     missingEntryNotice = `Module "${mod.id}" has no entry "${entry}". Registered: ${entryNames.join(", ") || "(none)"}.`;
   } else if (!entryPoints) {
     // `entry` requested but module exposes no entry points at all — surface

@@ -261,15 +261,16 @@ describe("useWaitForExit", () => {
 
       pushReady?.("T-push");
       expect(exit).toHaveBeenCalledExactlyOnceWith("ready", { token: "T-push" });
+      // First-wins teardown is immediate: the winning push drains every live
+      // teardown, including subscribe's own unsubscribe.
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
 
       const pollTicksAtWin = pollCheck.mock.calls.length;
-      const unsubsAtWin = unsubscribe.mock.calls.length;
       vi.advanceTimersByTime(500);
       expect(exit).toHaveBeenCalledTimes(1);
       // Poll interval was torn down inside resolve, so no further ticks.
       expect(pollCheck.mock.calls.length).toBe(pollTicksAtWin);
-      // Subscribe's own unsubscribe is deferred to unmount.
-      expect(unsubscribe.mock.calls.length).toBe(unsubsAtWin);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
 
     it("poll winning prevents timeout from firing", () => {

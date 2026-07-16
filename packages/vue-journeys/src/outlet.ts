@@ -202,14 +202,14 @@ export const JourneyOutlet = defineComponent({
     // caller asked to be notified when the journey they mounted finishes. Child
     // terminations are observed via the parent's resume handler and are not
     // reported through this hook.
-    let finishedFired = false;
+    const finishedInstances = new Set<InstanceId>();
     watch(
       rootInstance,
       (root) => {
         if (!root) return;
         if (root.status !== "completed" && root.status !== "aborted") return;
-        if (finishedFired) return;
-        finishedFired = true;
+        if (finishedInstances.has(root.id)) return;
+        finishedInstances.add(root.id);
         props.onFinished?.({
           status: root.status,
           payload: root.terminalPayload,
@@ -256,10 +256,16 @@ export const JourneyOutlet = defineComponent({
             if (cancelled) return;
             for (const entry of targets) {
               try {
-                void resolveEntryComponent(entry).preload();
+                // `.catch` swallows async rejection from the lazy import; the
+                // surrounding try/catch only covers a synchronous throw from
+                // `resolveEntryComponent`/`preload` itself. Both are best-effort:
+                // a malformed entry would have failed validation upstream, so one
+                // bad entry never hides the rest.
+                void resolveEntryComponent(entry)
+                  .preload()
+                  .catch(() => {});
               } catch {
-                // Best-effort: a malformed entry would have failed validation
-                // upstream. Swallow here so one bad entry never hides the rest.
+                // Synchronous failure — see above.
               }
             }
           };
