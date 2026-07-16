@@ -32,6 +32,24 @@ export {
   validateJourneyGraph,
 } from "./validation.js";
 
+// Journey <-> location sync. The reconciler and its decision table are
+// framework- and router-neutral; bindings wrap `createJourneySync` in a hook
+// (`useJourneySync`) and apps fill in the `JourneySyncPort` for their router.
+export {
+  createJourneySync,
+  createMemoryJourneySyncPort,
+  defaultStepPath,
+  journeyStepPath,
+  resolveJourneySyncAction,
+} from "./journey-sync.js";
+export type {
+  JourneySync,
+  JourneySyncAction,
+  JourneySyncCallbackCtx,
+  JourneySyncOptions,
+  JourneySyncPort,
+} from "./journey-sync.js";
+
 // Authoring helpers — exhaustive (and fallback) state-driven dispatch.
 export { selectModule, selectModuleOrDefault } from "./select-module.js";
 export type { SelectModuleCases, SelectModuleCasesPartial } from "./select-module.js";

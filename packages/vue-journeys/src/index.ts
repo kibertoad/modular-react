@@ -6,10 +6,6 @@
 // `@modular-react/journeys`; the framework-neutral engine pieces are
 // re-exported from `@modular-frontend/journeys-engine`, and the Vue-specific
 // provider / composables / plugin live in this package.
-//
-// The journeys-into-runtime wiring + `renderJourney` land in PR-32; this
-// package ships the provider, instance composables, and registry plugin (PR-30)
-// plus the outlet, module-tab, and `useWaitForExit` (PR-31).
 
 // Vue-specific: provider + context.
 export { JourneyProvider, useJourneyContext, journeyKey } from "./provider.js";
@@ -33,6 +29,21 @@ export type {
   JourneyOutletNotFoundProps,
   JourneyOutletErrorProps,
 } from "./outlet.js";
+
+// Vue-specific: hosting a journey — owns the instance lifecycle (start on
+// mount, end + forget on unmount) so route components stop hand-rolling it.
+export { JourneyHost, useJourneyHost } from "./journey-host.js";
+export type {
+  JourneyHostSlotProps,
+  JourneyHostState,
+  UseJourneyHostOptions,
+} from "./journey-host.js";
+
+// Vue-specific: journey <-> URL sync. The reconciler is framework- and
+// router-neutral (it lives in the engine); this composable is the Vue lifetime
+// wrapper, and the app supplies a `JourneySyncPort` for vue-router.
+export { useJourneySync } from "./use-journey-sync.js";
+export type { UseJourneySyncOptions } from "./use-journey-sync.js";
 
 // Vue-specific: host for a single module instance rendered outside a route.
 export { ModuleTab } from "./module-tab.js";
@@ -108,6 +119,23 @@ export type {
   AnnotatedTransitionHandler,
   StepRef,
   TerminalSentinel,
+} from "@modular-frontend/journeys-engine";
+
+// Journey <-> location reconciler — the neutral core behind `useJourneySync`,
+// plus the in-memory port for tests and headless hosts.
+export {
+  createJourneySync,
+  createMemoryJourneySyncPort,
+  defaultStepPath,
+  journeyStepPath,
+  resolveJourneySyncAction,
+} from "@modular-frontend/journeys-engine";
+export type {
+  JourneySync,
+  JourneySyncAction,
+  JourneySyncCallbackCtx,
+  JourneySyncOptions,
+  JourneySyncPort,
 } from "@modular-frontend/journeys-engine";
 
 // Semver + abort helpers, re-exported from the neutral core for back-compat
