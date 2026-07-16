@@ -32,19 +32,26 @@
   "devDependencies": {
     "@modular-frontend/core": "workspace:*",
     "@modular-frontend/testing": "workspace:*",
+    "@modular-vue/core": "workspace:*",
     "@modular-vue/vue": "workspace:*",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^20.9.0",
     "oxfmt": "^0.51.0",
     "oxlint": "^1.66.0",
     "rolldown-plugin-dts": "^0.26.0",
     "typescript": "^6.0.3",
     "vite": "^8.1.3",
     "vitest": "^4.1.10",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
   },
   "peerDependencies": {
     "@modular-frontend/core": "^0.1.0",
     "@modular-frontend/testing": "^0.1.0",
+    "@modular-vue/core": "^0.1.0",
     "@modular-vue/vue": "^0.1.0",
-    "vue": "^3.5.0"
+    "@vue/test-utils": "^2.4.6",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
   }
 }
