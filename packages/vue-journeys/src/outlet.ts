@@ -146,7 +146,6 @@ export const JourneyOutlet = defineComponent({
       );
     }
     const internals = getInternals(runtime);
-    const instanceId = props.instanceId;
 
     // Unwrap the reactive prop proxy: Vue deeply proxies prop objects, which
     // would change the entry-object identity that keys `resolveEntryComponent`'s
@@ -183,7 +182,13 @@ export const JourneyOutlet = defineComponent({
     // alive: if any subscriber is still attached to the record, another outlet
     // has taken over and we skip the `end()`. Targets the ROOT — `runtime.end`
     // cascades to any active child, so a single call cleans the whole chain.
+    //
+    // Read `props.instanceId` at unmount time (not a value captured at setup)
+    // so a host that re-binds `instanceId` on a live outlet abandons the
+    // instance it is currently rendering — matching the React effect, whose
+    // cleanup closure holds the latest id after re-subscription.
     onUnmounted(() => {
+      const instanceId = props.instanceId;
       queueMicrotask(() => {
         const record = internals.__getRecord(instanceId);
         if (!record) return;
