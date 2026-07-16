@@ -80,8 +80,9 @@ describe("renderModule — entry mode", () => {
 
     expect(wrapper.get(".go").text()).toBe("id:X2");
     // No `exit` option: the helper falls back to a no-op, so triggering the
-    // entry's exit must not throw.
-    await expect(wrapper.get(".go").trigger("click")).resolves.not.toThrow();
+    // entry's exit must not throw. `trigger` rejects if the handler throws, so
+    // awaiting it is the assertion.
+    await wrapper.get(".go").trigger("click");
   });
 });
 
@@ -145,13 +146,9 @@ describe("renderModule — createRoutes mode", () => {
       subscribe: () => () => {},
       getSnapshot: () => snapshot,
     };
-    const wrapper = await renderModule(clockModule, {
-      // `separateDeps` auto-detects a reactive service into the reactiveServices
-      // bucket at runtime. The `deps` type models the resolved snapshot shape
-      // (`Store<T> | T`), so the service instance is passed through a localized
-      // cast — mirroring how a real app wires a ReactiveService into deps.
-      deps: { clock: clock as unknown as TestDeps["clock"] },
-    });
+    // A reactive service is accepted directly by the `deps` type and
+    // auto-detected into the reactiveServices bucket by `separateDeps`.
+    const wrapper = await renderModule(clockModule, { deps: { clock } });
 
     expect(wrapper.get(".now").text()).toBe("42");
   });

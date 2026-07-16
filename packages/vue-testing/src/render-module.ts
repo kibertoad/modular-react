@@ -23,7 +23,10 @@ export interface RenderModuleOptions<TSharedDependencies extends Record<string, 
    * everything else into services — all auto-detected.
    */
   deps: Partial<{
-    [K in keyof TSharedDependencies]: Store<TSharedDependencies[K]> | TSharedDependencies[K];
+    [K in keyof TSharedDependencies]:
+      | Store<TSharedDependencies[K]>
+      | ReactiveService<TSharedDependencies[K]>
+      | TSharedDependencies[K];
   }>;
 
   /** Mock slot data for the module under test */
