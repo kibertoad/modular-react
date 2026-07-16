@@ -13,6 +13,11 @@ export type { RouteBuilderOptions } from "./route-builder.js";
 export { createModularProvidersPlugin, createModularProvidersComponent } from "./providers.js";
 export type { ModularProvidersConfig } from "./providers.js";
 
+// Zones and route data — read module-contributed statics off route `meta`.
+export { useZones } from "./zones.js";
+export { useActiveZones } from "./active-zones.js";
+export { useRouteData } from "./route-data.js";
+
 // Types
 export type {
   RegistryConfig,
