@@ -111,6 +111,57 @@ describe("useComposition", () => {
     expect(runtime.getInstance(id)).not.toBeNull();
   });
 
+  it("treats an input shaped like options as input, not options (brand disambiguation)", () => {
+    // The whole reason `useCompositionOptions` brands the options object: an
+    // `input` of shape `{ runtime: … }` is a perfectly valid TInput and must
+    // not be sniffed as options. Without the brand, the decoy runtime on the
+    // input would hijack minting; with it, the runtime still comes from context
+    // and the object flows through as input.
+    const runtime = makeRuntime();
+    const decoy = makeRuntime();
+    const ctxStart = vi.spyOn(runtime, "start");
+    const decoyStart = vi.spyOn(decoy, "start");
+
+    let id = "";
+    const Host = defineComponent({
+      setup() {
+        id = useComposition("use-comp", { runtime: decoy });
+        return () => null;
+      },
+    });
+    const Root = defineComponent({
+      setup() {
+        return () => h(CompositionsProvider, { runtime }, () => h(Host));
+      },
+    });
+    mount(Root);
+
+    expect(ctxStart).toHaveBeenCalledTimes(1);
+    expect(ctxStart).toHaveBeenCalledWith("use-comp", { runtime: decoy });
+    expect(decoyStart).not.toHaveBeenCalled();
+    expect(runtime.getInstance(id)).not.toBeNull();
+  });
+
+  it("detects branded options while still forwarding the middle argument as input", () => {
+    // No provider mounted, so the branded options is the only runtime source;
+    // the preceding argument must still be forwarded to `runtime.start` as
+    // input rather than being swallowed by the options detection.
+    const runtime = makeRuntime();
+    const start = vi.spyOn(runtime, "start");
+
+    let id = "";
+    const Host = defineComponent({
+      setup() {
+        id = useComposition("use-comp", { payload: 1 }, useCompositionOptions({ runtime }));
+        return () => null;
+      },
+    });
+    mount(Host);
+
+    expect(start).toHaveBeenCalledWith("use-comp", { payload: 1 });
+    expect(runtime.getInstance(id)).not.toBeNull();
+  });
+
   it("throws a clear error when used without a runtime / provider", () => {
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const Host = defineComponent({
