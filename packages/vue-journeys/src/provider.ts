@@ -41,12 +41,15 @@ export const journeyKey: InjectionKey<JourneyProviderValue> = Symbol("modular-vu
  * second provider.
  *
  * Authored with `defineComponent` + a render function (no SFC compiler in the
- * package build; see decision D4). The context is provided by identity at
- * setup — matching the modules / navigation contexts (PR-10), the runtime is
- * resolved once from the manifest and does not swap on the same mount. The
+ * package build; see decision D4). The `runtime` is provided by identity at
+ * setup — matching the modules / navigation contexts (PR-10), it is resolved
+ * once from the manifest and does not swap on the same mount, and it is left
+ * un-proxied so identity checks against `manifest.journeys` hold. The
  * `onModuleExit` handler is forwarded through the live `props` into
- * `<ModuleExitProvider>` on every render, so a swapped handler still reaches
- * descendant hosts (the provider reads it through a getter).
+ * `<ModuleExitProvider>` on every render, and the provided context value reads
+ * it through a getter, so a swapped handler reaches both descendant hosts and
+ * consumers that introspect `useJourneyContext().onModuleExit` (parity with the
+ * React provider, which rebuilds its value object each render).
  *
  * Existing journey consumers do not need to change — `onModuleExit` keeps
  * firing for every module exit emitted outside a journey step.
@@ -60,7 +63,17 @@ export const JourneyProvider = defineComponent({
     onModuleExit: { type: Function as PropType<ModuleExitHandler>, default: undefined },
   },
   setup(props, { slots }) {
-    provide(journeyKey, { runtime: props.runtime, onModuleExit: props.onModuleExit });
+    // Keep `runtime` a raw reference (identity-stable for the same mount) while
+    // exposing `onModuleExit` live: a getter reads the current prop on each
+    // access, so a swapped handler is visible to introspecting consumers
+    // without proxying `runtime` through `reactive`.
+    const value: JourneyProviderValue = {
+      runtime: props.runtime,
+      get onModuleExit() {
+        return props.onModuleExit;
+      },
+    };
+    provide(journeyKey, value);
     return () => h(ModuleExitProvider, { onExit: props.onModuleExit }, () => slots.default?.());
   },
 });

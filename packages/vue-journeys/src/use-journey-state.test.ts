@@ -11,6 +11,7 @@ import { JourneyProvider } from "./provider.js";
 import {
   useActiveLeafJourneyInstance,
   useActiveLeafJourneyState,
+  useJourneyInstance,
   useJourneyState,
 } from "./use-journey-state.js";
 
@@ -144,6 +145,39 @@ describe("useJourneyState", () => {
     const Probe = defineComponent({
       setup() {
         observed = useJourneyState<ParentState>("nope").value;
+        return () => null;
+      },
+    });
+    mount(Probe);
+    expect(observed).toBeNull();
+  });
+});
+
+describe("useJourneyInstance", () => {
+  it("exposes the full snapshot (status / step / state) and tracks changes", async () => {
+    const runtime = setupRuntime();
+    const id = runtime.start(parentJourney.id, undefined);
+
+    const inst = mountUnderProvider<ShallowRef<JourneyInstance | null>>(runtime, () =>
+      useJourneyInstance(id),
+    );
+
+    // Unlike `useJourneyState`, the instance form surfaces step / status too.
+    expect(inst.value?.step?.moduleId).toBe("parent");
+    expect(inst.value?.journeyId).toBe("parent");
+    expect(inst.value?.state).toEqual({ counter: 0 });
+
+    createTestHarness(runtime).fireExit(id, "bump");
+    await flushPromises();
+
+    expect(inst.value?.state).toEqual({ counter: 1 });
+  });
+
+  it("returns null when no runtime is mounted", () => {
+    let observed: JourneyInstance | null | undefined = undefined;
+    const Probe = defineComponent({
+      setup() {
+        observed = useJourneyInstance("nope").value;
         return () => null;
       },
     });
