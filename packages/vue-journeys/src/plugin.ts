@@ -1,4 +1,5 @@
 import { defineComponent, h } from "vue";
+import type { ModuleExitHandler } from "@modular-vue/vue";
 import type {
   JourneyRuntime,
   ModuleTypeMap,
@@ -93,15 +94,11 @@ export interface JourneysPluginOptions<
   /**
    * Forwarded onto `<JourneyProvider>` as the shell-wide `onModuleExit`
    * handler. Use it as a default place to close tabs / forward analytics when
-   * a module exit isn't consumed by an explicit prop.
+   * a module exit isn't consumed by an explicit prop. Reuses the upstream
+   * `ModuleExitHandler` so the full `ModuleExitEvent` (incl. `routeId`) stays
+   * in sync with `@modular-vue/vue`.
    */
-  readonly onModuleExit?: (event: {
-    readonly moduleId: string;
-    readonly entry: string;
-    readonly exit: string;
-    readonly output: unknown;
-    readonly tabId?: string;
-  }) => void;
+  readonly onModuleExit?: ModuleExitHandler;
   /**
    * Optional adapter that reshapes the plugin's default nav item into the
    * app's narrowed `TNavItem`. Apps that use a typed `NavigationItem` alias
