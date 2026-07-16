@@ -149,12 +149,12 @@ describe("collectDynamicSlotFactories", () => {
   });
 
   it("collects from multiple modules", () => {
-    const fn1 = () => ({ commands: [] });
-    const fn2 = () => ({ badges: [] });
+    const fn1 = (): Partial<TestSlots> => ({ commands: [] });
+    const fn2 = (): Partial<TestSlots> => ({ badges: [] });
 
     const factories = collectDynamicSlotFactories([
-      fakeModule({ id: "a", dynamicSlots: fn1 as any }),
-      fakeModule({ id: "b", dynamicSlots: fn2 as any }),
+      fakeModule({ id: "a", dynamicSlots: fn1 }),
+      fakeModule({ id: "b", dynamicSlots: fn2 }),
     ]);
 
     expect(factories).toHaveLength(2);
@@ -259,7 +259,7 @@ describe("evaluateDynamicSlots", () => {
   });
 
   it("skips factory that returns null/undefined", () => {
-    const factory: DynamicSlotFactory = () => null as any;
+    const factory: DynamicSlotFactory = () => null as unknown as ReturnType<DynamicSlotFactory>;
 
     const result = evaluateDynamicSlots<TestSlots>(baseSlots, [factory], {});
 

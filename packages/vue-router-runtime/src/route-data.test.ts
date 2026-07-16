@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, expectTypeOf } from "vitest";
+import { reactive } from "vue";
 
 vi.mock("vue-router", () => ({
   useRoute: vi.fn(),
@@ -79,6 +80,20 @@ describe("useRouteData", () => {
       );
       const data = useRouteData<{ headerVariant?: string }>();
       expect(data.value.headerVariant).toBe("portal");
+    });
+
+    it("recomputes when the matched hierarchy changes (navigation)", () => {
+      // useRouteData returns a ComputedRef off the live `route.matched`; drive
+      // an actual navigation by mutating a reactive route and assert the same
+      // ref reflects the new deepest-wins value.
+      const route = reactive({ matched: [{ meta: { headerVariant: "portal" } }] as unknown[] });
+      mockUseRoute.mockReturnValue(route as unknown as ReturnType<typeof useRoute>);
+
+      const data = useRouteData<{ headerVariant?: string }>();
+      expect(data.value.headerVariant).toBe("portal");
+
+      route.matched = [{ meta: { headerVariant: "project" } }];
+      expect(data.value.headerVariant).toBe("project");
     });
   });
 

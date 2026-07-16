@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { reactive } from "vue";
 
 vi.mock("vue-router", () => ({
   useRoute: vi.fn(),
@@ -69,5 +70,19 @@ describe("useZones", () => {
     mockUseRoute.mockReturnValue(routeWithMatches([{}, { meta: { detailPanel: PanelA } }]));
     const result = useZones<TestZones>();
     expect(result.value.detailPanel).toBe(PanelA);
+  });
+
+  it("recomputes when the matched hierarchy changes (navigation)", () => {
+    // The whole point of returning a ComputedRef is reactivity off the live
+    // `route.matched`. Drive an actual navigation by mutating a reactive route
+    // and assert the same ref reflects the new deepest match.
+    const route = reactive({ matched: [{ meta: { detailPanel: PanelA } }] as unknown[] });
+    mockUseRoute.mockReturnValue(route as unknown as ReturnType<typeof useRoute>);
+
+    const result = useZones<TestZones>();
+    expect(result.value.detailPanel).toBe(PanelA);
+
+    route.matched = [{ meta: { detailPanel: PanelB } }];
+    expect(result.value.detailPanel).toBe(PanelB);
   });
 });
