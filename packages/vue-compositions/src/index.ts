@@ -12,8 +12,8 @@
 // `@modular-frontend/compositions-engine` and is re-exported here, and the
 // Vue UI layer (provider, composables, plugin) lives in this package.
 //
-// The composition outlet lands in PR-34; this package (PR-33) ships the
-// provider, panel + host composables, and registry plugin.
+// This package ships the provider, panel + host composables, registry plugin,
+// and the composition outlet.
 
 export { defineComposition, defineCompositionHandle } from "@modular-frontend/compositions-engine";
 
@@ -62,6 +62,12 @@ export type { CompositionContextValue, TypedCompositionHooks } from "./hooks.js"
 // Vue-specific: host composable — mint an instance the host wants to render.
 export { useComposition, useCompositionOptions } from "./use-composition.js";
 export type { BrandedCompositionOptions, UseCompositionOptions } from "./use-composition.js";
+
+// Vue-specific: the composition outlet — renders an instance's zones through a
+// scoped default slot (the render-prop analog). The host owns layout; the
+// framework owns each zone's content (Suspense + error boundary applied).
+export { CompositionOutlet } from "./outlet.js";
+export type { CompositionOutletNotFoundProps, CompositionOutletErrorProps } from "./outlet.js";
 
 // --- Re-exported authoring surface from the framework-neutral engine ---
 
