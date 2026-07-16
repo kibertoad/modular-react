@@ -258,8 +258,17 @@ describe("evaluateDynamicSlots", () => {
     expect(baseSlots.commands).toEqual(originalCommands);
   });
 
-  it("skips factory that returns null/undefined", () => {
+  it("skips factory that returns null", () => {
     const factory: DynamicSlotFactory = () => null as unknown as ReturnType<DynamicSlotFactory>;
+
+    const result = evaluateDynamicSlots<TestSlots>(baseSlots, [factory], {});
+
+    expect(result.commands).toEqual([{ id: "static-1", label: "Static Command" }]);
+  });
+
+  it("skips factory that returns undefined", () => {
+    const factory: DynamicSlotFactory = () =>
+      undefined as unknown as ReturnType<DynamicSlotFactory>;
 
     const result = evaluateDynamicSlots<TestSlots>(baseSlots, [factory], {});
 

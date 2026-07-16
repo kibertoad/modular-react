@@ -135,6 +135,60 @@ describe("createRouteDataOverrideWarner", () => {
       const message = String(warnSpy.mock.calls[0]?.[0] ?? "");
       expect(message).toContain("<unknown>");
     });
+
+    it("falls back to a vue-router string name when id and routeId are absent", () => {
+      process.env.NODE_ENV = "development";
+      const warn = createRouteDataOverrideWarner("@modular-vue/runtime", "useZones", "meta")!;
+
+      warn({
+        key: "detailPanel",
+        previousValue: "A",
+        nextValue: "B",
+        previousMatch: { name: "parent" },
+        nextMatch: { name: "parent-child" },
+      });
+
+      const message = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(message).toContain("[@modular-vue/runtime]");
+      expect(message).toContain("parent");
+      expect(message).toContain("parent-child");
+    });
+
+    it("falls back to the route path when id, routeId, and a string name are all absent", () => {
+      process.env.NODE_ENV = "development";
+      const warn = createRouteDataOverrideWarner("@modular-vue/runtime", "useRouteData", "meta")!;
+
+      warn({
+        key: "headerVariant",
+        previousValue: "portal",
+        nextValue: "project",
+        previousMatch: { path: "/project" },
+        nextMatch: { path: "/project/:id" },
+      });
+
+      const message = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      expect(message).toContain("/project");
+      expect(message).toContain("/project/:id");
+    });
+
+    it("ignores a symbol-valued name and falls back to the path (vue-router allows symbol names)", () => {
+      process.env.NODE_ENV = "development";
+      const warn = createRouteDataOverrideWarner("@modular-vue/runtime", "useZones", "meta")!;
+
+      warn({
+        key: "detailPanel",
+        previousValue: "A",
+        nextValue: "B",
+        previousMatch: { name: Symbol("parent"), path: "/parent" },
+        nextMatch: { name: Symbol("child"), path: "/parent/child" },
+      });
+
+      const message = String(warnSpy.mock.calls[0]?.[0] ?? "");
+      // The symbol name must not be used as the identifier — the path wins.
+      expect(message).toContain("/parent");
+      expect(message).toContain("/parent/child");
+      expect(message).not.toContain("Symbol(");
+    });
   });
 
   describe("type contract", () => {
