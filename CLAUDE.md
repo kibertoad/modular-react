@@ -30,3 +30,16 @@ Two reasons:
 So: after code changes, run `pnpm lint:fix` (or `oxfmt --write .`) once over the
 whole repo, then commit. The staged diff will be clean even though the working
 tree showed a lot of touched files.
+
+### After formatting
+
+- **Do not rerun tests after formatting.** Formatting only rewrites whitespace,
+  line endings, and layout — it never changes runtime behavior, so tests that
+  passed before `oxfmt --write .` still pass after it. Run the test suite once
+  against the meaningful code change; the format pass does not invalidate that
+  result.
+- **Do not check formatting results directly.** Never run `oxfmt --check .` (or
+  inspect the reformatted files) to confirm formatting "worked". `oxfmt --write .`
+  is authoritative — if it exits cleanly the tree is formatted. A separate
+  `--check` pass, especially from a subpath, reports "No config found, using
+  defaults" and produces misleading results. Trust the `--write` and move on.
