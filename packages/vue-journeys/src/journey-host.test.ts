@@ -251,4 +251,42 @@ describe("useJourneyHost", () => {
     expect(runtime.listInstances()).toEqual([id]);
     expect(wrapper.find('[data-testid="step-b"]').exists()).toBe(true);
   });
+
+  it("pins the runtime it started on, rather than following a swapped one", async () => {
+    const runtimeA = setup();
+    const runtimeB = setup();
+    const wrapper = mount(JourneyHost, { props: { handle, runtime: runtimeA } });
+    await flushPromises();
+    const id = runtimeA.listInstances()[0]!;
+    expect(wrapper.find('[data-testid="step-a"]').exists()).toBe(true);
+
+    // The instance lives on runtimeA and its id means nothing to runtimeB, so
+    // the host stays on the runtime it started against instead of stranding
+    // itself against one that has never heard of the instance.
+    await wrapper.setProps({ runtime: runtimeB });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="step-a"]').exists()).toBe(true);
+    expect(runtimeA.getInstance(id)?.status).toBe("active");
+    expect(runtimeB.listInstances()).toHaveLength(0);
+  });
+
+  it("renders loadingFallback written kebab-case, as a template passes it", async () => {
+    const runtime = setup();
+    // What the template compiler emits for `:loading-fallback="…"`. Vue
+    // camelizes kebab keys only for *declared* props, and `loadingFallback`
+    // reaches the host as a fallthrough attr — so the host has to accept both
+    // spellings itself, or the pre-instance frame silently renders nothing.
+    const wrapper = mountUnderProvider(runtime, () =>
+      h(JourneyHost, {
+        handle,
+        "loading-fallback": () => h("span", { "data-testid": "fallback" }, "loading"),
+      }),
+    );
+
+    expect(wrapper.find('[data-testid="fallback"]').exists()).toBe(true);
+
+    await flushPromises();
+    expect(wrapper.find('[data-testid="step-a"]').exists()).toBe(true);
+  });
 });

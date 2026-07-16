@@ -59,11 +59,16 @@ export interface UseJourneySyncOptions extends JourneySyncOptions {
  * - **`instanceId` may be `null`.** The hook no-ops, so it can be called
  *   unconditionally above an early return — including on `<JourneyHost>`'s
  *   first render, before the instance exists.
- * - **The `port` need not be memoized.** The hook calls through to whatever
- *   you passed on the latest render, so an inline object literal will not
- *   tear down and rebuild the reconciler (which would re-navigate) on every
- *   render. Whether the port supplies `go` *is* read reactively, since it
- *   changes the rewind strategy.
+ * - **The `port` need not be memoized.** `read`, `push`, `replace` and `go`
+ *   call through to whatever you passed on the latest render, so an inline
+ *   object literal will not tear down and rebuild the reconciler (which would
+ *   re-navigate) on every render. Whether the port supplies `go` *is* read
+ *   reactively, since it changes the rewind strategy. The one exception is
+ *   `subscribe`: it is called once, when the sync is created, so the
+ *   subscription belongs to the port that was current at that moment. That is
+ *   invisible for the normal case — a port over a stable router — but a port
+ *   that subscribes to a *different* source on a later render will not be
+ *   re-subscribed. Change `instanceId` (or remount) to re-attach.
  * - **Callbacks need not be memoized** either — `stepToPath`, `onUnresolved`
  *   and `onBlocked` are read through the same latest-value ref.
  * - **The hook never starts or ends the instance.** It only navigates within

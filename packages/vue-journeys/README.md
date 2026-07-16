@@ -31,10 +31,12 @@ npm install @modular-vue/journeys
   default.
 - **`<JourneyHost :handle="…" :input="…">`** — mounts a journey in one line:
   starts it on mount, renders its step, ends + forgets the instance on unmount.
-  Outlet props pass through as attrs; the default scoped slot receives
+  Outlet props pass through as attrs, in either spelling (`:on-finished` and
+  `:onFinished` both reach the outlet); the default scoped slot receives
   `{ instanceId, instance, stepIndex, outlet }` for chrome.
 - **`useJourneyHost(handle, input, options?)`** — the lifecycle without the
-  rendering. Returns `{ instanceId, instance, stepIndex }` as refs.
+  rendering. Returns `{ instanceId, instance, stepIndex }` as refs, plus the
+  plain `runtime` it resolved at setup — the one `instanceId` is valid on.
 - **`useJourneySync(id, port, options?)`** — keeps a journey and the URL in step
   both ways: the journey advances and the URL follows; Back/Forward drive
   `rewindTo` / `goForward`. You supply a small `JourneySyncPort` for vue-router.

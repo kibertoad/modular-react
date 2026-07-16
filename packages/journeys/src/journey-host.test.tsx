@@ -212,6 +212,31 @@ describe("<JourneyHost>", () => {
     expect(screen.getByText("step-b")).toBeDefined();
   });
 
+  it("pins the runtime it started on, rather than following a swapped one", async () => {
+    const runtimeA = setup();
+    const runtimeB = setup();
+    const view = render(
+      <JourneyHost handle={handle} runtime={runtimeA} loadingFallback={<span>loading</span>} />,
+    );
+    const id = runtimeA.listInstances()[0]!;
+    expect(screen.getByText("step-a")).toBeDefined();
+
+    // The instance lives on runtimeA and its id means nothing to runtimeB, so
+    // the host stays on the runtime it started against instead of stranding
+    // itself against one that has never heard of the instance.
+    view.rerender(
+      <JourneyHost handle={handle} runtime={runtimeB} loadingFallback={<span>loading</span>} />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("step-a")).toBeDefined();
+    expect(screen.queryByText("loading")).toBeNull();
+    expect(runtimeA.getInstance(id)?.status).toBe("active");
+    expect(runtimeB.listInstances()).toHaveLength(0);
+  });
+
   it("forwards outlet props", () => {
     const runtime = setup();
     const onFinished = vi.fn();

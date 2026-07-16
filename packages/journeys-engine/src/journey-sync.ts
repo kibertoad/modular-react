@@ -142,6 +142,16 @@ export interface JourneySyncOptions {
    * on via `port.push`, which is the standard "block the Back button"
    * shape: the URL snaps forward and the user stays put. Use the callback to
    * explain why ("your payment is already submitted"), not to navigate.
+   *
+   * **The trigger is "the journey did not end up where the location asked",
+   * which is *usually* a refusal but not always.** `rewindTo` re-runs the
+   * destination entry's `buildInput` against the rewound state, so a
+   * `stepToPath` that folds `step.input` in — what
+   * {@link JourneySyncOptions.stepToPath} suggests for a journey that revisits
+   * an entry — can map the landed step to a different path than the one asked
+   * for, even though the rewind succeeded. The URL correction is right either
+   * way; only the name is off. `ctx.instance` is the post-move instance, so
+   * compare its step against `ctx.path` if you need to tell the two apart.
    */
   readonly onBlocked?: (ctx: JourneySyncCallbackCtx) => void;
 }

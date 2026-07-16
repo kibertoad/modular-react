@@ -30,6 +30,18 @@ export interface JourneyHostState {
   readonly instanceId: InstanceId | null;
   readonly instance: JourneyInstance | null;
   /**
+   * The runtime this host pinned on its first render — the one `instanceId`
+   * is meaningful to, and the one the host's own `<JourneyOutlet>` is given.
+   *
+   * Normally identical to whatever a `<JourneyProvider>` above you would hand
+   * out, so a hand-placed outlet can keep resolving from context. It is
+   * exposed for the case where those two could differ: a shell that swaps its
+   * provider value mid-flight. The host does not follow such a swap (see
+   * "The instance is fixed"), so this is the runtime to use if you want to be
+   * certain you are talking about the same journey the host started.
+   */
+  readonly runtime: JourneyRuntime;
+  /**
    * How many steps the user has completed — `history.length`, so `0` on the
    * first step. Stable across re-renders of the same step, and it rewinds
    * when the journey does.
@@ -52,11 +64,13 @@ export interface JourneyHostState {
  * the URL half, and `<JourneyOutlet>` is the rendering half.
  * {@link JourneyHost} packages the first and the last together.
  *
- * **The instance is fixed for the component's lifetime.** `handle` and
- * `input` are read once, at mount; changing them later does not restart the
- * journey, because silently abandoning a half-finished flow because a prop
- * identity changed is never what the caller meant. To run a different journey,
- * remount — `<JourneyHost key={journeyId} …>`.
+ * **The instance is fixed for the component's lifetime.** `handle`, `input`
+ * and `runtime` are read once, at mount; changing them later does not restart
+ * the journey, because silently abandoning a half-finished flow because a prop
+ * identity changed is never what the caller meant. To run a different journey
+ * — or to run it on a different runtime — remount:
+ * `<JourneyHost key={journeyId} …>`. The Vue binding resolves its runtime the
+ * same way, once at setup.
  *
  * **Start means resume, when persistence is configured.** `runtime.start()`
  * with a `persistence` adapter returns the in-flight instance for the same
@@ -84,7 +98,15 @@ export function useJourneyHost<TInput>(
   options: UseJourneyHostOptions = {},
 ): JourneyHostState {
   const context = useJourneyContext();
-  const runtime = options.runtime ?? context?.runtime;
+  // Pinned on first render, like `handle` / `input` below. The instance this
+  // host owns lives on exactly one runtime, so re-resolving mid-flight could
+  // only strand it: the id is meaningless to a different runtime, and the
+  // start is latched against StrictMode's remount, which is indistinguishable
+  // from a genuine swap by the time the effect re-runs. Reading once makes the
+  // effect's `runtime` dep constant and matches the Vue binding, which
+  // resolves its runtime once at setup.
+  const runtimeRef = useRef(options.runtime ?? context?.runtime);
+  const runtime = runtimeRef.current;
   if (!runtime) {
     throw new Error(
       "[@modular-react/journeys] useJourneyHost needs a runtime. Either pass `runtime` or mount a <JourneyProvider>.",
@@ -141,6 +163,7 @@ export function useJourneyHost<TInput>(
   return {
     instanceId,
     instance,
+    runtime,
     stepIndex: instance ? instance.history.length : 0,
   };
 }
@@ -216,13 +239,16 @@ export function JourneyHost<TInput>(props: JourneyHostProps<TInput>): ReactNode 
     readonly input: TInput;
   };
 
-  const { instanceId, instance, stepIndex } = useJourneyHost(handle, input, {
+  const { instanceId, instance, runtime, stepIndex } = useJourneyHost(handle, input, {
     runtime: runtimeProp,
   });
 
   if (!instanceId || !instance) return outletProps.loadingFallback ?? null;
 
-  const outlet = createElement(JourneyOutlet, { ...outletProps, runtime: runtimeProp, instanceId });
+  // The pinned runtime, not `runtimeProp`: `instanceId` only means anything on
+  // the runtime the host started it on, so forwarding a later prop value would
+  // point the outlet at a runtime that has never heard of this instance.
+  const outlet = createElement(JourneyOutlet, { ...outletProps, runtime, instanceId });
   if (!children) return outlet;
   return children({ instanceId, instance, stepIndex, outlet });
 }

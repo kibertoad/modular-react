@@ -40,6 +40,19 @@ export interface JourneyHostState {
   readonly instanceId: ShallowRef<InstanceId | null>;
   readonly instance: ShallowRef<JourneyInstance | null>;
   /**
+   * The runtime this host resolved at setup — the one `instanceId` is
+   * meaningful to, and the one the host's own `<JourneyOutlet>` is given.
+   * Already `toRaw`-unwrapped.
+   *
+   * Normally identical to whatever a `<JourneyProvider>` above you would hand
+   * out, so a hand-placed outlet can keep resolving from context. It is
+   * exposed for the case where those two could differ: a shell that swaps its
+   * provider value mid-flight. The host does not follow such a swap (see
+   * "read once, at setup"), so this is the runtime to use if you want to be
+   * certain you are talking about the same journey the host started.
+   */
+  readonly runtime: JourneyRuntime;
+  /**
    * How many steps the user has completed — `history.length`, so `0` on the
    * first step. Rewinds when the journey does.
    *
@@ -62,11 +75,13 @@ export interface JourneyHostState {
  * half, and `<JourneyOutlet>` is the rendering half. {@link JourneyHost}
  * packages the first and the last together.
  *
- * **`handle` and `input` are read once, at mount**, and are therefore plain
- * values rather than the `MaybeRefOrGetter` the reactive composables in this
- * package take. Changing them cannot restart the journey: silently abandoning
- * a half-finished flow because a prop changed is never what the caller meant.
- * To run a different journey, remount — `<JourneyHost :key="journeyId" …>`.
+ * **`handle`, `input` and `runtime` are read once, at setup**, and are
+ * therefore plain values rather than the `MaybeRefOrGetter` the reactive
+ * composables in this package take. Changing them cannot restart the journey:
+ * silently abandoning a half-finished flow because a prop changed is never
+ * what the caller meant. To run a different journey — or to run it on a
+ * different runtime — remount: `<JourneyHost :key="journeyId" …>`. The React
+ * binding pins its runtime the same way.
  *
  * **Start means resume, when persistence is configured.** `runtime.start()`
  * with a `persistence` adapter returns the in-flight instance for the same
@@ -129,8 +144,27 @@ export function useJourneyHost<TInput>(
   return {
     instanceId,
     instance,
+    runtime,
     stepIndex: computed(() => (instance.value ? instance.value.history.length : 0)),
   };
+}
+
+/**
+ * Pull `loadingFallback` out of the host's attrs, accepting either spelling.
+ *
+ * Vue camelizes kebab-case only for **declared** props; a fallthrough attr
+ * keeps whatever key the caller wrote. So a template's
+ * `:loading-fallback="…"` arrives as `attrs["loading-fallback"]` while a
+ * render function's `h(JourneyHost, { loadingFallback })` arrives camelCased,
+ * and the host — which reads this attr itself rather than declaring it — has
+ * to look under both. The inner `<JourneyOutlet>` needs no such help: it
+ * *declares* `loadingFallback`, so Vue normalizes the kebab key for it.
+ *
+ * Without this the template spelling renders nothing for the frame before the
+ * instance exists, then silently starts working once the outlet mounts.
+ */
+function readLoadingFallback(attrs: Record<string, unknown>): VNode | (() => VNode) | undefined {
+  return (attrs.loadingFallback ?? attrs["loading-fallback"]) as VNode | (() => VNode) | undefined;
 }
 
 export interface JourneyHostSlotProps {
@@ -158,7 +192,8 @@ export interface JourneyHostSlotProps {
  * (`onFinished`, `onStepError`, `errorComponent`, `preload`, …) works on
  * `<JourneyHost>` without this component re-declaring — and drifting from —
  * the outlet's prop list. `loadingFallback` is the one attr the host also
- * reads itself, to cover the render before the instance exists.
+ * reads itself, to cover the render before the instance exists — which is why
+ * it has to accept both spellings; see {@link readLoadingFallback}.
  *
  * For chrome around the step, use the default scoped slot:
  *
@@ -201,7 +236,7 @@ export const JourneyHost = defineComponent({
     runtime: { type: Object as PropType<JourneyRuntime>, default: undefined },
   },
   setup(props, { slots, attrs }) {
-    const { instanceId, instance, stepIndex } = useJourneyHost(props.handle, props.input, {
+    const { instanceId, instance, runtime, stepIndex } = useJourneyHost(props.handle, props.input, {
       runtime: props.runtime,
     });
 
@@ -209,12 +244,16 @@ export const JourneyHost = defineComponent({
       const id = instanceId.value;
       const inst = instance.value;
       if (!id || !inst) {
-        const fallback = attrs.loadingFallback as VNode | (() => VNode) | undefined;
+        const fallback = readLoadingFallback(attrs);
         if (!fallback) return null;
         return typeof fallback === "function" ? fallback() : fallback;
       }
 
-      const outlet = h(JourneyOutlet, { ...attrs, runtime: props.runtime, instanceId: id });
+      // The resolved runtime, not `props.runtime`: `instanceId` only means
+      // anything on the runtime the host started it on, so forwarding a later
+      // prop value would point the outlet at a runtime that has never heard of
+      // this instance.
+      const outlet = h(JourneyOutlet, { ...attrs, runtime, instanceId: id });
       const slot = slots.default;
       if (!slot) return outlet;
       return slot({

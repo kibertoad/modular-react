@@ -61,6 +61,11 @@ export interface UseJourneySyncOptions extends JourneySyncOptions {
  *   through a live holder rather than re-creating the reconciler, because
  *   re-creating it re-runs its initial reconcile — and that reconcile
  *   navigates. Pass a getter when the port itself depends on reactive state.
+ *   The one exception is `port.subscribe`: it is called once, when the sync is
+ *   created, so the subscription belongs to the port current at that moment.
+ *   That is invisible for the normal case — a port over a stable router — but
+ *   a port that subscribes to a *different* source later will not be
+ *   re-subscribed. Change `instanceId` (or remount) to re-attach.
  * - **The composable never starts or ends the instance.** It only navigates
  *   within a journey that is already running. Pair it with
  *   {@link JourneyHost}, which owns the lifecycle.
