@@ -31,8 +31,10 @@
   },
   "devDependencies": {
     "@modular-frontend/core": "workspace:*",
+    "@modular-frontend/journeys-engine": "workspace:*",
     "@modular-frontend/testing": "workspace:*",
     "@modular-vue/core": "workspace:*",
+    "@modular-vue/journeys": "workspace:*",
     "@modular-vue/vue": "workspace:*",
     "@vue/test-utils": "^2.4.6",
     "happy-dom": "^20.9.0",
@@ -49,6 +51,7 @@
     "@modular-frontend/core": "^0.1.0",
     "@modular-frontend/testing": "^0.1.0",
     "@modular-vue/core": "^0.1.0",
+    "@modular-vue/journeys": "^0.1.0",
     "@modular-vue/vue": "^0.1.0",
     "@vue/test-utils": "^2.4.6",
     "vue": "^3.5.0",

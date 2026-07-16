@@ -26,6 +26,7 @@ import type {
 } from "@modular-frontend/core";
 import { createSlotsSignal } from "@modular-vue/vue";
 import type { SlotsSignal } from "@modular-vue/vue";
+import type { Component } from "vue";
 import type { RouteRecordRaw } from "vue-router";
 import type { ModuleDescriptor, LazyModuleDescriptor } from "@modular-vue/core";
 import type {
@@ -137,6 +138,15 @@ interface CommonAssembly<
   recalculateSlots: () => void;
   slotFilter: SlotFilter | undefined;
   extensions: Record<string, unknown>;
+  /**
+   * Wrapping provider components contributed by plugins via `plugin.providers()`
+   * (e.g. the journeys plugin's `<JourneyProvider>`), in plugin-registration
+   * order. Threaded after user-supplied providers in the framework-mode
+   * component form (`resolveManifest`) — the Vue analog of the React runtime's
+   * `combinedProviders`. See the `resolve()` note on why the router-owning
+   * plugin form does not consume these.
+   */
+  pluginProviders: Component[];
 }
 
 export function createRegistry<
@@ -275,10 +285,13 @@ export function createRegistry<
     for (const mod of modules) moduleDescriptors[mod.id] = mod;
 
     // Plugin onResolve: collect each plugin's runtime into `extensions` keyed by
-    // name. `debug` matches a plugin's own environment-based default
-    // (NODE_ENV !== "production") so a plugin that respects the flag gets
-    // verbose dev output without an explicit opt-in.
+    // name, and each plugin's wrapping provider components into `pluginProviders`
+    // (applied after the user-supplied providers in framework mode). `debug`
+    // matches a plugin's own environment-based default (NODE_ENV !==
+    // "production") so a plugin that respects the flag gets verbose dev output
+    // without an explicit opt-in.
     const extensions: Record<string, unknown> = {};
+    const pluginProviders: Component[] = [];
     const debug = isDevEnv();
     for (const plugin of plugins) {
       const runtime = plugin.onResolve?.({
@@ -287,6 +300,12 @@ export function createRegistry<
         debug,
       });
       extensions[plugin.name] = runtime;
+      const contributed = plugin.providers?.({ runtime });
+      if (contributed && contributed.length > 0) {
+        // Plugin providers are typed to the neutral `UiComponent` seam; in Vue a
+        // UiComponent is a Vue component, so the cast is a no-op at runtime.
+        pluginProviders.push(...(contributed as unknown as Component[]));
+      }
     }
 
     return {
@@ -308,6 +327,7 @@ export function createRegistry<
       recalculateSlots,
       slotFilter,
       extensions,
+      pluginProviders,
     };
   }
 
@@ -427,6 +447,14 @@ export function createRegistry<
         options.router.beforeEach(options.authGuard);
       }
 
+      // Plugin-contributed providers (`assembly.pluginProviders`) are NOT
+      // threaded here: they are wrapping components, and the router-owning path
+      // returns an installable Vue plugin (`app.provide` app-wide), which has no
+      // library-owned root to wrap around. A shell that wants the journeys
+      // context in this mode wraps its own `<router-view>` in
+      // `<JourneyProvider :runtime="manifest.journeys">` (or passes `runtime`
+      // straight to `<JourneyOutlet>`); the framework-mode `resolveManifest()`
+      // path owns a `Providers` component and threads them automatically.
       const plugin = createModularProvidersPlugin(toProvidersConfig(assembly), options.providers);
 
       return {
@@ -489,9 +517,20 @@ export function createRegistry<
         );
       }
 
+      // Plugin-contributed providers (e.g. the journeys plugin's
+      // <JourneyProvider>) are wrapping components, so they compose onto the
+      // framework-mode component form. They go AFTER the user-supplied providers
+      // (first element outermost) — the Vue analog of the React runtime's
+      // `combinedProviders = [...options.providers, ...pluginProviders]` — so a
+      // journey outlet mounted inside `<router-view>` reads the journey runtime
+      // from context without the shell wiring <JourneyProvider> by hand.
+      const combinedProviders =
+        capturedOptions?.providers || assembly.pluginProviders.length > 0
+          ? [...(capturedOptions?.providers ?? []), ...assembly.pluginProviders]
+          : undefined;
       const Providers = createModularProvidersComponent(
         toProvidersConfig(assembly),
-        capturedOptions?.providers,
+        combinedProviders,
       );
       // `manifest.routes` is typed `readonly` — the cached manifest is shared by
       // reference across callsites, so TypeScript is the guard against a

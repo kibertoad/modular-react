@@ -2,12 +2,13 @@ import { describe, it, expect } from "vitest";
 import type { NavigationItemBase, RegistryPlugin } from "@modular-frontend/core";
 import { createRegistry } from "./registry.js";
 
-// The Vue journeys plugin lands in PR-30 / PR-32; until then the registry's
-// plugin machinery (extend / validate / contributeNavigation / onResolve, the
-// `.extensions` bag, and the `.journeys` alias) is exercised with a synthetic
-// journeys-shaped plugin. It mirrors the React `journeysPlugin` surface the
-// real one will provide: a `registerJourney` method, journey-launcher nav
-// items, and a runtime exposed on `manifest.journeys`.
+// Generic registry plugin machinery (extend / validate / contributeNavigation /
+// onResolve, the `.extensions` bag, the `.journeys` alias, and the collision /
+// Object.prototype-name guards) exercised with a synthetic journeys-shaped
+// plugin. The concrete `@modular-vue/journeys` plugin is wired end-to-end in
+// `registry-journeys.test.ts` (PR-32); this file keeps the framework-neutral
+// edge cases that the real plugin does not exercise (duplicate plugin name,
+// method-name collision, a method named after an `Object.prototype` key).
 
 interface JourneyNav {
   label: string;

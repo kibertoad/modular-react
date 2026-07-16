@@ -3012,9 +3012,15 @@ importers:
       '@modular-frontend/core':
         specifier: workspace:*
         version: link:../frontend-core
+      '@modular-frontend/journeys-engine':
+        specifier: workspace:*
+        version: link:../journeys-engine
       '@modular-vue/core':
         specifier: workspace:*
         version: link:../vue-router-core
+      '@modular-vue/journeys':
+        specifier: workspace:*
+        version: link:../vue-journeys
       '@modular-vue/vue':
         specifier: workspace:*
         version: link:../vue
@@ -3054,12 +3060,18 @@ importers:
       '@modular-frontend/core':
         specifier: workspace:*
         version: link:../frontend-core
+      '@modular-frontend/journeys-engine':
+        specifier: workspace:*
+        version: link:../journeys-engine
       '@modular-frontend/testing':
         specifier: workspace:*
         version: link:../frontend-testing
       '@modular-vue/core':
         specifier: workspace:*
         version: link:../vue-router-core
+      '@modular-vue/journeys':
+        specifier: workspace:*
+        version: link:../vue-journeys
       '@modular-vue/vue':
         specifier: workspace:*
         version: link:../vue

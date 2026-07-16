@@ -1,6 +1,6 @@
 # Vue support initiative: plan and tracker
 
-Status: **Phase 3 in progress** (Phase 0: PR-01, PR-02, PR-03 landed; Phase 1: PR-10, PR-11, PR-12 landed; Phase 2: PR-20, PR-21, PR-22, PR-23, PR-24 landed; Phase 3: PR-30, PR-31 landed). Last updated: 2026-07-16.
+Status: **Phase 3 in progress** (Phase 0: PR-01, PR-02, PR-03 landed; Phase 1: PR-10, PR-11, PR-12 landed; Phase 2: PR-20, PR-21, PR-22, PR-23, PR-24 landed; Phase 3: PR-30, PR-31, PR-32 landed). Last updated: 2026-07-16.
 Background and feasibility reasoning: [vue-port-analysis.md](./vue-port-analysis.md).
 
 This document is the single source of truth for the multi-PR effort to bring the framework to Vue 3, including full Journeys and Compositions support. Update the status board and per-PR checkboxes as PRs land; record decision outcomes in the Decisions section.
@@ -253,9 +253,21 @@ Deviations from the React source, all forced by the framework:
 
 Acceptance: met. 67 new tests across `use-wait-for-exit.test.ts` (21), `module-tab.test.ts` (9), `outlet.test.ts` (13), `outlet-invoke.test.ts` (6), `outlet-preload.test.ts` (9), and `mount-kinds-runtime.test.ts` (4) port the React suites case-for-case (StrictMode-only cases excepted): start render, transition re-render, go-back, `onFinished`-once, abandon-on-unmount + the sibling/keyed-handoff listener guard, loading fallback, retry-cap → abort, not-found / custom-error / ignore-card, the full invoke → child → resume lifecycle with `leafOnly` both ways, `useJourneyCallStack` grow/shrink, precise/aggressive/off preload with sentinel + scoped-id + destination-only coverage, lazy step fallback, and the render-time `mountKinds` guard. Package total 84 (17 from PR-30). Full workspace typecheck (122 tasks) and `vite build` (JS + dts) pass; externals (`vue`, `@modular-frontend/core`, `@modular-frontend/journeys-engine`, `@modular-vue/vue`) stay unbundled. The registry wiring + outlet rendering end-to-end and `renderJourney` stay with PR-32.
 
-**PR-32 (M): Journeys wired into `@modular-vue/runtime` + `renderJourney`.**
-Registry journey registration end-to-end, route integration for journey mounts, `renderJourney` testing helper. Port `registry-journeys` rendering cases and `render-journey.test.tsx`.
-Acceptance: the example-app journey scenario (multi-module sequence with a branch) passes as an integration test.
+**PR-32 (M): Journeys wired into `@modular-vue/runtime` + `renderJourney`.** Done.
+Wired the real `@modular-vue/journeys` plugin end-to-end into the runtime and added the `renderJourney` testing helper, closing the PR-21 / PR-22 deferrals that named PR-32 as the home of concrete journeys-in-runtime.
+
+- **Plugin providers threaded (`registry.ts`).** `buildAssembly` now collects each plugin's wrapping provider components (`plugin.providers({ runtime })`) into `pluginProviders`, and `resolveManifest()` threads them after the user-supplied providers into `createModularProvidersComponent` — the Vue analog of the React runtime's `combinedProviders = [...options.providers, ...pluginProviders]`. So a `<JourneyOutlet>` mounted inside `<router-view>` reads the journey runtime from the plugin's `<JourneyProvider>` context without the shell wiring it by hand. Error-message prefixes stay `[@modular-vue/runtime]`.
+- **`registry-journeys.test.ts` (new).** Ports `react-router-runtime/src/registry-journeys.test.ts` case-for-case against the real `journeysPlugin()` + `defineJourney` (11 tests): `manifest.journeys` exposure, the `extensions.journeys` alias, the no-plugin `@ts-expect-error` guard, no-op runtime with no journeys, `validateJourneyContracts` aggregation at `resolveManifest()`, structural `registerJourney` validation, `onModuleExit` forwarding, and the five journey-contributed navigation cases (nav item shape, no-nav-no-item, module/journey nav coexistence + sort, `buildNavItem` adapter, hidden launchers). `registry-plugins.test.ts` keeps the framework-neutral plugin-machinery edge cases (name collision, `Object.prototype`-named method, method overwrite) the concrete plugin doesn't exercise.
+- **`journeys-integration.test.ts` (new).** The acceptance scenario as an integration test (3 tests): a branching, multi-module journey (`chooser` → `finishA` | `finishB`) mounted through a route, driven to each terminal, asserting the `onFinished` payload. Two cases go through `resolveManifest()` + the threaded `Providers` (context-wired outlet); one goes through the router-owning `resolve()` with the shell wrapping its own `<router-view>` in `<JourneyProvider :runtime="manifest.journeys">`.
+- **`renderJourney` (`@modular-vue/testing`).** Ports `react-router-testing/src/render-journey.tsx` — boots a `createJourneyRuntime`, starts the instance, provides the three modular contexts via the `provide*` helpers, and mounts `<JourneyOutlet>` with the runtime handed in by prop. Ported `render-journey.test.tsx` (2 tests: drive-to-terminal + `onFinished` payload).
+
+Deviations from the plan / React source, all forced by the framework:
+
+- **The router-owning `resolve()` path does not auto-thread wrapping-component plugin providers.** It returns an installable Vue plugin (`app.provide` app-wide) with no library-owned root to wrap, so — matching the PR-22 split (`resolve()` = plugin model, `resolveManifest()` = component model) — a shell that wants the journey context in this mode wraps its own `<router-view>` in `<JourneyProvider>` (or passes `runtime` straight to `<JourneyOutlet>`). The framework-mode `resolveManifest()` path owns a `Providers` component and threads them automatically; that is the recommended journeys path and the integration test covers both.
+- **`renderJourney` returns `{ wrapper, runtime, instanceId }`** where `wrapper` is a `@vue/test-utils` `VueWrapper` (the repo-wide Vue test primitive), not a `@testing-library/react` `RenderResult` merged with the extras. The three React context-provider JSX wrappers collapse into one `defineComponent` wrapper calling the `provide*` helpers (decision D4).
+- **Entry components in the runtime-level tests are Vue functional components** (plain functions with a declared `.props`), satisfying the registry's `validateEntryExitShape` function-component check while still rendering real buttons to drive exits. Component-interaction assertions `await flushPromises()` after each trigger (Vue batches; React's `act()` flushes inline — the accepted PR-31 pattern).
+
+Acceptance: met. The branching multi-module journey scenario passes as an integration test through both resolve paths. Package totals: `@modular-vue/runtime` 124 tests (110 + 11 `registry-journeys` + 3 integration), `@modular-vue/testing` 20 (18 + 2 `render-journey`). Full workspace typecheck (123 tasks) and `vite build` (JS + dts) pass; the runtime source takes no journeys dependency (dev-only, tests) and the testing build externalizes `@modular-vue/journeys`.
 
 **PR-33 (M): `@modular-vue/compositions` part 1: provider, composables, store glue.**
 Analogs of `provider.tsx`, `hooks.ts`, `use-composition`, `plugin.tsx` over the compositions engine. Port `use-composition.test.tsx`, `selector-dispatch.test.tsx` intent.
@@ -346,7 +358,7 @@ Update the Status column as PRs move: `todo` → `in progress` → `in review` �
 | PR-24 | @modular-vue/testing renderModule           | S    | PR-23               | done       |
 | PR-30 | vue journeys: provider and composables      | M    | PR-02, PR-10        | done (#69) |
 | PR-31 | vue journeys: outlet                        | L    | PR-30               | done       |
-| PR-32 | journeys wired into runtime + renderJourney | M    | PR-22, PR-31        | todo       |
+| PR-32 | journeys wired into runtime + renderJourney | M    | PR-22, PR-31        | done       |
 | PR-33 | vue compositions: provider and composables  | M    | PR-03, PR-10        | todo       |
 | PR-34 | vue compositions: outlet                    | L    | PR-33               | todo       |
 | PR-40 | examples/vue-router                         | L    | PR-23, PR-32, PR-34 | todo       |
