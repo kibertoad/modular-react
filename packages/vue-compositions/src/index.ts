@@ -61,7 +61,7 @@ export type { CompositionContextValue, TypedCompositionHooks } from "./hooks.js"
 
 // Vue-specific: host composable — mint an instance the host wants to render.
 export { useComposition, useCompositionOptions } from "./use-composition.js";
-export type { UseCompositionOptions } from "./use-composition.js";
+export type { BrandedCompositionOptions, UseCompositionOptions } from "./use-composition.js";
 
 // --- Re-exported authoring surface from the framework-neutral engine ---
 

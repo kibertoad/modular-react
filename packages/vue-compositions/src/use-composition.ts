@@ -39,13 +39,24 @@ export interface UseCompositionOptions {
  * Branding is the only safe disambiguation when `TInput` is `unknown` — a
  * key-shape sniff misclassifies any input object whose only key is `runtime`.
  */
-export function useCompositionOptions(
-  options: UseCompositionOptions,
-): UseCompositionOptions & { readonly [USE_COMPOSITION_OPTIONS_BRAND]: true } {
+export function useCompositionOptions(options: UseCompositionOptions): BrandedCompositionOptions {
   return Object.assign({}, options, {
     [USE_COMPOSITION_OPTIONS_BRAND]: true as const,
   });
 }
+
+/**
+ * The branded shape {@link useCompositionOptions} produces. The
+ * {@link useComposition} overloads require this rather than a bare
+ * {@link UseCompositionOptions} so a plain options object can't be passed
+ * positionally: only branded values are honored at runtime (see
+ * `isBrandedOptions`), and an unbranded `{ runtime }` would otherwise
+ * type-check yet be silently consumed as `input`. Callers must route options
+ * through `useCompositionOptions(...)`.
+ */
+export type BrandedCompositionOptions = UseCompositionOptions & {
+  readonly [USE_COMPOSITION_OPTIONS_BRAND]: true;
+};
 
 function isBrandedOptions(value: unknown): value is UseCompositionOptions {
   return (
@@ -82,13 +93,13 @@ function isBrandedOptions(value: unknown): value is UseCompositionOptions {
 export function useComposition<TId extends string, TInput>(
   handle: CompositionHandleRef<TId, TInput>,
   ...rest: [TInput] extends [void]
-    ? [options?: UseCompositionOptions]
-    : [input: TInput, options?: UseCompositionOptions]
+    ? [options?: BrandedCompositionOptions]
+    : [input: TInput, options?: BrandedCompositionOptions]
 ): CompositionInstanceId;
 export function useComposition(
   compositionId: string,
   input: unknown,
-  options?: UseCompositionOptions,
+  options?: BrandedCompositionOptions,
 ): CompositionInstanceId;
 export function useComposition(
   handleOrId: CompositionHandleRef<string, unknown> | string,
