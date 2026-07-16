@@ -2,7 +2,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { defineComponent, h, type PropType } from "vue";
 import type { RouteRecordRaw } from "vue-router";
-import { createStore, defineEntry, defineExit, schema, type ExitFn } from "@modular-frontend/core";
+import {
+  createStore,
+  defineEntry,
+  defineExit,
+  schema,
+  type ExitFn,
+  type ReactiveService,
+} from "@modular-frontend/core";
 import { defineModule } from "@modular-vue/core";
 import { createSharedComposables, useModules, useSlots } from "@modular-vue/vue";
 import { renderModule } from "./render-module.js";
@@ -10,10 +17,11 @@ import { renderModule } from "./render-module.js";
 interface TestDeps {
   auth: { user: string | null };
   api: { baseUrl: string };
+  clock: { now: number };
 }
 type TestSlots = { widgets: { id: string; label: string }[] };
 
-const { useStore, useService } = createSharedComposables<TestDeps>();
+const { useStore, useService, useReactiveService } = createSharedComposables<TestDeps>();
 
 const exits = { done: defineExit<{ ok: boolean }>() } as const;
 
@@ -62,6 +70,19 @@ describe("renderModule — entry mode", () => {
       /Module "entry-mod" has no entry "nope"/,
     );
   });
+
+  it("supplies a no-op exit when no spy is passed, so emitting an exit does not throw", async () => {
+    const wrapper = await renderModule(entryModule, {
+      deps: {},
+      entry: "main",
+      input: { id: "X2" },
+    });
+
+    expect(wrapper.get(".go").text()).toBe("id:X2");
+    // No `exit` option: the helper falls back to a no-op, so triggering the
+    // entry's exit must not throw.
+    await expect(wrapper.get(".go").trigger("click")).resolves.not.toThrow();
+  });
 });
 
 describe("renderModule — createRoutes mode", () => {
@@ -100,6 +121,39 @@ describe("renderModule — createRoutes mode", () => {
     expect(wrapper.get(".api").text()).toBe("http://test");
     expect(wrapper.get(".mods").text()).toBe("dashboard@2.1.0");
     expect(wrapper.get(".slot").text()).toBe("Widget");
+  });
+
+  it("injects a reactive service (auto-detected into the reactiveServices bucket)", async () => {
+    const clockModule = defineModule<TestDeps>({
+      id: "clock-mod",
+      version: "1.0.0",
+      createRoutes: (): RouteRecordRaw => ({
+        path: "/",
+        name: "clock",
+        component: defineComponent({
+          setup() {
+            const now = useReactiveService("clock", (s) => s.now);
+            return () => h("p", { class: "now" }, String(now.value));
+          },
+        }),
+      }),
+    });
+
+    // `getSnapshot` must return a stable reference while state is unchanged.
+    const snapshot = { now: 42 };
+    const clock: ReactiveService<TestDeps["clock"]> = {
+      subscribe: () => () => {},
+      getSnapshot: () => snapshot,
+    };
+    const wrapper = await renderModule(clockModule, {
+      // `separateDeps` auto-detects a reactive service into the reactiveServices
+      // bucket at runtime. The `deps` type models the resolved snapshot shape
+      // (`Store<T> | T`), so the service instance is passed through a localized
+      // cast — mirroring how a real app wires a ReactiveService into deps.
+      deps: { clock: clock as unknown as TestDeps["clock"] },
+    });
+
+    expect(wrapper.get(".now").text()).toBe("42");
   });
 
   it("navigates to the provided initial route", async () => {
