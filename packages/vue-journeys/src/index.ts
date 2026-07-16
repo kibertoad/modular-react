@@ -7,9 +7,9 @@
 // re-exported from `@modular-frontend/journeys-engine`, and the Vue-specific
 // provider / composables / plugin live in this package.
 //
-// The journey outlet, module-tab, and `useWaitForExit` land in later PRs
-// (PR-31 / PR-32); this package currently ships the provider, the instance
-// composables, and the registry plugin (PR-30).
+// The journeys-into-runtime wiring + `renderJourney` land in PR-32; this
+// package ships the provider, instance composables, and registry plugin (PR-30)
+// plus the outlet, module-tab, and `useWaitForExit` (PR-31).
 
 // Vue-specific: provider + context.
 export { JourneyProvider, useJourneyContext, journeyKey } from "./provider.js";
@@ -22,8 +22,31 @@ export {
   useJourneyInstance,
   useJourneyState,
 } from "./use-journey-state.js";
-// Lower-level subscription composables the outlet (PR-31) builds on.
+// Lower-level subscription composables the outlet builds on.
 export { useInstanceSnapshot, useCallChain, useLeafId } from "./instance-hooks.js";
+
+// Vue-specific: the journey outlet — renders the current step of an instance,
+// walks the active call chain to the leaf, and drives step callbacks.
+export { JourneyOutlet, useJourneyCallStack } from "./outlet.js";
+export type {
+  JourneyStepErrorPolicy,
+  JourneyOutletNotFoundProps,
+  JourneyOutletErrorProps,
+} from "./outlet.js";
+
+// Vue-specific: host for a single module instance rendered outside a route.
+export { ModuleTab } from "./module-tab.js";
+export type { ModuleTabExitEvent } from "./module-tab.js";
+
+// Vue-specific: race several async channels and dispatch a journey exit when
+// the first one resolves.
+export { useWaitForExit } from "./use-wait-for-exit.js";
+export type {
+  WaitForExitChannels,
+  WaitForExitSubscribeChannel,
+  WaitForExitPollChannel,
+  WaitForExitTimeoutChannel,
+} from "./use-wait-for-exit.js";
 
 // Vue-specific: plugin — pass `journeysPlugin()` to
 // `createRegistry({ plugins: [...] })` to enable journey registration.
