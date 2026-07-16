@@ -31,7 +31,9 @@
   },
   "devDependencies": {
     "@modular-frontend/core": "workspace:*",
+    "@modular-frontend/journeys-engine": "workspace:*",
     "@modular-vue/core": "workspace:*",
+    "@modular-vue/journeys": "workspace:*",
     "@modular-vue/vue": "workspace:*",
     "@vue/test-utils": "^2.4.6",
     "happy-dom": "^20.9.0",
