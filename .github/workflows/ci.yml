@@ -45,6 +45,11 @@ jobs:
             ["packages/compositions"]="@modular-react/compositions"
             ["packages/testing"]="@modular-react/testing"
             ["packages/catalog"]="@modular-react/catalog"
+            ["packages/cli-core"]="@modular-react/cli-core"
+            ["packages/frontend-core"]="@modular-frontend/core"
+            ["packages/frontend-testing"]="@modular-frontend/testing"
+            ["packages/compositions-engine"]="@modular-frontend/compositions-engine"
+            ["packages/journeys-engine"]="@modular-frontend/journeys-engine"
             ["packages/react-router-cli"]="@react-router-modules/cli"
             ["packages/react-router-core"]="@react-router-modules/core"
             ["packages/react-router-runtime"]="@react-router-modules/runtime"
@@ -53,6 +58,13 @@ jobs:
             ["packages/tanstack-router-core"]="@tanstack-react-modules/core"
             ["packages/tanstack-router-runtime"]="@tanstack-react-modules/runtime"
             ["packages/tanstack-router-testing"]="@tanstack-react-modules/testing"
+            ["packages/vue"]="@modular-vue/vue"
+            ["packages/vue-compositions"]="@modular-vue/compositions"
+            ["packages/vue-journeys"]="@modular-vue/journeys"
+            ["packages/vue-router-core"]="@modular-vue/core"
+            ["packages/vue-router-runtime"]="@modular-vue/runtime"
+            ["packages/vue-testing"]="@modular-vue/testing"
+            ["packages/angular"]="@modular-angular/angular"
           )
 
           PACKAGES=()

@@ -630,6 +630,11 @@ const ZoneRenderer = defineComponent({
     // every state change. The store lives on the instance record. A unique
     // `STATE_UNAVAILABLE` sentinel distinguishes "record disappeared
     // mid-disposal" from a composition whose state is legitimately falsy.
+    //
+    // The record/store handle is captured once at setup and never re-read.
+    // That is safe because `instanceId` is fixed for the mount and ids are
+    // minted per `start`, so the record backing this zone cannot be swapped out
+    // from under us for the lifetime of the component.
     const record = internals.__getRecord(instanceId);
     const store = record?.store;
     const state = shallowRef<unknown>(store ? store.getState() : STATE_UNAVAILABLE);
@@ -853,7 +858,17 @@ const ZoneRenderer = defineComponent({
               // (the destructive side effect must not run during render). The
               // mint stays in render — it's idempotent per render via the cache.
               if (cached) journeyEndQueue.push(cached.id);
-              journeyInstanceId = adapter.start(selection.handle.id, selection.input);
+              try {
+                journeyInstanceId = adapter.start(selection.handle.id, selection.input);
+              } catch (err) {
+                // `adapter.start` is foreign runtime code called during render,
+                // so a throw here escapes the per-zone `ZoneErrorBoundary` (which
+                // only catches *descendant* errors) and would tear down the whole
+                // outlet. Contain it to this zone: report through the same channel
+                // as a selector error and render the fallback in place.
+                internals.__fireOnError(instanceId, err, { zone, phase: "render" });
+                return renderError(zone, err, props.errorComponent);
+              }
               journeyInstanceCache = { key: cacheKey, id: journeyInstanceId };
             }
           }

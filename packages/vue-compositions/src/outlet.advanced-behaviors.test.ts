@@ -36,6 +36,66 @@ function mountViaProvider(
 }
 
 // ---------------------------------------------------------------------------
+// A throwing journey `adapter.start` is contained in the zone, not fatal
+// ---------------------------------------------------------------------------
+
+describe("journey adapter.start throwing", () => {
+  it("renders the zone error fallback instead of tearing down the outlet", async () => {
+    const startSpy = vi.fn(() => {
+      throw new Error("boom-from-start");
+    });
+    const adapter = {
+      start: startSpy,
+      end: () => {},
+      Outlet: defineComponent({
+        name: "J",
+        props: {
+          instanceId: { type: String, default: "" },
+          loadingFallback: { type: null, default: undefined },
+        },
+        setup() {
+          return () => h("div", { "data-testid": "j" });
+        },
+      }),
+    };
+    const def = defineComposition<{}, { readonly tick: number }>()({
+      id: "start-throws",
+      version: "1.0.0",
+      initialState: () => ({ tick: 0 }),
+      zones: {
+        only: {
+          select: () =>
+            ({
+              kind: "journey",
+              handle: { id: "h" } as never,
+              input: undefined,
+            }) as never,
+        },
+      },
+    });
+    const runtime = createCompositionRuntime(
+      [{ definition: def, options: undefined } as RegisteredComposition],
+      { modules: {}, debug: false },
+    );
+    runtime.registerMountAdapter("journey", adapter as never);
+    const id = runtime.start("start-throws", undefined);
+    const wrapper = mountViaProvider(
+      runtime,
+      { compositionId: "start-throws", instanceId: id },
+      (zones) => h("div", { "data-testid": "root" }, [zones.only]),
+    );
+    await flushPromises();
+    // `start()` threw during render, but the outlet stayed mounted and showed
+    // the zone's error fallback in place — the journey outlet never rendered.
+    expect(startSpy).toHaveBeenCalledTimes(1);
+    const alert = wrapper.find('[data-composition-zone-error="only"]');
+    expect(alert.exists()).toBe(true);
+    expect(alert.text()).toContain("boom-from-start");
+    expect(wrapper.find('[data-testid="j"]').exists()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // hashInput DAG safety, exercised through the journey-zone cache
 // ---------------------------------------------------------------------------
 
