@@ -1,0 +1,58 @@
+{
+  "name": "@modular-vue/nuxt",
+  "version": "0.1.0",
+  "description": "Nuxt 3 integration for @modular-vue: a Nuxt module plus a runtime installer that grafts module routes onto Nuxt's vue-router and installs the modular contexts on the Nuxt Vue app.",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kibertoad/modular-react.git",
+    "directory": "packages/vue-nuxt"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nuxt/kit": "^3.13.0"
+  },
+  "devDependencies": {
+    "@modular-frontend/core": "workspace:*",
+    "@modular-vue/core": "workspace:*",
+    "@modular-vue/runtime": "workspace:*",
+    "@modular-vue/vue": "workspace:*",
+    "@nuxt/schema": "^3.13.0",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^20.9.0",
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.66.0",
+    "rolldown-plugin-dts": "^0.26.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.3",
+    "vitest": "^4.1.10",
+    "vue": "^3.5.40",
+    "vue-router": "^4.5.0"
+  },
+  "peerDependencies": {
+    "@modular-frontend/core": "^0.1.0",
+    "@modular-vue/runtime": "^1.0.0",
+    "vue": "^3.5.40",
+    "vue-router": "^4.5.0"
+  }
+}

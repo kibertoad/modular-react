@@ -187,6 +187,10 @@ jobs:
               - 'packages/vue-cli/src/**'
               - 'packages/vue-cli/package.json'
               - 'packages/vue-cli/README.md'
+            pkg_vue_nuxt:
+              - 'packages/vue-nuxt/src/**'
+              - 'packages/vue-nuxt/package.json'
+              - 'packages/vue-nuxt/README.md'
 
       - name: Build dynamic matrix
         id: build-matrix
@@ -220,6 +224,7 @@ jobs:
             ["pkg_vue_journeys"]="vue-journeys:@modular-vue/journeys"
             ["pkg_vue_compositions"]="vue-compositions:@modular-vue/compositions"
             ["pkg_vue_cli"]="vue-cli:@modular-vue/cli"
+            ["pkg_vue_nuxt"]="vue-nuxt:@modular-vue/nuxt"
           )
 
           echo "Changed filters: $CHANGED"
