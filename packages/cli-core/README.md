@@ -30,8 +30,11 @@ is internal machinery the commands rely on:
 - Centralized runtime-package version pins in `runtime-versions.ts` —
   bump in one place to refresh every generated `package.json`.
 - Router-agnostic templates under `src/templates/`: workspace files,
-  `app-shared` package metadata, store stub, journey package +
-  definition + persistence, and the root `catalog.config.ts`.
+  `app-shared` and shell package metadata, the shared `http-client`,
+  journey package metadata (`package.json` + `index` + `tsconfig`), and
+  the root `catalog.config.ts`. Framework-specific bodies (JSX/SFC
+  source, stores, `vite.config.ts`, `index.html`, journey definition +
+  persistence) come from the preset — see below.
 
 ## Adding a router integration
 
@@ -48,27 +51,37 @@ const preset: CliPreset = {
     core: "@your-router-modules/core",
     runtime: "@your-router-modules/runtime",
     testing: "@your-router-modules/testing",
+    journeys: "@your-router-modules/journeys", // journeys binding the scaffolded packages import
     router: "your-router",
     routerVersion: "^1.0.0",
   },
   docs: { shellPatterns: "shell-patterns-your-router.md" },
   templates: {
-    appSharedIndex,        // your `app-shared/src/index.ts` template
-    shellMain,             // your `shell/src/main.tsx` template
+    appSharedIndex, // your `app-shared/src/index.ts` template
+    shellMain, // your `shell/src/main.tsx` template
     shellRootLayout,
     shellShellLayout,
     shellSidebar,
-    shellViteDedupe: ["react", "react-dom", "react/jsx-runtime", "your-router", ...],
-    moduleDescriptor,      // your `defineModule({...})` template
+    shellViteConfig, // your `shell/vite.config.ts` (plugin + dedupe list)
+    shellIndexHtml, // your `shell/index.html`
+    shellAuthStore, // your `shell/src/stores/auth.ts`
+    shellConfigStore, // your `shell/src/stores/config.ts`
+    shellHome, // your `shell/src/components/Home.*`
+    moduleDescriptor, // your `defineModule({...})` template
     modulePage,
     moduleListPage,
     moduleDetailPanel,
     moduleTest,
+    storeFile, // your `create store` scaffold
+    journeyDefinition, // your journey definition body
+    journeyPersistence, // your journey persistence adapter
   },
 };
 
 runCli(preset);
 ```
 
-The router-agnostic bits (project layout, journeys, stores, package
-metadata) come from this package automatically.
+The router-agnostic bits (project layout, journey package metadata,
+package.json/tsconfig scaffolding, workspace + catalog wiring) come from
+this package automatically; the framework-specific bodies above are the
+only pieces a preset supplies.

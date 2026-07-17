@@ -1,3 +1,4 @@
+import type { PluginOption } from "vite";
 import type { AnyModuleDescriptor, CatalogMeta } from "@modular-react/core";
 
 // JourneyDefinition types live in @modular-react/journeys, but we don't take a
@@ -189,6 +190,21 @@ export interface CatalogConfig {
    * your project's path aliases here so files that import through them load.
    */
   readonly resolve?: CatalogResolve;
+
+  /**
+   * Vite plugins forwarded to the harvester's SSR loader. The loader runs with
+   * `configFile: false`, so it never picks up your project's own Vite plugins.
+   *
+   * Descriptors written in plain TS/JSX need nothing here — Vite's built-in
+   * esbuild pipeline handles them. But when a descriptor imports source that
+   * needs a compiler plugin to load, that plugin must be listed here. The
+   * canonical case is Vue: a `defineModule` descriptor importing an `.vue`
+   * single-file component only loads through the SSR path when
+   * `@vitejs/plugin-vue` is present, e.g. `plugins: [vue()]`. The plugin is
+   * inert for files it doesn't handle, so a mixed React/Vue catalog can list
+   * it unconditionally.
+   */
+  readonly plugins?: readonly PluginOption[];
 
   /** Theme tokens injected as CSS custom properties at build time. */
   readonly theme?: CatalogTheme;

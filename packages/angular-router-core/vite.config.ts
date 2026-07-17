@@ -10,15 +10,10 @@ export default defineConfig(({ command }) => ({
     },
     rollupOptions: {
       external: [
-        "vue",
-        "vue-router",
-        "@vue/test-utils",
+        "@angular/core",
+        "@angular/router",
         "@modular-frontend/core",
-        "@modular-frontend/testing",
-        "@modular-vue/core",
-        "@modular-vue/journeys",
-        "@modular-vue/journeys/testing",
-        "@modular-vue/vue",
+        "@modular-angular/angular",
       ],
     },
     sourcemap: true,

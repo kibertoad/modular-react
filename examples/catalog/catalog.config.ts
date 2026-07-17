@@ -1,3 +1,4 @@
+import vue from "@vitejs/plugin-vue";
 import { defineCatalogConfig } from "@modular-react/catalog";
 
 /**
@@ -108,19 +109,29 @@ const HTML_ESCAPE: Readonly<Record<string, string>> = {
 };
 
 /**
- * Demo catalog config. Scans both tanstack-router example apps in this
- * monorepo so the generated catalog has multiple modules and multiple
- * journeys to display — useful as a "what does this look like populated"
- * demo and as the target for the package's e2e tests.
+ * Demo catalog config. Scans example apps across the monorepo so the generated
+ * catalog has multiple modules and multiple journeys to display — useful as a
+ * "what does this look like populated" demo and as the target for the package's
+ * e2e tests. The scan is deliberately mixed-framework: the onboarding /
+ * checkout roots come from the tanstack-router examples, and the `@modular-vue`
+ * `integration-manager` example contributes Vue modules — demonstrating that
+ * the harvester is framework-agnostic and one catalog can span React and Vue.
  *
  * `cwd` is set per-root to the example directory; the config file itself
  * lives in `examples/catalog/`, so we walk up to the repo root and back
  * down. Patterns are scoped to that example's `modules/` and `journeys/`
  * subdirs so we don't pick up the example's own shell or app-shared code.
+ *
+ * The Vue modules import `.vue` single-file components, which only load through
+ * the harvester's Vite SSR path when `@vitejs/plugin-vue` is forwarded — hence
+ * `plugins: [vue()]` below. The plugin is inert for the React/TSX descriptors,
+ * so a mixed catalog lists it unconditionally.
  */
 export default defineCatalogConfig({
   out: "dist-catalog",
   title: "Modular-React — Examples Catalog",
+
+  plugins: [vue()],
 
   roots: [
     {
@@ -150,6 +161,15 @@ export default defineCatalogConfig({
       cwd: "../tanstack-router/journey-invoke",
       pattern: "journeys/*/src/index.ts",
       resolver: "namedExport",
+    },
+    {
+      // Vue example — modules whose descriptors import `.vue` SFCs. Harvested
+      // through the same pipeline as the React roots (see `plugins: [vue()]`
+      // above), proving the catalog is framework-agnostic.
+      name: "vue-integrations",
+      cwd: "../vue/integration-manager",
+      pattern: "modules/*/src/index.ts",
+      resolver: "defaultExport",
     },
   ],
 

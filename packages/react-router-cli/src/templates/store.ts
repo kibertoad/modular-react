@@ -1,8 +1,6 @@
-export function storeFile(params: {
-  scope: string;
-  interfaceName: string;
-  exportName: string;
-}): string {
+import type { StoreFileParams } from "@modular-react/cli-core";
+
+export function storeFile(params: StoreFileParams): string {
   return `import { createStore } from 'zustand/vanilla'
 import type { ${params.interfaceName} } from '${params.scope}/app-shared'
 

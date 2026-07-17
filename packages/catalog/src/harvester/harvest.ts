@@ -31,7 +31,7 @@ export interface HarvestResult {
  * patterns). Roots may override this per-root via `root.cwd`.
  */
 export async function harvest(config: CatalogConfig, cwd: string): Promise<HarvestResult> {
-  const server = await createCatalogSsrServer(cwd, config.resolve);
+  const server = await createCatalogSsrServer(cwd, config.resolve, config.plugins);
   const entries: CatalogEntry[] = [];
   const errors: HarvestError[] = [];
 

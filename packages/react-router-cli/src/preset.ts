@@ -1,7 +1,17 @@
 import { createRequire } from "node:module";
 import type { CliPreset } from "@modular-react/cli-core";
 import { appSharedIndex } from "./templates/app-shared.js";
-import { shellMain, shellRootLayout, shellShellLayout, shellSidebar } from "./templates/shell.js";
+import {
+  shellMain,
+  shellRootLayout,
+  shellShellLayout,
+  shellSidebar,
+  shellViteConfig,
+  shellIndexHtml,
+  shellAuthStore,
+  shellConfigStore,
+  shellHome,
+} from "./templates/shell.js";
 import {
   moduleDescriptor,
   moduleDetailPanel,
@@ -9,6 +19,8 @@ import {
   modulePage,
   moduleTest,
 } from "./templates/module.js";
+import { storeFile } from "./templates/store.js";
+import { journeyDefinition, journeyPersistence } from "./templates/journey.js";
 
 const ROUTER_VERSION = "^7.6.0";
 
@@ -24,6 +36,7 @@ export const reactRouterPreset: CliPreset = {
     core: "@react-router-modules/core",
     runtime: "@react-router-modules/runtime",
     testing: "@react-router-modules/testing",
+    journeys: "@modular-react/journeys",
     router: "react-router",
     routerVersion: ROUTER_VERSION,
   },
@@ -36,18 +49,18 @@ export const reactRouterPreset: CliPreset = {
     shellRootLayout,
     shellShellLayout,
     shellSidebar,
-    shellViteDedupe: [
-      "react",
-      "react-dom",
-      "react/jsx-runtime",
-      "react-router",
-      "@tanstack/react-query",
-      "zustand",
-    ],
+    shellViteConfig,
+    shellIndexHtml,
+    shellAuthStore,
+    shellConfigStore,
+    shellHome,
     moduleDescriptor,
     modulePage,
     moduleListPage,
     moduleDetailPanel,
     moduleTest,
+    storeFile,
+    journeyDefinition,
+    journeyPersistence,
   },
 };
