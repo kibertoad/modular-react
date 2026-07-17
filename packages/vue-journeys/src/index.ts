@@ -25,6 +25,12 @@ export {
 // Lower-level subscription composables the outlet builds on.
 export { useInstanceSnapshot, useCallChain, useLeafId } from "./instance-hooks.js";
 
+// Mount adapter — lets other packages (today: `@modular-vue/compositions`)
+// embed a journey runtime via the generic `RuntimeMountAdapter` shape without
+// depending on this package's Vue surface directly. The Vue analog of
+// `@modular-react/journeys`'s `createJourneyMountAdapter`.
+export { createJourneyMountAdapter } from "./mount-adapter.js";
+
 // Vue-specific: the journey outlet — renders the current step of an instance,
 // walks the active call chain to the leaf, and drives step callbacks.
 export { JourneyOutlet, useJourneyCallStack } from "./outlet.js";

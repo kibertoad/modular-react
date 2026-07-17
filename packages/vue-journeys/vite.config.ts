@@ -5,7 +5,10 @@ export default defineConfig(({ command }) => ({
   plugins: command === "build" ? [dts()] : [],
   build: {
     lib: {
-      entry: { index: "src/index.ts" },
+      entry: {
+        index: "src/index.ts",
+        testing: "src/testing.ts",
+      },
       formats: ["es"],
     },
     rollupOptions: {
@@ -13,6 +16,7 @@ export default defineConfig(({ command }) => ({
         "vue",
         "@modular-frontend/core",
         "@modular-frontend/journeys-engine",
+        "@modular-frontend/journeys-engine/testing",
         "@modular-vue/vue",
       ],
     },
