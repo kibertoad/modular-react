@@ -103,6 +103,16 @@ export interface PresetPackages {
    * journeys binding; a Vue preset would point this at `@modular-vue/journeys`.
    */
   readonly journeys: string;
+  /**
+   * Version range for the shell's direct dependency on {@link journeys}. When
+   * omitted, `cli-core` falls back to its own `RUNTIME_VERSIONS.journeys` — the
+   * right source for the React families, whose journeys binding is versioned in
+   * lockstep with `cli-core`. A preset whose journeys binding versions
+   * independently (e.g. `@modular-vue/journeys`) should set this so the shell's
+   * range stays in sync with the version its generated journey packages pin,
+   * rather than tracking the React constant.
+   */
+  readonly journeysVersion?: string;
   /** Underlying router (e.g. `react-router`, `@tanstack/react-router`). */
   readonly router: string;
   /** Pinned router version range (e.g. `^7.6.0`). */

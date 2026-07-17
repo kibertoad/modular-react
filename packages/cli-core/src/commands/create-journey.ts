@@ -138,6 +138,7 @@ export function createCreateJourneyCommand(preset: CliPreset) {
         scope,
         journeyName: name,
         journeysPackage: preset.packages.journeys,
+        journeysVersion: preset.packages.journeysVersion,
       });
 
       // 4. Optional persistence adapter under shell/src/. Written before

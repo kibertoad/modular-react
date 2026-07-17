@@ -33,6 +33,7 @@ import {
   shellPackageJson,
   shellTsconfig,
   tsconfigBase,
+  MODULAR_VUE_VERSION,
 } from "./templates/scaffold.js";
 
 const ROUTER_VERSION = "^4.5.0";
@@ -50,6 +51,10 @@ export const vuePreset: CliPreset = {
     runtime: "@modular-vue/runtime",
     testing: "@modular-vue/testing",
     journeys: "@modular-vue/journeys",
+    // Pin the shell's direct journeys dep to the Vue family range (not
+    // cli-core's React `RUNTIME_VERSIONS.journeys`), matching the generated
+    // journey packages.
+    journeysVersion: MODULAR_VUE_VERSION,
     router: "vue-router",
     routerVersion: ROUTER_VERSION,
   },

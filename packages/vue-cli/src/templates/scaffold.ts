@@ -11,9 +11,17 @@ import type {
  * so a single bump propagates to every template — the Vue analog of
  * `cli-core`'s `RUNTIME_VERSIONS`.
  */
+/**
+ * Version range for the `@modular-vue/*` family (core, runtime, vue, testing,
+ * journeys). Exported so the preset can pin the shell's direct
+ * `@modular-vue/journeys` dep to the same range the generated journey packages
+ * use, keeping them in sync from one source.
+ */
+export const MODULAR_VUE_VERSION = "^1.0.0";
+
 const V = {
   /** `@modular-vue/*` family (core, runtime, vue, testing, journeys). */
-  modularVue: "^1.0.0",
+  modularVue: MODULAR_VUE_VERSION,
   /** `@modular-frontend/*` shared engine/core (0.x — tight range, see D-policy). */
   modularFrontend: "^0.1.0",
   vue: "^3.5.0",

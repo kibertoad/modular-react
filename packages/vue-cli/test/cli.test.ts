@@ -432,6 +432,46 @@ describe("create catalog / init --with-catalog", { sequential: true }, () => {
     expect(rootPkg.scripts["catalog:build"]).toBe("modular-react-catalog build");
     expect(rootPkg.devDependencies["@modular-react/catalog"]).toBeTruthy();
   });
+
+  it("wires catalog into an existing workspace via the standalone `create catalog`", async () => {
+    files.registerGlobForCleanup(`${TMP}/cat-add/**`);
+    files.registerGlobForCleanup(`${TMP}/cat-add`);
+
+    // A plain workspace (no --with-catalog) should have no catalog config yet.
+    await execCommand(`node ${CLI} init cat-add --scope @cat --module dashboard`, {
+      baseDir: TMP,
+    });
+
+    await execCommand(`node ${CLI} create catalog`, {
+      expectedOutput: "Catalog configured",
+      baseDir: resolve(TMP, "cat-add"),
+    });
+
+    files.fileExists("cat-add/catalog.config.ts");
+
+    const config = readFileSync(resolve(TMP, "cat-add/catalog.config.ts"), "utf-8");
+    expect(config).toContain("defineCatalogConfig");
+    expect(config).toContain("modules/*/src/index.ts");
+    expect(config).toContain("journeys/*/src/index.ts");
+
+    const rootPkg = JSON.parse(readFileSync(resolve(TMP, "cat-add/package.json"), "utf-8"));
+    expect(rootPkg.scripts["catalog:build"]).toBe("modular-react-catalog build");
+    expect(rootPkg.devDependencies["@modular-react/catalog"]).toBeTruthy();
+  });
+
+  it("rejects `create catalog` when a catalog is already configured", async () => {
+    files.registerGlobForCleanup(`${TMP}/cat-dup/**`);
+    files.registerGlobForCleanup(`${TMP}/cat-dup`);
+
+    await execCommand(`node ${CLI} init cat-dup --scope @cat --module dashboard --with-catalog`, {
+      baseDir: TMP,
+    });
+
+    await execCommand(`node ${CLI} create catalog`, {
+      expectedErrorMessage: "already configured",
+      baseDir: resolve(TMP, "cat-dup"),
+    });
+  });
 });
 
 // Guards a stable generated Vue tree across init + create module/store/journey.

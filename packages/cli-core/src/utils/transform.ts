@@ -153,7 +153,17 @@ export function addStoreToMain(
  */
 export function addJourneyToShellPackageJson(
   shellDir: string,
-  params: { scope: string; journeyName: string; journeysPackage: string },
+  params: {
+    scope: string;
+    journeyName: string;
+    journeysPackage: string;
+    /**
+     * Version range for the `journeysPackage` dep. Falls back to
+     * `RUNTIME_VERSIONS.journeys` (correct for the React families); a preset
+     * whose journeys binding versions independently supplies its own.
+     */
+    journeysVersion?: string;
+  },
 ): void {
   const pkgPath = resolve(shellDir, "package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
@@ -163,7 +173,7 @@ export function addJourneyToShellPackageJson(
   // Modules-runtime always carries journeys transitively; the shell still
   // wants a direct dep so it can `import { journeysPlugin }` etc.
   if (!pkg.dependencies[params.journeysPackage]) {
-    pkg.dependencies[params.journeysPackage] = RUNTIME_VERSIONS.journeys;
+    pkg.dependencies[params.journeysPackage] = params.journeysVersion ?? RUNTIME_VERSIONS.journeys;
   }
   pkg.dependencies = sortObject(pkg.dependencies);
 
