@@ -10,7 +10,8 @@
 //      `EntryPointMap` / `ExitPointMap` (which would collapse `EntryNamesOf` to
 //      `string` and break per-entry / per-exit narrowing).
 //   2. Function-form `to` (`to: (ctx) => "/x/" + ctx.id`) type-checks WITHOUT
-//      having to spell the `TNavItem` generic — the default admits it.
+//      having to spell the `TNavItem` generic — `TNavItem` is inferred from the
+//      `navigation` array rather than defaulting to the string-`to` shape.
 //
 // Runs through vitest's typecheck pass (see vitest.config.ts).
 
@@ -32,7 +33,8 @@ const plan = defineModule({
   navigation: [
     // Function-form `to` — resolves an href from render-time context. Under the
     // old `TNavItem = NavigationItem` default this was a compile error (`to`
-    // narrowed to `string`); the `NavigationItemBase` default admits it.
+    // narrowed to `string`); inferring `TNavItem` from this `navigation` array
+    // admits it.
     { label: "Plan", to: (ctx: { workspaceId: string }) => `/plan/${ctx.workspaceId}` },
   ],
   exitPoints: {

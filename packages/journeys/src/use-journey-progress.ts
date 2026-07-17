@@ -20,6 +20,10 @@ export interface UseJourneyProgressOptions<TInput = unknown> {
   /**
    * Forwarded to `resolveStepSequence` — most importantly `branch`, to
    * linearize a forking flow, and `input`, when the start step depends on it.
+   *
+   * The sequence is memoized on this object's identity, so pass a stable
+   * reference (e.g. a module-level constant or a `useMemo`) rather than a fresh
+   * literal each render if you want to avoid re-walking the graph per render.
    */
   readonly sequence?: ResolveStepSequenceOptions<TInput>;
 }
@@ -28,12 +32,23 @@ export interface JourneyProgress {
   /**
    * 0-based position in the flow — `history.length`, so `0` on the first step.
    * Matches `useJourneyHost`'s `stepIndex`. Render "Step {index + 1} of {total}".
+   *
+   * Note `index` tracks the *live* instance while `total` comes from the
+   * *statically-resolved* spine, so when the runtime path diverges from the
+   * resolved one (a fork walked with a different `branch`, or steps past an
+   * unannotated transition) `index` can reach or exceed `total`. Clamp at the
+   * call site if you render a bounded stepper.
    */
   readonly index: number;
   /**
-   * Total number of steps in the resolved sequence, or `null` when it can't be
-   * derived — no instance yet, or the flow's transitions aren't annotated with
-   * `defineTransition` so the graph can't be walked (see `resolveStepSequence`).
+   * Total number of steps in the resolved sequence — the "N" in "Step X of N".
+   *
+   * Best-effort: it counts the statically-walkable spine `resolveStepSequence`
+   * returns from the start step, which is a *partial* total when the flow forks
+   * without a `branch` resolver, stops at an unannotated (bare-function)
+   * transition, or is cut by `maxSteps`. It does not depend on a live instance —
+   * a definition with a derivable start always yields at least `1`. `null` only
+   * when no step at all can be resolved (an empty sequence).
    */
   readonly total: number | null;
   /**

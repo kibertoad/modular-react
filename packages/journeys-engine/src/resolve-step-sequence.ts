@@ -74,7 +74,14 @@ const DEFAULT_MAX_STEPS = 256;
  * (stamped by `defineTransition`). A step whose transitions are all *bare*
  * function handlers has no statically-known forward target, so the sequence
  * stops there. Terminal sentinels (`"complete"` / `"abort"` / `"invoke"`)
- * carry no next step and are skipped.
+ * carry no next step and are skipped. Only the per-step `transitions` map is
+ * walked — `wildcard` fall-through handlers are not followed, so a step whose
+ * only forward movement is a wildcard also ends the sequence.
+ *
+ * Unless `options.start` is supplied, the first step is computed by invoking
+ * `definition.initialState(options.input)` then `definition.start(...)`; these
+ * author-supplied factories must be safe to call with the provided `input`
+ * (pass `options.start` to skip them entirely).
  *
  * Each returned step carries any `path` / `progressLabel` declared under
  * `definition.steps[module][entry]`.
@@ -120,10 +127,21 @@ export function resolveStepSequence<
     const targets = forwardTargets(definition, current.module, current.entry);
     if (targets.length === 0) break;
 
-    current =
-      targets.length === 1
-        ? targets[0]
-        : options.branch?.({ module: current.module, entry: current.entry, targets });
+    if (targets.length === 1) {
+      current = targets[0];
+    } else {
+      // Fork — the resolver picks. Its return is matched back against `targets`
+      // by `module` + `entry` (identity not required), so a `undefined` return
+      // or a ref that isn't one of the declared targets stops the sequence here.
+      const picked: StepSequenceRef | undefined = options.branch?.({
+        module: current.module,
+        entry: current.entry,
+        targets,
+      });
+      current = picked
+        ? targets.find((t) => t.module === picked.module && t.entry === picked.entry)
+        : undefined;
+    }
   }
 
   return sequence;

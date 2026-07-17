@@ -1,12 +1,14 @@
 // Type-level acceptance tests for `defineModule`'s navigation defaults.
 //
-// Production-feedback item 3 (b): `defineModule`'s default nav-item generic
-// used to be `NavigationItem`, which narrows `to` to a plain `string`. A module
-// that resolves its href from render-time context (`to: (ctx) => …`) then only
-// compiled if the author spelled the fourth generic — so real apps abandoned
-// the helper. The default is now the structural `NavigationItemBase` bound,
-// which admits function-form `to` with zero generics while still accepting the
-// plain-string form and any explicitly-narrowed `TNavItem`.
+// Production-feedback item 3 (b): `defineModule`'s nav-item generic `TNavItem`
+// defaulted to `NavigationItem`, which narrows `to` to a plain `string`. A
+// module that resolves its href from render-time context (`to: (ctx) => …`)
+// then only compiled if the author spelled the fourth generic — so real apps
+// abandoned the helper. `TNavItem` is now *inferred from the `navigation` array*
+// (the parameter is typed `TDescriptor & { navigation?: readonly TNavItem[] }`),
+// falling back to `NavigationItem` only when there is no navigation. That
+// inference admits function-form `to` with zero generics while still accepting
+// the plain-string form and any explicitly-narrowed `TNavItem`.
 //
 // Runs through vitest's typecheck pass (see vitest.config.ts).
 

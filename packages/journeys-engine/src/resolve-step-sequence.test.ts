@@ -181,6 +181,15 @@ describe("resolveStepSequence — branching flow", () => {
     const seq = resolveStepSequence(branching, { branch: () => undefined });
     expect(seq.map((s) => `${s.module}/${s.entry}`)).toEqual(["plan/choose"]);
   });
+
+  it("stops the sequence when the resolver returns a ref that isn't a declared target", () => {
+    const seq = resolveStepSequence(branching, {
+      branch: () => ({ module: "billing", entry: "not-a-target" }),
+    });
+    // The returned ref is matched back against the fork's `targets` by
+    // module + entry; no match means the walk stops rather than following it.
+    expect(seq.map((s) => `${s.module}/${s.entry}`)).toEqual(["plan/choose"]);
+  });
 });
 
 // --- Edge cases --------------------------------------------------------------

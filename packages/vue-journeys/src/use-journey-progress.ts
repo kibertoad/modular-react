@@ -24,9 +24,20 @@ export interface UseJourneyProgressOptions<TInput = unknown> {
 }
 
 export interface JourneyProgress {
-  /** 0-based position (`history.length`), so `0` on the first step. */
+  /**
+   * 0-based position (`history.length`), so `0` on the first step. Tracks the
+   * live instance, whereas `total` is the statically-resolved spine, so `index`
+   * can reach or exceed `total` when the runtime path diverges (a fork walked
+   * with a different `branch`, or steps past an unannotated transition).
+   */
   readonly index: ComputedRef<number>;
-  /** Resolved sequence length, or `null` when it can't be derived. */
+  /**
+   * Resolved sequence length — best-effort. Counts the statically-walkable
+   * spine, so it is a *partial* total when the flow forks without a `branch`
+   * resolver, stops at an unannotated transition, or is cut by `maxSteps`. A
+   * definition with a derivable start always yields at least `1`; `null` only
+   * when no step at all can be resolved.
+   */
   readonly total: ComputedRef<number | null>;
   /** `progressLabel` of the current step, or `null`. */
   readonly label: ComputedRef<string | null>;
