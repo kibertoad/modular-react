@@ -2116,6 +2116,434 @@ importers:
         specifier: ^8.1.3
         version: 8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
 
+  examples/vue/customer-onboarding-journey/app-shared:
+    dependencies:
+      '@modular-vue/vue':
+        specifier: workspace:*
+        version: link:../../../../packages/vue
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/customer-onboarding-journey/journeys/customer-onboarding:
+    dependencies:
+      '@example-vue-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@example-vue-onboarding/billing-module':
+        specifier: workspace:*
+        version: link:../../modules/billing
+      '@example-vue-onboarding/plan-module':
+        specifier: workspace:*
+        version: link:../../modules/plan
+      '@example-vue-onboarding/profile-module':
+        specifier: workspace:*
+        version: link:../../modules/profile
+      '@modular-vue/journeys':
+        specifier: workspace:*
+        version: link:../../../../../packages/vue-journeys
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/customer-onboarding-journey/modules/billing:
+    dependencies:
+      '@example-vue-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-frontend/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/frontend-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/customer-onboarding-journey/modules/plan:
+    dependencies:
+      '@example-vue-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-frontend/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/frontend-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/customer-onboarding-journey/modules/profile:
+    dependencies:
+      '@example-vue-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-frontend/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/frontend-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/customer-onboarding-journey/shell:
+    dependencies:
+      '@example-vue-onboarding/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-vue-onboarding/billing-module':
+        specifier: workspace:*
+        version: link:../modules/billing
+      '@example-vue-onboarding/customer-onboarding-journey':
+        specifier: workspace:*
+        version: link:../journeys/customer-onboarding
+      '@example-vue-onboarding/plan-module':
+        specifier: workspace:*
+        version: link:../modules/plan
+      '@example-vue-onboarding/profile-module':
+        specifier: workspace:*
+        version: link:../modules/profile
+      '@modular-vue/journeys':
+        specifier: workspace:*
+        version: link:../../../../packages/vue-journeys
+      '@modular-vue/runtime':
+        specifier: workspace:*
+        version: link:../../../../packages/vue-runtime
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.6.4(vue@3.5.40(typescript@6.0.3))
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.0
+        version: 6.0.8(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))(vue@3.5.40(typescript@6.0.3))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^8.1.3
+        version: 8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/editor-composition/app-shared:
+    dependencies:
+      '@modular-frontend/core':
+        specifier: workspace:*
+        version: link:../../../../packages/frontend-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/editor-composition/compositions/editor:
+    dependencies:
+      '@example-vue-editor/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@example-vue-editor/contentful':
+        specifier: workspace:*
+        version: link:../../modules/contentful
+      '@example-vue-editor/editor':
+        specifier: workspace:*
+        version: link:../../modules/editor
+      '@example-vue-editor/strapi':
+        specifier: workspace:*
+        version: link:../../modules/strapi
+      '@modular-vue/compositions':
+        specifier: workspace:*
+        version: link:../../../../../packages/vue-compositions
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/editor-composition/modules/contentful:
+    dependencies:
+      '@example-vue-editor/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-frontend/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/frontend-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/editor-composition/modules/editor:
+    dependencies:
+      '@example-vue-editor/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-frontend/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/frontend-core
+      '@modular-vue/compositions':
+        specifier: workspace:*
+        version: link:../../../../../packages/vue-compositions
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/editor-composition/modules/strapi:
+    dependencies:
+      '@example-vue-editor/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-frontend/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/frontend-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/editor-composition/shell:
+    dependencies:
+      '@example-vue-editor/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-vue-editor/contentful':
+        specifier: workspace:*
+        version: link:../modules/contentful
+      '@example-vue-editor/editor':
+        specifier: workspace:*
+        version: link:../modules/editor
+      '@example-vue-editor/editor-composition':
+        specifier: workspace:*
+        version: link:../compositions/editor
+      '@example-vue-editor/strapi':
+        specifier: workspace:*
+        version: link:../modules/strapi
+      '@modular-vue/compositions':
+        specifier: workspace:*
+        version: link:../../../../packages/vue-compositions
+      '@modular-vue/runtime':
+        specifier: workspace:*
+        version: link:../../../../packages/vue-runtime
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.6.4(vue@3.5.40(typescript@6.0.3))
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.0
+        version: 6.0.8(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))(vue@3.5.40(typescript@6.0.3))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^8.1.3
+        version: 8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/integration-manager/app-shared:
+    dependencies:
+      '@modular-vue/core':
+        specifier: workspace:*
+        version: link:../../../../packages/vue-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.6.4(vue@3.5.40(typescript@6.0.3))
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/integration-manager/modules/contentful:
+    dependencies:
+      '@example-vue-integration-manager/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-vue/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/vue-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.6.4(vue@3.5.40(typescript@6.0.3))
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/integration-manager/modules/github:
+    dependencies:
+      '@example-vue-integration-manager/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-vue/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/vue-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.6.4(vue@3.5.40(typescript@6.0.3))
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/integration-manager/modules/strapi:
+    dependencies:
+      '@example-vue-integration-manager/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-vue/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/vue-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.6.4(vue@3.5.40(typescript@6.0.3))
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/integration-manager/shell:
+    dependencies:
+      '@example-vue-integration-manager/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-vue-integration-manager/contentful':
+        specifier: workspace:*
+        version: link:../modules/contentful
+      '@example-vue-integration-manager/github':
+        specifier: workspace:*
+        version: link:../modules/github
+      '@example-vue-integration-manager/strapi':
+        specifier: workspace:*
+        version: link:../modules/strapi
+      '@modular-vue/core':
+        specifier: workspace:*
+        version: link:../../../../packages/vue-core
+      '@modular-vue/runtime':
+        specifier: workspace:*
+        version: link:../../../../packages/vue-runtime
+      '@modular-vue/vue':
+        specifier: workspace:*
+        version: link:../../../../packages/vue
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.6.4(vue@3.5.40(typescript@6.0.3))
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.0
+        version: 6.0.8(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))(vue@3.5.40(typescript@6.0.3))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: ^8.1.3
+        version: 8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
   packages/angular:
     devDependencies:
       '@angular/compiler':
@@ -2141,7 +2569,7 @@ importers:
         version: 1.66.0
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       rxjs:
         specifier: ^7.8.0
         version: 7.8.2
@@ -2304,7 +2732,7 @@ importers:
         version: 19.2.6(react@19.2.6)
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2332,7 +2760,7 @@ importers:
         version: 1.66.0
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2357,7 +2785,7 @@ importers:
         version: 1.66.0
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2382,7 +2810,7 @@ importers:
         version: 1.66.0
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2406,7 +2834,7 @@ importers:
         version: 1.66.0
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2458,7 +2886,7 @@ importers:
         version: 19.2.6(react@19.2.6)
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2486,7 +2914,7 @@ importers:
         version: 1.66.0
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2528,7 +2956,7 @@ importers:
         version: 19.2.6(react@19.2.6)
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2580,7 +3008,7 @@ importers:
         version: 7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -2631,7 +3059,7 @@ importers:
         version: 7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -2685,7 +3113,7 @@ importers:
         version: 7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -2740,7 +3168,7 @@ importers:
         version: 19.2.6
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -2791,7 +3219,7 @@ importers:
         version: 19.2.6(react@19.2.6)
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -2845,7 +3273,7 @@ importers:
         version: 19.2.6(react@19.2.6)
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -2890,7 +3318,7 @@ importers:
         version: 19.2.6(react@19.2.6)
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -2908,7 +3336,7 @@ importers:
         version: link:../frontend-core
       '@vue/test-utils':
         specifier: ^2.4.6
-        version: 2.4.11(@vue/compiler-dom@3.5.39)(@vue/server-renderer@3.5.39(vue@3.5.39(typescript@6.0.3)))(vue@3.5.39(typescript@6.0.3))
+        version: 2.4.11(@vue/compiler-dom@3.5.40)(@vue/server-renderer@3.5.40)(vue@3.5.40(typescript@6.0.3))
       happy-dom:
         specifier: ^20.9.0
         version: 20.9.0
@@ -2920,7 +3348,7 @@ importers:
         version: 1.66.0
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2931,8 +3359,8 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@25.6.2)(happy-dom@20.9.0)(msw@2.14.5(@types/node@25.6.2)(typescript@6.0.3))(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))
       vue:
-        specifier: ^3.5.13
-        version: 3.5.39(typescript@6.0.3)
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
 
   packages/vue-compositions:
     dependencies:
@@ -2948,7 +3376,7 @@ importers:
         version: link:../vue
       '@vue/test-utils':
         specifier: ^2.4.6
-        version: 2.4.11(@vue/compiler-dom@3.5.39)(@vue/server-renderer@3.5.39(vue@3.5.39(typescript@6.0.3)))(vue@3.5.39(typescript@6.0.3))
+        version: 2.4.11(@vue/compiler-dom@3.5.40)(@vue/server-renderer@3.5.40)(vue@3.5.40(typescript@6.0.3))
       happy-dom:
         specifier: ^20.9.0
         version: 20.9.0
@@ -2960,7 +3388,7 @@ importers:
         version: 1.66.0
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2971,8 +3399,41 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@25.6.2)(happy-dom@20.9.0)(msw@2.14.5(@types/node@25.6.2)(typescript@6.0.3))(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))
       vue:
-        specifier: ^3.5.13
-        version: 3.5.39(typescript@6.0.3)
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+
+  packages/vue-core:
+    devDependencies:
+      '@modular-frontend/core':
+        specifier: workspace:*
+        version: link:../frontend-core
+      '@modular-vue/vue':
+        specifier: workspace:*
+        version: link:../vue
+      oxfmt:
+        specifier: ^0.51.0
+        version: 0.51.0
+      oxlint:
+        specifier: ^1.66.0
+        version: 1.66.0
+      rolldown-plugin-dts:
+        specifier: ^0.26.0
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vite:
+        specifier: ^8.1.3
+        version: 8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@25.6.2)(happy-dom@20.9.0)(msw@2.14.5(@types/node@25.6.2)(typescript@6.0.3))(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-router:
+        specifier: ^4.5.0
+        version: 4.6.4(vue@3.5.40(typescript@6.0.3))
 
   packages/vue-journeys:
     dependencies:
@@ -2988,7 +3449,7 @@ importers:
         version: link:../vue
       '@vue/test-utils':
         specifier: ^2.4.6
-        version: 2.4.11(@vue/compiler-dom@3.5.39)(@vue/server-renderer@3.5.39(vue@3.5.39(typescript@6.0.3)))(vue@3.5.39(typescript@6.0.3))
+        version: 2.4.11(@vue/compiler-dom@3.5.40)(@vue/server-renderer@3.5.40)(vue@3.5.40(typescript@6.0.3))
       happy-dom:
         specifier: ^20.9.0
         version: 20.9.0
@@ -3000,7 +3461,7 @@ importers:
         version: 1.66.0
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -3011,43 +3472,10 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@25.6.2)(happy-dom@20.9.0)(msw@2.14.5(@types/node@25.6.2)(typescript@6.0.3))(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))
       vue:
-        specifier: ^3.5.13
-        version: 3.5.39(typescript@6.0.3)
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
 
-  packages/vue-router-core:
-    devDependencies:
-      '@modular-frontend/core':
-        specifier: workspace:*
-        version: link:../frontend-core
-      '@modular-vue/vue':
-        specifier: workspace:*
-        version: link:../vue
-      oxfmt:
-        specifier: ^0.51.0
-        version: 0.51.0
-      oxlint:
-        specifier: ^1.66.0
-        version: 1.66.0
-      rolldown-plugin-dts:
-        specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vite:
-        specifier: ^8.1.3
-        version: 8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
-      vitest:
-        specifier: ^4.1.10
-        version: 4.1.10(@types/node@25.6.2)(happy-dom@20.9.0)(msw@2.14.5(@types/node@25.6.2)(typescript@6.0.3))(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))
-      vue:
-        specifier: ^3.5.13
-        version: 3.5.39(typescript@6.0.3)
-      vue-router:
-        specifier: ^4.5.0
-        version: 4.6.4(vue@3.5.39(typescript@6.0.3))
-
-  packages/vue-router-runtime:
+  packages/vue-runtime:
     devDependencies:
       '@modular-frontend/core':
         specifier: workspace:*
@@ -3057,7 +3485,7 @@ importers:
         version: link:../journeys-engine
       '@modular-vue/core':
         specifier: workspace:*
-        version: link:../vue-router-core
+        version: link:../vue-core
       '@modular-vue/journeys':
         specifier: workspace:*
         version: link:../vue-journeys
@@ -3066,7 +3494,7 @@ importers:
         version: link:../vue
       '@vue/test-utils':
         specifier: ^2.4.6
-        version: 2.4.11(@vue/compiler-dom@3.5.39)(@vue/server-renderer@3.5.39(vue@3.5.39(typescript@6.0.3)))(vue@3.5.39(typescript@6.0.3))
+        version: 2.4.11(@vue/compiler-dom@3.5.40)(@vue/server-renderer@3.5.40)(vue@3.5.40(typescript@6.0.3))
       happy-dom:
         specifier: ^20.9.0
         version: 20.9.0
@@ -3078,7 +3506,7 @@ importers:
         version: 1.66.0
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -3089,11 +3517,11 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@25.6.2)(happy-dom@20.9.0)(msw@2.14.5(@types/node@25.6.2)(typescript@6.0.3))(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))
       vue:
-        specifier: ^3.5.13
-        version: 3.5.39(typescript@6.0.3)
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
       vue-router:
         specifier: ^4.5.0
-        version: 4.6.4(vue@3.5.39(typescript@6.0.3))
+        version: 4.6.4(vue@3.5.40(typescript@6.0.3))
 
   packages/vue-testing:
     devDependencies:
@@ -3108,7 +3536,7 @@ importers:
         version: link:../frontend-testing
       '@modular-vue/core':
         specifier: workspace:*
-        version: link:../vue-router-core
+        version: link:../vue-core
       '@modular-vue/journeys':
         specifier: workspace:*
         version: link:../vue-journeys
@@ -3117,7 +3545,7 @@ importers:
         version: link:../vue
       '@vue/test-utils':
         specifier: ^2.4.6
-        version: 2.4.11(@vue/compiler-dom@3.5.39)(@vue/server-renderer@3.5.39(vue@3.5.39(typescript@6.0.3)))(vue@3.5.39(typescript@6.0.3))
+        version: 2.4.11(@vue/compiler-dom@3.5.40)(@vue/server-renderer@3.5.40)(vue@3.5.40(typescript@6.0.3))
       happy-dom:
         specifier: ^20.9.0
         version: 20.9.0
@@ -3129,7 +3557,7 @@ importers:
         version: 1.66.0
       rolldown-plugin-dts:
         specifier: ^0.26.0
-        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)
+        version: 0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3))
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -3140,11 +3568,11 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@25.6.2)(happy-dom@20.9.0)(msw@2.14.5(@types/node@25.6.2)(typescript@6.0.3))(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))
       vue:
-        specifier: ^3.5.13
-        version: 3.5.39(typescript@6.0.3)
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
       vue-router:
         specifier: ^4.5.0
-        version: 4.6.4(vue@3.5.39(typescript@6.0.3))
+        version: 4.6.4(vue@3.5.40(typescript@6.0.3))
 
 packages:
 
@@ -4609,6 +5037,13 @@ packages:
       babel-plugin-react-compiler:
         optional: true
 
+  '@vitejs/plugin-vue@6.0.8':
+    resolution: {integrity: sha512-0ZjgOg7oO6farnNGup7yvoM/YXZV84OZxHAwtflItNa/6zzQyVb5LNxyea3FEKEX2XlagIKzrlH7wwxkKgtiew==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0
+      vue: ^3.2.25
+
   '@vitest/expect@4.1.10':
     resolution: {integrity: sha512-YsCn+qAk1GWjQOWFEsEcL2gNQ0zmVmQu3T03qP6UyjhtmdtwtbuI+DASn/7iQB3HGTXkdBwGddzxPlmiql5vlA==}
 
@@ -4667,37 +5102,56 @@ packages:
   '@vitest/utils@4.1.5':
     resolution: {integrity: sha512-76wdkrmfXfqGjueGgnb45ITPyUi1ycZ4IHgC2bhPDUfWHklY/q3MdLOAB+TF1e6xfl8NxNY0ZYaPCFNWSsw3Ug==}
 
+  '@volar/language-core@2.4.28':
+    resolution: {integrity: sha512-w4qhIJ8ZSitgLAkVay6AbcnC7gP3glYM3fYwKV3srj8m494E3xtrCv6E+bWviiK/8hs6e6t1ij1s2Endql7vzQ==}
+
+  '@volar/source-map@2.4.28':
+    resolution: {integrity: sha512-yX2BDBqJkRXfKw8my8VarTyjv48QwxdJtvRgUpNE5erCsgEUdI2DsLbpa+rOQVAJYshY99szEcRDmyHbF10ggQ==}
+
+  '@volar/typescript@2.4.28':
+    resolution: {integrity: sha512-Ja6yvWrbis2QtN4ClAKreeUZPVYMARDYZl9LMEv1iQ1QdepB6wn0jTRxA9MftYmYa4DQ4k/DaSZpFPUfxl8giw==}
+
   '@vue/compiler-core@3.5.39':
     resolution: {integrity: sha512-16KBTEXAJCpDr0mwlw+AZyhu8iyC7R3S2vBwsI7QnWJU6X3WKc9VKeNEZpiMdZ569qWhz9574L3vV55qRL0Vtw==}
+
+  '@vue/compiler-core@3.5.40':
+    resolution: {integrity: sha512-39E8IgOhTbVDnoJFMKc2DvYnypcZwUqgUhQkccva/0m6FUwtIKSGV7n1hpVmYcFaoRAwf9pBcwnKlCEsN63ZEQ==}
 
   '@vue/compiler-dom@3.5.39':
     resolution: {integrity: sha512-oQPigALqYbNxTNPvNgSOe+czwVExfbVF02lz8jP0S3AXJiu3jxYDygNUiqSep4ezzW8XgnubqH63My2A7JR/vg==}
 
-  '@vue/compiler-sfc@3.5.39':
-    resolution: {integrity: sha512-d0ki86iOyN8LoZPBmk5SJWNwHP19CnDDCfuo//+2WJa2g5Ke0Jay983PIBIcSSzldC68I8DrD5GrHV3OSDfodg==}
+  '@vue/compiler-dom@3.5.40':
+    resolution: {integrity: sha512-pwkx4vqlqOspFstrcmzwkKLePVMD3PT65imRzLhanU2V1Fj4K13g6OXjanOyzw3aTAuRk84BOmY8f3rEHqPaVA==}
 
-  '@vue/compiler-ssr@3.5.39':
-    resolution: {integrity: sha512-Ce7/wvwMHai74bdszfXExdazFigYnlF9zgCmEQUcM1j0fOymlouZ7XilTYNo8oUjhlnjYOZbGrcYKuqjz89Ucw==}
+  '@vue/compiler-sfc@3.5.40':
+    resolution: {integrity: sha512-gIf497P4kpuALcvs5n3AEg1Vdn0pSY4XbjASIfHNYF1/MP3T2Mf2STERTubysBxCRxzJGJYtF/O7vwJrxFB3Vw==}
+
+  '@vue/compiler-ssr@3.5.40':
+    resolution: {integrity: sha512-rrE5xiXG663+vHCHa3J9p2z5OcBRjXmoqenprJxAFQxg5pSshzeBiCE6pu46axapRJ2Adk0YDA2BRZVjiHXnhg==}
 
   '@vue/devtools-api@6.6.4':
     resolution: {integrity: sha512-sGhTPMuXqZ1rVOk32RylztWkfXTRhuS7vgAKv0zjqk8gbsHkJ7xfFf+jbySxt7tWObEJwyKaHMikV/WGDiQm8g==}
 
-  '@vue/reactivity@3.5.39':
-    resolution: {integrity: sha512-TpsuBJ9gGlZa5d23XcM2y8EXanz9dZeVDQBXRwzy46ItgvM+rWpzs+UVM0wcRLxGvcav0HE5jz2gNL53xlRAog==}
+  '@vue/language-core@3.3.7':
+    resolution: {integrity: sha512-LzmkKinXAMMoh8Jfi/jMUSDUjuPdv8mynH5WJGKfXyZtDw3hQ6GBaoI6Bcnl/Xqlu32q/0Z6i/trp4VXykzyLw==}
 
-  '@vue/runtime-core@3.5.39':
-    resolution: {integrity: sha512-9GLtNyRvPAUMbX+7ono0RC2j0guo2LXVi8LvcmAooImACUKm0oFf0jjwbX8/H0AE/t1nxhAkn8RSl9PMCzzxZw==}
+  '@vue/reactivity@3.5.40':
+    resolution: {integrity: sha512-B7ot9UlUZOi1zbq61/LvE88ZLTV8IlajTdiZTAEiDQgrnIMIZoPr9kGw0Zw46ObW62O9+H/Be3kMbfb7kYPQZA==}
 
-  '@vue/runtime-dom@3.5.39':
-    resolution: {integrity: sha512-7Y6aAGboKcXAZ3ECuUy7RrS5yy2r47dhTp2SKaJmYxjopImaVFaNa5Ne66NwGovsrxVAl5S5rwc7m22UG7Lmww==}
+  '@vue/runtime-core@3.5.40':
+    resolution: {integrity: sha512-KAZLweuZ6uUJPK1PMSQPgBU5gCjgrrfjUhSglmU9NhH+Zjepa8cnwSydPWDWHDwOgY4g3VcZ+PljbiHlURNCbw==}
 
-  '@vue/server-renderer@3.5.39':
-    resolution: {integrity: sha512-yZSakiAGw85rZfG7UM8akMnIF+FmeiNk47uvHf2nVBBSe+dIKUhZuZq9+XgJhbV3nS5Z4ALH23/MpXofW+mbcw==}
-    peerDependencies:
-      vue: 3.5.39
+  '@vue/runtime-dom@3.5.40':
+    resolution: {integrity: sha512-ZfrX8ssZQds900L9pr8AuK05ddnMsR4MPMZr8cPN9GoqoPWcXLhjvvbIA2SMv+7a97sJ1vv9pj/zxK0Cq/eEFQ==}
+
+  '@vue/server-renderer@3.5.40':
+    resolution: {integrity: sha512-XNJym9WpevhTVt1HuwOrCRJ5Q+9z4BjTMrDtjTrvx74SmUll8spNTw6whWJa9mEkO4PKn5TihI/bm/8ds2QVJw==}
 
   '@vue/shared@3.5.39':
     resolution: {integrity: sha512-l1rrBtBfTnmxvtsvdQDXltUUy8S1Y+ZaqdfUzmAnJkTd8Z8rv5v/ytW+TKiqEOWyHPoqtPlNFSs0lhRmYVSHVA==}
+
+  '@vue/shared@3.5.40':
+    resolution: {integrity: sha512-WxnBtruIqOoV3rA4jeKDWzrYI5h7Cp4+pjwDi8kWGHz+IslhiN+wguLVVhtv2l8VoU02rzDCVfDjgCl1lNpZVg==}
 
   '@vue/test-utils@2.4.11':
     resolution: {integrity: sha512-GDqaqZsA6m2E5vNzej0aYiIb6BX8xV9pNSbbbXKOfEYwg7ZNblVX8suyqmUBThq8VIrgAJNxn+z72hVtUeiWHA==}
@@ -4731,6 +5185,9 @@ packages:
 
   ajv@8.20.0:
     resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
+
+  alien-signals@3.2.1:
+    resolution: {integrity: sha512-I8FjmltrfnDFoZedi5CG8DghVYNhzb/Ijluz7tCSJH0xpd0484Kowhbb1XDYOxfJpU1p5wnM2X54dA+IfGyD1g==}
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -5648,6 +6105,9 @@ packages:
       typescript:
         optional: true
 
+  muggle-string@0.4.1:
+    resolution: {integrity: sha512-VNTrAak/KhO2i8dqqnqnAHOa3cYBwXEZe9h+D5h/1ZqFSTEFHdM65lR7RoIqq3tBBYavsOXV84NoHXZ0AkPyqQ==}
+
   mute-stream@3.0.0:
     resolution: {integrity: sha512-dkEJPVvun4FryqBmZ5KhDo0K9iDXAwn08tMLDinNdRBNPcYEDiWYysLcc6k3mjTMlbP9KyylvRpd4wFtwrT9rw==}
     engines: {node: ^20.17.0 || >=22.9.0}
@@ -5837,6 +6297,10 @@ packages:
 
   postcss@8.5.16:
     resolution: {integrity: sha512-vuwillviilfKZsg0VGj5R/YwwcHx4SLsIOI/7K6mQkWx+l5cUHTjj5g0AasTBcyXsbfTgrwsUNmVUb5xVwyPwg==}
+    engines: {node: ^10 || ^12 || >=14}
+
+  postcss@8.5.19:
+    resolution: {integrity: sha512-Mz8SaolMd8nB+G13WkORcxQKHZ/NE4xXevtkJHVuG+guo9/wYKlIMTKAqGdEmYOXR2ijPjTYNHssizdaVSUNdQ==}
     engines: {node: ^10 || ^12 || >=14}
 
   powershell-utils@0.1.0:
@@ -6430,6 +6894,9 @@ packages:
       jsdom:
         optional: true
 
+  vscode-uri@3.1.0:
+    resolution: {integrity: sha512-/BpdSx+yCQGnCvecbyXdxHDkuk55/G3xwnC0GqY4gmQ3j+A+g8kzzgB4Nk/SINjqn6+waqw3EgbVF2QKExkRxQ==}
+
   vue-component-type-helpers@3.3.6:
     resolution: {integrity: sha512-FkljacAwJ9BUoSUdpFe3VDy0sGigNlTH9+2zcXUWmZOjN8swiCkl3t48wOJun0OsUd2cEIda1l04tsxMiKIIrQ==}
 
@@ -6438,8 +6905,14 @@ packages:
     peerDependencies:
       vue: ^3.5.0
 
-  vue@3.5.39:
-    resolution: {integrity: sha512-xmZCYabFGcirU8r0fTuvl/LICc1OU620rnqepaJDL/a141ZigkG7AyaxQLdqJ02ZRYzWe6YPaDHeQx7MfknQfA==}
+  vue-tsc@3.3.7:
+    resolution: {integrity: sha512-+C+rgD49wAQ5bUTl2sp5a8Bzg4YoldMNXM+g7CFe604MYcQ8PrZPMQhIjJSzKXtPBCa+C5ayMipqjbA7splekQ==}
+    hasBin: true
+    peerDependencies:
+      typescript: '>=5.0.0'
+
+  vue@3.5.40:
+    resolution: {integrity: sha512-+8PJ4SJXdn/cHGImF4CKdxlWHIN5Dkt7DoufRREM6h6uVCx2m7QxgcEQmmzyOK8A9mcafg7sFbJFYsdFVubTig==}
     peerDependencies:
       typescript: '*'
     peerDependenciesMeta:
@@ -7696,6 +8169,12 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-rc.7
       vite: 8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
 
+  '@vitejs/plugin-vue@6.0.8(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))(vue@3.5.40(typescript@6.0.3))':
+    dependencies:
+      '@rolldown/pluginutils': 1.0.1
+      vite: 8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0)
+      vue: 3.5.40(typescript@6.0.3)
+
   '@vitest/expect@4.1.10':
     dependencies:
       '@standard-schema/spec': 1.1.0
@@ -7780,10 +8259,30 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
+  '@volar/language-core@2.4.28':
+    dependencies:
+      '@volar/source-map': 2.4.28
+
+  '@volar/source-map@2.4.28': {}
+
+  '@volar/typescript@2.4.28':
+    dependencies:
+      '@volar/language-core': 2.4.28
+      path-browserify: 1.0.1
+      vscode-uri: 3.1.0
+
   '@vue/compiler-core@3.5.39':
     dependencies:
       '@babel/parser': 7.29.7
       '@vue/shared': 3.5.39
+      entities: 7.0.1
+      estree-walker: 2.0.2
+      source-map-js: 1.2.1
+
+  '@vue/compiler-core@3.5.40':
+    dependencies:
+      '@babel/parser': 7.29.7
+      '@vue/shared': 3.5.40
       entities: 7.0.1
       estree-walker: 2.0.2
       source-map-js: 1.2.1
@@ -7793,57 +8292,74 @@ snapshots:
       '@vue/compiler-core': 3.5.39
       '@vue/shared': 3.5.39
 
-  '@vue/compiler-sfc@3.5.39':
+  '@vue/compiler-dom@3.5.40':
+    dependencies:
+      '@vue/compiler-core': 3.5.40
+      '@vue/shared': 3.5.40
+
+  '@vue/compiler-sfc@3.5.40':
     dependencies:
       '@babel/parser': 7.29.7
-      '@vue/compiler-core': 3.5.39
-      '@vue/compiler-dom': 3.5.39
-      '@vue/compiler-ssr': 3.5.39
-      '@vue/shared': 3.5.39
+      '@vue/compiler-core': 3.5.40
+      '@vue/compiler-dom': 3.5.40
+      '@vue/compiler-ssr': 3.5.40
+      '@vue/shared': 3.5.40
       estree-walker: 2.0.2
       magic-string: 0.30.21
-      postcss: 8.5.16
+      postcss: 8.5.19
       source-map-js: 1.2.1
 
-  '@vue/compiler-ssr@3.5.39':
+  '@vue/compiler-ssr@3.5.40':
     dependencies:
-      '@vue/compiler-dom': 3.5.39
-      '@vue/shared': 3.5.39
+      '@vue/compiler-dom': 3.5.40
+      '@vue/shared': 3.5.40
 
   '@vue/devtools-api@6.6.4': {}
 
-  '@vue/reactivity@3.5.39':
+  '@vue/language-core@3.3.7':
     dependencies:
+      '@volar/language-core': 2.4.28
+      '@vue/compiler-dom': 3.5.39
       '@vue/shared': 3.5.39
+      alien-signals: 3.2.1
+      muggle-string: 0.4.1
+      path-browserify: 1.0.1
+      picomatch: 4.0.4
 
-  '@vue/runtime-core@3.5.39':
+  '@vue/reactivity@3.5.40':
     dependencies:
-      '@vue/reactivity': 3.5.39
-      '@vue/shared': 3.5.39
+      '@vue/shared': 3.5.40
 
-  '@vue/runtime-dom@3.5.39':
+  '@vue/runtime-core@3.5.40':
     dependencies:
-      '@vue/reactivity': 3.5.39
-      '@vue/runtime-core': 3.5.39
-      '@vue/shared': 3.5.39
+      '@vue/reactivity': 3.5.40
+      '@vue/shared': 3.5.40
+
+  '@vue/runtime-dom@3.5.40':
+    dependencies:
+      '@vue/reactivity': 3.5.40
+      '@vue/runtime-core': 3.5.40
+      '@vue/shared': 3.5.40
       csstype: 3.2.3
 
-  '@vue/server-renderer@3.5.39(vue@3.5.39(typescript@6.0.3))':
+  '@vue/server-renderer@3.5.40':
     dependencies:
-      '@vue/compiler-ssr': 3.5.39
-      '@vue/shared': 3.5.39
-      vue: 3.5.39(typescript@6.0.3)
+      '@vue/compiler-ssr': 3.5.40
+      '@vue/runtime-dom': 3.5.40
+      '@vue/shared': 3.5.40
 
   '@vue/shared@3.5.39': {}
 
-  '@vue/test-utils@2.4.11(@vue/compiler-dom@3.5.39)(@vue/server-renderer@3.5.39(vue@3.5.39(typescript@6.0.3)))(vue@3.5.39(typescript@6.0.3))':
+  '@vue/shared@3.5.40': {}
+
+  '@vue/test-utils@2.4.11(@vue/compiler-dom@3.5.40)(@vue/server-renderer@3.5.40)(vue@3.5.40(typescript@6.0.3))':
     dependencies:
-      '@vue/compiler-dom': 3.5.39
+      '@vue/compiler-dom': 3.5.40
       js-beautify: 1.15.4
-      vue: 3.5.39(typescript@6.0.3)
+      vue: 3.5.40(typescript@6.0.3)
       vue-component-type-helpers: 3.3.6
     optionalDependencies:
-      '@vue/server-renderer': 3.5.39(vue@3.5.39(typescript@6.0.3))
+      '@vue/server-renderer': 3.5.40
 
   abbrev@2.0.0: {}
 
@@ -7864,6 +8380,8 @@ snapshots:
       fast-uri: 3.1.2
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
+
+  alien-signals@3.2.1: {}
 
   ansi-regex@5.0.1: {}
 
@@ -8718,6 +9236,8 @@ snapshots:
       - '@types/node'
     optional: true
 
+  muggle-string@0.4.1: {}
+
   mute-stream@3.0.0: {}
 
   nanoid@3.3.12: {}
@@ -8939,6 +9459,12 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
+  postcss@8.5.19:
+    dependencies:
+      nanoid: 3.3.12
+      picocolors: 1.1.1
+      source-map-js: 1.2.1
+
   powershell-utils@0.1.0: {}
 
   pretty-format@27.5.1:
@@ -9029,7 +9555,7 @@ snapshots:
       glob: 13.0.6
       package-json-from-dist: 1.0.1
 
-  rolldown-plugin-dts@0.26.0(rolldown@1.1.4)(typescript@6.0.3):
+  rolldown-plugin-dts@0.26.0(rolldown@1.1.4)(typescript@6.0.3)(vue-tsc@3.3.7(typescript@6.0.3)):
     dependencies:
       '@babel/generator': 8.0.0
       '@babel/helper-validator-identifier': 8.0.2
@@ -9042,6 +9568,7 @@ snapshots:
       rolldown: 1.1.4
     optionalDependencies:
       typescript: 6.0.3
+      vue-tsc: 3.3.7(typescript@6.0.3)
     transitivePeerDependencies:
       - oxc-resolver
 
@@ -9492,20 +10019,28 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
+  vscode-uri@3.1.0: {}
+
   vue-component-type-helpers@3.3.6: {}
 
-  vue-router@4.6.4(vue@3.5.39(typescript@6.0.3)):
+  vue-router@4.6.4(vue@3.5.40(typescript@6.0.3)):
     dependencies:
       '@vue/devtools-api': 6.6.4
-      vue: 3.5.39(typescript@6.0.3)
+      vue: 3.5.40(typescript@6.0.3)
 
-  vue@3.5.39(typescript@6.0.3):
+  vue-tsc@3.3.7(typescript@6.0.3):
     dependencies:
-      '@vue/compiler-dom': 3.5.39
-      '@vue/compiler-sfc': 3.5.39
-      '@vue/runtime-dom': 3.5.39
-      '@vue/server-renderer': 3.5.39(vue@3.5.39(typescript@6.0.3))
-      '@vue/shared': 3.5.39
+      '@volar/typescript': 2.4.28
+      '@vue/language-core': 3.3.7
+      typescript: 6.0.3
+
+  vue@3.5.40(typescript@6.0.3):
+    dependencies:
+      '@vue/compiler-dom': 3.5.40
+      '@vue/compiler-sfc': 3.5.40
+      '@vue/runtime-dom': 3.5.40
+      '@vue/server-renderer': 3.5.40
+      '@vue/shared': 3.5.40
     optionalDependencies:
       typescript: 6.0.3
 

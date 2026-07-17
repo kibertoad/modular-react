@@ -1,6 +1,6 @@
 # Vue support initiative: plan and tracker
 
-Status: **Phase 3 complete** (Phase 0: PR-01, PR-02, PR-03 landed; Phase 1: PR-10, PR-11, PR-12 landed; Phase 2: PR-20, PR-21, PR-22, PR-23, PR-24 landed; Phase 3: PR-30, PR-31, PR-32, PR-33, PR-34, PR-35 landed). Next up: Phase 4 (PR-40 example app). Last updated: 2026-07-16.
+Status: **Phase 4 in progress** (Phase 0: PR-01, PR-02, PR-03 landed; Phase 1: PR-10, PR-11, PR-12 landed; Phase 2: PR-20, PR-21, PR-22, PR-23, PR-24 landed; Phase 3: PR-30, PR-31, PR-32, PR-33, PR-34, PR-35 landed; Phase 4: PR-40 example apps landed). Next up: PR-41 (docs), PR-42 (parity audit). Last updated: 2026-07-17.
 Background and feasibility reasoning: [vue-port-analysis.md](./vue-port-analysis.md).
 
 This document is the single source of truth for the multi-PR effort to bring the framework to Vue 3, including full Journeys and Compositions support. Update the status board and per-PR checkboxes as PRs land; record decision outcomes in the Decisions section.
@@ -148,7 +148,7 @@ Acceptance: met. 15 tests total — `resolve-module.test.ts` (6) now lives in `@
 ### Phase 2: vue-router family
 
 **PR-20 (M): `@modular-vue/core`.** Done.
-New `packages/vue-router-core` (`@modular-vue/core`, `0.1.0`) with the repo's standard skeleton (`vite build` + `rolldown-plugin-dts`, `vitest`, `tsc --noEmit`). Depends on `@modular-frontend/core`, `@modular-vue/vue`, a `vue ^3.5` peer, and a `vue-router ^4.5` peer (D5).
+New `packages/vue-core` (`@modular-vue/core`, `0.1.0`) with the repo's standard skeleton (`vite build` + `rolldown-plugin-dts`, `vitest`, `tsc --noEmit`). Depends on `@modular-frontend/core`, `@modular-vue/vue`, a `vue ^3.5` peer, and a `vue-router ^4.5` peer (D5).
 
 - `types.ts` — vue-router `ModuleDescriptor` whose `createRoutes()` returns `RouteRecordRaw | RouteRecordRaw[]` (the React source returns `RouteObject`), plus `LazyModuleDescriptor` and the `AnyModuleDescriptor` shorthand, mirroring `react-router-core/types.ts` field-for-field. `LazyModuleDescriptor` follows the React Router shape (`{ id, basePath, load }` yielding a full `createRoutes()` subtree), not the frozen-tree TanStack shape: vue-router's `router.addRoute()` lets the runtime graft the loaded subtree in on first visit.
 - `define-module.ts` / `define-slots.ts` — the same identity functions as `react-router-core`, typed over the vue-router descriptor.
@@ -162,7 +162,7 @@ Deviations from the plan, both structural, none behavioral:
 Acceptance: met. 15 tests — `define-slots.test.ts` (2, ported from the React source), `index.test.ts` (3, asserting the re-export barrel resolves at runtime), plus `.test-d.ts` descriptor-inference coverage (`define-module.test-d.ts`: 6, covering `createRoutes` narrowing to `RouteRecordRaw`, generic preservation, typed nav label / meta pass-through, `AnyModuleDescriptor` bivariance, and `LazyModuleDescriptor.load` resolution; `route-meta.test-d.ts`: 3). Full workspace typecheck (118 tasks) and `vite build` (JS + dts) pass; externals (`vue`, `vue-router`, `@modular-frontend/core`, `@modular-vue/vue`) stay unbundled.
 
 **PR-21 (M): `@modular-vue/runtime` part 1: registry.** Done.
-New `packages/vue-router-runtime` (`@modular-vue/runtime`, `0.1.0`) with the repo's standard skeleton (`vite build` + `rolldown-plugin-dts`, `vitest`, `tsc --noEmit`). Depends on `@modular-frontend/core`, `@modular-vue/vue`, `@modular-vue/core`, plus `vue ^3.5` / `vue-router ^4.5` peers. Ports `registry.ts` (React source: `react-router-runtime/src/registry.ts`): `createRegistry` with `register`, `registerLazy`, `use` (plugin machinery), and `resolveManifest`. Validation reuses the neutral core validators directly (`validateNoDuplicateIds`, `validateDependencies`, `validateEntryExitShape`); the deps snapshot uses `buildDepsSnapshot` rather than a local reimplementation. `resolveManifest()` keeps the React idempotency contract (first call captures options and caches; later calls return the cache and reject options) and the `onRegister`-once / flip-before-throw guard.
+New `packages/vue-runtime` (`@modular-vue/runtime`, `0.1.0`) with the repo's standard skeleton (`vite build` + `rolldown-plugin-dts`, `vitest`, `tsc --noEmit`). Depends on `@modular-frontend/core`, `@modular-vue/vue`, `@modular-vue/core`, plus `vue ^3.5` / `vue-router ^4.5` peers. Ports `registry.ts` (React source: `react-router-runtime/src/registry.ts`): `createRegistry` with `register`, `registerLazy`, `use` (plugin machinery), and `resolveManifest`. Validation reuses the neutral core validators directly (`validateNoDuplicateIds`, `validateDependencies`, `validateEntryExitShape`); the deps snapshot uses `buildDepsSnapshot` rather than a local reimplementation. `resolveManifest()` keeps the React idempotency contract (first call captures options and caches; later calls return the cache and reject options) and the `onRegister`-once / flip-before-throw guard.
 
 Deviations from the plan, forced by the PR boundary and the Vue design:
 
@@ -173,7 +173,7 @@ Deviations from the plan, forced by the PR boundary and the Vue design:
 Acceptance: met for the registry scope. 30 tests across `registry.test.ts` (17: assembly, validation, onRegister-once, idempotency, `recalculateSlots` no-op vs live, `onModuleExit` forwarding, `moduleDescriptors`), `registry-plugins.test.ts` (9), and `registry.test-d.ts` (4: plugin-extend intersection, base-surface exclusion, `extensions` typing, `journeys`-alias-`never`). Full workspace typecheck (120 tasks) and `vite build` (JS + dts) pass; externals (`vue`, `vue-router`, `@modular-frontend/core`, `@modular-vue/vue`, `@modular-vue/core`) stay unbundled.
 
 **PR-22 (M): `@modular-vue/runtime` part 2: route building and app shell.** Done.
-Added `route-builder.ts`, `providers.ts`, `app.ts` to `packages/vue-router-runtime`, plus a router-owning `resolve()` entry and the framework-mode `Providers` component on `resolveManifest()`. React sources: `react-router-runtime/route-builder.tsx`, `providers.tsx`, `app.tsx`, and the `resolve()`/`resolveManifest()` machinery in `registry.ts`.
+Added `route-builder.ts`, `providers.ts`, `app.ts` to `packages/vue-runtime`, plus a router-owning `resolve()` entry and the framework-mode `Providers` component on `resolveManifest()`. React sources: `react-router-runtime/route-builder.tsx`, `providers.tsx`, `app.tsx`, and the `resolve()`/`resolveManifest()` machinery in `registry.ts`.
 
 - `route-builder.ts` — `graftModuleRoutes(router, modules, lazyModules, options?)` adds each eager module's `createRoutes()` output onto a live router via `router.addRoute()` (or `router.addRoute(parentName, route)` when a `parentRouteName` boundary is set); headless modules are skipped and a falsy `createRoutes()` throws with the module id. `createLazyModuleRoute` registers a `basePath/:pathMatch(.*)*` catch-all whose `beforeEnter` loads the descriptor, grafts its subtree, removes the placeholder, and redirects to the same location so vue-router re-resolves into the real routes. An in-flight-load promise guards against double-loading under concurrent navigation.
 - `providers.ts` — the provider layer in two shapes over one `ModularProvidersConfig`: `createModularProvidersPlugin` (app-level `app.provide` for the router-owning path, where the app root is the user's own component rendering `<router-view>`) and `createModularProvidersComponent` (a `Providers` component wrapping its default slot for framework mode). Dynamic slots route through the shared `DynamicSlotsProvider` in the component form and a `shallowRef` + `slotsSignal` subscription in the plugin form.
@@ -190,7 +190,7 @@ Deviations from the plan, all forced by the framework:
 Error-message prefixes are `[@modular-vue/runtime]`. Acceptance: met. The integration suite (`app.test.ts`) boots a memory-history router with two modules, navigates between them (asserting both routing and injected navigation/modules/slots), exercises lazy mounting after `createRouter`, and covers the `beforeEach` auth guard, extra-plugin install, and mode exclusivity. 28 new tests across `route-builder.test.ts` (9), `app.test.ts` (11), and `resolve-manifest.test.ts` (8); package total 58. Full workspace typecheck (120 tasks) and `vite build` (JS + dts) pass; externals (`vue`, `vue-router`, `@modular-frontend/core`, `@modular-vue/vue`, `@modular-vue/core`) stay unbundled.
 
 **PR-23 (M): `@modular-vue/runtime` part 3: zones and route data.** Done.
-Added `zones.ts`, `active-zones.ts`, `route-data.ts` to `packages/vue-router-runtime`, each the Vue analog of the same-named React file (`react-router-runtime/src/zones.ts`, `active-zones.ts`, `route-data.ts`). All three read `useRoute().matched`, pull each matched record's `meta` (vue-router's analog of React Router's `handle`), and funnel through core's `mergeRouteStaticData` (deepest-wins) with the dev-only `createRouteDataOverrideWarner`. Error-message prefixes / warner label are `[@modular-vue/runtime]`.
+Added `zones.ts`, `active-zones.ts`, `route-data.ts` to `packages/vue-runtime`, each the Vue analog of the same-named React file (`react-router-runtime/src/zones.ts`, `active-zones.ts`, `route-data.ts`). All three read `useRoute().matched`, pull each matched record's `meta` (vue-router's analog of React Router's `handle`), and funnel through core's `mergeRouteStaticData` (deepest-wins) with the dev-only `createRouteDataOverrideWarner`. Error-message prefixes / warner label are `[@modular-vue/runtime]`.
 
 - `zones.ts` — `useZones<TZones>()` returns a `ComputedRef<Partial<TZones>>` of merged zone components off `route.matched[i].meta`.
 - `route-data.ts` — `useRouteData<TRouteData>()`, the relaxed-typing counterpart (same merge, no component constraint on values), also a `ComputedRef`.
@@ -332,9 +332,20 @@ Acceptance: met. 30 new tests across `outlet.test.ts` (6: scoped-slot zone layou
 
 ### Phase 4: example, docs, parity audit
 
-**PR-40 (L): `examples/vue-router` example app.**
-Mirror `examples/react-router`: app-shared, shell, two or three modules, one journey, one composition, wired with SFCs and the patterns the docs will teach. Registered in `pnpm-workspace.yaml` (globs already cover it) and CI.
-Acceptance: `pnpm dev` runs it; a smoke test boots it headlessly.
+**PR-40 (L): `examples/vue` example apps.** Done.
+Mirrors the `examples/react-router` / `examples/tanstack-router` layout (a family of focused example workspaces, matching how tanstack-router mirrored react-router) rather than one combined app — three example workspaces under `examples/vue/`, each self-contained, SFC-authored (decision D4), and wired with the patterns the docs will teach:
+
+- **`integration-manager`** — sibling modules sharing a screen. Three route modules (contentful/strapi/github) render the same `IntegrationManager.vue`; the shell owns the router and grafts module routes via `createModularApp(registry, { router, parentRouteName })`, reads the active integration through `useRouteData<AppRouteData>()` off vue-router `meta` (typed via a `RouteMeta` augmentation in `app-shared`).
+- **`customer-onboarding-journey`** — the `profile → plan → billing` journey via `@modular-vue/journeys`. Journey steps are module-entry SFCs (`defineProps<ModuleEntryProps<…>>()`), one lazy step (`billing/collect`), workspace-tab persistence via a `reactive` store + `createWebStoragePersistence`, and tab rehydration with `UnknownJourneyError` discrimination. Uses `resolveManifest()` so the plugin's `<JourneyProvider>` is threaded into `Providers`. Scoped to the single onboarding journey (PR-40's "one journey") — the React example's extra plan-switch / quick-bill / launcher surfaces are out of scope here.
+- **`editor-composition`** — the editor screen via `@modular-vue/compositions`. `CompositionOutlet`'s render-prop becomes a scoped default slot (`<component :is="zones.x" />`); the cross-team `WritableStore` projection is read with a small `useReactiveStore` bridge (Vue's `useSyncExternalStore` analog), and the inspector uses the in-team `useCompositionState`.
+
+Enabling changes (forced by the framework, applied outside the example dirs):
+
+- **SFC tooling.** Added `@vitejs/plugin-vue` + `vue-tsc` as example devDeps; packages containing or importing `.vue` typecheck with `vue-tsc --noEmit` (pure-TS packages keep `tsc --noEmit`).
+- **Neutral entry validator accepts object components.** `@modular-frontend/core`'s `validateModuleEntryExit` previously required `component` to be a _function_ (React-centric). Vue SFCs / `defineComponent` compile to objects, so real SFC journey/composition entry modules failed `resolveManifest()` validation (the PR-30..34 tests sidestepped this with functional components). Relaxed the check to accept a function **or** a non-null object (also covers React `memo`/`forwardRef`), and made the message framework-neutral. One `entry-exit.test.ts` assertion updated to match; all 277 frontend-core tests pass.
+
+CI: registered the three e2e shells in the `examples-e2e` matrix (`@example-vue-integration-manager/shell`, `@example-vue-onboarding/shell`, `@example-vue-editor/shell`) and extended the changed-files trigger to the vue binding / journeys / compositions / engine / frontend-core paths. The always-on `examples` job already typechecks + builds every example.
+Acceptance: met. `pnpm --filter "@example-vue-*/shell" dev` runs each app; each ships a headless Playwright smoke suite (3 + 6 + 6 specs) that boots the shell on Vite and drives the core flow (navigation + route-data adaptation; start → advance → reload-resume → terminal → close; zone swap + cross-panel state write-through). All pass locally.
 
 **PR-41 (M, docs only): Documentation.**
 `getting-started-vue-router.md`, `shell-patterns-vue-router.md` (route shape, zones via `meta`, `useRouteData`, `beforeEach` auth), Vue sections in `docs/navigation.md`, journeys and compositions README updates, README package-map and quickstart updates, tagline adjustment per D1.
@@ -351,7 +362,7 @@ Preset over the PR-04 `cli-core` interface with SFC template bodies: shell, modu
 
 **PR-51 (S): Catalog Vue support.**
 Teach `detect.ts`/`resolve.ts` the Vue package names, verify the harvester loads Vue descriptor files through the Vite SSR path (descriptors are plain objects, so this is mostly configuration plus a fixture), add a Vue example to the catalog example.
-Acceptance: catalog build over `examples/vue-router` produces a correct model including the journey cross-reference graph.
+Acceptance: catalog build over `examples/vue` produces a correct model including the journey cross-reference graph.
 
 **PR-52 (stretch, L): Nuxt module.** Blocked by D6 and demand signal.
 A Nuxt module that registers the family at app setup, plus a `framework-mode-nuxt.md` doc. Deliberately unscoped until the SPA story has users.
@@ -416,7 +427,7 @@ Update the Status column as PRs move: `todo` → `in progress` → `in review` �
 | PR-33 | vue compositions: provider and composables  | M    | PR-03, PR-10        | done (#72) |
 | PR-34 | vue compositions: outlet                    | L    | PR-33               | done       |
 | PR-35 | JourneyHost + useJourneySync (React + Vue)  | M    | PR-31               | done       |
-| PR-40 | examples/vue-router                         | L    | PR-23, PR-32, PR-34 | todo       |
+| PR-40 | examples/vue                                | L    | PR-23, PR-32, PR-34 | done       |
 | PR-41 | Documentation                               | M    | PR-40               | todo       |
 | PR-42 | Parity audit, promote to 1.0                | S    | PR-40               | todo       |
 | PR-50 | @modular-vue/cli                            | M    | PR-04, PR-40        | todo       |
