@@ -235,6 +235,34 @@ so they apply to the SSR load the harvester performs. If a file still fails to
 load, check the reported `HarvestError` — the message includes the unresolved
 specifier.
 
+## Non-JS descriptor sources (Vue SFCs and other compiler plugins)
+
+The same `configFile: false` isolation means the harvester's SSR loader has no
+compiler plugins beyond Vite's built-in esbuild pipeline. Plain TS/JSX
+descriptors need nothing. But when a descriptor imports source that requires a
+Vite plugin to transform — the canonical case being a Vue `defineModule`
+descriptor that imports an `.vue` **single-file component** — that plugin must be
+forwarded under `plugins`:
+
+```ts
+import vue from "@vitejs/plugin-vue";
+import { defineCatalogConfig } from "@modular-react/catalog";
+
+export default defineCatalogConfig({
+  // Lets the harvester load `@modular-vue` module descriptors that
+  // `import Page from "./Page.vue"`. Without it those files fail to load
+  // (reported as a non-fatal HarvestError) and their descriptors are missing.
+  plugins: [vue()],
+  roots: [{ name: "vue-modules", pattern: "packages/*/src/index.ts", resolver: "defaultExport" }],
+});
+```
+
+The catalog is **framework-agnostic** — descriptors are plain objects regardless
+of the UI framework, so React and Vue modules/journeys harvest through one
+pipeline. The Vue plugin is inert for the files it doesn't handle, so a single
+config can scan a **mixed React + Vue** monorepo and list `plugins: [vue()]`
+unconditionally. See `examples/catalog/catalog.config.ts` for a mixed scan.
+
 ## Enrich hook
 
 Inject org-specific metadata that the descriptor authors didn't (or couldn't) write themselves:

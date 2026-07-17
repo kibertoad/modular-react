@@ -1,5 +1,11 @@
 import { resolve } from "pathe";
-import { createServer, type Alias, type InlineConfig, type ViteDevServer } from "vite";
+import {
+  createServer,
+  type Alias,
+  type InlineConfig,
+  type PluginOption,
+  type ViteDevServer,
+} from "vite";
 import type { CatalogResolve } from "../config/types.js";
 
 /**
@@ -17,24 +23,30 @@ import type { CatalogResolve } from "../config/types.js";
  * dependencies" errors. Keeping both loaders on this one factory means the
  * quieting can't drift back out of one of them.
  *
- * `resolveConfig` is only meaningful for the harvester — the config loader runs
- * before the resolve config is even known, so it omits it.
+ * `resolveConfig` and `plugins` are only meaningful for the harvester — the
+ * config loader runs before either is known, so it omits both.
  *
  * Pure and exported so the shared options can be asserted in a unit test
  * without standing up a real server.
  */
-export function buildSsrServerConfig(cwd: string, resolveConfig?: CatalogResolve): InlineConfig {
+export function buildSsrServerConfig(
+  cwd: string,
+  resolveConfig?: CatalogResolve,
+  plugins?: PluginOption[],
+): InlineConfig {
   return {
     root: cwd,
     server: { middlewareMode: true, hmr: false },
     appType: "custom",
     logLevel: "error",
     optimizeDeps: { noDiscovery: true, entries: [] },
-    // The user's own configFile / plugins are irrelevant to ssrLoadModule and
-    // only add noise, so they stay disabled. Resolution is the exception —
-    // see buildResolve.
+    // The user's own configFile is irrelevant to ssrLoadModule and only adds
+    // noise, so it stays disabled. Plugins default to none for the same reason,
+    // but the catalog config may forward compiler plugins the descriptor files
+    // need to load (e.g. `@vitejs/plugin-vue` for `.vue` imports). Resolution
+    // is likewise threaded through — see buildResolve.
     configFile: false,
-    plugins: [],
+    plugins: plugins ? [...plugins] : [],
     ...buildResolve(cwd, resolveConfig),
   };
 }
@@ -46,8 +58,9 @@ export function buildSsrServerConfig(cwd: string, resolveConfig?: CatalogResolve
 export function createCatalogSsrServer(
   cwd: string,
   resolveConfig?: CatalogResolve,
+  plugins?: PluginOption[],
 ): Promise<ViteDevServer> {
-  return createServer(buildSsrServerConfig(cwd, resolveConfig));
+  return createServer(buildSsrServerConfig(cwd, resolveConfig, plugins));
 }
 
 /**

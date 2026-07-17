@@ -17,11 +17,21 @@ describe("buildSsrServerConfig", () => {
     });
   });
 
-  it("ignores the project's own config and plugins", () => {
+  it("ignores the project's own config and defaults to no plugins", () => {
     const config = buildSsrServerConfig(CWD);
     expect(config.configFile).toBe(false);
     expect(config.plugins).toEqual([]);
     expect(config.root).toBe(CWD);
+  });
+
+  it("forwards configured plugins into the SSR config (Vue SFC support)", () => {
+    // A plugin is just an object with a `name`; assert the exact list is
+    // threaded through so a Vue catalog config's `@vitejs/plugin-vue` reaches
+    // the loader.
+    const plugin = { name: "vue-stub" };
+    expect(buildSsrServerConfig(CWD, undefined, [plugin]).plugins).toEqual([plugin]);
+    // Plugins compose with the resolve config (harvester shape).
+    expect(buildSsrServerConfig(CWD, { dedupe: ["vue"] }, [plugin]).plugins).toEqual([plugin]);
   });
 
   it("omits resolve when no resolve config is given (config-loader shape)", () => {

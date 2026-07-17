@@ -1,3 +1,4 @@
+import vue from "@vitejs/plugin-vue";
 import { resolve } from "pathe";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -184,6 +185,42 @@ describe("harvest", () => {
     expect(entries).toEqual([]);
     expect(errors).toHaveLength(1);
     expect(errors[0]!.message).toContain("@shared/meta");
+  });
+
+  it("harvests a Vue descriptor that imports a `.vue` SFC when the vue plugin is forwarded", async () => {
+    const { entries, errors } = await harvest(
+      {
+        roots: [{ name: "vue", pattern: "vue-modules/*.ts", resolver: "defaultExport" }],
+        plugins: [vue()],
+      },
+      FIXTURES,
+    );
+
+    expect(errors).toEqual([]);
+    const insights = entries.find((e) => e.id === "insights");
+    expect(insights).toBeDefined();
+    if (insights!.kind !== "module") throw new Error("expected module");
+    // The descriptor's `createRoutes` references the imported SFC — proving the
+    // `.vue` file resolved and compiled through the SSR path, not type-erased.
+    expect(insights!.hasRoutes).toBe(true);
+    expect(insights!.meta.ownerTeam).toBe("growth");
+    expect(insights!.navigationLabels).toEqual(["Insights"]);
+    expect(insights!.requires).toEqual(["auth"]);
+  });
+
+  it("reports a `.vue` import as a non-fatal load error when no vue plugin is configured", async () => {
+    const { entries, errors } = await harvest(
+      {
+        roots: [{ name: "vue", pattern: "vue-modules/*.ts", resolver: "defaultExport" }],
+      },
+      FIXTURES,
+    );
+
+    // Without `@vitejs/plugin-vue`, Vite cannot transform the `.vue` import, so
+    // the descriptor never loads — and the failure is collected, not thrown.
+    expect(entries).toEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.message).toContain(".vue");
   });
 
   it("collects load errors without aborting the whole scan", async () => {
