@@ -1651,12 +1651,14 @@ interface JourneyRuntime {
   canGoForward(id: InstanceId): boolean;
 
   /**
-   * Force-terminate an instance. Fires `onAbandon` if still active;
-   * no-op if already terminal or unknown. Pass `{ force: true }` for a
-   * teardown caller (an unmounting host/outlet) that must end up
-   * terminal: a terminal `onAbandon` result is honoured, but a
-   * non-terminal one (`{ next }` / `{ invoke }`) is coerced to an abort
-   * so `forget()` can drop the record instead of leaking a live instance.
+   * End an instance. Fires `onAbandon` if still active; no-op if already
+   * terminal or unknown. A plain `end()` applies whatever `onAbandon`
+   * returns — so a non-terminal result (`{ next }` / `{ invoke }`) advances
+   * the flow and leaves the instance **active**, not terminal. Pass
+   * `{ force: true }` for a teardown caller (an unmounting host/outlet) that
+   * must end up terminal: a terminal `onAbandon` result is still honoured,
+   * but a non-terminal one is coerced to an abort so `forget()` can drop the
+   * record instead of leaking a live instance.
    */
   end(id: InstanceId, reason?: unknown, options?: { readonly force?: boolean }): void;
 
@@ -2210,7 +2212,7 @@ For chrome around the step, pass a render-prop child and place the ready-built `
 
 ### Behavior
 
-- **The instance is fixed for the host's lifetime.** `handle`, `input` and `runtime` are read once, at mount. Changing them later does **not** restart the journey — silently abandoning a half-finished flow because a prop identity changed is never what the caller meant. To run a different journey, or to run it on a different runtime, remount: `<JourneyHost key={journeyId} …>`. (An `instanceId` only means anything on the runtime that started it, so following a swapped runtime could only strand the host against one that has never heard of the instance.)
+- **The instance is fixed for the host's lifetime.** `handle`, `input` and `runtime` are read once, at mount. Changing them later does **not** restart the journey — silently abandoning a half-finished flow because a prop identity changed is never what the caller meant. To run a different journey — or the same journey with different `input`, or on a different runtime — remount by giving the host a `key` that encodes whatever identity should trigger the restart, e.g. `<JourneyHost key={`${journeyId}:${cartId}`} …>`. A key that tracks only part of it (say `journeyId`) will not remount when the rest changes. (An `instanceId` only means anything on the runtime that started it, so following a swapped runtime could only strand the host against one that has never heard of the instance.)
 - **Start means resume, when persistence is configured.** `runtime.start()` with a `persistence` adapter returns the in-flight instance for the same `keyFor(input)` instead of minting a new one, so a host that remounts (route change, tab switch) picks the journey back up where it was. Without persistence, every mount starts a fresh instance. See [Keys, idempotency, and "resume vs new"](#keys-idempotency-and-resume-vs-new).
 - **The journey starts from an effect, not during render.** `runtime.start()` mutates the runtime and may write to persistence, and a render React discards or replays would duplicate that. So `instanceId` is `null` for the first render and the host shows `loadingFallback` — this is also why `useState(() => runtime.start(…))`, the obvious hand-rolled version, is unsafe under StrictMode: its initializer runs twice and React keeps only one result. With deterministic persistence both calls converge on the same instance (the second `start` resumes the first), so the damage is bounded; but without idempotent persistence the discarded call leaks a live instance per mount. Starting from the effect sidesteps the question entirely.
 - **Unmount ends _and_ forgets.** `runtime.end(id, { reason: "unmounted" }, { force: true })` then `runtime.forget(id)`, deferred one microtask so StrictMode's mount/unmount/mount cycle does not tear the journey down on its first visit. `<JourneyOutlet>` on its own only ends; forgetting is what stops terminal records accumulating in a long-lived shell. The `force` is what makes "ends" reliable: `onAbandon` may return a non-terminal `{ next }` (or `{ invoke }`), which on a plain `end()` would advance the flow to a step no host renders and leave the instance active — `forget()` would then no-op and the instance (and its persistence key) would leak. Forcing coerces that to an abort while still honouring a terminal `onAbandon` choice (complete/abort).
@@ -2330,7 +2332,7 @@ Push vs. replace follows the journey's own depth (`history.length`):
 - **a refused Back** (a location the journey will not rewind to) walks the browser forward by the rejected distance with `port.go(+n)` — the same amount it was asked to go back — restoring the stack exactly and leaving the intermediate entries addressable; without `go`, it `push`es the current step instead, which truncates whatever was ahead;
 - **the first sync** replaces, since the host's own navigation already spent an entry getting here.
 
-`go` is optional. Without it the sync falls back to `replace`, which keeps the URL truthful but drops the forward entry — Forward will not redo the step. Supply `go` only when the journey owns a contiguous run of history entries; if your shell pushes unrelated entries mid-journey, `go(-n)` can land outside the flow (the sync reports that through `onUnresolved` rather than guessing, but `replace` would have been safer).
+`go` is optional, and its absence changes the two `go`-based cases above, each to a different fallback. An **in-app rewind** falls back to `replace`: the URL stays truthful but the forward entry is dropped, so Forward will not redo the step. A **refused Back** falls back to `push`: the URL is corrected to the current step, but pushing from the earlier entry the browser is sitting on truncates whatever was ahead. Both keep the URL honest and both forfeit forward entries — only the mechanics differ. Supply `go` only when the journey owns a contiguous run of history entries; if your shell pushes unrelated entries mid-journey, `go(-n)` can land outside the flow (the sync reports that through `onUnresolved` rather than guessing, but the fallback would have been safer).
 
 ### Give steps distinct paths
 
