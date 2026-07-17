@@ -187,7 +187,10 @@ describe("useJourneySync", () => {
     await flushPromises();
 
     expect(port.read()).toBe("a/show");
-    // And the reverse direction is detached too.
+    // And the reverse direction is detached too. Push a second entry first so
+    // `go(-1)` actually moves and notifies — from index zero it would be a
+    // no-op, and a leaked subscription would go undetected.
+    port.push("b/show");
     port.go(-1);
     expect(runtime.getInstance(id)?.step?.moduleId).toBe("b");
   });

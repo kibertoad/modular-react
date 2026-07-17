@@ -423,19 +423,46 @@ describe("createJourneySync", () => {
     const { runtime, id, harness } = setup();
     const port = createMemoryJourneySyncPort();
     const sync = createJourneySync(runtime, id, port);
+
+    // Advance once while attached so the port carries a real second frame; a
+    // reverse `go` from index zero would be a no-op and could not detect a
+    // leaked subscription.
+    harness.fireExit(id, "next");
+    expect(port.read()).toBe("b/show");
     sync.stop();
 
+    // Forward direction detached: the runtime advances but the port does not.
     harness.fireExit(id, "next");
-    expect(port.read()).toBe("a/show");
+    expect(port.read()).toBe("b/show");
 
-    // And the reverse direction is detached too.
+    // And the reverse direction is detached too: a real port notification no
+    // longer rewinds the runtime.
     port.go(-1);
-    expect(runtime.getInstance(id)?.step?.moduleId).toBe("b");
+    expect(port.read()).toBe("a/show");
+    expect(runtime.getInstance(id)?.step?.moduleId).toBe("c");
   });
 
   it("stop() is idempotent", () => {
     const { runtime, id } = setup();
-    const port = createMemoryJourneySyncPort();
+    const base = createMemoryJourneySyncPort();
+    // A non-idempotent unsubscribe: the naturally-idempotent `Set.delete` the
+    // memory port returns would hide a double cleanup, so throw on the second
+    // call to prove `stop()` unsubscribes at most once.
+    let portUnsubscribes = 0;
+    const port: JourneySyncPort = {
+      read: base.read,
+      push: base.push,
+      replace: base.replace,
+      go: base.go,
+      subscribe(listener) {
+        const inner = base.subscribe(listener);
+        return () => {
+          portUnsubscribes += 1;
+          if (portUnsubscribes > 1) throw new Error("port unsubscribe called more than once");
+          inner();
+        };
+      },
+    };
     const sync = createJourneySync(runtime, id, port);
     sync.stop();
     expect(() => sync.stop()).not.toThrow();

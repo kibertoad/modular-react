@@ -20,7 +20,7 @@ a feature request in disguise. Items are ordered by estimated impact.
 > **Shipped** — `createJourneySync` in `@modular-frontend/journeys-engine`, with
 > `useJourneySync` on both bindings. See the changelog's "journey hosting and URL
 > sync" entry and
-> [Deep-linking steps](../packages/journeys/README.md#deep-linking-steps--usejourneysync).
+> [Deep-linking steps](../packages/journeys/README.md#deep-linking-steps---usejourneysync).
 >
 > Built router-neutral rather than as per-router packages: the reconciler is a
 > state machine over `{ status, step, history, future }` and a path string, so it
@@ -58,7 +58,7 @@ stack) that solving it once in the library is worth a lot.
 
 > **Shipped** — `<JourneyHost>` + `useJourneyHost` on both bindings (both forms,
 > as the suggestion allowed). See
-> [Hosting a journey](../packages/journeys/README.md#hosting-a-journey--journeyhost).
+> [Hosting a journey](../packages/journeys/README.md#hosting-a-journey---journeyhost).
 > Combined with item 1, a journey is now mountable in one line.
 >
 > `{ instanceId, stepIndex }` ship; **`stepCount` does not**. The total is not

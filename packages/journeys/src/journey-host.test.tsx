@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createJourneyRuntime,
+  createMemoryPersistence,
   defineJourney,
   defineJourneyHandle,
 } from "@modular-frontend/journeys-engine";
@@ -71,11 +72,32 @@ const journey = defineJourney<Modules, Record<string, never>, void, string>()({
 
 const handle = defineJourneyHandle(journey);
 
+/** A second, distinct journey so a test can rerender the host with a different
+ * `handle` and prove the pinned lifecycle input is never re-read. */
+const journeyAlt = defineJourney<Modules, Record<string, never>, void, string>()({
+  id: "two-step-alt",
+  version: "1.0.0",
+  initialState: () => ({}),
+  start: () => ({ module: "a", entry: "show", input: undefined }),
+  transitions: {
+    a: { show: { next: () => ({ next: { module: "b", entry: "show", input: undefined } }) } },
+    b: { show: { allowBack: true, next: () => ({ complete: "done" }) } },
+  },
+});
+
+const handleAlt = defineJourneyHandle(journeyAlt);
+
 function setup() {
-  return createJourneyRuntime([{ definition: journey, options: undefined }], {
-    modules,
-    debug: false,
-  });
+  return createJourneyRuntime(
+    [
+      { definition: journey, options: undefined },
+      { definition: journeyAlt, options: undefined },
+    ],
+    {
+      modules,
+      debug: false,
+    },
+  );
 }
 
 describe("<JourneyHost>", () => {
@@ -194,9 +216,13 @@ describe("<JourneyHost>", () => {
     act(() => {
       screen.getByText("step-a").click();
     });
+    // Rerender with a *different* handle (and a changed fallback). `handle` and
+    // `input` are read once at mount, so neither the swap nor the fallback
+    // change may restart the flow — if either value leaked into the lifecycle
+    // effect's dependencies, the "two-step-alt" journey would start here.
     view.rerender(
       <JourneyProvider runtime={runtime}>
-        <JourneyHost handle={handle} loadingFallback={<span>two</span>}>
+        <JourneyHost handle={handleAlt} loadingFallback={<span>two</span>}>
           {({ instanceId, outlet }) => {
             seen.push(instanceId);
             return outlet;
@@ -205,11 +231,57 @@ describe("<JourneyHost>", () => {
       </JourneyProvider>,
     );
 
-    // Same instance throughout, and still on the step the user reached —
-    // a prop identity change must never abandon a half-finished flow.
+    // Same instance throughout, still the original "two-step" journey, and
+    // still on the step the user reached — a prop change must never abandon a
+    // half-finished flow.
     expect(new Set(seen)).toHaveLength(1);
     expect(runtime.listInstances()).toHaveLength(1);
+    expect(runtime.getInstance(seen[0]!)?.journeyId).toBe("two-step");
     expect(screen.getByText("step-b")).toBeDefined();
+  });
+
+  it("does not tear down an instance a same-tick replacement host has resumed", async () => {
+    // Persistence makes `start()` return the same id for the same input, so a
+    // route change that swaps one host for another lands both on the same
+    // instance. The outgoing host's deferred end+forget must not fire against
+    // the instance the incoming host is now presenting.
+    const persistence = createMemoryPersistence<void, Record<string, never>>({
+      keyFor: ({ journeyId }) => journeyId,
+    });
+    const runtime = createJourneyRuntime([{ definition: journey, options: { persistence } }], {
+      modules,
+      debug: false,
+    });
+
+    function App({ which }: { which: "a" | "b" }) {
+      return (
+        <JourneyProvider runtime={runtime}>
+          {which === "a" ? (
+            <JourneyHost key="a" handle={handle} />
+          ) : (
+            <JourneyHost key="b" handle={handle} />
+          )}
+        </JourneyProvider>
+      );
+    }
+
+    const view = render(<App which="a" />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const id = runtime.listInstances()[0]!;
+    expect(runtime.getInstance(id)?.status).toBe("active");
+
+    // Different `key`: the "a" host unmounts and the "b" host mounts in the
+    // same commit, and persistence hands the same instance across.
+    view.rerender(<App which="b" />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(runtime.getInstance(id)?.status).toBe("active");
+    expect(runtime.listInstances()).toEqual([id]);
+    expect(screen.getByText("step-a")).toBeDefined();
   });
 
   it("pins the runtime it started on, rather than following a swapped one", async () => {

@@ -7,7 +7,6 @@ import type {
   JourneySyncCallbackCtx,
   JourneySyncOptions,
   JourneySyncPort,
-  JourneyStep,
 } from "@modular-frontend/journeys-engine";
 import { useJourneyContext } from "./provider.js";
 
@@ -69,8 +68,12 @@ export interface UseJourneySyncOptions extends JourneySyncOptions {
  *   invisible for the normal case — a port over a stable router — but a port
  *   that subscribes to a *different* source on a later render will not be
  *   re-subscribed. Change `instanceId` (or remount) to re-attach.
- * - **Callbacks need not be memoized** either — `stepToPath`, `onUnresolved`
- *   and `onBlocked` are read through the same latest-value ref.
+ * - **`onUnresolved` and `onBlocked` need not be memoized** — they are read
+ *   through the same latest-value ref. `stepToPath` is the exception: it is
+ *   captured once when the sync is created, because the engine needs a stable
+ *   step->path mapping to resolve history frames the port already stamped.
+ *   A mapping that changes on a later render takes effect only after the sync
+ *   is re-created (change `instanceId` or remount).
  * - **The hook never starts or ends the instance.** It only navigates within
  *   a journey that is already running. Pair it with {@link JourneyHost},
  *   which owns the lifecycle.
@@ -117,8 +120,13 @@ export function useJourneySync(
 
   useEffect(() => {
     if (!runtime || !instanceId) return;
+    // `stepToPath` is captured once per sync, not read live: the engine relies
+    // on a stable step->path mapping to resolve the history frames the port has
+    // already stamped, so swapping it mid-flight would strand previously
+    // visited paths as unresolved. `onUnresolved`/`onBlocked` stay live.
+    const stepToPath = optionsRef.current.stepToPath ?? defaultStepPath;
     const sync = createJourneySync(runtime, instanceId, stablePort, {
-      stepToPath: (step: JourneyStep) => (optionsRef.current.stepToPath ?? defaultStepPath)(step),
+      stepToPath,
       onUnresolved: (ctx: JourneySyncCallbackCtx) => optionsRef.current.onUnresolved?.(ctx),
       onBlocked: (ctx: JourneySyncCallbackCtx) => optionsRef.current.onBlocked?.(ctx),
     });

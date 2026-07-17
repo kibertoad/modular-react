@@ -61,11 +61,15 @@ export interface UseJourneySyncOptions extends JourneySyncOptions {
  *   through a live holder rather than re-creating the reconciler, because
  *   re-creating it re-runs its initial reconcile — and that reconcile
  *   navigates. Pass a getter when the port itself depends on reactive state.
- *   The one exception is `port.subscribe`: it is called once, when the sync is
- *   created, so the subscription belongs to the port current at that moment.
- *   That is invisible for the normal case — a port over a stable router — but
- *   a port that subscribes to a *different* source later will not be
- *   re-subscribed. Change `instanceId` (or remount) to re-attach.
+ *   Two things are read once rather than live: `port.subscribe`, called when
+ *   the sync is created (so the subscription belongs to the port current at
+ *   that moment), and `options.stepToPath`, captured then too (the engine
+ *   needs a stable step->path mapping to resolve already-stamped history
+ *   frames). Both are invisible for the normal case — a port over a stable
+ *   router with a fixed mapping — but a port that subscribes to a *different*
+ *   source later, or a mapping that changes, will not take effect until the
+ *   sync is re-created. `onUnresolved`/`onBlocked` remain live. Change
+ *   `instanceId` (or remount) to re-attach.
  * - **The composable never starts or ends the instance.** It only navigates
  *   within a journey that is already running. Pair it with
  *   {@link JourneyHost}, which owns the lifecycle.
@@ -111,8 +115,14 @@ export function useJourneySync(
     () => toValue(instanceId),
     (id, _previous, onCleanup) => {
       if (!runtime || !id) return;
+      // `stepToPath` is captured once per sync, not read live: the engine
+      // relies on a stable step->path mapping to resolve the history frames the
+      // port has already stamped, so swapping it mid-flight would strand
+      // previously visited paths as unresolved. `onUnresolved`/`onBlocked` stay
+      // live. Change `instanceId` (or remount) to adopt a new mapping.
+      const stepToPath = latest.options.stepToPath ?? defaultStepPath;
       const sync = createJourneySync(runtime, id, stablePort, {
-        stepToPath: (step) => (latest.options.stepToPath ?? defaultStepPath)(step),
+        stepToPath,
         onUnresolved: (syncCtx: JourneySyncCallbackCtx) => latest.options.onUnresolved?.(syncCtx),
         onBlocked: (syncCtx: JourneySyncCallbackCtx) => latest.options.onBlocked?.(syncCtx),
       });

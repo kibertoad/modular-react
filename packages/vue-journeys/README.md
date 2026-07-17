@@ -125,7 +125,7 @@ start is guaranteed to be paired with an unmount that ends it).
 A URL cannot navigate a journey to an arbitrary step — a step is derived from
 state, so the only positions a location can select are ones the journey has
 already been to. See
-[Deep-linking steps](../journeys/README.md#deep-linking-steps--usejourneysync)
+[Deep-linking steps](../journeys/README.md#deep-linking-steps---usejourneysync)
 in the React README for the full model; the reconciler is the same code.
 
 ## Reactivity

@@ -415,6 +415,7 @@ export function createJourneySync(
   return {
     sync,
     stop() {
+      if (stopped) return;
       stopped = true;
       unsubscribeRuntime();
       unsubscribePort();

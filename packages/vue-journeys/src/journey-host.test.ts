@@ -1,10 +1,11 @@
-import { defineComponent, h, type PropType } from "vue";
+import { defineComponent, h, ref, type PropType } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-frontend/core";
 
 import {
   createJourneyRuntime,
+  createMemoryPersistence,
   defineJourney,
   defineJourneyHandle,
 } from "@modular-frontend/journeys-engine";
@@ -149,6 +150,45 @@ describe("<JourneyHost>", () => {
     // does not do on its own.
     expect(runtime.getInstance(id)).toBeNull();
     expect(runtime.listInstances()).toHaveLength(0);
+  });
+
+  it("does not tear down an instance a same-tick replacement host has resumed", async () => {
+    // Persistence makes `start()` return the same id for the same input, so a
+    // route change that swaps one host for another lands both on the same
+    // instance. The outgoing host's deferred end+forget must not fire against
+    // the instance the incoming host is now presenting.
+    const persistence = createMemoryPersistence<void, Record<string, never>>({
+      keyFor: ({ journeyId }) => journeyId,
+    });
+    const runtime = createJourneyRuntime([{ definition: journey, options: { persistence } }], {
+      modules,
+      debug: false,
+    });
+
+    const which = ref<"a" | "b">("a");
+    const Root = defineComponent({
+      setup() {
+        return () =>
+          h(JourneyProvider, { runtime }, () =>
+            which.value === "a"
+              ? h(JourneyHost, { key: "a", handle })
+              : h(JourneyHost, { key: "b", handle }),
+          );
+      },
+    });
+    const wrapper = mount(Root);
+    await flushPromises();
+    const id = runtime.listInstances()[0]!;
+    expect(runtime.getInstance(id)?.status).toBe("active");
+
+    // Different `key`: the "a" host unmounts and the "b" host mounts in the
+    // same tick, and persistence hands the same instance across.
+    which.value = "b";
+    await flushPromises();
+
+    expect(runtime.getInstance(id)?.status).toBe("active");
+    expect(runtime.listInstances()).toEqual([id]);
+    expect(wrapper.find('[data-testid="step-a"]').exists()).toBe(true);
   });
 
   it("forwards outlet props through attrs", async () => {

@@ -23,6 +23,27 @@ import { useInstanceSnapshot } from "./instance-hooks.js";
 import { JourneyOutlet } from "./outlet.js";
 import { useJourneyContext } from "./provider.js";
 
+/**
+ * Tracks which host mount currently owns each started instance, so an
+ * unmounting host's deferred teardown does not end and forget an instance a
+ * same-tick replacement host has already resumed. With persistence,
+ * `runtime.start()` returns the same id for the same input, so a route change
+ * that unmounts one host and mounts another for the same journey hands the
+ * live instance across — and the outgoing host's queued `end`/`forget` must
+ * not fire against it. Keyed by runtime (a `WeakMap`, so it drops when the
+ * runtime is collected) then by instance id.
+ */
+const hostOwners = new WeakMap<JourneyRuntime, Map<InstanceId, symbol>>();
+
+function ownersFor(runtime: JourneyRuntime): Map<InstanceId, symbol> {
+  let owners = hostOwners.get(runtime);
+  if (!owners) {
+    owners = new Map();
+    hostOwners.set(runtime, owners);
+  }
+  return owners;
+}
+
 export interface UseJourneyHostOptions {
   /**
    * Runtime to start the journey on. Optional when a `<JourneyProvider>` is
@@ -106,6 +127,8 @@ export function useJourneyHost<TInput>(
   }
 
   const instanceId = shallowRef<InstanceId | null>(null);
+  // Unique per host mount — see `hostOwners`.
+  const ownerToken = Symbol("journey-host");
 
   onMounted(() => {
     // Started from `onMounted` rather than `setup` so the start is guaranteed
@@ -118,17 +141,28 @@ export function useJourneyHost<TInput>(
     // The string-id overload: the handle form's `...rest` tuple cannot be
     // satisfied from a generic `TInput` without widening the call site.
     // `handle.id` is the same value the handle overload reads.
-    instanceId.value = runtime.start(handle.id, input);
+    const id = runtime.start(handle.id, input);
+    instanceId.value = id;
+    // Claim ownership of the id. A previous host that resumed this same id and
+    // is mid-teardown will see it no longer owns the id and skip its cleanup.
+    ownersFor(runtime).set(id, ownerToken);
   });
 
   onUnmounted(() => {
     const id = instanceId.value;
     if (!id) return;
     instanceId.value = null;
+    const owners = ownersFor(runtime);
     // Deferred one microtask, matching `<JourneyOutlet>`: an inner outlet
     // schedules its own abandon the same way, and reading the record after
     // both have settled keeps the two from racing.
     queueMicrotask(() => {
+      // Only tear down if this host still owns the id. A same-tick replacement
+      // host (a route change resuming the same persisted instance) will have
+      // re-claimed it by now; ending here would destroy the live instance it
+      // is presenting.
+      if (owners.get(id) !== ownerToken) return;
+      owners.delete(id);
       // `end` first, then `forget`: `forget` is a no-op on an instance that is
       // still active, and `end` is synchronous, so this ordering both aborts
       // the run and drops the record. An inner `<JourneyOutlet>` may have
