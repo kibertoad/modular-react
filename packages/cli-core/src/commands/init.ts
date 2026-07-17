@@ -165,27 +165,42 @@ function scaffold(args: {
 }): void {
   const { preset, root, projectName, scope, moduleName, pageName, listPageName, importName } = args;
   const moduleLabel = toPascalCase(moduleName);
+  const sc = preset.scaffold;
+  const view = sc.viewExt;
 
   // Root files
   mkdirSync(root, { recursive: true });
-  writeFileSync(resolve(root, "package.json"), rootPackageJson({ name: projectName }));
-  writeFileSync(resolve(root, "pnpm-workspace.yaml"), pnpmWorkspace());
-  writeFileSync(resolve(root, "tsconfig.base.json"), tsconfigBase());
+  writeFileSync(
+    resolve(root, "package.json"),
+    sc.rootPackageJson?.({ name: projectName }) ?? rootPackageJson({ name: projectName }),
+  );
+  writeFileSync(resolve(root, "pnpm-workspace.yaml"), sc.pnpmWorkspace?.() ?? pnpmWorkspace());
+  writeFileSync(resolve(root, "tsconfig.base.json"), sc.tsconfigBase?.() ?? tsconfigBase());
   writeFileSync(resolve(root, "tsconfig.json"), tsconfigRoot());
   writeFileSync(resolve(root, ".gitignore"), gitignore());
+  const rootVitestConfig = sc.rootVitestConfig?.();
+  if (rootVitestConfig !== undefined) {
+    writeFileSync(resolve(root, "vitest.config.ts"), rootVitestConfig);
+  }
 
   // app-shared
   mkdirSync(resolve(root, "app-shared", "src", "contracts"), { recursive: true });
   writeFileSync(
     resolve(root, "app-shared", "package.json"),
-    appSharedPackageJson({ scope, preset }),
+    sc.appSharedPackageJson?.({ scope }) ?? appSharedPackageJson({ scope, preset }),
   );
-  writeFileSync(resolve(root, "app-shared", "tsconfig.json"), appSharedTsconfig());
+  writeFileSync(
+    resolve(root, "app-shared", "tsconfig.json"),
+    sc.appSharedTsconfig?.() ?? appSharedTsconfig(),
+  );
   writeFileSync(
     resolve(root, "app-shared", "src", "index.ts"),
     preset.templates.appSharedIndex({ scope }),
   );
-  writeFileSync(resolve(root, "app-shared", "src", "types.ts"), appSharedTypes());
+  writeFileSync(
+    resolve(root, "app-shared", "src", "types.ts"),
+    sc.appSharedTypes?.() ?? appSharedTypes(),
+  );
 
   // shell
   mkdirSync(resolve(root, "shell", "src", "stores"), { recursive: true });
@@ -193,16 +208,16 @@ function scaffold(args: {
   mkdirSync(resolve(root, "shell", "src", "components"), { recursive: true });
   writeFileSync(
     resolve(root, "shell", "package.json"),
-    shellPackageJson({ scope, moduleName, preset }),
+    sc.shellPackageJson?.({ scope, moduleName }) ?? shellPackageJson({ scope, moduleName, preset }),
   );
-  writeFileSync(resolve(root, "shell", "tsconfig.json"), shellTsconfig());
+  writeFileSync(resolve(root, "shell", "tsconfig.json"), sc.shellTsconfig?.() ?? shellTsconfig());
   writeFileSync(resolve(root, "shell", "vite.config.ts"), preset.templates.shellViteConfig());
   writeFileSync(
     resolve(root, "shell", "index.html"),
     preset.templates.shellIndexHtml({ projectName }),
   );
   writeFileSync(
-    resolve(root, "shell", "src", "main.tsx"),
+    resolve(root, "shell", "src", sc.entryMain),
     preset.templates.shellMain({
       scope,
       moduleName,
@@ -218,21 +233,24 @@ function scaffold(args: {
     resolve(root, "shell", "src", "stores", "config.ts"),
     preset.templates.shellConfigStore({ scope, appName: projectName }),
   );
-  writeFileSync(resolve(root, "shell", "src", "services", "http-client.ts"), shellHttpClient());
   writeFileSync(
-    resolve(root, "shell", "src", "components", "RootLayout.tsx"),
+    resolve(root, "shell", "src", "services", "http-client.ts"),
+    sc.shellHttpClient?.() ?? shellHttpClient(),
+  );
+  writeFileSync(
+    resolve(root, "shell", "src", "components", `RootLayout.${view}`),
     preset.templates.shellRootLayout(),
   );
   writeFileSync(
-    resolve(root, "shell", "src", "components", "ShellLayout.tsx"),
+    resolve(root, "shell", "src", "components", `ShellLayout.${view}`),
     preset.templates.shellShellLayout({ scope }),
   );
   writeFileSync(
-    resolve(root, "shell", "src", "components", "Sidebar.tsx"),
+    resolve(root, "shell", "src", "components", `Sidebar.${view}`),
     preset.templates.shellSidebar({ projectName }),
   );
   writeFileSync(
-    resolve(root, "shell", "src", "components", "Home.tsx"),
+    resolve(root, "shell", "src", "components", `Home.${view}`),
     preset.templates.shellHome({ scope }),
   );
 
@@ -246,9 +264,10 @@ function scaffold(args: {
   mkdirSync(resolve(moduleDir, "src", "__tests__"), { recursive: true });
   writeFileSync(
     resolve(moduleDir, "package.json"),
-    modulePackageJson({ scope, name: moduleName, preset }),
+    sc.modulePackageJson?.({ scope, name: moduleName }) ??
+      modulePackageJson({ scope, name: moduleName, preset }),
   );
-  writeFileSync(resolve(moduleDir, "tsconfig.json"), moduleTsconfig());
+  writeFileSync(resolve(moduleDir, "tsconfig.json"), sc.moduleTsconfig?.() ?? moduleTsconfig());
   writeFileSync(
     resolve(moduleDir, "src", "index.ts"),
     preset.templates.moduleDescriptor({
@@ -261,15 +280,15 @@ function scaffold(args: {
     }),
   );
   writeFileSync(
-    resolve(moduleDir, "src", "pages", `${pageName}.tsx`),
+    resolve(moduleDir, "src", "pages", `${pageName}.${view}`),
     preset.templates.modulePage({ scope, pageName, moduleLabel, moduleName }),
   );
   writeFileSync(
-    resolve(moduleDir, "src", "pages", `${listPageName}.tsx`),
+    resolve(moduleDir, "src", "pages", `${listPageName}.${view}`),
     preset.templates.moduleListPage({ scope, pageName: listPageName, moduleLabel }),
   );
   writeFileSync(
-    resolve(moduleDir, "src", "panels", "DetailPanel.tsx"),
+    resolve(moduleDir, "src", "panels", `DetailPanel.${view}`),
     preset.templates.moduleDetailPanel({ moduleLabel }),
   );
   writeFileSync(

@@ -94,34 +94,29 @@ export function createCreateJourneyCommand(preset: CliPreset) {
       const journeyExportName = `${journeyCamel}Journey`;
       const handleExportName = `${journeyCamel}Handle`;
       const persistenceExportName = `${journeyCamel}Persistence`;
+      const sc = preset.scaffold;
+      const journeyParams = {
+        scope,
+        journeyName: name,
+        journeyPascal,
+        journeyCamel,
+        modules,
+        withPersistence,
+      };
 
       // 1. Scaffold the journey package.
       mkdirSync(resolve(journeyDir, "src"), { recursive: true });
       writeFileSync(
         resolve(journeyDir, "package.json"),
-        journeyPackageJson(
-          {
-            scope,
-            journeyName: name,
-            journeyPascal,
-            journeyCamel,
-            modules,
-            withPersistence,
-          },
-          preset,
-        ),
+        sc.journeyPackageJson?.(journeyParams) ?? journeyPackageJson(journeyParams, preset),
       );
-      writeFileSync(resolve(journeyDir, "tsconfig.json"), journeyTsconfig());
+      writeFileSync(
+        resolve(journeyDir, "tsconfig.json"),
+        sc.journeyTsconfig?.() ?? journeyTsconfig(),
+      );
       writeFileSync(
         resolve(journeyDir, "src", "index.ts"),
-        journeyIndex({
-          scope,
-          journeyName: name,
-          journeyPascal,
-          journeyCamel,
-          modules,
-          withPersistence,
-        }),
+        sc.journeyIndex?.(journeyParams) ?? journeyIndex(journeyParams),
       );
       writeFileSync(
         resolve(journeyDir, "src", `${name}.ts`),
@@ -139,7 +134,12 @@ export function createCreateJourneyCommand(preset: CliPreset) {
       ensureJourneysInWorkspace(project.root);
 
       // 3. Add a shell dependency on the journey + the journeys runtime.
-      addJourneyToShellPackageJson(project.shellDir, { scope, journeyName: name });
+      addJourneyToShellPackageJson(project.shellDir, {
+        scope,
+        journeyName: name,
+        journeysPackage: preset.packages.journeys,
+        journeysVersion: preset.packages.journeysVersion,
+      });
 
       // 4. Optional persistence adapter under shell/src/. Written before
       //    we wire main.tsx so the import we add is immediately valid.
@@ -168,6 +168,8 @@ export function createCreateJourneyCommand(preset: CliPreset) {
         journeyExportName,
         handleExportName,
         persistenceExportName: withPersistence ? persistenceExportName : undefined,
+        journeysPackage: preset.packages.journeys,
+        mainFile: sc.entryMain,
       });
 
       const summary = [

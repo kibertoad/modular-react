@@ -14,11 +14,11 @@ Two sibling docs go deeper once you're past setup:
   depend on vue-router specifically: route shape, zones via `meta`,
   `useRouteData`, and the `beforeEach` auth guard.
 
-> **No scaffolder yet.** The React families ship a `create-app` CLI; the
-> `@modular-vue/cli` equivalent is still on the roadmap (PR-50). Until it lands,
-> this guide sets the workspace up **by hand** — which is worth doing once
-> regardless, because it shows exactly what the CLI would generate. Every step
-> is a file you write, and there are only a handful of them.
+> **Prefer the scaffolder?** `@modular-vue/cli` (binary `modular-vue`) generates
+> everything below — `modular-vue init my-app --scope @myorg --module dashboard`,
+> then `modular-vue create module|store|journey`. This guide still sets the
+> workspace up **by hand**, which is worth doing once regardless: it shows
+> exactly what the CLI generates, and every step is a single file you write.
 
 ## Prerequisites
 
