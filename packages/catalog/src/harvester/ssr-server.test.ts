@@ -29,7 +29,12 @@ describe("buildSsrServerConfig", () => {
     // threaded through so a Vue catalog config's `@vitejs/plugin-vue` reaches
     // the loader.
     const plugin = { name: "vue-stub" };
-    expect(buildSsrServerConfig(CWD, undefined, [plugin]).plugins).toEqual([plugin]);
+    const input = [plugin];
+    const forwarded = buildSsrServerConfig(CWD, undefined, input).plugins;
+    expect(forwarded).toEqual([plugin]);
+    // Defensively copied, not aliased — mutating the returned list must not
+    // leak back into the caller's array (mirrors the `dedupe` handling).
+    expect(forwarded).not.toBe(input);
     // Plugins compose with the resolve config (harvester shape).
     expect(buildSsrServerConfig(CWD, { dedupe: ["vue"] }, [plugin]).plugins).toEqual([plugin]);
   });

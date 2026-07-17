@@ -204,7 +204,7 @@ export interface CatalogConfig {
    * inert for files it doesn't handle, so a mixed React/Vue catalog can list
    * it unconditionally.
    */
-  readonly plugins?: PluginOption[];
+  readonly plugins?: readonly PluginOption[];
 
   /** Theme tokens injected as CSS custom properties at build time. */
   readonly theme?: CatalogTheme;

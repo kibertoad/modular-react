@@ -32,7 +32,7 @@ import type { CatalogResolve } from "../config/types.js";
 export function buildSsrServerConfig(
   cwd: string,
   resolveConfig?: CatalogResolve,
-  plugins?: PluginOption[],
+  plugins?: readonly PluginOption[],
 ): InlineConfig {
   return {
     root: cwd,
@@ -58,7 +58,7 @@ export function buildSsrServerConfig(
 export function createCatalogSsrServer(
   cwd: string,
   resolveConfig?: CatalogResolve,
-  plugins?: PluginOption[],
+  plugins?: readonly PluginOption[],
 ): Promise<ViteDevServer> {
   return createServer(buildSsrServerConfig(cwd, resolveConfig, plugins));
 }
