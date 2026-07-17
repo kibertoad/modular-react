@@ -42,6 +42,35 @@ Peer deps: `@modular-react/core`, `@modular-react/react`, `react`, `react-dom`.
 
 `@modular-react/journeys` is **not** a peer dependency. Compositions stays journeys-agnostic at the package level — `kind: "journey"` zone resolutions are wired through a generic [`RuntimeMountAdapter`](#runtime-mount-adapters) the consumer registers explicitly. If your app uses journey-in-zone, install `@modular-react/journeys` and call `registerMountAdapter("journey", createJourneyMountAdapter(...))` once at startup. See [Composing journeys inside zones](#composing-journeys-inside-zones).
 
+## Using this with Vue
+
+There's a full Vue 3 binding: **`@modular-vue/compositions`** (peer deps
+`@modular-frontend/core`, `@modular-vue/vue`, `vue`). The composition _engine_ —
+`defineComposition`, the runtime, scoped stores, validation, zone selectors, and
+every type — is framework-neutral (it lives in
+`@modular-frontend/compositions-engine`) and is re-exported identically by both
+bindings, so **composition definitions and zone selectors are written exactly
+the same way** whichever framework you ship.
+
+What changes is the UI layer:
+
+- Import `CompositionOutlet`, `CompositionsProvider`, `compositionsPlugin()`,
+  `useComposition`, and the panel composables (`useCompositionState`,
+  `useCompositionDispatch`, `useCompositionEmit`, `useCompositionZone`) from
+  `@modular-vue/compositions`.
+- The React outlet's render-prop `children(zones)` becomes a **scoped default
+  slot**: `<CompositionOutlet><template #default="zones">…<component :is="zones.main" />…</template></CompositionOutlet>`.
+  The host still owns layout; the framework owns each zone's content.
+- Panel composables return **Vue refs** (e.g. `useCompositionState` →
+  `ShallowRef<TState>`), matching the rest of the Vue binding.
+
+See [`examples/vue/editor-composition`](../../examples/vue/editor-composition)
+for a runnable three-zone composition, and
+[Getting started with Vue Router](../../docs/getting-started-vue-router.md) for
+the surrounding shell setup. The React code below uses React imports and JSX;
+translate the imports, the render-prop to a scoped slot, and the panels to SFCs
+for Vue — the composition and zone-selector contracts are unchanged.
+
 ## Mental model
 
 Three roles, strictly separated:

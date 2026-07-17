@@ -246,6 +246,65 @@ resolveNavHref<TContext>(
 
 The function takes a `Pick<..., "to" \| "label">` rather than the full item, so you can pass any object with those two fields — useful for tests or intermediate representations.
 
+## Reading navigation in a Vue shell
+
+The `NavigationItem` type and `resolveNavHref` are framework-neutral — they come
+from `@modular-frontend/core`, and everything above (the four generics, ordering,
+the `AppNavItem` alias, `resolveNavHref` semantics) applies unchanged to a Vue
+app. Only two things differ: modules import `defineModule` from
+`@modular-vue/core`, and the shell reads the manifest with the Vue
+`useNavigation` composable (from `@modular-vue/vue`, re-exported by
+`@modular-vue/runtime`) instead of the React hook.
+
+`useNavigation<AppNavItem>()` returns the resolved `NavigationManifest` as a
+**plain value** — navigation is set once at resolve time, so it isn't wrapped in
+a ref. The Vue equivalent of the `Sidebar.tsx` above:
+
+```vue
+<!-- components/Sidebar.vue -->
+<script setup lang="ts">
+import { RouterLink } from "vue-router";
+import { useNavigation } from "@modular-vue/vue";
+import { resolveNavHref } from "@modular-frontend/core";
+import type { AppNavItem } from "@myorg/app-shared";
+import { usePermissions } from "./permissions";
+import { useWorkspaceId } from "./workspace";
+
+const manifest = useNavigation<AppNavItem>();
+const { canPerform } = usePermissions();
+const workspaceId = useWorkspaceId();
+
+const visible = manifest.items.filter((item) => !item.meta?.action || canPerform(item.meta.action));
+</script>
+
+<template>
+  <ul>
+    <li v-for="item in visible" :key="item.label">
+      <RouterLink :to="resolveNavHref(item, { workspaceId })">{{ t(item.label) }}</RouterLink>
+      <span v-if="item.meta?.badge" class="badge">{{ item.meta.badge }}</span>
+    </li>
+  </ul>
+</template>
+```
+
+`TAction`'s link-vs-button switch translates directly — pick the element by
+looking at `item.action`:
+
+```vue
+<template>
+  <template v-for="item in manifest.items" :key="item.label">
+    <button v-if="item.action" type="button" @click="dispatchNavAction(item.action)">
+      {{ t(item.label) }}
+    </button>
+    <RouterLink v-else :to="resolveNavHref(item, ctx)">{{ t(item.label) }}</RouterLink>
+  </template>
+</template>
+```
+
+The manifest also exposes `.groups` (items bucketed by their `group` field) when
+you'd rather render section headers than a flat list — see the
+[`examples/vue/integration-manager`](../examples/vue/integration-manager) sidebar.
+
 ## Do I have to use generics?
 
 No. `NavigationItem` defaults to `label: string, to: string, meta: unknown, action: never` — existing modules keep compiling unchanged. The generics are opt-in, and each one pays for itself independently. Common adoption paths:
@@ -258,4 +317,6 @@ No. `NavigationItem` defaults to `label: string, to: string, meta: unknown, acti
 ## See also
 
 - [Shell Patterns (Fundamentals)](shell-patterns.md) — rest of the shell surface.
-- `@modular-react/core` README — full type reference.
+- [Shell Patterns for Vue Router](shell-patterns-vue-router.md) — the Vue shell
+  surface (zones and route data via `meta`, auth guard).
+- `@modular-react/core` / `@modular-frontend/core` README — full type reference.

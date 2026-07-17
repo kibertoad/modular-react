@@ -1,8 +1,10 @@
 # modular-react
 
-modular-react sits on top of React Router or TanStack Router and lets you split your app into self-contained modules. Each module declares its own routes, navigation items, slot contributions, and dependencies, and a typed registry composes them at startup.
+modular-react sits on top of your router — **React Router, TanStack Router, or Vue Router** — and lets you split your app into self-contained modules. Each module declares its own routes, navigation items, slot contributions, and dependencies, and a typed registry composes them at startup.
 
-The two router integrations are peers. Pick the one that matches the router you already ship.
+> **The name is historical.** The project started React-only; the module contract, registry, journeys, and compositions are now framework-neutral, and a full Vue 3 + vue-router family (`@modular-vue/*`) ships alongside the React families. The shared engine and core packages live under the neutral `@modular-frontend/*` scope.
+
+The router integrations are peers. Pick the one that matches the framework and router you already ship.
 
 ## The problem this solves
 
@@ -47,8 +49,10 @@ Once a workspace has accumulated more modules than any one team can keep in thei
 - `@tanstack-react-modules/*`: **v1.x**, considered stable for the APIs documented in the guides below.
 - `@modular-react/{core,react,testing}`: the shared foundation, stable at `1.x`. The router-integration packages depend on these and version independently.
 - `@modular-react/compositions`: **v0.1.x**, the surface and behavior are documented in [its README](packages/compositions/README.md) but breaking changes between 0.x minor versions are still possible.
+- `@modular-vue/*` (`core`, `runtime`, `vue`, `testing`, `journeys`, `compositions`): the Vue 3 + vue-router family, **v1.0**, at feature parity with `@react-router-modules/*` (see the [parity audit](docs/vue-support-tracker.md#parity-audit-pr-42)). Start with [Getting started with Vue Router](docs/getting-started-vue-router.md). The `@modular-vue/cli` scaffolder is still on the roadmap; until it lands, set the workspace up manually per the getting-started guide.
+- `@modular-frontend/*` (`core`, `testing`, `journeys-engine`, `compositions-engine`): the framework-neutral shared engine and core the React and Vue families both build on. Stable at the version of the package each was extracted from.
 
-All packages target **React 19** and **Node 22+**. The docs and CLI scaffolder assume **pnpm workspaces**, but nothing in the runtime or CLI is pnpm-specific; any local package resolution that understands the `workspace:*` protocol (Yarn Berry, Bun) will work after scaffolding with a few script edits. See each getting-started guide for the full pinned version set.
+The React families target **React 19**; the Vue family targets **Vue ^3.5** and **vue-router ^4.5**. All target **Node 22+**. The docs and CLI scaffolder assume **pnpm workspaces**, but nothing in the runtime or CLI is pnpm-specific; any local package resolution that understands the `workspace:*` protocol (Yarn Berry, Bun) will work after scaffolding with a few script edits. See each getting-started guide for the full pinned version set.
 
 ## Quickstart
 
@@ -62,10 +66,13 @@ npx @tanstack-react-modules/cli init my-app --scope @myorg --module dashboard
 cd my-app && pnpm install && pnpm dev
 ```
 
-For the walkthrough of what the scaffold produces and how to extend it, see the getting-started guide for your router:
+The **Vue family** has no scaffolder yet (`@modular-vue/cli` is on the roadmap), so its getting-started guide walks through a manual workspace setup — a handful of files, mirroring what the CLI would emit.
+
+For the walkthrough of what the scaffold produces (or how to build the workspace by hand, for Vue) and how to extend it, see the getting-started guide for your framework:
 
 - [Getting started with React Router](docs/getting-started-react-router.md)
 - [Getting started with TanStack Router](docs/getting-started-tanstack-router.md)
+- [Getting started with Vue Router](docs/getting-started-vue-router.md)
 
 > **Package manager:** the scaffold produces a **pnpm workspace**. Yarn Berry and Bun will work after scaffolding with minor script edits; **npm is not supported** because it doesn't implement the `workspace:*` protocol. Turborepo is orthogonal; run it on top of pnpm. See the getting-started guides for details.
 
@@ -77,12 +84,14 @@ Conceptual documentation for building apps with the framework. Start with a gett
 | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Getting started with React Router](docs/getting-started-react-router.md)          | Scaffold, tour the generated workspace, add modules and stores, turn on the auth guard.                                                                                                   |
 | [Getting started with TanStack Router](docs/getting-started-tanstack-router.md)    | Same walkthrough for the TSR integration, including the `staticData` type augmentation and `beforeLoad` auth guard.                                                                       |
+| [Getting started with Vue Router](docs/getting-started-vue-router.md)              | Manual workspace setup for the Vue 3 + vue-router family — modules, the registry, zones via `meta`, stores, and the `beforeEach` auth guard.                                              |
 | [Framework-mode (React Router v7)](docs/framework-mode-react-router.md)            | `resolveManifest()` integration with `@react-router/dev/vite` — keep file-based `routes.ts`, `+types/route.ts`, HMR, and SSR.                                                             |
 | [Framework-mode (TanStack Router & Start)](docs/framework-mode-tanstack-router.md) | `resolveManifest()` integration with `@tanstack/router-plugin` and TanStack Start — keep file-based `routeTree.gen.ts`, typed routes, SSR.                                                |
 | [Navigation: typed labels, dynamic hrefs, meta](docs/navigation.md)                | `NavigationItem<TLabel, TContext, TMeta>` — typed i18n keys, context-aware `to`, app-owned `meta` for permissions/badges.                                                                 |
 | [Shell Patterns (Fundamentals)](docs/shell-patterns.md)                            | Multi-zone layouts, command palette, module-to-shell communication, headless modules, optional deps, cross-store coordination.                                                            |
 | [Shell Patterns for React Router](docs/shell-patterns-react-router.md)             | Module route shape, route zones via `handle`, `useRouteData` for non-component metadata, auth guards, public shell routes.                                                                |
 | [Shell Patterns for TanStack Router](docs/shell-patterns-tanstack-router.md)       | Module route shape with `createRoute`/`getParentRoute`, route zones via `staticData`, `useRouteData`, `beforeLoad` auth.                                                                  |
+| [Shell Patterns for Vue Router](docs/shell-patterns-vue-router.md)                 | Router-owning vs framework mode, module route shape, zones and route data via `meta` (typed through `RouteMeta`), `useRouteData`, `beforeEach` auth.                                      |
 | [Workspace Patterns](docs/workspace-patterns.md)                                   | Tabbed workspaces, component-only modules, `useActiveZones`, per-session state via `createScopedStore`.                                                                                   |
 | [Sibling modules sharing a screen](docs/sibling-modules-shared-screen.md)          | One generic screen (e.g. an integration manager) rendered by several sibling modules with per-module config flowing through typed handle (React Router) or staticData (TanStack Router).  |
 | [Journeys](packages/journeys/README.md)                                            | Typed multi-module workflows with serializable shared state — entry/exit contracts, branch/complete/abort transitions, pluggable persistence.                                             |
@@ -170,6 +179,53 @@ authStore.subscribe(manifest.recalculateSlots);
 
 See [Framework-mode (TanStack Router & Start) guide](docs/framework-mode-tanstack-router.md) for the full walkthrough and the SSR considerations.
 
+The **Vue** family mirrors the same contract. A module is the same plain object (`defineModule` from `@modular-vue/core`), with `createRoutes()` returning a vue-router `RouteRecordRaw` and zones/route-data on the route's `meta`:
+
+```typescript
+// modules/billing/src/index.ts
+import { defineModule } from "@modular-vue/core";
+import type { RouteRecordRaw } from "vue-router";
+import BillingPage from "./BillingPage.vue";
+
+export default defineModule<AppDependencies, AppSlots>({
+  id: "billing",
+  version: "1.0.0",
+  createRoutes: (): RouteRecordRaw => ({
+    path: "billing",
+    component: BillingPage,
+    meta: { pageTitle: "Billing" },
+  }),
+  navigation: [{ label: "Billing", to: "/billing", group: "finance" }],
+  requires: ["auth"],
+});
+```
+
+The shell owns the router and installs the resolved manifest as a Vue plugin (or wraps `<router-view>` in `manifest.Providers` in framework mode):
+
+```typescript
+// shell/src/main.ts
+import { createApp } from "vue";
+import { createRouter, createWebHistory } from "vue-router";
+import { createModularApp, createRegistry } from "@modular-vue/runtime";
+import billing from "@myorg/billing-module";
+
+const registry = createRegistry<AppDependencies, AppSlots>({
+  stores: { auth: authStore },
+  services: { httpClient },
+});
+registry.register(billing);
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [{ path: "/", name: "root", component: ShellLayout }],
+});
+const manifest = createModularApp(registry, { router, parentRouteName: "root" });
+
+createApp(App).use(router).use(manifest).mount("#app");
+```
+
+See [Getting started with Vue Router](docs/getting-started-vue-router.md) and [Shell Patterns for Vue Router](docs/shell-patterns-vue-router.md) for the full walkthrough.
+
 ## Examples
 
 Runnable examples live under [`examples/`](examples/), split by router integration. Each is a self-contained pnpm workspace that resolves the library packages from this repo, so changes in `packages/*` are reflected the next time you run the example (some examples pin `workspace:*` on every dep, others declare library deps with semver ranges and rely on the repo's `.npmrc` `link-workspace-packages=true` — either way the local source wins):
@@ -180,6 +236,9 @@ Runnable examples live under [`examples/`](examples/), split by router integrati
 - [`examples/tanstack-router/customer-onboarding-journey/`](examples/tanstack-router/customer-onboarding-journey) — multi-module workflow with typed journeys (TanStack Router)
 - [`examples/react-router/editor-composition/`](examples/react-router/editor-composition) — multi-module screen via `@modular-react/compositions` (React Router)
 - [`examples/tanstack-router/editor-composition/`](examples/tanstack-router/editor-composition) — multi-module screen via `@modular-react/compositions` (TanStack Router)
+- [`examples/vue/integration-manager/`](examples/vue/integration-manager) — sibling modules sharing a screen (Vue Router)
+- [`examples/vue/customer-onboarding-journey/`](examples/vue/customer-onboarding-journey) — multi-module workflow with typed journeys (Vue Router)
+- [`examples/vue/editor-composition/`](examples/vue/editor-composition) — multi-module screen via `@modular-vue/compositions` (Vue Router)
 - [`examples/react-router/remote-capabilities/`](examples/react-router/remote-capabilities) — slots/navigation driven by a backend-served remote manifest
 - [`examples/react-router/active-project-manifest/`](examples/react-router/active-project-manifest) — per-project remote manifests swapped at runtime
 
@@ -216,6 +275,26 @@ See [`examples/README.md`](examples/README.md) for how to run them and how to ad
 | [`@tanstack-react-modules/runtime`](packages/tanstack-router-runtime) | Registry, route tree builder, app assembly with all providers wired.                                    |
 | [`@tanstack-react-modules/testing`](packages/tanstack-router-testing) | `renderModule` and `resolveModule` for testing modules in isolation.                                    |
 | [`@tanstack-react-modules/cli`](packages/tanstack-router-cli)         | Scaffolding CLI: `tanstack-react-modules init`, `tanstack-react-modules create module\|store\|journey`. |
+
+### Vue Router integration
+
+| Package                                                  | Description                                                                                                                                  |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@modular-vue/vue`](packages/vue)                       | Vue bindings: injection contexts, composables (`useStore`, `useSlots`, `useNavigation`, …), scoped stores, entry resolution, error boundary. |
+| [`@modular-vue/core`](packages/vue-core)                 | Module definition with vue-router `RouteRecordRaw` support (`createRoutes()`), `defineSlots`, the `RouteMeta` convention.                    |
+| [`@modular-vue/runtime`](packages/vue-runtime)           | Registry, `router.addRoute()` route builder, `resolve()` / `resolveManifest()` app assembly, zones and route data.                           |
+| [`@modular-vue/testing`](packages/vue-testing)           | `renderModule`, `renderJourney`, `resolveModule`, `createMockStore`, `preloadEntries`.                                                       |
+| [`@modular-vue/journeys`](packages/vue-journeys)         | Vue journey provider, composables, `<JourneyOutlet>`, `<ModuleTab>`, `useWaitForExit`, registry plugin.                                      |
+| [`@modular-vue/compositions`](packages/vue-compositions) | Vue composition provider, panel/host composables, `<CompositionOutlet>` (scoped-slot), registry plugin.                                      |
+
+### Framework-neutral engine (shared by React and Vue)
+
+| Package                                                                 | Description                                                                                                           |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| [`@modular-frontend/core`](packages/frontend-core)                      | The router- and framework-neutral core: types, slots, navigation, validation, store, the `UiComponent`/`UiNode` seam. |
+| [`@modular-frontend/testing`](packages/frontend-testing)                | Neutral `resolveModule` + `createMockStore`, re-exported by each binding's testing package.                           |
+| [`@modular-frontend/journeys-engine`](packages/journeys-engine)         | The journey runtime, validation, persistence, and authoring surface — no UI framework dependency.                     |
+| [`@modular-frontend/compositions-engine`](packages/compositions-engine) | The composition runtime, scoped stores, validation, and authoring surface — no UI framework dependency.               |
 
 ## Architecture
 

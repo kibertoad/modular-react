@@ -1,6 +1,6 @@
 # Vue support initiative: plan and tracker
 
-Status: **Phase 4 in progress** (Phase 0: PR-01, PR-02, PR-03 landed; Phase 1: PR-10, PR-11, PR-12 landed; Phase 2: PR-20, PR-21, PR-22, PR-23, PR-24 landed; Phase 3: PR-30, PR-31, PR-32, PR-33, PR-34 landed; Phase 4: PR-40 example apps landed). Next up: PR-41 (docs), PR-42 (parity audit). Last updated: 2026-07-17.
+Status: **Phase 4 complete — `@modular-vue/*` promoted to 1.0** (Phase 0: PR-01, PR-02, PR-03 landed; Phase 1: PR-10, PR-11, PR-12 landed; Phase 2: PR-20, PR-21, PR-22, PR-23, PR-24 landed; Phase 3: PR-30, PR-31, PR-32, PR-33, PR-34 landed; Phase 4: PR-40 example apps, PR-41 docs, PR-42 parity audit landed). The parity audit found two follow-up gaps (PR-35: Vue journey mount adapter; PR-43: `simulateJourney` re-export) — see [Parity audit (PR-42)](#parity-audit-pr-42). Next up: Phase 5 tooling (PR-04/PR-50 CLI, PR-51 catalog). Last updated: 2026-07-17.
 Background and feasibility reasoning: [vue-port-analysis.md](./vue-port-analysis.md).
 
 This document is the single source of truth for the multi-PR effort to bring the framework to Vue 3, including full Journeys and Compositions support. Update the status board and per-PR checkboxes as PRs land; record decision outcomes in the Decisions section.
@@ -327,13 +327,14 @@ Enabling changes (forced by the framework, applied outside the example dirs):
 CI: registered the three e2e shells in the `examples-e2e` matrix (`@example-vue-integration-manager/shell`, `@example-vue-onboarding/shell`, `@example-vue-editor/shell`) and extended the changed-files trigger to the vue binding / journeys / compositions / engine / frontend-core paths. The always-on `examples` job already typechecks + builds every example.
 Acceptance: met. `pnpm --filter "@example-vue-*/shell" dev` runs each app; each ships a headless Playwright smoke suite (3 + 6 + 6 specs) that boots the shell on Vite and drives the core flow (navigation + route-data adaptation; start → advance → reload-resume → terminal → close; zone swap + cross-panel state write-through). All pass locally.
 
-**PR-41 (M, docs only): Documentation.**
-`getting-started-vue-router.md`, `shell-patterns-vue-router.md` (route shape, zones via `meta`, `useRouteData`, `beforeEach` auth), Vue sections in `docs/navigation.md`, journeys and compositions README updates, README package-map and quickstart updates, tagline adjustment per D1.
-Acceptance: a developer can go from `npx @modular-vue/cli init` (after PR-50) or manual setup to a running two-module app following only the docs.
+**PR-41 (M, docs only): Documentation.** Done.
+Added `getting-started-vue-router.md` (a **manual-setup** walkthrough — the `@modular-vue/cli` scaffolder is PR-50, still todo, so the guide builds the workspace by hand: contract → module → shell → second module → zones via `meta` → store → `beforeEach` auth) and `shell-patterns-vue-router.md` (router-owning vs framework mode, module route shape, zones and route data via `meta`, the `RouteMeta` augmentation, `useRouteData`, and the `authGuard` → `router.beforeEach` boundary). Added a "Reading navigation in a Vue shell" section + Vue "See also" links to `docs/navigation.md`; a "Using this with Vue" section to the journeys and compositions READMEs (pointing at `@modular-vue/journeys` / `@modular-vue/compositions`, the shared engine, and the ref-returning composables); and to the root README: the D1 tagline softening (React Router / TanStack / Vue Router, with a "the name is historical" note), a Vue quickstart entry, Vue getting-started / shell-patterns guide rows, a compact Vue `defineModule` + shell snippet, the three `examples/vue/*` entries, and package tables for the Vue Router integration and the framework-neutral `@modular-frontend/*` engine.
+Deviation from the plan, forced by sequencing: the acceptance line named `npx @modular-vue/cli init` "after PR-50"; since PR-50 hasn't landed, the getting-started guide is the manual-setup path and flags the CLI as roadmap. All doc code is grounded in the shipped `examples/vue/*` apps and the real package exports.
+Acceptance: met via the manual-setup path — a developer can go from an empty directory to a running two-module Vue app following only `getting-started-vue-router.md`.
 
-**PR-42 (S): Parity audit.**
-Compare exported API surface and test-case inventory between the React-router and vue-router families; file follow-up issues for gaps; add a CI check or checklist that new core features must state their Vue impact.
-Acceptance: a parity table appended to this document with no unexplained gaps; Vue packages promoted from 0.x to 1.0 after this PR.
+**PR-42 (S): Parity audit.** Done.
+Compared the exported API surface and the test-case inventory of every `@modular-vue/*` package against its React-router counterpart (and the shared `@modular-frontend/*` engine). Results are in the [Parity audit (PR-42)](#parity-audit-pr-42) section below: functional parity holds across all six packages, with two follow-up gaps filed (PR-35: no Vue `createJourneyMountAdapter`, so journey-in-composition-zone is not yet wireable in the Vue family; PR-43: `simulateJourney` / `JourneySimulator` is not re-exported by any Vue package). Added a "new core features must state their Vue impact" line to Working agreements and a repo PR-template checklist enforcing it. Promoted all six `@modular-vue/*` packages from `0.1.0` to `1.0.0` and bumped their inter-package peer ranges to `^1.0.0`.
+Acceptance: met — parity table appended below with every gap explained and tracked; Vue packages promoted to 1.0.
 
 ### Phase 5: tooling and stretch
 
@@ -346,6 +347,98 @@ Acceptance: catalog build over `examples/vue` produces a correct model including
 
 **PR-52 (stretch, L): Nuxt module.** Blocked by D6 and demand signal.
 A Nuxt module that registers the family at app setup, plus a `framework-mode-nuxt.md` doc. Deliberately unscoped until the SPA story has users.
+
+## Parity audit (PR-42)
+
+Compares every `@modular-vue/*` package against its React-router counterpart —
+exported API surface and test-case inventory — and records each difference as
+either an **idiomatic difference** (same capability, framework-appropriate shape)
+or a **gap** (missing capability, tracked as a follow-up). Test counts are from a
+full `pnpm --filter … test` run; the React-router family is the reference
+because the Vue family mirrors it package-for-package (decision D1).
+
+### Package parity
+
+| `@modular-vue/*`            | React counterpart               | Shared engine/core                      | Surface parity                                                                    |
+| --------------------------- | ------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------- |
+| `@modular-vue/vue`          | `@modular-react/react`          | `@modular-frontend/core`                | Full — composables for hooks, injection keys for contexts                         |
+| `@modular-vue/core`         | `@react-router-modules/core`    | `@modular-frontend/core`                | Full + `ModuleRouteMeta` (typed `meta`, no RR analog)                             |
+| `@modular-vue/runtime`      | `@react-router-modules/runtime` | `@modular-frontend/core`                | Full — route-builder/provider factories replace RR's route-tree + context objects |
+| `@modular-vue/testing`      | `@react-router-modules/testing` | `@modular-frontend/testing`             | Full **except `simulateJourney`** (gap PR-43); adds `preloadEntries`              |
+| `@modular-vue/journeys`     | `@modular-react/journeys`       | `@modular-frontend/journeys-engine`     | Full **except `createJourneyMountAdapter`** (gap PR-35)                           |
+| `@modular-vue/compositions` | `@modular-react/compositions`   | `@modular-frontend/compositions-engine` | Full — render-prop becomes a scoped default slot                                  |
+
+### Idiomatic differences (same capability, different shape)
+
+These are deliberate and expected; they are not gaps.
+
+- **Hooks → composables; context objects → injection keys.** React exports
+  context objects (`NavigationContext`, `SlotsContext`, `ModulesContext`,
+  `RecalculateSlotsContext`, `DynamicSlotsProvider`); Vue exports the equivalent
+  injection keys + `provide*`/`use*` helpers (`navigationKey`/`provideNavigation`,
+  `slotsKey`, `modulesKey`, `moduleExitKey`, …). `createSharedHooks` →
+  `createSharedComposables`.
+- **Reactive composables return refs.** `useZones`/`useRouteData`/`useActiveZones`
+  return a `ComputedRef`; `useSlots`/`useStore`/`useReactiveService` return a
+  `Ref`; the journeys/compositions state composables return `ComputedRef`/
+  `ShallowRef`. The set-once contexts (`useNavigation`, `useModules`,
+  `useService`) return plain values, matching React's plain returns.
+- **Route-tree builder → runtime graft.** vue-router registers routes at runtime,
+  so React's `buildRouteTree` (returns a nested tree for `createRouter`) becomes
+  `graftModuleRoutes` + `createLazyModuleRoute` (mutate a live router via
+  `router.addRoute()`). The Vue runtime therefore also exports
+  `createModularProvidersPlugin` / `createModularProvidersComponent` and
+  `createModularApp`, which have no RR analog because RR owns the app root.
+- **Component prop-type exports are React-only.** RR exports `ModuleRouteProps`,
+  `ModuleTabProps`, `JourneyProviderProps`, `CompositionsProviderProps`,
+  `ModuleExitProviderProps`. Vue `defineComponent`s declare props internally and
+  infer them, so there are no prop-type exports to mirror. No capability lost.
+- **Typed `meta` beats untyped `handle`.** `@modular-vue/core` adds
+  `ModuleRouteMeta` and the app augments vue-router's global `RouteMeta`, so route
+  data is type-checked at the source — stronger than RR7's `unknown` `handle` +
+  per-call-site `satisfies`, on par with TanStack's `StaticDataRouteOption`.
+- **`createMockStore` is shared.** Both families re-export it from
+  `@modular-frontend/testing` (the router-specific React CLIs keep a local
+  zustand `createMockStore`; that split is React-internal and irrelevant to Vue).
+
+### Gaps (tracked follow-ups)
+
+- **PR-35 — `@modular-vue/journeys` `createJourneyMountAdapter` (journey-in-zone).**
+  React ships `createJourneyMountAdapter` so a composition zone can mount a
+  journey (`registerMountAdapter("journey", createJourneyMountAdapter(runtime))`).
+  The Vue `CompositionOutlet` already _supports_ `kind: "journey"` resolutions and
+  its own error message instructs the user to register exactly such an adapter —
+  but no Vue `createJourneyMountAdapter` exists to pass. The adapter is
+  binding-specific (it supplies the framework `JourneyOutlet` as `Outlet`), so it
+  was never ported in PR-30/PR-31. Until PR-35 lands, journey-in-composition-zone
+  is the one advanced cross-feature integration not wireable on Vue; single
+  journeys, single compositions, and every other surface are at parity. This is
+  the top post-1.0 follow-up.
+- **PR-43 — `simulateJourney` / `JourneySimulator` re-export.** The headless
+  journey simulator is framework-neutral and lives in the engine
+  (`@modular-frontend/journeys-engine/testing`); React re-exports it from
+  `@react-router-modules/testing`. No Vue package re-exports it, so Vue users must
+  import it from the engine directly. A one-line re-export (mirroring React's
+  `@modular-react/journeys/testing` subpath) closes it; deferred out of the
+  audit PR to avoid adding surface immediately before the 1.0 tag.
+
+### Test inventory
+
+| Package             | Vue tests (files) | React counterpart tests (files) | Notes                                                           |
+| ------------------- | ----------------- | ------------------------------- | --------------------------------------------------------------- |
+| `vue` / `react`     | 75 (11)           | 68 (11)                         | +reactivity (subscribe/unsubscribe, selector eq.)               |
+| `core`              | 15 (4)            | 14 (2)                          | +`route-meta` / `index` barrel `.test-d`                        |
+| `runtime`           | 124 (12)          | 109 (9)                         | +`journeys-integration`, split registry suites                  |
+| `testing`           | 20 (3)            | 9 (2) + 6 shared                | `resolve-module` (6) now in `@modular-frontend/testing`         |
+| `journeys`          | 84 (10)           | 72 (8)                          | engine (346) shared via `@modular-frontend/journeys-engine`     |
+| `compositions`      | 62 (10)           | 63 (8)                          | engine (52) shared via `@modular-frontend/compositions-engine`  |
+| **Total (binding)** | **380 (50)**      | **335 (40)**                    | React-only StrictMode / sync-thenable cases excepted throughout |
+
+Every Vue suite ports its React counterpart case-for-case except the React-only
+cases the per-PR notes above enumerate (StrictMode double-mount, `React.lazy`
+synchronous-thenable fallback-flash). The higher Vue counts come from added
+reactivity/navigation-recompute cases and from splitting some React suites
+(e.g. registry plugins vs. registry journeys) rather than from new behavior.
 
 ## Dependency graph
 
@@ -368,10 +461,10 @@ Parallelizable tracks once Phase 0 lands: (a) PR-10..12 binding layer, (b) PR-30
 
 ## Versioning and release
 
-- All Vue packages start at `0.1.0` and stay 0.x until PR-42.
+- All Vue packages start at `0.1.0` and stay 0.x until PR-42. **(Done — PR-42 promoted all six `@modular-vue/*` packages from `0.1.0` to `1.0.0` and bumped their inter-package peer ranges to `^1.0.0`. Peers on `@modular-frontend/*`, `vue`, `vue-router`, and `@vue/test-utils` are unchanged.)**
 - Engine packages (PR-02/03) start at the version of the package they were extracted from, since their API is already stable.
 - `@modular-react/journeys` and `@modular-react/compositions` releases after extraction are patch/minor (re-export shim, no API change).
-- 1.0 for `@modular-vue/*` and `@modular-vue/*` ships together, after the parity audit, example, and docs.
+- 1.0 for the whole `@modular-vue/*` family ships together, after the parity audit, example, and docs. **(Shipped in PR-42.)**
 
 ## Risks
 
@@ -386,36 +479,39 @@ Parallelizable tracks once Phase 0 lands: (a) PR-10..12 binding layer, (b) PR-30
 
 Update the Status column as PRs move: `todo` → `in progress` → `in review` → `done` (link the PR).
 
-| PR    | Title                                       | Size | Depends on          | Status     |
-| ----- | ------------------------------------------- | ---- | ------------------- | ---------- |
-| PR-01 | Neutralize renderable types in core         | S    | —                   | done (#54) |
-| PR-02 | Extract journeys engine                     | L    | D2                  | done (#55) |
-| PR-03 | Extract compositions engine                 | L    | D2                  | done (#56) |
-| PR-04 | cli-core framework-pluggable templates      | M    | —                   | todo       |
-| PR-05 | CI/publish plumbing, scope reservation      | S    | D1                  | todo       |
-| PR-10 | @modular-vue/vue: stores and context        | M    | PR-01               | done       |
-| PR-11 | @modular-vue/vue: rendering pieces          | M    | PR-10               | done       |
-| PR-12 | @modular-vue/testing                        | S    | PR-11               | done       |
-| PR-20 | @modular-vue/core                           | M    | PR-10               | done       |
-| PR-21 | runtime: registry                           | M    | PR-20               | done       |
-| PR-22 | runtime: route building, app plugin, guards | M    | PR-21               | done       |
-| PR-23 | runtime: zones and route data               | M    | PR-22               | done       |
-| PR-24 | @modular-vue/testing renderModule           | S    | PR-23               | done       |
-| PR-30 | vue journeys: provider and composables      | M    | PR-02, PR-10        | done (#69) |
-| PR-31 | vue journeys: outlet                        | L    | PR-30               | done       |
-| PR-32 | journeys wired into runtime + renderJourney | M    | PR-22, PR-31        | done       |
-| PR-33 | vue compositions: provider and composables  | M    | PR-03, PR-10        | done (#72) |
-| PR-34 | vue compositions: outlet                    | L    | PR-33               | done       |
-| PR-40 | examples/vue                                | L    | PR-23, PR-32, PR-34 | done       |
-| PR-41 | Documentation                               | M    | PR-40               | todo       |
-| PR-42 | Parity audit, promote to 1.0                | S    | PR-40               | todo       |
-| PR-50 | @modular-vue/cli                            | M    | PR-04, PR-40        | todo       |
-| PR-51 | Catalog Vue support                         | S    | PR-40               | todo       |
-| PR-52 | Nuxt module (stretch)                       | L    | D6, 1.0             | todo       |
+| PR    | Title                                                             | Size | Depends on          | Status                        |
+| ----- | ----------------------------------------------------------------- | ---- | ------------------- | ----------------------------- |
+| PR-01 | Neutralize renderable types in core                               | S    | —                   | done (#54)                    |
+| PR-02 | Extract journeys engine                                           | L    | D2                  | done (#55)                    |
+| PR-03 | Extract compositions engine                                       | L    | D2                  | done (#56)                    |
+| PR-04 | cli-core framework-pluggable templates                            | M    | —                   | todo                          |
+| PR-05 | CI/publish plumbing, scope reservation                            | S    | D1                  | todo                          |
+| PR-10 | @modular-vue/vue: stores and context                              | M    | PR-01               | done                          |
+| PR-11 | @modular-vue/vue: rendering pieces                                | M    | PR-10               | done                          |
+| PR-12 | @modular-vue/testing                                              | S    | PR-11               | done                          |
+| PR-20 | @modular-vue/core                                                 | M    | PR-10               | done                          |
+| PR-21 | runtime: registry                                                 | M    | PR-20               | done                          |
+| PR-22 | runtime: route building, app plugin, guards                       | M    | PR-21               | done                          |
+| PR-23 | runtime: zones and route data                                     | M    | PR-22               | done                          |
+| PR-24 | @modular-vue/testing renderModule                                 | S    | PR-23               | done                          |
+| PR-30 | vue journeys: provider and composables                            | M    | PR-02, PR-10        | done (#69)                    |
+| PR-31 | vue journeys: outlet                                              | L    | PR-30               | done                          |
+| PR-32 | journeys wired into runtime + renderJourney                       | M    | PR-22, PR-31        | done                          |
+| PR-33 | vue compositions: provider and composables                        | M    | PR-03, PR-10        | done (#72)                    |
+| PR-34 | vue compositions: outlet                                          | L    | PR-33               | done                          |
+| PR-40 | examples/vue                                                      | L    | PR-23, PR-32, PR-34 | done                          |
+| PR-41 | Documentation                                                     | M    | PR-40               | done                          |
+| PR-42 | Parity audit, promote to 1.0                                      | S    | PR-40               | done                          |
+| PR-35 | @modular-vue/journeys createJourneyMountAdapter (journey-in-zone) | S    | PR-31, PR-34        | todo (parity-audit follow-up) |
+| PR-43 | @modular-vue/testing simulateJourney re-export                    | S    | PR-42               | todo (parity-audit follow-up) |
+| PR-50 | @modular-vue/cli                                                  | M    | PR-04, PR-40        | todo                          |
+| PR-51 | Catalog Vue support                                               | S    | PR-40               | todo                          |
+| PR-52 | Nuxt module (stretch)                                             | L    | D6, 1.0             | todo                          |
 
 ## Working agreements
 
 - One PR per row above; if a PR grows past its size class, split it and add a row rather than letting it balloon.
 - Every PR that adds a Vue analog of a React file names the React source file in its description, so reviewers can diff intent.
 - Every PR updates this document (status board, decision outcomes, and any scope changes) in the same commit.
-- No Vue package publishes above 0.x before PR-42 is done.
+- No Vue package publishes above 0.x before PR-42 is done. **(Satisfied — PR-42 promoted all `@modular-vue/*` to 1.0.)**
+- **Every core feature change states its Vue impact.** Now that `@modular-vue/*` is 1.0, a change to `@modular-frontend/*` (core, engines, testing) or a new capability in a React binding must say, in the PR description, whether the Vue family needs the same change — and either make it or file a follow-up row here. The repo PR template (`.github/PULL_REQUEST_TEMPLATE.md`) carries a checklist item enforcing this. Keeping the engines extracted means most feature work lands framework-neutral by construction, so the common answer is "covered by the shared engine."
