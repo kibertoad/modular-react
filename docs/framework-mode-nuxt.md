@@ -120,7 +120,7 @@ Write the plugin yourself when you need the non-serializable options —
 
 ```ts
 // plugins/modular-vue.ts
-import { installModularApp } from "@modular-vue/nuxt";
+import { installModularApp } from "@modular-vue/nuxt/runtime";
 import buildRegistry from "~/modular/registry";
 
 export default defineNuxtPlugin((nuxtApp) => {

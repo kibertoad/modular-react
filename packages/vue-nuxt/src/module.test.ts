@@ -17,7 +17,7 @@ describe("buildModularPluginContents", () => {
     const src = buildModularPluginContents({ registry: "~/modular/registry" });
 
     expect(src).toContain('import { defineNuxtPlugin } from "#app";');
-    expect(src).toContain('import { installModularApp } from "@modular-vue/nuxt";');
+    expect(src).toContain('import { installModularApp } from "@modular-vue/nuxt/runtime";');
     expect(src).toContain('import registryExport from "~/modular/registry";');
     expect(src).toContain("export default defineNuxtPlugin((nuxtApp) => {");
     expect(src).toContain("installModularApp(nuxtApp, registry,");
@@ -59,7 +59,7 @@ describe("the Nuxt module definition", () => {
       name: "@modular-vue/nuxt",
       configKey: "modularVue",
     });
-    expect(modularVueModule.defaults).toEqual({ registry: "~/modular.registry" });
+    expect(modularVueModule.defaults).toEqual({ registry: "~/modular/registry" });
   });
 
   it("transpiles the package and registers the runtime plugin template", () => {

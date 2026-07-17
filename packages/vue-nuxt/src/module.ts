@@ -20,7 +20,7 @@ export interface ModuleOptions {
    * client-only app.
    *
    * Resolved by Nuxt's builder, so a `~`/`@` alias or a bare package specifier
-   * both work. Defaults to `~/modular.registry`.
+   * both work. Defaults to `~/modular/registry`.
    */
   registry: string;
 
@@ -36,8 +36,12 @@ export interface ModuleOptions {
  * Build the source of the runtime plugin the module injects. Kept pure (string
  * in, string out) so it is unit-testable without booting Nuxt: the returned
  * code imports the user registry, unwraps a factory export, and hands both to
- * {@link installModularApp} inside a `defineNuxtPlugin`, exposing the manifest
- * as `$modular`.
+ * `installModularApp` inside a `defineNuxtPlugin`, exposing the manifest as
+ * `$modular`.
+ *
+ * The plugin imports `installModularApp` from the `@modular-vue/nuxt/runtime`
+ * subpath (not the package barrel) so the app's runtime bundle never pulls in
+ * `@nuxt/kit`, which the barrel's Nuxt-module default export depends on.
  *
  * `#app` and the registry path are resolved by Nuxt's builder when this
  * template is materialized inside a real app, so nothing here is evaluated at
@@ -49,7 +53,7 @@ export function buildModularPluginContents(options: ModuleOptions): string {
     options.parentRouteName != null ? JSON.stringify(options.parentRouteName) : "undefined";
 
   return `import { defineNuxtPlugin } from "#app";
-import { installModularApp } from "@modular-vue/nuxt";
+import { installModularApp } from "@modular-vue/nuxt/runtime";
 import registryExport from ${registryPath};
 
 export default defineNuxtPlugin((nuxtApp) => {
@@ -83,7 +87,7 @@ const module: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>({
     compatibility: { nuxt: ">=3.0.0" },
   },
   defaults: {
-    registry: "~/modular.registry",
+    registry: "~/modular/registry",
   },
   setup(options, nuxt) {
     // The package ships ESM/TS; transpile it so Nuxt's build handles the

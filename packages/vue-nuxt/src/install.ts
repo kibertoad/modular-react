@@ -78,7 +78,7 @@ export interface InstallModularAppOptions<
  *
  * ```ts
  * // plugins/modular-vue.ts
- * import { installModularApp } from "@modular-vue/nuxt";
+ * import { installModularApp } from "@modular-vue/nuxt/runtime";
  * import { buildRegistry } from "~/modular/registry";
  *
  * export default defineNuxtPlugin((nuxtApp) => {
