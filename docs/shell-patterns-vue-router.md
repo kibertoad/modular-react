@@ -351,5 +351,7 @@ createRoutes: (): RouteRecordRaw => ({
   running two-module app.
 - [Navigation: typed labels, dynamic hrefs, meta](navigation.md) — includes a
   Vue reading example.
+- [Framework-mode (Nuxt 3)](framework-mode-nuxt.md) — run the family inside a
+  Nuxt app with `@modular-vue/nuxt`.
 - `@modular-vue/runtime` README — `createRegistry`, `resolve`, `resolveManifest`,
   and the composables.
