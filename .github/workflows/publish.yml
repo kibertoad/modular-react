@@ -139,6 +139,54 @@ jobs:
               - 'packages/tanstack-router-testing/src/**'
               - 'packages/tanstack-router-testing/package.json'
               - 'packages/tanstack-router-testing/README.md'
+            # Shared framework-neutral engines (@modular-frontend/*, D2) —
+            # extracted from the React packages and consumed by both the React
+            # and Vue families, so they publish on their own cadence.
+            pkg_fe_core:
+              - 'packages/frontend-core/src/**'
+              - 'packages/frontend-core/package.json'
+              - 'packages/frontend-core/README.md'
+            pkg_fe_testing:
+              - 'packages/frontend-testing/src/**'
+              - 'packages/frontend-testing/package.json'
+              - 'packages/frontend-testing/README.md'
+            pkg_fe_journeys_engine:
+              - 'packages/journeys-engine/src/**'
+              - 'packages/journeys-engine/package.json'
+              - 'packages/journeys-engine/README.md'
+            pkg_fe_compositions_engine:
+              - 'packages/compositions-engine/src/**'
+              - 'packages/compositions-engine/package.json'
+              - 'packages/compositions-engine/README.md'
+            # Vue Router family (@modular-vue/*).
+            pkg_vue:
+              - 'packages/vue/src/**'
+              - 'packages/vue/package.json'
+              - 'packages/vue/README.md'
+            pkg_vue_core:
+              - 'packages/vue-core/src/**'
+              - 'packages/vue-core/package.json'
+              - 'packages/vue-core/README.md'
+            pkg_vue_runtime:
+              - 'packages/vue-runtime/src/**'
+              - 'packages/vue-runtime/package.json'
+              - 'packages/vue-runtime/README.md'
+            pkg_vue_testing:
+              - 'packages/vue-testing/src/**'
+              - 'packages/vue-testing/package.json'
+              - 'packages/vue-testing/README.md'
+            pkg_vue_journeys:
+              - 'packages/vue-journeys/src/**'
+              - 'packages/vue-journeys/package.json'
+              - 'packages/vue-journeys/README.md'
+            pkg_vue_compositions:
+              - 'packages/vue-compositions/src/**'
+              - 'packages/vue-compositions/package.json'
+              - 'packages/vue-compositions/README.md'
+            pkg_vue_cli:
+              - 'packages/vue-cli/src/**'
+              - 'packages/vue-cli/package.json'
+              - 'packages/vue-cli/README.md'
 
       - name: Build dynamic matrix
         id: build-matrix
@@ -161,6 +209,17 @@ jobs:
             ["pkg_tr_core"]="tanstack-router-core:@tanstack-react-modules/core"
             ["pkg_tr_runtime"]="tanstack-router-runtime:@tanstack-react-modules/runtime"
             ["pkg_tr_testing"]="tanstack-router-testing:@tanstack-react-modules/testing"
+            ["pkg_fe_core"]="frontend-core:@modular-frontend/core"
+            ["pkg_fe_testing"]="frontend-testing:@modular-frontend/testing"
+            ["pkg_fe_journeys_engine"]="journeys-engine:@modular-frontend/journeys-engine"
+            ["pkg_fe_compositions_engine"]="compositions-engine:@modular-frontend/compositions-engine"
+            ["pkg_vue"]="vue:@modular-vue/vue"
+            ["pkg_vue_core"]="vue-core:@modular-vue/core"
+            ["pkg_vue_runtime"]="vue-runtime:@modular-vue/runtime"
+            ["pkg_vue_testing"]="vue-testing:@modular-vue/testing"
+            ["pkg_vue_journeys"]="vue-journeys:@modular-vue/journeys"
+            ["pkg_vue_compositions"]="vue-compositions:@modular-vue/compositions"
+            ["pkg_vue_cli"]="vue-cli:@modular-vue/cli"
           )
 
           echo "Changed filters: $CHANGED"
