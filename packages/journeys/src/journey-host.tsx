@@ -23,10 +23,16 @@ import { useJourneyContext } from "./provider.js";
  * *same* host; this covers a *different* host claiming the same id. Keyed by
  * runtime (a `WeakMap`, so it drops when the runtime is collected) then by
  * instance id.
+ *
+ * The value is a **set** of owner tokens, not a single one: two hosts can be
+ * mounted on the same persisted id at once (concurrently, or across a route
+ * swap), and only when the last of them unmounts should the instance be ended
+ * and forgotten. A single "latest owner" would let the newer host, unmounting
+ * first, tear the instance down while the older one is still showing it.
  */
-const hostOwners = new WeakMap<JourneyRuntime, Map<InstanceId, symbol>>();
+const hostOwners = new WeakMap<JourneyRuntime, Map<InstanceId, Set<symbol>>>();
 
-function ownersFor(runtime: JourneyRuntime): Map<InstanceId, symbol> {
+function ownersFor(runtime: JourneyRuntime): Map<InstanceId, Set<symbol>> {
   let owners = hostOwners.get(runtime);
   if (!owners) {
     owners = new Map();
@@ -163,15 +169,20 @@ export function useJourneyHost<TInput>(
       idRef.current = runtime.start(h.id, i);
     }
     const id = idRef.current;
-    // Claim ownership of the id. A previous host that resumed this same id and
-    // is mid-teardown will see it no longer owns the id and skip its cleanup.
-    ownersFor(runtime).set(id, ownerToken);
+    // Claim ownership of the id by adding this mount's token to the id's owner
+    // set (creating it on first mount).
+    const owners = ownersFor(runtime);
+    let ownerSet = owners.get(id);
+    if (!ownerSet) {
+      ownerSet = new Set();
+      owners.set(id, ownerSet);
+    }
+    ownerSet.add(ownerToken);
     setInstanceId(id);
 
     return () => {
       mountedRef.current = false;
       if (!id) return;
-      const owners = ownersFor(runtime);
       // Deferred one microtask, matching `<JourneyOutlet>`: StrictMode fires
       // cleanup synchronously and then remounts the same component, and
       // tearing the journey down on its first visit would be a regression a
@@ -179,10 +190,14 @@ export function useJourneyHost<TInput>(
       queueMicrotask(() => {
         // StrictMode remounted this same host, so it is live again.
         if (mountedRef.current) return;
-        // A different host claimed the id (a route change resuming the same
-        // persisted instance); tearing down here would destroy the live
-        // instance it is presenting.
-        if (owners.get(id) !== ownerToken) return;
+        const set = owners.get(id);
+        if (!set) return;
+        // Drop this host's claim. Only tear down when no host still owns the id
+        // — another host may share it (a route swap resuming the same persisted
+        // instance, or two concurrent hosts), and it would keep showing the
+        // instance we would otherwise end and forget.
+        set.delete(ownerToken);
+        if (set.size > 0) return;
         owners.delete(id);
         idRef.current = null;
         // `end` first, then `forget`: `forget` is a no-op on an instance that

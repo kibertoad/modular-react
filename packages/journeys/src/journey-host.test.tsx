@@ -284,6 +284,51 @@ describe("<JourneyHost>", () => {
     expect(screen.getByText("step-a")).toBeDefined();
   });
 
+  it("tears down a shared instance only when the last concurrent host unmounts", async () => {
+    // Two hosts mounted at once resolve to the same persisted instance. The
+    // newer one unmounting first must not end+forget the instance the older is
+    // still showing — teardown waits for the last owner.
+    const persistence = createMemoryPersistence<void, Record<string, never>>({
+      keyFor: ({ journeyId }) => journeyId,
+    });
+    const runtime = createJourneyRuntime([{ definition: journey, options: { persistence } }], {
+      modules,
+      debug: false,
+    });
+
+    function App({ hosts }: { hosts: 0 | 1 | 2 }) {
+      return (
+        <JourneyProvider runtime={runtime}>
+          {hosts >= 1 ? <JourneyHost key="a" handle={handle} /> : null}
+          {hosts >= 2 ? <JourneyHost key="b" handle={handle} /> : null}
+        </JourneyProvider>
+      );
+    }
+
+    const view = render(<App hosts={2} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const id = runtime.listInstances()[0]!;
+    // Both hosts share the one persisted instance.
+    expect(runtime.listInstances()).toEqual([id]);
+    expect(runtime.getInstance(id)?.status).toBe("active");
+
+    // Unmount the newer host (b) first — the older host (a) still owns the id.
+    view.rerender(<App hosts={1} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(runtime.getInstance(id)?.status).toBe("active");
+
+    // Unmount the last owner — now it ends and forgets.
+    view.rerender(<App hosts={0} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(runtime.getInstance(id)).toBeNull();
+  });
+
   it("pins the runtime it started on, rather than following a swapped one", async () => {
     const runtimeA = setup();
     const runtimeB = setup();
