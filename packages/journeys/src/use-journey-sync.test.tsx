@@ -252,6 +252,49 @@ describe("useJourneySync", () => {
     expect(second).toHaveBeenCalledTimes(1);
   });
 
+  it("has the newest callback in place before a descendant's layout effect can navigate", () => {
+    // The same hazard as the test above, but from a *descendant*. React runs a
+    // child's layout effects before its parent's, so a ref write in the hook's
+    // own `useLayoutEffect` runs too late: a child that navigates from its
+    // layout effect drives the live subscription while the parent hook's refs
+    // still hold the previous render's callbacks, firing the stale one. Closing
+    // this needs the refs published before *any* layout effect in the tree — an
+    // insertion effect, which the whole tree flushes before the layout phase.
+    const { runtime, id } = setup();
+    const port = createMemoryJourneySyncPort();
+    const first = vi.fn();
+    const second = vi.fn();
+
+    function Navigator({ navigate }: { navigate: boolean }) {
+      useLayoutEffect(() => {
+        if (navigate) port.push("/settings");
+      }, [navigate]);
+      return null;
+    }
+
+    function Probe({ onUnresolved, navigate }: { onUnresolved: () => void; navigate: boolean }) {
+      useJourneySync(id, port, { onUnresolved });
+      return <Navigator navigate={navigate} />;
+    }
+
+    const view = render(
+      <JourneyProvider runtime={runtime}>
+        <Probe onUnresolved={first} navigate={false} />
+      </JourneyProvider>,
+    );
+    view.rerender(
+      <JourneyProvider runtime={runtime}>
+        <Probe onUnresolved={second} navigate={true} />
+      </JourneyProvider>,
+    );
+
+    // The descendant's layout push must see the newest callback, not the stale
+    // one — the parent hook's refs are published in the insertion phase, ahead
+    // of the child's layout effect.
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
   it("honours a port that cannot navigate relatively", () => {
     const { runtime, id, harness } = setup();
     const base = createMemoryJourneySyncPort();

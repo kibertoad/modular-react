@@ -347,6 +347,30 @@ export function createJourneySync(
   let runtimeEpoch = 0;
   let pendingGoEpoch: number | null = null;
 
+  /**
+   * The deepest browser index that currently holds an entry — the top of the
+   * history stack, in the depth space the sync mirrors (the entry at index `N`
+   * shows the step at journey depth `N`). Every `push` sets it (a push also
+   * truncates everything beyond the cursor, so the pushed depth becomes the
+   * new top).
+   *
+   * It exists for the async-`go` correction: when a superseded `go` echo
+   * settles, the sync needs to know whether the runtime's current step still
+   * has an entry in the browser — reached by walking the cursor forward — or
+   * whether the runtime advanced to a step whose entry was never written,
+   * because the write was deferred while the `go` was in flight, in which case
+   * the tail has to be re-pushed. Only meaningful for a port that supplies
+   * `go`; a port without one never reaches the correction.
+   */
+  let browserTop = 0;
+  /**
+   * Set while the sync re-pushes a tail of entries, so the port notifications
+   * those pushes emit are swallowed rather than mistaken for user navigation
+   * (an intermediate frame re-pushed mid-tail would otherwise resolve to a
+   * rewind and drive the runtime backward).
+   */
+  let reasserting = false;
+
   /** Runtime -> location. */
   const writeUrl = (): void => {
     if (stopped) return;
@@ -366,6 +390,7 @@ export function createJourneySync(
       } else if (depth > lastDepth) {
         // Advanced. Push so Back returns to the step we just left.
         port.push(target);
+        browserTop = depth;
       } else if (port.go) {
         // Rewound from inside the journey. Walk the browser back the same
         // distance rather than pushing, so the forward stack survives and
@@ -385,47 +410,95 @@ export function createJourneySync(
   };
 
   /**
+   * Re-align the URL to the runtime's current step after a stale, *superseded*
+   * `go` echo has settled the cursor on an earlier frame. It never drives the
+   * runtime — the location that triggered it is stale by definition, a newer
+   * runtime event already won — it only repairs the URL, preserving the stack.
+   *
+   * Two shapes, chosen by whether the current step still has a browser entry:
+   *
+   * - **Walk forward** (`depth <= browserTop`): the step's entry is still there,
+   *   ahead of the settled cursor. `go` the cursor forward to it, keeping the
+   *   frames in between (and any forward stack) intact. Async, so it stamps a
+   *   fresh epoch and a still-newer advance can supersede it in turn.
+   * - **Re-push the tail** (`depth > browserTop`): the runtime advanced past
+   *   the last-written frame while the `go` was in flight, so the write for the
+   *   current step (and possibly some frames before it) was deferred and never
+   *   reached the browser. Re-push every frame from just past the cursor up to
+   *   the current step. That reconstructs the whole `[history…, step]` stack
+   *   (the intermediate entries are re-pushed with identical values) and drops
+   *   any stale forward entries, which is correct — an advance clears the redo
+   *   stack. Pushing only the current step from the shallower cursor instead
+   *   would truncate the frames between and lose their Back targets.
+   */
+  const reassert = (): void => {
+    if (stopped) return;
+    const instance = runtime.getInstance(instanceId);
+    if (!instance) return;
+    const target = journeyStepPath(instance, stepToPath);
+    if (target === null) return;
+    const cur = port.read();
+    if (cur === target) {
+      // The cursor already landed on the current step — nothing to repair.
+      lastDepth = instance.history.length;
+      return;
+    }
+    const action = resolveJourneySyncAction(instance, cur, stepToPath);
+    if (action.kind !== "rewind" || !port.go) {
+      // The cursor is not on a frame behind the current step, or the port
+      // cannot navigate relatively: keep the URL truthful with a plain write.
+      writeUrl();
+      return;
+    }
+    const depth = instance.history.length;
+    if (depth <= browserTop) {
+      pendingGoEpoch = runtimeEpoch;
+      lastDepth = depth;
+      port.go(depth - action.historyIndex);
+    } else {
+      reasserting = true;
+      try {
+        for (let d = action.historyIndex + 1; d <= depth; d += 1) {
+          const frame = d < depth ? instance.history[d] : instance.step;
+          if (frame) port.push(stepToPath(frame));
+        }
+      } finally {
+        reasserting = false;
+      }
+      browserTop = depth;
+      lastDepth = depth;
+    }
+  };
+
+  /**
    * Location -> runtime. `reportUnresolved` is false for the initial
    * reconcile, where a location that names no frame is simply a URL that has
    * not been stamped yet — see {@link JourneySyncOptions.onUnresolved}.
    */
   const readUrl = (reportUnresolved: boolean): void => {
-    if (stopped) return;
+    // `reasserting`: swallow the port notifications the sync's own tail re-push
+    // emits, so a re-pushed intermediate frame is not read back as a rewind.
+    if (stopped || reasserting) return;
     const instance = runtime.getInstance(instanceId);
     if (!instance) return;
-    const path = port.read();
-    const action = resolveJourneySyncAction(instance, path, stepToPath);
 
     // Resolve the pending self-rewind `go`, if any. This notification is either
-    // its echo (nothing newer happened — let it reconcile, which will be a
+    // its echo (nothing newer happened — fall through and reconcile, which is a
     // no-op since the runtime is already where the `go` aimed) or a stale echo
     // the runtime has since moved past. The latter must not drive the runtime:
-    // re-assert the URL to the current step and drop the location change.
+    // its echo has settled the cursor, so hand off to `reassert`, which repairs
+    // the URL from that settled position and drops the location change.
     if (pendingGoEpoch !== null) {
       const superseded = runtimeEpoch !== pendingGoEpoch;
       pendingGoEpoch = null;
-      if (superseded && action.kind !== "none") {
-        // The stale `go(-n)` only moved the browser *cursor* back onto an
-        // earlier frame; it did not destroy any entries. Re-assert the URL to
-        // the runtime's current step by walking the cursor forward the same
-        // distance (`history.length - historyIndex`), which leaves the whole
-        // stack — and therefore Back — intact. `writeUrl` here would see equal
-        // depth and `replace` the frame the cursor landed on, overwriting the
-        // entry Back needs (`[a, b]` cursor on `a` -> `[b, b]`). Walking
-        // forward is itself async in a real router, so stamp a fresh epoch so
-        // a newer advance can supersede this correction in turn. `writeUrl` is
-        // the fallback only when the port cannot navigate relatively, where the
-        // forward stack is forfeit anyway.
-        if (action.kind === "rewind" && port.go) {
-          pendingGoEpoch = runtimeEpoch;
-          port.go(instance.history.length - action.historyIndex);
-        } else {
-          writeUrl();
-        }
+      if (superseded) {
+        reassert();
         return;
       }
     }
 
+    const path = port.read();
+    const action = resolveJourneySyncAction(instance, path, stepToPath);
     if (action.kind === "none") return;
     if (action.kind === "unresolved") {
       if (reportUnresolved) onUnresolved?.({ path, instance });
@@ -469,10 +542,16 @@ export function createJourneySync(
     // collapsing `[a, b, c]` to `[a, c]` and losing `b`. So `push` is only the
     // fallback for a port without `go`, where the forward stack is forfeit
     // anyway (the same cost the advance path documents).
+    //
+    // The forward walk is another async `go` in a real router, so stamp a
+    // fresh epoch: an advance landing before its echo is then caught as stale
+    // and repaired by `reassert`, exactly as a self-rewind's `go` is.
     if (action.kind === "rewind" && port.go) {
+      pendingGoEpoch = runtimeEpoch;
       port.go(after.history.length - action.historyIndex);
     } else {
       port.push(landed);
+      browserTop = after.history.length;
     }
     onBlocked?.({ path, instance: after });
   };
@@ -491,6 +570,13 @@ export function createJourneySync(
     // genuine runtime moves, so they neither advance the epoch nor write.
     if (applying) return;
     runtimeEpoch += 1;
+    // While a `go` is in flight the browser cursor is mid-navigation, so a
+    // `push`/`replace` here would land at the wrong place — pushing from a
+    // cursor a stale `go` parked on an earlier frame truncates everything
+    // ahead of it. Defer the write: the epoch has already advanced, so when
+    // the `go` settles it is recognised as superseded and `reassert` repairs
+    // the URL to this newer step from the settled cursor instead.
+    if (pendingGoEpoch !== null) return;
     writeUrl();
   });
   const unsubscribePort = port.subscribe(() => {

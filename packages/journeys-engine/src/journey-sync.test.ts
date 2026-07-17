@@ -441,6 +441,79 @@ describe("createJourneySync", () => {
     expect(base.entries).toEqual(["a/show", "b/show"]);
   });
 
+  it("preserves the stack when the runtime advances while a corrective go is pending", () => {
+    // A second interleaving of the async-`go` race (the first is the test
+    // above). Here the runtime advances to a *brand-new* step while the
+    // sync's own corrective `go` is still in flight:
+    //
+    //   1. a -> b; `runtime.goBack()` rewinds to `a` and queues `go(-1)`.
+    //   2. The runtime returns to `b`; the stale `go(-1)` lands on `a`, and the
+    //      sync — seeing it superseded — queues a corrective forward `go(+1)`.
+    //   3. Before that `+1` lands, the runtime advances `b -> c`.
+    //   4. The `c` write happens while the browser cursor is still parked on
+    //      `a`. Pushing `c` from there truncates `b`, and the queued `+1` then
+    //      clamps at the top and never notifies.
+    //
+    // The stack must survive as [a, b, c] with Back still able to reach `b` and
+    // `a`; the runtime and URL must both settle on `c`. Needs a FIFO deferred
+    // port: the corrective `go` is issued from inside the delivery of the
+    // previous one, so it has to queue behind it rather than replace it.
+    const { runtime, id, harness, instance } = setup();
+    const base = createMemoryJourneySyncPort();
+    const queue: number[] = [];
+    const port: JourneySyncPort = {
+      read: base.read,
+      push: base.push,
+      replace: base.replace,
+      go: (delta) => {
+        queue.push(delta);
+      },
+      subscribe: base.subscribe,
+    };
+    const deliverGo = (): void => {
+      const delta = queue.shift();
+      if (delta === undefined) return;
+      base.go(delta);
+    };
+
+    createJourneySync(runtime, id, port);
+    harness.fireExit(id, "next"); // a -> b, URL pushed to b/show
+    expect(base.entries).toEqual(["a/show", "b/show"]);
+    expect(base.index).toBe(1);
+
+    // 1. Runtime rewinds to `a`; the sync queues go(-1), URL still on `b`.
+    runtime.goBack(id);
+    expect(instance().step?.moduleId).toBe("a");
+    expect(base.read()).toBe("b/show");
+
+    // 2. The runtime returns to `b` before that go(-1) is delivered.
+    runtime.goForward(id);
+    expect(instance().step?.moduleId).toBe("b");
+
+    // The stale go(-1) finally lands, parking the cursor on `a`. Superseded, so
+    // the sync queues a corrective forward go(+1) rather than following it.
+    deliverGo();
+    expect(instance().step?.moduleId).toBe("b");
+    expect(base.read()).toBe("a/show");
+
+    // 3. The runtime advances to a brand-new step `c` while that corrective
+    //    go(+1) is still queued.
+    harness.fireExit(id, "next"); // b -> c
+    expect(instance().step?.moduleId).toBe("c");
+
+    // 4. Drain every remaining queued go. The stack must be intact.
+    deliverGo();
+    deliverGo();
+    deliverGo();
+
+    expect(instance().step?.moduleId).toBe("c");
+    expect(base.read()).toBe("c/show");
+    // The whole run survives — Back reaches `b` then `a`. A push from the stale
+    // `a` cursor would have collapsed this to ["a/show", "c/show"], losing `b`.
+    expect(base.entries).toEqual(["a/show", "b/show", "c/show"]);
+    expect(base.index).toBe(2);
+  });
+
   it("reports a location the journey has never visited without touching it", () => {
     const { runtime, id, harness } = setup();
     const port = createMemoryJourneySyncPort();

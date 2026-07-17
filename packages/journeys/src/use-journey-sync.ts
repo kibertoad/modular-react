@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useInsertionEffect, useMemo, useRef } from "react";
 
 import { createJourneySync, defaultStepPath } from "@modular-frontend/journeys-engine";
 import type {
@@ -100,23 +100,27 @@ export function useJourneySync(
   // inline port that means navigating through a base path, or even a router,
   // that never made it on screen.
   //
-  // Written in a **layout** effect rather than a passive one. A passive effect
-  // runs after paint, so it leaves a window — from commit until the passive
-  // effects flush — during which a *layout* effect elsewhere in the same commit
-  // (a router that navigates from `useLayoutEffect`, say) can drive the live
-  // subscription while these refs still hold the previous render's values,
-  // firing a stale `onUnresolved`/`onBlocked`. A layout effect updates the refs
-  // within the layout phase, before that paint and before passive effects, so a
-  // committed render's values are in place before anything downstream can
-  // navigate. It still runs only for committed renders, so it keeps the
-  // discarded-render guarantee above; and the sync's callbacks only ever fire
-  // from router/runtime notifications (never synchronously during render), so a
-  // committed value is always safe to read. Declared before the effect that
-  // creates the sync, so on mount the refs are populated before
-  // `createJourneySync`'s initial reconcile reads them.
+  // Written in an **insertion** effect, not a passive or even a layout one.
+  // A passive effect runs after paint, leaving a window in which a *layout*
+  // effect elsewhere in the commit (a router that navigates from
+  // `useLayoutEffect`) drives the live subscription while these refs still hold
+  // the previous render's values, firing a stale `onUnresolved`/`onBlocked`. A
+  // layout effect closes that for *this* component, but not for a descendant:
+  // React runs a child's layout effects before its parent's, so a child that
+  // navigates from its own layout effect would still see the stale refs. An
+  // insertion effect runs earlier still — the whole tree's insertion effects
+  // flush during the mutation phase, before *any* layout effect — so a
+  // committed render's port and callbacks are in place before anything
+  // downstream in the tree can navigate. It still runs only for committed
+  // renders, so it keeps the discarded-render guarantee above (an
+  // abandoned/suspended render never publishes an uncommitted value); and the
+  // sync's callbacks only ever fire from router/runtime notifications (never
+  // synchronously during render), so a committed value is always safe to read.
+  // Runs before the passive effect that creates the sync, so on mount the refs
+  // are populated before `createJourneySync`'s initial reconcile reads them.
   const portRef = useRef(port);
   const optionsRef = useRef(options);
-  useLayoutEffect(() => {
+  useInsertionEffect(() => {
     portRef.current = port;
     optionsRef.current = options;
   });
