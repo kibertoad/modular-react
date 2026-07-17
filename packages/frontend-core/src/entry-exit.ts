@@ -295,7 +295,9 @@ export function validateModuleEntryExit(
       const componentValue = (entry as { component?: unknown }).component;
       const hasComponent =
         typeof componentValue === "function" ||
-        (typeof componentValue === "object" && componentValue !== null);
+        (typeof componentValue === "object" &&
+          componentValue !== null &&
+          !Array.isArray(componentValue));
       const hasLazy = typeof (entry as { lazy?: unknown }).lazy === "function";
       if (!hasComponent && !hasLazy) {
         issues.push(

@@ -16,7 +16,7 @@ examples/
 │   ├── integration-manager/          Sibling modules sharing a screen (TanStack Router)
 │   ├── customer-onboarding-journey/  Multi-module workflow via @modular-react/journeys (TanStack Router)
 │   └── editor-composition/           Multi-module screen via @modular-react/compositions (TanStack Router)
-└── vue-router/
+└── vue/
     ├── integration-manager/          Sibling modules sharing a screen (Vue Router)
     ├── customer-onboarding-journey/  Multi-module workflow via @modular-vue/journeys (Vue Router)
     └── editor-composition/           Multi-module screen via @modular-vue/compositions (Vue Router)

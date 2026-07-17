@@ -1,11 +1,11 @@
 {
-  "name": "@modular-vue/compositions",
+  "name": "@modular-vue/runtime",
   "version": "0.1.0",
-  "description": "Vue 3 compositions for @modular-vue: CompositionsProvider, panel composables (useCompositionState / useCompositionDispatch / useCompositionEmit), the host useComposition hook, and the compositions registry plugin over @modular-frontend/compositions-engine.",
+  "description": "vue-router runtime for @modular-vue modules: createRegistry with module registration, dependency validation, lifecycle hooks, plugin machinery, and manifest resolution.",
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
-    "directory": "packages/vue-compositions"
+    "directory": "packages/vue-runtime"
   },
   "files": [
     "dist"
@@ -29,11 +29,11 @@
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@modular-frontend/compositions-engine": "workspace:*"
-  },
   "devDependencies": {
     "@modular-frontend/core": "workspace:*",
+    "@modular-frontend/journeys-engine": "workspace:*",
+    "@modular-vue/core": "workspace:*",
+    "@modular-vue/journeys": "workspace:*",
     "@modular-vue/vue": "workspace:*",
     "@vue/test-utils": "^2.4.6",
     "happy-dom": "^20.9.0",
@@ -43,11 +43,14 @@
     "typescript": "^6.0.3",
     "vite": "^8.1.3",
     "vitest": "^4.1.10",
-    "vue": "^3.5.40"
+    "vue": "^3.5.40",
+    "vue-router": "^4.5.0"
   },
   "peerDependencies": {
     "@modular-frontend/core": "^0.1.0",
+    "@modular-vue/core": "^0.1.0",
     "@modular-vue/vue": "^0.1.0",
-    "vue": "^3.5.40"
+    "vue": "^3.5.40",
+    "vue-router": "^4.5.0"
   }
 }

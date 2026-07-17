@@ -1,0 +1,30 @@
+{
+  "name": "@example-vue-editor/editor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@example-vue-editor/app-shared": "workspace:*",
+    "@modular-frontend/core": "workspace:*",
+    "@modular-vue/compositions": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vue": "^3.5.40",
+    "vue-tsc": "^3.3.0"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.40"
+  }
+}
