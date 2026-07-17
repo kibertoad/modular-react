@@ -343,9 +343,21 @@ export function createJourneySync(
    * to the runtime's current step instead. Only the latest `go` is tracked —
    * more than one in flight is already outside the "journey owns a contiguous
    * run of history" contract the relative-navigation path depends on.
+   *
+   * `pendingGoPath` is the destination that `go` was aimed at — the path the
+   * cursor will read once it settles. It exists so that **only the go's own
+   * echo retires the guard**: a port notification while the `go` is in flight
+   * that reads a *different* path is not the echo (a manual {@link JourneySync.sync},
+   * an unrelated location change the shell made) and must not clear
+   * `pendingGoEpoch`. Retiring it early would leave the real, later echo
+   * unguarded — processed as an ordinary location change, it would rewind newer
+   * runtime state, the exact race the epoch guard exists to stop. Such
+   * intervening notifications are deferred instead, mirroring the runtime
+   * subscriber, which likewise holds its writes until the `go` settles.
    */
   let runtimeEpoch = 0;
   let pendingGoEpoch: number | null = null;
+  let pendingGoPath: string | null = null;
 
   /**
    * The deepest browser index that currently holds an entry — the top of the
@@ -374,6 +386,13 @@ export function createJourneySync(
   /** Runtime -> location. */
   const writeUrl = (): void => {
     if (stopped) return;
+    // A self-rewind `go` is in flight: the browser cursor is mid-navigation, so
+    // any push/replace here lands on the wrong entry (a `replace` would clobber
+    // the frame the not-yet-settled cursor sits on). The runtime subscriber
+    // already defers its own writes for this reason; this guard covers the
+    // other caller, a manual `sync()`. The echo reconciles from the settled
+    // cursor when it lands.
+    if (pendingGoEpoch !== null) return;
     const instance = runtime.getInstance(instanceId);
     if (!instance) return;
     const target = journeyStepPath(instance, stepToPath);
@@ -401,6 +420,7 @@ export function createJourneySync(
         // a synchronous port (the memory stub, tests) notifies re-entrantly
         // from inside the call, so the guard has to already see the pending go.
         pendingGoEpoch = runtimeEpoch;
+        pendingGoPath = target;
         port.go(depth - lastDepth);
       } else {
         port.replace(target);
@@ -453,6 +473,7 @@ export function createJourneySync(
     const depth = instance.history.length;
     if (depth <= browserTop) {
       pendingGoEpoch = runtimeEpoch;
+      pendingGoPath = target;
       lastDepth = depth;
       port.go(depth - action.historyIndex);
     } else {
@@ -482,15 +503,27 @@ export function createJourneySync(
     const instance = runtime.getInstance(instanceId);
     if (!instance) return;
 
-    // Resolve the pending self-rewind `go`, if any. This notification is either
-    // its echo (nothing newer happened — fall through and reconcile, which is a
-    // no-op since the runtime is already where the `go` aimed) or a stale echo
-    // the runtime has since moved past. The latter must not drive the runtime:
-    // its echo has settled the cursor, so hand off to `reassert`, which repairs
-    // the URL from that settled position and drops the location change.
+    // Resolve the pending self-rewind `go`, if any — but only when *this*
+    // notification is the go's own echo, i.e. the cursor now reads the path the
+    // `go` aimed at (`pendingGoPath`). A notification that reads any other path
+    // is not the echo: it is a manual `sync()`, or an unrelated location change
+    // the shell made while the `go` is still in flight. Retiring the guard on
+    // one of those would leave the real, later echo unguarded — processed as an
+    // ordinary location change it would rewind newer runtime state, the exact
+    // race the guard exists to stop. So defer it (return), just as the runtime
+    // subscriber defers its writes until the `go` settles.
+    //
+    // On the echo itself the notification is either the expected one (nothing
+    // newer happened — fall through and reconcile, a no-op since the runtime is
+    // already where the `go` aimed) or a stale echo the runtime has since moved
+    // past. The latter must not drive the runtime: its echo has settled the
+    // cursor, so hand off to `reassert`, which repairs the URL from that settled
+    // position and drops the location change.
     if (pendingGoEpoch !== null) {
+      if (port.read() !== pendingGoPath) return;
       const superseded = runtimeEpoch !== pendingGoEpoch;
       pendingGoEpoch = null;
+      pendingGoPath = null;
       if (superseded) {
         reassert();
         return;
@@ -548,6 +581,7 @@ export function createJourneySync(
     // and repaired by `reassert`, exactly as a self-rewind's `go` is.
     if (action.kind === "rewind" && port.go) {
       pendingGoEpoch = runtimeEpoch;
+      pendingGoPath = landed;
       port.go(after.history.length - action.historyIndex);
     } else {
       port.push(landed);

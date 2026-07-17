@@ -514,6 +514,75 @@ describe("createJourneySync", () => {
     expect(base.index).toBe(2);
   });
 
+  it("does not let an intervening notification retire the pending-go guard", () => {
+    // The epoch guard must be settled only by the pending `go`'s own echo. An
+    // arbitrary reconciliation call that fires while the `go` is still in
+    // flight — a manual `sync()`, or an unrelated port notification the shell
+    // emitted — reads a path that is not the go's destination, so it must be
+    // deferred rather than clear the guard. Retiring it early leaves the real,
+    // later echo unguarded: processed as an ordinary location change it rewinds
+    // the newer runtime state, the exact race the guard exists to stop.
+    const { runtime, id, harness, instance } = setup();
+    const base = createMemoryJourneySyncPort();
+    let queued: number | null = null;
+    let fireSpurious = (): void => {};
+    const port: JourneySyncPort = {
+      read: base.read,
+      push: base.push,
+      replace: base.replace,
+      go: (delta) => {
+        queued = delta;
+      },
+      subscribe: (listener) => {
+        const unsubscribe = base.subscribe(listener);
+        // Capture the live listener so the test can emit a port notification
+        // that reports no path change — an unrelated wake (a search-param
+        // write, a shell push elsewhere) arriving mid-`go`.
+        fireSpurious = listener;
+        return unsubscribe;
+      },
+    };
+    const deliverGo = (): void => {
+      if (queued === null) return;
+      const delta = queued;
+      queued = null;
+      base.go(delta);
+    };
+
+    createJourneySync(runtime, id, port);
+    harness.fireExit(id, "next"); // a -> b, URL pushed to b/show
+    expect(base.entries).toEqual(["a/show", "b/show"]);
+
+    // Runtime rewinds to `a`; the sync queues go(-1), URL still shows `b`.
+    runtime.goBack(id);
+    expect(instance().step?.moduleId).toBe("a");
+    expect(base.read()).toBe("b/show");
+
+    // The user advances to `b` again before the go(-1) is delivered — the go is
+    // now stale (a newer runtime advance has superseded it).
+    harness.fireExit(id, "next");
+    expect(instance().step?.moduleId).toBe("b");
+
+    // An unrelated notification fires while the stale go(-1) is still in flight.
+    // It reads `b/show` (unchanged), so it is not the echo and must not retire
+    // the guard. Before the fix it cleared `pendingGoEpoch` here.
+    fireSpurious();
+    expect(instance().step?.moduleId).toBe("b");
+
+    // The stale go(-1) finally lands. With the guard intact it is caught as
+    // superseded, the runtime is left on `b`, and the URL is re-asserted
+    // forward. Without the fix the unguarded echo drove a rewind back to `a`.
+    deliverGo();
+    expect(instance().step?.moduleId).toBe("b");
+    expect(base.entries).toEqual(["a/show", "b/show"]);
+
+    // The corrective forward `go` settles the cursor back on `b`, stack intact.
+    deliverGo();
+    expect(instance().step?.moduleId).toBe("b");
+    expect(base.read()).toBe("b/show");
+    expect(base.entries).toEqual(["a/show", "b/show"]);
+  });
+
   it("reports a location the journey has never visited without touching it", () => {
     const { runtime, id, harness } = setup();
     const port = createMemoryJourneySyncPort();
