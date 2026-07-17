@@ -1,0 +1,31 @@
+{
+  "name": "@example-vue-onboarding/shell",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@example-vue-onboarding/app-shared": "workspace:*",
+    "@example-vue-onboarding/billing-module": "workspace:*",
+    "@example-vue-onboarding/customer-onboarding-journey": "workspace:*",
+    "@example-vue-onboarding/plan-module": "workspace:*",
+    "@example-vue-onboarding/profile-module": "workspace:*",
+    "@modular-vue/journeys": "workspace:*",
+    "@modular-vue/runtime": "workspace:*",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.1.3",
+    "vue-tsc": "^3.3.0"
+  }
+}

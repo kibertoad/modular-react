@@ -12,10 +12,14 @@ examples/
 │   ├── editor-composition/           Multi-module screen via @modular-react/compositions (React Router)
 │   ├── remote-capabilities/          Slots/navigation driven by a backend-served remote manifest
 │   └── active-project-manifest/      Per-project remote manifests swapped at runtime
-└── tanstack-router/
-    ├── integration-manager/          Sibling modules sharing a screen (TanStack Router)
-    ├── customer-onboarding-journey/  Multi-module workflow via @modular-react/journeys (TanStack Router)
-    └── editor-composition/           Multi-module screen via @modular-react/compositions (TanStack Router)
+├── tanstack-router/
+│   ├── integration-manager/          Sibling modules sharing a screen (TanStack Router)
+│   ├── customer-onboarding-journey/  Multi-module workflow via @modular-react/journeys (TanStack Router)
+│   └── editor-composition/           Multi-module screen via @modular-react/compositions (TanStack Router)
+└── vue-router/
+    ├── integration-manager/          Sibling modules sharing a screen (Vue Router)
+    ├── customer-onboarding-journey/  Multi-module workflow via @modular-vue/journeys (Vue Router)
+    └── editor-composition/           Multi-module screen via @modular-vue/compositions (Vue Router)
 ```
 
 ## Running an example
@@ -31,6 +35,12 @@ For instance, to run the React Router variant:
 
 ```bash
 pnpm --filter "@example-rr-integration-manager/shell" dev
+```
+
+Or the Vue Router variant:
+
+```bash
+pnpm --filter "@example-vue-integration-manager/shell" dev
 ```
 
 ## What each example demonstrates

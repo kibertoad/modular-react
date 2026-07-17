@@ -75,7 +75,9 @@ describe("validateModuleEntryExit", () => {
     });
     const issues = validateModuleEntryExit(m);
     expect(issues).toHaveLength(1);
-    expect(issues[0]).toMatch(/broken.*React component or a lazy importer/);
+    expect(issues[0]).toMatch(
+      /broken.*component \(function or component object\) or a lazy importer/,
+    );
   });
 
   it("accepts an entry with only a lazy importer", () => {
