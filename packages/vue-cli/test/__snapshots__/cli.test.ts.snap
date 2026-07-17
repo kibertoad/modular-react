@@ -1,0 +1,1199 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`modular-vue generated tree snapshot > emits a stable project tree across init + create module/store/journey 1`] = `
+{
+  ".gitignore": "node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+",
+  "app-shared/package.json": "{
+  "name": "@acme/app-shared",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@modular-frontend/core": "^0.1.0",
+    "@modular-vue/vue": "^1.0.0",
+    "wretch": "^2.11.0"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0",
+    "vue-tsc": "^3.3.0"
+  }
+}",
+  "app-shared/src/index.ts": "import { createSharedComposables } from '@modular-vue/vue'
+import type {} from 'vue-router'
+import type { UiComponent } from '@modular-frontend/core'
+import type { LoginCredentials, User } from './types.js'
+import type { Wretch } from 'wretch'
+
+export type { User, LoginCredentials } from './types.js'
+
+// ---- Store shapes (reactive / client state) ----
+
+export interface AuthStore {
+  user: User | null
+  token: string | null
+  isAuthenticated: boolean
+  login: (credentials: LoginCredentials) => Promise<void>
+  logout: () => void
+}
+
+export interface ConfigStore {
+  apiBaseUrl: string
+  environment: 'dev' | 'staging' | 'prod'
+  appName: string
+}
+
+export interface NotificationsStore {
+  // TODO: Add store state and actions
+}
+
+// ---- The contract ----
+
+export interface AppDependencies {
+  // Reactive client state (framework core stores — see shell/src/stores)
+  auth: AuthStore
+  config: ConfigStore
+  // Wretch instance for making HTTP calls via @lokalise/frontend-http-client
+  httpClient: Wretch
+  notifications: NotificationsStore
+}
+
+// ---- Slots (static contributions from every module) ----
+
+export interface CommandDefinition {
+  readonly id: string
+  readonly label: string
+  readonly group?: string
+  readonly icon?: string
+  readonly onSelect: () => void
+}
+
+export interface AppSlots {
+  commands: CommandDefinition[]
+}
+
+// ---- Zones (per-route layout regions a module can fill) ----
+// Declared on a route's \`meta\` and read by the shell via \`useZones<AppZones>()\`.
+
+export interface AppZones {
+  detailPanel?: UiComponent
+  headerActions?: UiComponent
+}
+
+// ---- Typed route data (per-route static data, read via useRouteData) ----
+
+export interface AppRouteData {
+  pageTitle?: string
+}
+
+// ---- Typed \`meta\` augmentation ----
+// vue-router exposes a single global \`RouteMeta\` interface as the formal
+// augmentation point. Extending it with AppZones + AppRouteData type-checks
+// \`meta: { ... }\` on every route against the app's shape. This lives in
+// app-shared (not a library) because \`RouteMeta\` is global.
+
+declare module 'vue-router' {
+  interface RouteMeta extends AppZones, AppRouteData {}
+}
+
+// ---- Typed composables (use these in all modules) ----
+
+export const { useStore, useService, useReactiveService, useOptional } =
+  createSharedComposables<AppDependencies>()
+",
+  "app-shared/src/types.ts": "export interface User {
+  id: string
+  name: string
+  email: string
+  role: string
+}
+
+export interface LoginCredentials {
+  email: string
+  password: string
+}
+",
+  "app-shared/tsconfig.json": "{
+  "extends": "../tsconfig.base.json",
+  "include": [
+    "src"
+  ]
+}",
+  "catalog.config.ts": "import { defineCatalogConfig } from '@modular-react/catalog'
+
+export default defineCatalogConfig({
+  title: 'snap-app Catalog',
+  out: 'dist-catalog',
+  roots: [
+    {
+      name: 'modules',
+      pattern: 'modules/*/src/index.ts',
+      resolver: 'defaultExport',
+    },
+    {
+      name: 'journeys',
+      pattern: 'journeys/*/src/index.ts',
+      resolver: 'namedExport',
+    },
+  ],
+
+  // The harvester loads each descriptor for real, so its imports must
+  // resolve. After \`pnpm install\` the workspace packages (e.g.
+  // \`@acme/app-shared\`) are symlinked into node_modules and
+  // resolve automatically. If you harvest without installing, mirror your
+  // path aliases here:
+  // resolve: {
+  //   alias: {
+  //     '@acme/app-shared': './app-shared/src',
+  //   },
+  // },
+})
+",
+  "journeys/customer-onboarding/package.json": "{
+  "name": "@acme/customer-onboarding-journey",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@modular-vue/journeys": "^1.0.0",
+    "@acme/app-shared": "workspace:*",
+    "@acme/dashboard-module": "workspace:*",
+    "@acme/orders-module": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vue": "^3.5.0",
+    "vue-tsc": "^3.3.0"
+  }
+}",
+  "journeys/customer-onboarding/src/customer-onboarding.ts": "import { defineJourney, defineJourneyHandle } from '@modular-vue/journeys'
+import type dashboardModule from '@acme/dashboard-module'
+import type ordersModule from '@acme/orders-module'
+
+// All module imports are \`import type\` — the runtime resolves entries by id
+// against the registered descriptors, so this package stays bundle-free of
+// module code.
+type CustomerOnboardingModules = {
+  readonly dashboard: typeof dashboardModule;
+  readonly orders: typeof ordersModule;
+}
+
+export interface CustomerOnboardingInput {
+  // TODO: shape the input the caller passes to runtime.start(handle, input).
+  readonly customerId: string;
+}
+
+export interface CustomerOnboardingState {
+  // TODO: shape the state shared across steps. Keep it serializable —
+  // persistence adapters round-trip it via JSON.
+  readonly customerId: string;
+}
+
+export const customerOnboardingJourney = defineJourney<CustomerOnboardingModules, CustomerOnboardingState>()({
+  id: 'customer-onboarding',
+  version: '1.0.0',
+  meta: {
+    name: 'CustomerOnboarding',
+  },
+
+  initialState: ({ customerId }: CustomerOnboardingInput) => ({
+    customerId,
+  }),
+
+  start: (state) => ({
+    module: 'dashboard',
+    // TODO: pick an entry name your dashboard module exposes via entryPoints.
+    entry: 'TODO_entry_name' as const,
+    input: state,
+  }),
+
+  transitions: {
+    dashboard: {
+      // TODO: list each entry name you handle and one branch per exit it can emit.
+      // Example shape:
+      //   <entry>: {
+      //     <exitName>: ({ output, state }) => ({ complete: { ... } }),
+      //     cancelled: () => ({ abort: { reason: 'cancelled' } }),
+      //   }
+    },
+  },
+})
+
+/**
+ * Typed token for opening this journey. Modules and shells import this
+ * (via \`import type\`) to call \`runtime.start(handle, input)\` with full
+ * input checking — without pulling the journey's runtime into the caller.
+ */
+export const customerOnboardingHandle = defineJourneyHandle(customerOnboardingJourney)
+export type CustomerOnboardingHandle = typeof customerOnboardingHandle
+",
+  "journeys/customer-onboarding/src/index.ts": "export {
+  customerOnboardingJourney,
+  customerOnboardingHandle,
+  type CustomerOnboardingInput,
+  type CustomerOnboardingState,
+  type CustomerOnboardingHandle,
+} from './customer-onboarding.js'
+",
+  "journeys/customer-onboarding/tsconfig.json": "{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "src"
+  ]
+}",
+  "modules/dashboard/package.json": "{
+  "name": "@acme/dashboard-module",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@modular-frontend/core": "^0.1.0",
+    "@modular-vue/core": "^1.0.0",
+    "@acme/app-shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@modular-vue/testing": "^1.0.0",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^15.0.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0",
+    "vue-tsc": "^3.3.0"
+  }
+}",
+  "modules/dashboard/src/__tests__/dashboard.test.ts": "// @vitest-environment happy-dom
+import { describe, it, expect } from 'vitest'
+import { renderModule, createMockStore } from '@modular-vue/testing'
+import type { AppDependencies } from '@acme/app-shared'
+import dashboard from '../index.js'
+
+const mockAuth = createMockStore<AppDependencies['auth']>({
+  user: { id: 'usr-001', name: 'Test User', email: 'test@example.com', role: 'admin' },
+  token: 'mock-token',
+  isAuthenticated: true,
+  login: async () => {},
+  logout: () => {},
+})
+
+const mockConfig = createMockStore<AppDependencies['config']>({
+  apiBaseUrl: 'http://localhost:3000/api',
+  environment: 'dev',
+  appName: 'Test',
+})
+
+describe('dashboard module', () => {
+  it('renders the index page', async () => {
+    const wrapper = await renderModule(dashboard, {
+      route: '/dashboard',
+      deps: { auth: mockAuth, config: mockConfig },
+    })
+
+    // \`renderModule\` returns a @vue/test-utils wrapper. Querying by label +
+    // asserting on rendered text avoids the dashed-name mismatch that bit a
+    // previous version of the React template.
+    expect(wrapper.text()).toContain('Dashboard')
+  })
+
+  it('renders the list page', async () => {
+    const wrapper = await renderModule(dashboard, {
+      route: '/dashboard/list',
+      deps: { auth: mockAuth, config: mockConfig },
+    })
+
+    expect(wrapper.text()).toContain('Dashboard List')
+  })
+})
+",
+  "modules/dashboard/src/index.ts": "import { defineModule } from '@modular-vue/core'
+import type { RouteRecordRaw } from 'vue-router'
+import type { AppDependencies, AppSlots, AppZones } from '@acme/app-shared'
+import DashboardDetailPanel from './panels/DetailPanel.vue'
+
+export default defineModule<AppDependencies, AppSlots>({
+  id: 'dashboard',
+  version: '0.1.0',
+
+  // Catalog metadata — the shell discovers modules via useModules() + getModuleMeta()
+  meta: {
+    name: 'Dashboard',
+    description: 'Dashboard module',
+    category: 'general',
+  },
+
+  // A vue-router subtree. The runtime grafts it onto the router via
+  // \`router.addRoute()\`. The parent has no component, so each child renders in
+  // the shell's <router-view>. The parent path is absolute so the subtree also
+  // resolves when a test mounts it in isolation (\`renderModule\`); grafted under
+  // the shell's named "root" route, an absolute child still renders inside its
+  // <router-view>.
+  createRoutes: (): RouteRecordRaw => ({
+    path: '/dashboard',
+    children: [
+      {
+        path: '',
+        component: () => import('./pages/DashboardDashboard.vue'),
+      },
+      {
+        path: 'list',
+        component: () => import('./pages/DashboardList.vue'),
+        // Route zone — the shell renders this in its detail panel while this
+        // route is active. \`meta\` is vue-router's per-route data channel, typed
+        // against AppZones via the RouteMeta augmentation in app-shared.
+        meta: { detailPanel: DashboardDetailPanel } satisfies AppZones,
+      },
+    ],
+  }),
+
+  navigation: [
+    { label: 'Dashboard', to: '/dashboard', order: 10 },
+    { label: 'Dashboard List', to: '/dashboard/list', order: 11 },
+  ],
+
+  // Commands aggregated into the shell's command palette / action bar
+  slots: {
+    commands: [
+      {
+        id: 'dashboard:refresh',
+        label: 'Refresh Dashboard',
+        group: 'actions',
+        onSelect: () => window.location.reload(),
+      },
+    ],
+  },
+
+  // To compose this module into a multi-step flow, declare entry/exit
+  // contracts here (defineEntry / defineExit) and feed them into a journey
+  // — see packages/journeys/README.md and \`create journey\`.
+  // entryPoints: { ... },
+  // exitPoints: { ... },
+
+  requires: ['auth'],
+})
+",
+  "modules/dashboard/src/pages/DashboardDashboard.vue": "<script setup lang="ts">
+import { RouterLink } from 'vue-router'
+import { useStore } from '@acme/app-shared'
+
+const user = useStore('auth', (s) => s.user)
+</script>
+
+<template>
+  <div>
+    <h2>Dashboard</h2>
+    <p v-if="user">Welcome, {{ user?.name }}.</p>
+    <p v-else>Please log in to continue.</p>
+    <nav>
+      <RouterLink to="/dashboard/list">View Dashboard List</RouterLink>
+    </nav>
+  </div>
+</template>
+",
+  "modules/dashboard/src/pages/DashboardList.vue": "<script setup lang="ts">
+import { useStore } from '@acme/app-shared'
+
+const user = useStore('auth', (s) => s.user)
+</script>
+
+<template>
+  <div>
+    <h2>Dashboard List</h2>
+    <p v-if="user">Showing items for {{ user?.name }}.</p>
+    <p v-else>Please log in to view the list.</p>
+  </div>
+</template>
+",
+  "modules/dashboard/src/panels/DetailPanel.vue": "<script setup lang="ts"></script>
+
+<template>
+  <!--
+    Rendered by the shell in its detail-panel zone when the list route is active.
+    See the module descriptor's \`meta: { detailPanel: ... }\` for the wiring.
+  -->
+  <div>
+    <h3 :style="{ fontSize: '0.875rem', fontWeight: 600, color: '#4a5568', marginBottom: '0.5rem' }">
+      Dashboard details
+    </h3>
+    <p :style="{ fontSize: '0.875rem', color: '#718096' }">
+      This panel is contributed by the dashboard module via a route zone.
+    </p>
+  </div>
+</template>
+",
+  "modules/dashboard/tsconfig.json": "{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "src"
+  ]
+}",
+  "modules/orders/package.json": "{
+  "name": "@acme/orders-module",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@modular-frontend/core": "^0.1.0",
+    "@modular-vue/core": "^1.0.0",
+    "@acme/app-shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@modular-vue/testing": "^1.0.0",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^15.0.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0",
+    "vue-tsc": "^3.3.0"
+  }
+}",
+  "modules/orders/src/__tests__/orders.test.ts": "// @vitest-environment happy-dom
+import { describe, it, expect } from 'vitest'
+import { renderModule, createMockStore } from '@modular-vue/testing'
+import type { AppDependencies } from '@acme/app-shared'
+import orders from '../index.js'
+
+const mockAuth = createMockStore<AppDependencies['auth']>({
+  user: { id: 'usr-001', name: 'Test User', email: 'test@example.com', role: 'admin' },
+  token: 'mock-token',
+  isAuthenticated: true,
+  login: async () => {},
+  logout: () => {},
+})
+
+const mockConfig = createMockStore<AppDependencies['config']>({
+  apiBaseUrl: 'http://localhost:3000/api',
+  environment: 'dev',
+  appName: 'Test',
+})
+
+describe('orders module', () => {
+  it('renders the index page', async () => {
+    const wrapper = await renderModule(orders, {
+      route: '/orders',
+      deps: { auth: mockAuth, config: mockConfig },
+    })
+
+    // \`renderModule\` returns a @vue/test-utils wrapper. Querying by label +
+    // asserting on rendered text avoids the dashed-name mismatch that bit a
+    // previous version of the React template.
+    expect(wrapper.text()).toContain('Orders')
+  })
+
+  it('renders the list page', async () => {
+    const wrapper = await renderModule(orders, {
+      route: '/orders/list',
+      deps: { auth: mockAuth, config: mockConfig },
+    })
+
+    expect(wrapper.text()).toContain('Orders List')
+  })
+})
+",
+  "modules/orders/src/index.ts": "import { defineModule } from '@modular-vue/core'
+import type { RouteRecordRaw } from 'vue-router'
+import type { AppDependencies, AppSlots, AppZones } from '@acme/app-shared'
+import OrdersDetailPanel from './panels/DetailPanel.vue'
+
+export default defineModule<AppDependencies, AppSlots>({
+  id: 'orders',
+  version: '0.1.0',
+
+  // Catalog metadata — the shell discovers modules via useModules() + getModuleMeta()
+  meta: {
+    name: 'Orders',
+    description: 'Orders module',
+    category: 'general',
+  },
+
+  // A vue-router subtree. The runtime grafts it onto the router via
+  // \`router.addRoute()\`. The parent has no component, so each child renders in
+  // the shell's <router-view>. The parent path is absolute so the subtree also
+  // resolves when a test mounts it in isolation (\`renderModule\`); grafted under
+  // the shell's named "root" route, an absolute child still renders inside its
+  // <router-view>.
+  createRoutes: (): RouteRecordRaw => ({
+    path: '/orders',
+    children: [
+      {
+        path: '',
+        component: () => import('./pages/OrdersDashboard.vue'),
+      },
+      {
+        path: 'list',
+        component: () => import('./pages/OrdersList.vue'),
+        // Route zone — the shell renders this in its detail panel while this
+        // route is active. \`meta\` is vue-router's per-route data channel, typed
+        // against AppZones via the RouteMeta augmentation in app-shared.
+        meta: { detailPanel: OrdersDetailPanel } satisfies AppZones,
+      },
+    ],
+  }),
+
+  navigation: [
+    { label: 'Orders', to: '/orders', group: 'commerce', order: 10 },
+    { label: 'Orders List', to: '/orders/list', group: 'commerce', order: 11 },
+  ],
+
+  // Commands aggregated into the shell's command palette / action bar
+  slots: {
+    commands: [
+      {
+        id: 'orders:refresh',
+        label: 'Refresh Orders',
+        group: 'actions',
+        onSelect: () => window.location.reload(),
+      },
+    ],
+  },
+
+  // To compose this module into a multi-step flow, declare entry/exit
+  // contracts here (defineEntry / defineExit) and feed them into a journey
+  // — see packages/journeys/README.md and \`create journey\`.
+  // entryPoints: { ... },
+  // exitPoints: { ... },
+
+  requires: ['auth'],
+})
+",
+  "modules/orders/src/pages/OrdersDashboard.vue": "<script setup lang="ts">
+import { RouterLink } from 'vue-router'
+import { useStore } from '@acme/app-shared'
+
+const user = useStore('auth', (s) => s.user)
+</script>
+
+<template>
+  <div>
+    <h2>Orders</h2>
+    <p v-if="user">Welcome, {{ user?.name }}.</p>
+    <p v-else>Please log in to continue.</p>
+    <nav>
+      <RouterLink to="/orders/list">View Orders List</RouterLink>
+    </nav>
+  </div>
+</template>
+",
+  "modules/orders/src/pages/OrdersList.vue": "<script setup lang="ts">
+import { useStore } from '@acme/app-shared'
+
+const user = useStore('auth', (s) => s.user)
+</script>
+
+<template>
+  <div>
+    <h2>Orders List</h2>
+    <p v-if="user">Showing items for {{ user?.name }}.</p>
+    <p v-else>Please log in to view the list.</p>
+  </div>
+</template>
+",
+  "modules/orders/src/panels/DetailPanel.vue": "<script setup lang="ts"></script>
+
+<template>
+  <!--
+    Rendered by the shell in its detail-panel zone when the list route is active.
+    See the module descriptor's \`meta: { detailPanel: ... }\` for the wiring.
+  -->
+  <div>
+    <h3 :style="{ fontSize: '0.875rem', fontWeight: 600, color: '#4a5568', marginBottom: '0.5rem' }">
+      Orders details
+    </h3>
+    <p :style="{ fontSize: '0.875rem', color: '#718096' }">
+      This panel is contributed by the orders module via a route zone.
+    </p>
+  </div>
+</template>
+",
+  "modules/orders/tsconfig.json": "{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "src"
+  ]
+}",
+  "package.json": "{
+  "name": "snap-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev": "pnpm --filter shell dev",
+    "test": "vitest run",
+    "typecheck": "pnpm -r run typecheck",
+    "catalog:build": "modular-react-catalog build",
+    "catalog:serve": "modular-react-catalog serve dist-catalog"
+  },
+  "devDependencies": {
+    "@modular-react/catalog": "^1.0.0",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "@vue/test-utils": "^2.4.6",
+    "happy-dom": "^15.0.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0",
+    "vue": "^3.5.0"
+  }
+}
+",
+  "pnpm-workspace.yaml": "packages:
+  - app-shared
+  - shell
+  - modules/*
+  - journeys/*
+
+onlyBuiltDependencies:
+  - esbuild
+",
+  "shell/index.html": "<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>snap-app</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a2e; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+",
+  "shell/package.json": "{
+  "name": "shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@acme/app-shared": "workspace:*",
+    "@acme/customer-onboarding-journey": "workspace:*",
+    "@acme/dashboard-module": "workspace:*",
+    "@acme/orders-module": "workspace:*",
+    "@modular-frontend/core": "^0.1.0",
+    "@modular-vue/core": "^1.0.0",
+    "@modular-vue/journeys": "^1.0.0",
+    "@modular-vue/runtime": "^1.0.0",
+    "@modular-vue/vue": "^1.0.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0",
+    "wretch": "^2.11.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.1.3",
+    "vue-tsc": "^3.3.0"
+  }
+}
+",
+  "shell/src/components/Home.vue": "<script setup lang="ts">
+import { useStore } from '@acme/app-shared'
+
+// \`useStore\` returns a Ref; the template auto-unwraps it.
+const appName = useStore('config', (s) => s.appName)
+const isAuthenticated = useStore('auth', (s) => s.isAuthenticated)
+</script>
+
+<template>
+  <div>
+    <h2>Welcome to {{ appName }}</h2>
+    <p>
+      {{
+        isAuthenticated
+          ? 'Use the sidebar to navigate between modules.'
+          : 'Click "Login as Demo User" to get started.'
+      }}
+    </p>
+  </div>
+</template>
+",
+  "shell/src/components/RootLayout.vue": "<script setup lang="ts"></script>
+
+<template>
+  <!--
+    The app root. Renders for every route — public or protected. It's the place
+    for app-wide concerns that must run even on public pages: analytics, feature
+    flags, error reporting, global providers that don't depend on auth.
+
+    The authenticated chrome (sidebar, header, detail panel) lives in
+    ShellLayout, mounted as the "/" layout route in main.ts.
+  -->
+  <router-view />
+</template>
+",
+  "shell/src/components/ShellLayout.vue": "<script setup lang="ts">
+import { useSlots, useZones } from '@modular-vue/runtime'
+import { useStore } from '@acme/app-shared'
+import type { AppSlots, AppZones } from '@acme/app-shared'
+import Sidebar from './Sidebar.vue'
+
+// The authenticated shell chrome. Rendered as the "/" layout route in main.ts —
+// everything mounted under it has (conceptually) cleared the auth guard.
+//
+// This is also where cross-cutting module contributions get rendered:
+//   - useSlots<AppSlots>().commands — the action bar in the header
+//   - useZones<AppZones>().detailPanel — the right-hand detail panel
+//
+// The store composables return refs; templates auto-unwrap top-level refs.
+const user = useStore('auth', (s) => s.user)
+const isAuthenticated = useStore('auth', (s) => s.isAuthenticated)
+const login = useStore('auth', (s) => s.login)
+const logout = useStore('auth', (s) => s.logout)
+const slots = useSlots<AppSlots>()
+const zones = useZones<AppZones>()
+</script>
+
+<template>
+  <div :style="{ display: 'flex', minHeight: '100vh' }">
+    <Sidebar />
+    <div :style="{ flex: 1, display: 'flex', flexDirection: 'column' }">
+      <header
+        :style="{
+          padding: '0.75rem 1.5rem',
+          borderBottom: '1px solid #e2e8f0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+        }"
+      >
+        <!-- Commands contributed by modules via slots.commands -->
+        <button
+          v-for="cmd in slots.commands"
+          :key="cmd.id"
+          type="button"
+          @click="cmd.onSelect"
+          :style="{
+            padding: '0.375rem 0.75rem',
+            borderRadius: '0.375rem',
+            border: '1px solid #e2e8f0',
+            backgroundColor: 'white',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+          }"
+        >
+          {{ cmd.label }}
+        </button>
+
+        <div :style="{ marginLeft: 'auto', display: 'flex', gap: '1rem', alignItems: 'center' }">
+          <template v-if="isAuthenticated">
+            <span :style="{ color: '#4a5568' }">{{ user?.name }}</span>
+            <button
+              type="button"
+              @click="logout()"
+              :style="{
+                padding: '0.375rem 0.75rem',
+                borderRadius: '0.375rem',
+                border: '1px solid #e2e8f0',
+                backgroundColor: 'white',
+                cursor: 'pointer',
+              }"
+            >
+              Logout
+            </button>
+          </template>
+          <button
+            v-else
+            type="button"
+            @click="login({ email: 'demo@example.com', password: 'demo' })"
+            :style="{
+              padding: '0.375rem 0.75rem',
+              borderRadius: '0.375rem',
+              border: 'none',
+              backgroundColor: '#3182ce',
+              color: 'white',
+              cursor: 'pointer',
+            }"
+          >
+            Login as Demo User
+          </button>
+        </div>
+      </header>
+      <div :style="{ flex: 1, display: 'flex' }">
+        <main :style="{ flex: 1, padding: '1.5rem' }">
+          <router-view />
+        </main>
+        <aside
+          v-if="zones.detailPanel"
+          :style="{
+            width: '320px',
+            borderLeft: '1px solid #e2e8f0',
+            padding: '1.5rem',
+            backgroundColor: '#f7fafc',
+          }"
+        >
+          <component :is="zones.detailPanel" />
+        </aside>
+      </div>
+    </div>
+  </div>
+</template>
+",
+  "shell/src/components/Sidebar.vue": "<script setup lang="ts">
+import { RouterLink } from 'vue-router'
+import { useNavigation } from '@modular-vue/runtime'
+
+// \`useNavigation()\` returns the resolved navigation manifest — a plain value
+// (it's set once at resolve time, so it isn't wrapped in a ref). Its \`.groups\`
+// bucket the module-contributed items; the shell owns how they render.
+const navigation = useNavigation()
+</script>
+
+<template>
+  <aside
+    :style="{
+      width: '240px',
+      minHeight: '100vh',
+      borderRight: '1px solid #e2e8f0',
+      padding: '1rem',
+      backgroundColor: '#f7fafc',
+    }"
+  >
+    <h1 :style="{ fontSize: '1.25rem', marginBottom: '1.5rem', color: '#2d3748' }">
+      snap-app
+    </h1>
+
+    <nav>
+      <RouterLink
+        to="/"
+        :style="{
+          display: 'block',
+          padding: '0.5rem 0.75rem',
+          borderRadius: '0.375rem',
+          textDecoration: 'none',
+          color: '#4a5568',
+          marginBottom: '0.25rem',
+        }"
+      >
+        Home
+      </RouterLink>
+
+      <div v-for="group in navigation.groups" :key="group.group" :style="{ marginTop: '1rem' }">
+        <h3
+          :style="{
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            color: '#a0aec0',
+            marginBottom: '0.5rem',
+            padding: '0 0.75rem',
+          }"
+        >
+          {{ group.group }}
+        </h3>
+        <RouterLink
+          v-for="item in group.items.filter((i) => !i.hidden)"
+          :key="item.label"
+          :to="typeof item.to === 'string' ? item.to : '#'"
+          :style="{
+            display: 'block',
+            padding: '0.5rem 0.75rem',
+            borderRadius: '0.375rem',
+            textDecoration: 'none',
+            color: '#4a5568',
+            marginBottom: '0.25rem',
+          }"
+        >
+          {{ item.label }}
+        </RouterLink>
+      </div>
+
+      <div v-if="navigation.ungrouped.length > 0" :style="{ marginTop: '1rem' }">
+        <RouterLink
+          v-for="item in navigation.ungrouped.filter((i) => !i.hidden)"
+          :key="item.label"
+          :to="typeof item.to === 'string' ? item.to : '#'"
+          :style="{
+            display: 'block',
+            padding: '0.5rem 0.75rem',
+            borderRadius: '0.375rem',
+            textDecoration: 'none',
+            color: '#4a5568',
+            marginBottom: '0.25rem',
+          }"
+        >
+          {{ item.label }}
+        </RouterLink>
+      </div>
+    </nav>
+  </aside>
+</template>
+",
+  "shell/src/customer-onboarding-persistence.ts": "import { createWebStoragePersistence } from '@modular-vue/journeys'
+import type { CustomerOnboardingInput, CustomerOnboardingState } from '@acme/customer-onboarding-journey'
+
+/**
+ * localStorage-backed persistence for the customer-onboarding journey.
+ * One key per (customerId, journey) pair: starting the journey for the
+ * same customer twice resumes the active instance instead of minting a
+ * fresh one (see \`JourneyRuntime.start\` idempotency semantics).
+ *
+ * Pass this to \`registry.registerJourney(customerOnboardingJourney, { persistence })\`.
+ */
+export const customerOnboardingPersistence = createWebStoragePersistence<CustomerOnboardingInput, CustomerOnboardingState>({
+  keyFor: ({ journeyId, input }) => \`journey:\${input.customerId}:\${journeyId}\`,
+})
+",
+  "shell/src/main.ts": "import { createApp } from 'vue'
+import { createRouter, createWebHistory } from 'vue-router'
+import { createModularApp, createRegistry } from '@modular-vue/runtime'
+import type { AppDependencies, AppSlots } from '@acme/app-shared'
+import dashboard from '@acme/dashboard-module'
+import { authStore } from './stores/auth.js'
+import { configStore } from './stores/config.js'
+import { notificationsStore } from './stores/notifications.js'
+import { httpClient } from './services/http-client.js'
+import RootLayout from './components/RootLayout.vue'
+import ShellLayout from './components/ShellLayout.vue'
+import Home from './components/Home.vue'
+import orders from '@acme/orders-module'
+import { journeysPlugin } from '@modular-vue/journeys'
+// Use customerOnboardingHandle (typed token) at call sites: runtime.start(customerOnboardingHandle, input).
+import { customerOnboardingJourney, customerOnboardingHandle } from '@acme/customer-onboarding-journey'
+import { customerOnboardingPersistence } from './customer-onboarding-persistence.js'
+
+// Create the registry with shared dependencies.
+const registry = createRegistry<AppDependencies, AppSlots>({
+  stores: { auth: authStore, config: configStore, notifications: notificationsStore },
+  services: { httpClient },
+  reactiveServices: {},
+  slots: { commands: [] },
+}).use(journeysPlugin())
+
+// Register modules
+registry.register(dashboard)
+registry.register(orders)
+registry.registerJourney(customerOnboardingJourney, { persistence: customerOnboardingPersistence })
+
+// The shell owns the router. It declares a layout route at "/" whose nested
+// <router-view> hosts module routes; the index child renders Home. Module
+// routes are grafted under the named "root" route via \`parentRouteName\`, so
+// they render inside ShellLayout next to the sidebar + header chrome.
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    {
+      path: '/',
+      name: 'root',
+      component: ShellLayout,
+      children: [{ path: '', name: 'home', component: Home }],
+    },
+    // Public routes (e.g. /login) live here, OUTSIDE the "root" parent, so the
+    // auth guard's redirect target exists. See:
+    //   https://github.com/kibertoad/modular-react/blob/main/docs/shell-patterns-vue-router.md
+    // { path: '/login', name: 'login', component: LoginPage },
+  ],
+})
+
+// \`createModularApp\` resolves the registry and grafts module routes onto the
+// router. The returned manifest is itself a Vue plugin.
+//
+// Auth guard is a no-op TODO. Replace it with a real check and declare a public
+// /login route above so the redirect target resolves.
+const manifest = createModularApp(registry, {
+  router,
+  parentRouteName: 'root',
+
+  // authGuard: (to) => {
+  //   if (to.meta.public) return true
+  //   // The guard runs outside a component, so read the store snapshot directly.
+  //   return authStore.getState().isAuthenticated ? true : { name: 'login' }
+  // },
+})
+
+const app = createApp(RootLayout)
+app.use(router)
+// Installing the manifest wires the modular contexts (navigation, modules,
+// slots, shared deps) app-wide, so every <router-view>-mounted component can
+// inject them.
+app.use(manifest)
+app.mount('#app')
+",
+  "shell/src/services/http-client.ts": "import wretch from 'wretch'
+import { authStore } from '../stores/auth.js'
+import { configStore } from '../stores/config.js'
+
+export const httpClient = wretch()
+  .defer((w) => {
+    const { apiBaseUrl } = configStore.getState()
+    const { token } = authStore.getState()
+    let instance = w.url(apiBaseUrl)
+    if (token) {
+      instance = instance.auth(\`Bearer \${token}\`)
+    }
+    return instance
+  })
+",
+  "shell/src/stores/auth.ts": "import { createStore } from '@modular-vue/vue'
+import type { AuthStore } from '@acme/app-shared'
+
+// The framework ships a small zustand-shaped \`createStore\` (decision D3) so you
+// don't need a state library to get going. Actions call \`authStore.setState\`
+// (partial-merged). Swap in a zustand vanilla store or Pinia if you prefer —
+// anything exposing getState / setState / subscribe satisfies the contract.
+export const authStore = createStore<AuthStore>({
+  user: null,
+  token: null,
+  isAuthenticated: false,
+
+  login: async (credentials) => {
+    // TODO: Replace with real API call
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    authStore.setState({
+      user: {
+        id: 'usr-001',
+        name: 'Demo User',
+        email: credentials.email,
+        role: 'admin',
+      },
+      token: 'mock-jwt-token',
+      isAuthenticated: true,
+    })
+  },
+
+  logout: () => {
+    authStore.setState({ user: null, token: null, isAuthenticated: false })
+  },
+})
+",
+  "shell/src/stores/config.ts": "import { createStore } from '@modular-vue/vue'
+import type { ConfigStore } from '@acme/app-shared'
+
+export const configStore = createStore<ConfigStore>({
+  apiBaseUrl: 'http://localhost:3000/api',
+  environment: 'dev',
+  appName: 'snap-app',
+})
+",
+  "shell/src/stores/notifications.ts": "import { createStore } from '@modular-vue/vue'
+import type { NotificationsStore } from '@acme/app-shared'
+
+// The framework core store (decision D3) — a zustand-shaped vanilla store.
+// Update it with \`notificationsStore.setState(...)\` (partial-merged); read it
+// reactively in modules via the typed \`useStore\` composable from app-shared.
+export const notificationsStore = createStore<NotificationsStore>({
+  // TODO: Add initial state
+})
+",
+  "shell/tsconfig.json": "{
+  "extends": "../tsconfig.base.json",
+  "include": [
+    "src"
+  ],
+  "compilerOptions": {
+    "noEmit": true,
+    "types": [
+      "vite/client"
+    ]
+  }
+}",
+  "shell/vite.config.ts": "import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+
+export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    dedupe: ['vue', 'vue-router'],
+  },
+})
+",
+  "tsconfig.base.json": "{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true
+  }
+}",
+  "tsconfig.json": "{
+  "files": [],
+  "references": []
+}",
+  "vitest.config.ts": "import vue from '@vitejs/plugin-vue'
+import { defineConfig } from 'vitest/config'
+
+// Module tests render Vue SFCs (via @modular-vue/testing's renderModule), so
+// Vitest needs @vitejs/plugin-vue to transform \`.vue\` imports. \`happy-dom\`
+// gives the tests a DOM; individual test files may override the environment
+// with a \`// @vitest-environment\` directive.
+export default defineConfig({
+  plugins: [vue()],
+  test: {
+    environment: 'happy-dom',
+  },
+})
+",
+}
+`;

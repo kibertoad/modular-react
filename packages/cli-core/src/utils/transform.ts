@@ -9,9 +9,9 @@ import { RUNTIME_VERSIONS } from "../runtime-versions.js";
  */
 export function addModuleToMain(
   shellDir: string,
-  params: { scope: string; moduleName: string; importName: string },
+  params: { scope: string; moduleName: string; importName: string; mainFile: string },
 ): void {
-  const mainPath = resolve(shellDir, "src", "main.tsx");
+  const mainPath = resolve(shellDir, "src", params.mainFile);
   let content = readFileSync(mainPath, "utf-8");
 
   const importLine = `import ${params.importName} from '${params.scope}/${params.moduleName}-module'`;
@@ -119,9 +119,9 @@ export function addStoreToAppShared(
  */
 export function addStoreToMain(
   shellDir: string,
-  params: { storeName: string; importName: string },
+  params: { storeName: string; importName: string; mainFile: string },
 ): void {
-  const mainPath = resolve(shellDir, "src", "main.tsx");
+  const mainPath = resolve(shellDir, "src", params.mainFile);
   let content = readFileSync(mainPath, "utf-8");
 
   const storeImports = content
@@ -153,7 +153,7 @@ export function addStoreToMain(
  */
 export function addJourneyToShellPackageJson(
   shellDir: string,
-  params: { scope: string; journeyName: string },
+  params: { scope: string; journeyName: string; journeysPackage: string },
 ): void {
   const pkgPath = resolve(shellDir, "package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
@@ -162,8 +162,8 @@ export function addJourneyToShellPackageJson(
   pkg.dependencies[`${params.scope}/${params.journeyName}-journey`] = "workspace:*";
   // Modules-runtime always carries journeys transitively; the shell still
   // wants a direct dep so it can `import { journeysPlugin }` etc.
-  if (!pkg.dependencies["@modular-react/journeys"]) {
-    pkg.dependencies["@modular-react/journeys"] = RUNTIME_VERSIONS.journeys;
+  if (!pkg.dependencies[params.journeysPackage]) {
+    pkg.dependencies[params.journeysPackage] = RUNTIME_VERSIONS.journeys;
   }
   pkg.dependencies = sortObject(pkg.dependencies);
 
@@ -195,19 +195,23 @@ export function addJourneyToMain(
      * `{ persistence }`.
      */
     persistenceExportName?: string;
+    /** Journeys binding to import `journeysPlugin` from (e.g. `@modular-react/journeys`). */
+    journeysPackage: string;
+    /** Shell entry filename (`main.tsx` for React, `main.ts` for Vue). */
+    mainFile: string;
   },
 ): void {
-  const mainPath = resolve(shellDir, "src", "main.tsx");
+  const mainPath = resolve(shellDir, "src", params.mainFile);
   let content = readFileSync(mainPath, "utf-8");
 
   // 1. Import the journeys plugin if not already imported.
-  if (!content.includes("from '@modular-react/journeys'")) {
+  if (!content.includes(`from '${params.journeysPackage}'`)) {
     const lines = content.split("\n");
     const lastImportIndex = findLastImportIndex(lines);
     lines.splice(
       lastImportIndex + 1,
       0,
-      `import { journeysPlugin } from '@modular-react/journeys'`,
+      `import { journeysPlugin } from '${params.journeysPackage}'`,
     );
     content = lines.join("\n");
   }

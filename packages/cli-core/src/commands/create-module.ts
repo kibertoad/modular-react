@@ -84,12 +84,17 @@ export function createCreateModuleCommand(preset: CliPreset) {
       const listPageName = toPascalCase(name) + "List";
       const importName = toCamelCase(name);
       const moduleLabel = toPascalCase(name);
+      const sc = preset.scaffold;
+      const view = sc.viewExt;
 
       mkdirSync(resolve(moduleDir, "src", "pages"), { recursive: true });
       mkdirSync(resolve(moduleDir, "src", "panels"), { recursive: true });
       mkdirSync(resolve(moduleDir, "src", "__tests__"), { recursive: true });
-      writeFileSync(resolve(moduleDir, "package.json"), modulePackageJson({ scope, name, preset }));
-      writeFileSync(resolve(moduleDir, "tsconfig.json"), moduleTsconfig());
+      writeFileSync(
+        resolve(moduleDir, "package.json"),
+        sc.modulePackageJson?.({ scope, name }) ?? modulePackageJson({ scope, name, preset }),
+      );
+      writeFileSync(resolve(moduleDir, "tsconfig.json"), sc.moduleTsconfig?.() ?? moduleTsconfig());
       writeFileSync(
         resolve(moduleDir, "src", "index.ts"),
         preset.templates.moduleDescriptor({
@@ -103,15 +108,15 @@ export function createCreateModuleCommand(preset: CliPreset) {
         }),
       );
       writeFileSync(
-        resolve(moduleDir, "src", "pages", `${pageName}.tsx`),
+        resolve(moduleDir, "src", "pages", `${pageName}.${view}`),
         preset.templates.modulePage({ scope, pageName, moduleLabel, moduleName: name }),
       );
       writeFileSync(
-        resolve(moduleDir, "src", "pages", `${listPageName}.tsx`),
+        resolve(moduleDir, "src", "pages", `${listPageName}.${view}`),
         preset.templates.moduleListPage({ scope, pageName: listPageName, moduleLabel }),
       );
       writeFileSync(
-        resolve(moduleDir, "src", "panels", "DetailPanel.tsx"),
+        resolve(moduleDir, "src", "panels", `DetailPanel.${view}`),
         preset.templates.moduleDetailPanel({ moduleLabel }),
       );
       writeFileSync(
@@ -120,7 +125,12 @@ export function createCreateModuleCommand(preset: CliPreset) {
       );
 
       addModuleToShellPackageJson(project.shellDir, { scope, moduleName: name });
-      addModuleToMain(project.shellDir, { scope, moduleName: name, importName });
+      addModuleToMain(project.shellDir, {
+        scope,
+        moduleName: name,
+        importName,
+        mainFile: sc.entryMain,
+      });
 
       if (!isNonInteractive) {
         p.note(
