@@ -2,24 +2,43 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * E2E tests against the demo catalog. The webServer in playwright.config.ts
- * builds the catalog from `examples/tanstack-router/customer-onboarding-journey`
- * and `examples/tanstack-router/journey-invoke`, so these assertions are
- * coupled to the metadata declared on those modules and journeys. If you
- * rename a team / domain / tag in those examples, update the constants
- * below.
+ * builds the catalog from the tanstack-router `customer-onboarding-journey` and
+ * `journey-invoke` examples plus the `@modular-vue` `integration-manager`
+ * example, so these assertions are coupled to the metadata declared on those
+ * modules and journeys. If you rename a team / domain / tag in those examples,
+ * update the constants below. The Vue integration-manager modules
+ * (contentful / github / strapi) are harvested through `@vitejs/plugin-vue`
+ * and ship at 0.0.0 with no owner team — see `VUE_MODULES` / `versionFor`.
  */
+const VUE_MODULES = ["contentful", "github", "strapi"];
+
 const KNOWN = {
-  modules: ["age-verify", "billing", "checkout-confirm", "checkout-review", "plan", "profile"],
+  modules: [
+    "age-verify",
+    "billing",
+    "checkout-confirm",
+    "checkout-review",
+    "contentful",
+    "github",
+    "plan",
+    "profile",
+    "strapi",
+  ],
   journeys: ["checkout", "customer-onboarding", "verify-identity"],
   teams: ["billing-platform", "checkout", "growth", "onboarding-core", "trust-and-safety"],
   domains: ["commerce", "compliance", "finance", "onboarding"],
 };
 
+/** Version a module card renders with: Vue integration modules are 0.0.0. */
+function versionFor(id: string): string {
+  return VUE_MODULES.includes(id) ? "0.0.0" : "1.0.0";
+}
+
 async function gotoModulesList(page: Page) {
   await page.goto("/");
   // `/` redirects to `/modules`
   await page.waitForURL(/\/modules(\?|$)/);
-  await expect(page.getByText(/Showing \d+ of 6 modules/)).toBeVisible();
+  await expect(page.getByText(/Showing \d+ of 9 modules/)).toBeVisible();
 }
 
 test.describe("catalog SPA", () => {
@@ -28,7 +47,8 @@ test.describe("catalog SPA", () => {
 
     for (const id of KNOWN.modules) {
       // Each card has the descriptor id + version in a mono CardDescription.
-      await expect(page.getByText(`${id}@1.0.0`).first()).toBeVisible();
+      // Vue integration modules render at 0.0.0, the React ones at 1.0.0.
+      await expect(page.getByText(`${id}@${versionFor(id)}`).first()).toBeVisible();
     }
   });
 
@@ -50,14 +70,14 @@ test.describe("catalog SPA", () => {
     await page.getByRole("option", { name: "checkout" }).click();
 
     await expect(page).toHaveURL(/team=checkout/);
-    await expect(page.getByText(/Showing 2 of 6 modules/)).toBeVisible();
+    await expect(page.getByText(/Showing 2 of 9 modules/)).toBeVisible();
     await expect(page.getByText("checkout-review@1.0.0")).toBeVisible();
     await expect(page.getByText("checkout-confirm@1.0.0")).toBeVisible();
     await expect(page.getByText("billing@1.0.0")).not.toBeVisible();
 
     // URL round-trip: a fresh navigation to the same URL must restore the filter.
     await page.goto("/modules?team=checkout");
-    await expect(page.getByText(/Showing 2 of 6 modules/)).toBeVisible();
+    await expect(page.getByText(/Showing 2 of 9 modules/)).toBeVisible();
   });
 
   test("clicking a team chip on a card navigates to the team pivot", async ({ page }) => {
@@ -79,12 +99,12 @@ test.describe("catalog SPA", () => {
     //   tag "payments" → ["pci", "soc2"]   (billing, checkout-confirm)
     //   tag "identity" → ["soc2"]          (age-verify)
     await page.goto("/modules?c.compliance=pci");
-    await expect(page.getByText(/Showing 2 of 6 modules/)).toBeVisible();
+    await expect(page.getByText(/Showing 2 of 9 modules/)).toBeVisible();
     await expect(page.getByText("billing@1.0.0")).toBeVisible();
     await expect(page.getByText("checkout-confirm@1.0.0")).toBeVisible();
 
     await page.goto("/modules?c.compliance=soc2");
-    await expect(page.getByText(/Showing 3 of 6 modules/)).toBeVisible();
+    await expect(page.getByText(/Showing 3 of 9 modules/)).toBeVisible();
     await expect(page.getByText("age-verify@1.0.0")).toBeVisible();
   });
 
@@ -142,12 +162,12 @@ test.describe("catalog SPA", () => {
     // Apply a team filter, count narrows, Clear becomes enabled.
     await page.getByRole("combobox").nth(0).click();
     await page.getByRole("option", { name: "checkout" }).click();
-    await expect(page.getByText(/Showing 2 of 6 modules/)).toBeVisible();
+    await expect(page.getByText(/Showing 2 of 9 modules/)).toBeVisible();
     await expect(clearButton).toBeEnabled();
 
     // Click Clear — filter drops, full list returns, URL no longer carries `team`.
     await clearButton.click();
-    await expect(page.getByText(/Showing 6 of 6 modules/)).toBeVisible();
+    await expect(page.getByText(/Showing 9 of 9 modules/)).toBeVisible();
     await expect(page).not.toHaveURL(/team=/);
     await expect(clearButton).toBeDisabled();
   });

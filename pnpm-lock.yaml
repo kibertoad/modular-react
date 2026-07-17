@@ -33,12 +33,18 @@ importers:
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.59.1
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.0
+        version: 6.0.8(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))(vue@3.5.40(typescript@6.0.3))
       rimraf:
         specifier: ^6.0.1
         version: 6.1.3
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
 
   examples/react-router/active-project-manifest/app-shared:
     dependencies:
@@ -2643,6 +2649,9 @@ importers:
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.2
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.0
+        version: 6.0.8(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))(vue@3.5.40(typescript@6.0.3))
       rimraf:
         specifier: ^6.0.1
         version: 6.1.3
@@ -2652,6 +2661,9 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@25.6.2)(happy-dom@20.9.0)(msw@2.14.5(@types/node@25.6.2)(typescript@6.0.3))(vite@8.1.3(@types/node@25.6.2)(esbuild@0.27.7)(jiti@2.7.0))
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
 
   packages/catalog/spa-src:
     dependencies:
