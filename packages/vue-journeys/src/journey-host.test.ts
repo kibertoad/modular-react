@@ -72,6 +72,22 @@ const journey = defineJourney<Modules, Record<string, never>, void, string>()({
 
 const handle = defineJourneyHandle(journey);
 
+/** A journey whose `onAbandon` returns a non-terminal `{ next }` — the case a
+ * host's forced teardown must still terminate, or the instance leaks. */
+const journeyAbandonNext = defineJourney<Modules, Record<string, never>, void, string>()({
+  id: "abandon-next",
+  version: "1.0.0",
+  initialState: () => ({}),
+  start: () => ({ module: "a", entry: "show", input: undefined }),
+  onAbandon: () => ({ next: { module: "b", entry: "show", input: undefined } }),
+  transitions: {
+    a: { show: { next: () => ({ next: { module: "b", entry: "show", input: undefined } }) } },
+    b: { show: { allowBack: true, next: () => ({ complete: "done" }) } },
+  },
+});
+
+const handleAbandonNext = defineJourneyHandle(journeyAbandonNext);
+
 function setup() {
   return createJourneyRuntime([{ definition: journey, options: undefined }], {
     modules,
@@ -148,6 +164,29 @@ describe("<JourneyHost>", () => {
 
     // `forget` drops the record outright, which is the half `<JourneyOutlet>`
     // does not do on its own.
+    expect(runtime.getInstance(id)).toBeNull();
+    expect(runtime.listInstances()).toHaveLength(0);
+  });
+
+  it("forces a terminal teardown even when onAbandon would keep the instance alive", async () => {
+    // `onAbandon` returns a non-terminal `{ next }`. Without a forced teardown,
+    // unmount would advance the instance to `b` and leave it active, and
+    // `forget()` — which only drops terminal records — would no-op, leaking the
+    // instance and its persistence key. The host forces the teardown terminal.
+    const runtime = createJourneyRuntime([{ definition: journeyAbandonNext, options: undefined }], {
+      modules,
+      debug: false,
+    });
+    const wrapper = mountUnderProvider(runtime, () =>
+      h(JourneyHost, { handle: handleAbandonNext }),
+    );
+    await flushPromises();
+    const id = runtime.listInstances()[0]!;
+    expect(runtime.getInstance(id)?.status).toBe("active");
+
+    wrapper.unmount();
+    await Promise.resolve();
+
     expect(runtime.getInstance(id)).toBeNull();
     expect(runtime.listInstances()).toHaveLength(0);
   });

@@ -2758,12 +2758,13 @@ export function createJourneyRuntime(
       return canRewindToFor(record, reg, historyIndex);
     },
 
-    end(id, reason) {
+    end(id, reason, options) {
       const record = instances.get(id);
       if (!record) return;
       if (record.status === "completed" || record.status === "aborted") return;
       const reg = definitions.get(record.journeyId);
       if (!reg) return;
+      const force = options?.force === true;
       // Cascade-end: a parent that gets force-terminated must take its
       // active child with it. Sever the parent ↔ child link first so the
       // child's terminal does NOT trigger the parent's resume (the parent
@@ -2779,8 +2780,13 @@ export function createJourneyRuntime(
         }
         childToParent.delete(childId);
         // Use a distinct cascade reason so child telemetry can distinguish
-        // "user closed parent" from "child aborted on its own."
-        runtime.end(childId, { reason: "parent-ended", parentId: record.id, cause: reason });
+        // "user closed parent" from "child aborted on its own." Propagate
+        // `force` so a guaranteed-terminal teardown cleans the whole chain.
+        runtime.end(
+          childId,
+          { reason: "parent-ended", parentId: record.id, cause: reason },
+          options,
+        );
       }
       // An outlet that unmounts mid-load should still be able to tear the
       // placeholder instance down. The journey never "started" as far as the
@@ -2827,6 +2833,15 @@ export function createJourneyRuntime(
             },
           };
         }
+      }
+      // Force-terminal: a teardown caller (a host/outlet unmounting) must end
+      // up terminal. `onAbandon`'s terminal choices — `{ complete }` /
+      // `{ abort }` — are honoured; a non-terminal result (`{ next }` would
+      // advance the flow to a step nothing renders, `{ invoke }` would launch
+      // a child) is coerced to the default abort so `forget()` can drop the
+      // record instead of leaking a live instance.
+      if (force && !("complete" in result) && !("abort" in result)) {
+        result = defaultAbort;
       }
       applyTransition(record, reg, result, null);
     },

@@ -183,7 +183,16 @@ export function useJourneyHost<TInput>(
       // the run and drops the record. An inner `<JourneyOutlet>` may have
       // already ended it — `end` no-ops on a terminal instance, so the race is
       // harmless in either order.
-      runtime.end(id, { reason: "unmounted" });
+      //
+      // `force`: the host owns this instance's lifetime, so unmount must leave
+      // it terminal. Without force, an `onAbandon` returning a non-terminal
+      // `{ next }` would advance the flow to a step no host renders and
+      // `forget` would then no-op, leaking the instance and its persistence
+      // key. Forcing coerces that to an abort; a terminal `onAbandon` choice
+      // (complete/abort) is still honoured. The inner outlet's teardown also
+      // forces, so whichever runs first terminates and the other no-ops —
+      // `onAbandon` runs once, not twice. Matches the React host.
+      runtime.end(id, { reason: "unmounted" }, { force: true });
       runtime.forget(id);
     });
   });

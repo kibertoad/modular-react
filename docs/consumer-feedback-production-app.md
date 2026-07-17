@@ -69,8 +69,10 @@ stack) that solving it once in the library is worth a lot.
 >
 > Note for whoever picks up the app: the host's start is latched on a ref inside
 > an effect, not `useState(() => runtime.start(...))`. The `useState` form
-> double-invokes its initializer under StrictMode and leaks an instance per mount
-> — worth checking the app's own host for the same bug.
+> double-invokes its initializer under StrictMode and keeps only one result;
+> without idempotent persistence the discarded `start` leaks an instance per
+> mount (deterministic persistence bounds it by converging both calls on the
+> same instance) — worth checking the app's own host for the same bug.
 
 **Evidence.** The app wraps `<JourneyOutlet>` in its own host component to add
 what every host needs: start-on-mount, a step counter, and instance cleanup on

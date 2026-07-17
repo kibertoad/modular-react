@@ -276,6 +276,19 @@ export function resolveJourneySyncAction(
  * Pair it with `<JourneyHost>` (React) / `<JourneyHost>` (Vue), which owns
  * start-on-mount and end-on-unmount.
  *
+ * **A sync tracks exactly the instance it is given — it does not follow child
+ * journeys.** When this instance `invoke`s a child, the parent pauses on its
+ * invoking step and the child runs on its own instance. This sync keeps
+ * mirroring the *parent's* step (the paused one), and a Back press against it
+ * resolves through `onBlocked` — a child in flight is one of the documented
+ * reasons the runtime refuses a rewind. It deliberately does **not** reach
+ * into the child's `history`/`future`: a child's steps are the child's own
+ * URL space, and splicing two instances' histories into one path string would
+ * make neither addressable. To deep-link within a child, mount a second sync
+ * on the child instance (e.g. from the child's own host). Nested-journey URL
+ * composition beyond that — a single path that encodes both levels — is out of
+ * scope for this primitive.
+ *
  * @example
  * ```ts
  * const sync = createJourneySync(runtime, instanceId, port, {
@@ -311,6 +324,29 @@ export function createJourneySync(
   let applying = false;
   let stopped = false;
 
+  /**
+   * Navigation generations, guarding the one write that is genuinely async in
+   * a real router: the `port.go(-n)` a self-rewind issues (§ `writeUrl`).
+   *
+   * `port.go` returns before the browser has moved; its location change lands a
+   * turn or more later, as a port notification. Between issuing the `go` and
+   * that echo arriving, the runtime can advance again (the user clicks Next
+   * before the router settles the Back). The late echo then reads a path that
+   * resolves to a rewind and would drag the runtime back over the newer state —
+   * the classic "stale navigation wins" race, invisible to the synchronous
+   * memory port but real against TanStack / React Router / vue-router.
+   *
+   * `runtimeEpoch` counts genuine runtime advances. When `writeUrl` issues a
+   * `go`, it stamps `pendingGoEpoch` with the epoch at that moment. When the
+   * echo arrives, a higher `runtimeEpoch` means a newer runtime event
+   * superseded the `go`: the sync refuses to follow it and re-asserts the URL
+   * to the runtime's current step instead. Only the latest `go` is tracked —
+   * more than one in flight is already outside the "journey owns a contiguous
+   * run of history" contract the relative-navigation path depends on.
+   */
+  let runtimeEpoch = 0;
+  let pendingGoEpoch: number | null = null;
+
   /** Runtime -> location. */
   const writeUrl = (): void => {
     if (stopped) return;
@@ -334,7 +370,12 @@ export function createJourneySync(
         // Rewound from inside the journey. Walk the browser back the same
         // distance rather than pushing, so the forward stack survives and
         // Forward redoes the step. Async in every real router — the port's
-        // notification lands later and reconciles to `{ kind: "none" }`.
+        // notification lands later and reconciles to `{ kind: "none" }`, or,
+        // if the runtime advanced in the meantime, is caught as stale by the
+        // epoch guard in `readUrl`. Stamp the epoch *before* issuing the `go`:
+        // a synchronous port (the memory stub, tests) notifies re-entrantly
+        // from inside the call, so the guard has to already see the pending go.
+        pendingGoEpoch = runtimeEpoch;
         port.go(depth - lastDepth);
       } else {
         port.replace(target);
@@ -354,6 +395,21 @@ export function createJourneySync(
     if (!instance) return;
     const path = port.read();
     const action = resolveJourneySyncAction(instance, path, stepToPath);
+
+    // Resolve the pending self-rewind `go`, if any. This notification is either
+    // its echo (nothing newer happened — let it reconcile, which will be a
+    // no-op since the runtime is already where the `go` aimed) or a stale echo
+    // the runtime has since moved past. The latter must not drive the runtime:
+    // re-assert the URL to the current step and drop the location change.
+    if (pendingGoEpoch !== null) {
+      const superseded = runtimeEpoch !== pendingGoEpoch;
+      pendingGoEpoch = null;
+      if (superseded && action.kind !== "none") {
+        writeUrl();
+        return;
+      }
+    }
+
     if (action.kind === "none") return;
     if (action.kind === "unresolved") {
       if (reportUnresolved) onUnresolved?.({ path, instance });
@@ -386,10 +442,22 @@ export function createJourneySync(
     const landed = journeyStepPath(after, stepToPath);
     if (landed === null || landed === port.read()) return;
     // The journey would not go where the location asked. Snap the URL back to
-    // the step the user is actually on. `push` (not `replace`) is deliberate:
-    // the browser is sitting on the earlier entry, so pushing restores the
-    // stack to exactly its pre-Back shape and leaves Back pressable again.
-    port.push(landed);
+    // the step the user is actually on.
+    //
+    // A refused rewind left the browser sitting `after.history.length -
+    // action.historyIndex` entries behind the journey's step. When the port
+    // can navigate relatively, walk it forward by exactly that distance: the
+    // in-between entries (a `b` skipped over by a `c → a` history-menu jump)
+    // survive, and Back stays pressable on the whole run. `push` cannot do
+    // this — pushing from an earlier entry truncates everything ahead of it,
+    // collapsing `[a, b, c]` to `[a, c]` and losing `b`. So `push` is only the
+    // fallback for a port without `go`, where the forward stack is forfeit
+    // anyway (the same cost the advance path documents).
+    if (action.kind === "rewind" && port.go) {
+      port.go(after.history.length - action.historyIndex);
+    } else {
+      port.push(landed);
+    }
     onBlocked?.({ path, instance: after });
   };
 
@@ -403,7 +471,10 @@ export function createJourneySync(
   };
 
   const unsubscribeRuntime = runtime.subscribe(instanceId, () => {
+    // `applying` notifications are the sync's own `rewindTo`/`goForward`, not
+    // genuine runtime moves, so they neither advance the epoch nor write.
     if (applying) return;
+    runtimeEpoch += 1;
     writeUrl();
   });
   const unsubscribePort = port.subscribe(() => {

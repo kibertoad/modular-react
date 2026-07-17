@@ -958,8 +958,21 @@ export interface JourneyRuntime {
   /**
    * Force-terminate an instance. Fires `onAbandon` if still active; no-op if
    * the instance is already terminal or unknown.
+   *
+   * `onAbandon` returns a {@link TransitionResult}, and a terminal one
+   * (`{ complete }` / `{ abort }`) is honoured as written — this is how a
+   * "complete instead of abort on tab close" policy works. But `onAbandon`
+   * may also return a **non-terminal** result (`{ next }` advancing the flow,
+   * `{ invoke }` launching a child), which leaves the instance active after an
+   * `end()` — fine for an explicit, still-mounted cancel, but a leak when the
+   * caller is a component tearing down: there is nothing left to render the
+   * next step, and `forget()` cannot drop a live instance. Pass
+   * `{ force: true }` for such teardown callers: `onAbandon` still runs (so its
+   * telemetry and a terminal choice are preserved), but a non-terminal result
+   * is coerced to an abort, guaranteeing the instance ends. The coercion
+   * cascades to any active child.
    */
-  end(id: InstanceId, reason?: unknown): void;
+  end(id: InstanceId, reason?: unknown, options?: { readonly force?: boolean }): void;
   /**
    * Drop a terminal instance from the runtime. No-op for active/loading
    * instances (use `end()` first) and unknown ids. Prevents long-lived

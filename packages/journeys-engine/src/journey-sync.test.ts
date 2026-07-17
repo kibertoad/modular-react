@@ -77,6 +77,23 @@ const locked = defineJourney<Modules, Record<string, never>>()({
   },
 });
 
+/**
+ * a -> b -> c, again with no `allowBack`: every rewind is refused, but the run
+ * is long enough for a multi-entry Back (a history-menu jump past an
+ * intermediate step) to be refused.
+ */
+const lockedLinear = defineJourney<Modules, Record<string, never>>()({
+  id: "locked-linear",
+  version: "1.0.0",
+  initialState: () => ({}),
+  start: () => ({ module: "a", entry: "show", input: undefined }),
+  transitions: {
+    a: { show: { next: () => ({ next: { module: "b", entry: "show", input: undefined } }) } },
+    b: { show: { next: () => ({ next: { module: "c", entry: "show", input: undefined } }) } },
+    c: { show: { next: () => ({ complete: undefined }) } },
+  },
+});
+
 /** a -> b -> (again) -> a -> b, so the same path occupies two history frames. */
 const loop = defineJourney<Modules, Record<string, never>>()({
   id: "loop",
@@ -334,6 +351,85 @@ describe("createJourneySync", () => {
     expect(port.entries).toEqual(["a/show", "b/show"]);
     expect(onBlocked).toHaveBeenCalledTimes(1);
     expect(onBlocked.mock.calls[0]?.[0]).toMatchObject({ path: "a/show" });
+  });
+
+  it("preserves entries skipped by a refused multi-entry Back instead of truncating them", () => {
+    // From [a, b, c], a history-menu jump lands straight back on `a`. The
+    // journey refuses the rewind (no `allowBack`), so the URL must return to
+    // `c`. `push`-ing `c` from the `a` entry would truncate the forward stack
+    // to [a, c] and lose `b`; with `go` available the sync walks the browser
+    // forward the rejected distance, keeping the whole run intact.
+    const { runtime, id, harness, instance } = setup(lockedLinear);
+    const port = createMemoryJourneySyncPort();
+    const onBlocked = vi.fn();
+    createJourneySync(runtime, id, port, { onBlocked });
+    harness.fireExit(id, "next"); // a -> b
+    harness.fireExit(id, "next"); // b -> c
+    expect(port.entries).toEqual(["a/show", "b/show", "c/show"]);
+    expect(port.index).toBe(2);
+
+    port.go(-2); // jump c -> a through the history menu
+
+    // Refused: the journey stays on `c`...
+    expect(instance().step?.moduleId).toBe("c");
+    // ...and the full stack survives, cursor back on `c`, Back still pressable.
+    expect(port.read()).toBe("c/show");
+    expect(port.entries).toEqual(["a/show", "b/show", "c/show"]);
+    expect(port.index).toBe(2);
+    expect(onBlocked).toHaveBeenCalledTimes(1);
+    expect(onBlocked.mock.calls[0]?.[0]).toMatchObject({ path: "a/show" });
+  });
+
+  it("ignores a stale async go() that lands after a newer runtime advance", () => {
+    // The one write that is genuinely async in a real router is the self-rewind
+    // `go(-n)`. Model it: the port records the delta and only applies it when
+    // `deliverGo()` is called, standing in for a router that settles a turn
+    // later. Between issuing the `go` and its echo, the user advances again;
+    // the stale echo must not drag the runtime back over the newer step. The
+    // synchronous memory port cannot exhibit this, which is why the finding
+    // could not be caught by the existing suite.
+    const { runtime, id, harness, instance } = setup();
+    const base = createMemoryJourneySyncPort();
+    let queued: number | null = null;
+    const port: JourneySyncPort = {
+      read: base.read,
+      push: base.push,
+      replace: base.replace,
+      go: (delta) => {
+        queued = delta;
+      },
+      subscribe: base.subscribe,
+    };
+    const deliverGo = (): void => {
+      if (queued === null) return;
+      const delta = queued;
+      queued = null;
+      base.go(delta);
+    };
+
+    createJourneySync(runtime, id, port);
+    harness.fireExit(id, "next"); // a -> b, URL pushed to b/show
+    expect(base.read()).toBe("b/show");
+
+    // Runtime rewinds to `a`; the sync queues go(-1), but the router has not
+    // delivered it, so the URL still shows `b`.
+    runtime.goBack(id);
+    expect(instance().step?.moduleId).toBe("a");
+    expect(base.read()).toBe("b/show");
+
+    // Before delivery, the user advances forward again to `b`.
+    harness.fireExit(id, "next");
+    expect(instance().step?.moduleId).toBe("b");
+
+    // The stale go(-1) finally lands. It moves the browser to `a`, but the
+    // sync catches it as stale and re-asserts the URL — synchronously, within
+    // the same notification — so the browser never rests on `a/show`.
+    deliverGo();
+
+    // The runtime keeps the newer step — the stale go did not rewind it...
+    expect(instance().step?.moduleId).toBe("b");
+    // ...and the URL matches the runtime.
+    expect(base.read()).toBe("b/show");
   });
 
   it("reports a location the journey has never visited without touching it", () => {

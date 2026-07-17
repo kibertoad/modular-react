@@ -1652,9 +1652,13 @@ interface JourneyRuntime {
 
   /**
    * Force-terminate an instance. Fires `onAbandon` if still active;
-   * no-op if already terminal or unknown.
+   * no-op if already terminal or unknown. Pass `{ force: true }` for a
+   * teardown caller (an unmounting host/outlet) that must end up
+   * terminal: a terminal `onAbandon` result is honoured, but a
+   * non-terminal one (`{ next }` / `{ invoke }`) is coerced to an abort
+   * so `forget()` can drop the record instead of leaking a live instance.
    */
-  end(id: InstanceId, reason?: unknown): void;
+  end(id: InstanceId, reason?: unknown, options?: { readonly force?: boolean }): void;
 
   /** Drop a terminal instance from memory. No-op on active/loading. */
   forget(id: InstanceId): void;
@@ -2139,7 +2143,7 @@ What it does:
 3. Resolves `step.module` + `step.entry` against the module map (prop, or the one the runtime was built with) and renders its component with a freshly bound `{ input, exit, goBack? }`. Lazy entries are wrapped in `React.lazy` + `<Suspense fallback={entry.fallback ?? loadingFallback ?? null}>` automatically — see [Pattern - lazy entry-points](#pattern---lazy-entry-points-code-splitting-per-step).
 4. Wraps the step in an error boundary and applies `onStepError` policy. Retries count against `retryLimit` globally per instance (the counter does **not** reset when a retry advances the step), so a throwing component can't bypass the cap by bumping the step token. Lazy import failures surface through this same boundary.
 5. Fires `onFinished` exactly once when the instance terminates; the outcome carries `{ status, payload, instanceId, journeyId }` so analytics can correlate without re-reading props.
-6. On unmount while still `active` **or** `loading`, abandons the instance via `runtime.end({ reason: 'unmounted' })`. Two defenses keep the instance alive when it should stay: StrictMode's simulated mount/unmount/remount cycle (same component, same `mountedRef`) and back-to-back independent outlets that hand off to each other (checked via `record.listeners.size`).
+6. On unmount while still `active` **or** `loading`, abandons the instance via `runtime.end(id, { reason: 'unmounted' }, { force: true })`. The `force` guarantees the instance ends even if `onAbandon` returns a non-terminal `{ next }` — an unmounting outlet can't host a next step, so a plain `end()` would leave it stranded and active. Two defenses keep the instance alive when it should stay: StrictMode's simulated mount/unmount/remount cycle (same component, same `mountedRef`) and back-to-back independent outlets that hand off to each other (checked via `record.listeners.size`).
 7. After each step mounts, schedules a `requestIdleCallback` (with a `setTimeout(_, 0)` fallback) to call `preload()` on every entry reachable from the current step (per `preload` mode — see the prop docs above). Effect cancels on step change so a fast advance doesn't race with the previous step's preload set.
 
 ### Error policies in depth
@@ -2208,9 +2212,9 @@ For chrome around the step, pass a render-prop child and place the ready-built `
 
 - **The instance is fixed for the host's lifetime.** `handle`, `input` and `runtime` are read once, at mount. Changing them later does **not** restart the journey — silently abandoning a half-finished flow because a prop identity changed is never what the caller meant. To run a different journey, or to run it on a different runtime, remount: `<JourneyHost key={journeyId} …>`. (An `instanceId` only means anything on the runtime that started it, so following a swapped runtime could only strand the host against one that has never heard of the instance.)
 - **Start means resume, when persistence is configured.** `runtime.start()` with a `persistence` adapter returns the in-flight instance for the same `keyFor(input)` instead of minting a new one, so a host that remounts (route change, tab switch) picks the journey back up where it was. Without persistence, every mount starts a fresh instance. See [Keys, idempotency, and "resume vs new"](#keys-idempotency-and-resume-vs-new).
-- **The journey starts from an effect, not during render.** `runtime.start()` mutates the runtime and may write to persistence, and a render React discards or replays would duplicate that. So `instanceId` is `null` for the first render and the host shows `loadingFallback` — this is also why `useState(() => runtime.start(…))`, the obvious hand-rolled version, quietly leaks an instance per mount under StrictMode.
-- **Unmount ends _and_ forgets.** `runtime.end(id, { reason: "unmounted" })` then `runtime.forget(id)`, deferred one microtask so StrictMode's mount/unmount/mount cycle does not tear the journey down on its first visit. `<JourneyOutlet>` on its own only ends; forgetting is what stops terminal records accumulating in a long-lived shell.
-- **Nesting an outlet is fine.** The host renders one internally, and the two deferred teardowns are safe in either order (`end` no-ops on a terminal instance).
+- **The journey starts from an effect, not during render.** `runtime.start()` mutates the runtime and may write to persistence, and a render React discards or replays would duplicate that. So `instanceId` is `null` for the first render and the host shows `loadingFallback` — this is also why `useState(() => runtime.start(…))`, the obvious hand-rolled version, is unsafe under StrictMode: its initializer runs twice and React keeps only one result. With deterministic persistence both calls converge on the same instance (the second `start` resumes the first), so the damage is bounded; but without idempotent persistence the discarded call leaks a live instance per mount. Starting from the effect sidesteps the question entirely.
+- **Unmount ends _and_ forgets.** `runtime.end(id, { reason: "unmounted" }, { force: true })` then `runtime.forget(id)`, deferred one microtask so StrictMode's mount/unmount/mount cycle does not tear the journey down on its first visit. `<JourneyOutlet>` on its own only ends; forgetting is what stops terminal records accumulating in a long-lived shell. The `force` is what makes "ends" reliable: `onAbandon` may return a non-terminal `{ next }` (or `{ invoke }`), which on a plain `end()` would advance the flow to a step no host renders and leave the instance active — `forget()` would then no-op and the instance (and its persistence key) would leak. Forcing coerces that to an abort while still honouring a terminal `onAbandon` choice (complete/abort).
+- **Nesting an outlet is fine.** The host renders one internally, and the two deferred teardowns are safe in either order — `end` no-ops on a terminal instance, and both force, so whichever runs first terminates and the other no-ops. That also means `onAbandon` runs once per unmount, not once per teardown.
 
 ### `stepIndex`, and the absence of `stepCount`
 
@@ -2270,13 +2274,19 @@ React Router:
 
 ```ts
 const navigate = useNavigate();
-const location = useLocation();
-const locationRef = useRef(location);
-locationRef.current = location;
 
 const port = useMemo<JourneySyncPort>(
   () => ({
-    read: () => locationRef.current.pathname.replace(/^\/checkout\//, ""),
+    // Read the browser's own location, not React Router's `useLocation()`.
+    // This port subscribes to `popstate`, and when that listener fires React
+    // Router's state update can still be batched — a `useLocation()` value
+    // (or a ref tracking it) can point at the *previous* path for the length
+    // of the event. `window.location` is the source `popstate` reports on and
+    // is always current inside the handler, so `read()` never sees a stale
+    // path and miss a change. (Routers that expose their committed location
+    // synchronously — TanStack's `router.state.location` — can read that
+    // instead.)
+    read: () => window.location.pathname.replace(/^\/checkout\//, ""),
     push: (path) => navigate(`/checkout/${path}`),
     replace: (path) => navigate(`/checkout/${path}`, { replace: true }),
     go: (delta) => navigate(delta),
@@ -2289,7 +2299,7 @@ const port = useMemo<JourneySyncPort>(
 );
 ```
 
-The port need not be memoized for correctness — the hook reads through to whatever you passed on the latest render, so an inline literal will not rebuild the reconciler. `stepToPath`, `onUnresolved` and `onBlocked` are read the same way.
+The port need not be memoized for correctness — the hook reads through to whatever you passed on the latest render, so an inline literal will not rebuild the reconciler. `onUnresolved` and `onBlocked` are read the same live way. Two things are read **once**, when the sync is created, and changing them later has no effect until it is re-created (change `instanceId` or remount): `port.subscribe` — the subscription belongs to the port current at that moment — and `stepToPath`, because the engine needs a stable step→path mapping to resolve the history frames the port has already stamped, and a mapping that changed mid-flight would strand previously visited paths as unresolved.
 
 `createMemoryJourneySyncPort()` is an in-memory port over an array of entries — for tests, and for headless hosts that want journey history semantics without a browser.
 
@@ -2309,7 +2319,7 @@ A journey's step is derived from its state, and `JourneyStep` carries no identit
 
 So `onUnresolved` is where a stale bookmark, or a click on a nav link out of the flow, lands. The sync deliberately does not force the URL back there — that would trap a user who navigated away on purpose. Decide for yourself: `runtime.end(…)` to abandon, or navigate to the journey's real step to bounce a stale link. It is **not** fired for the initial reconcile: at mount the URL has not been stamped with a step yet, and a host that ends the journey on this callback would otherwise kill the instance it just started. (A stale deep link is handled by the same rule — the journey starts at its real first step and the sync rewrites the URL to match.)
 
-`onBlocked` fires when the frame is real but the runtime will not move to it: the transition did not opt in with `allowBack: true`, the entry declares `allowBack: false`, or a child journey is in flight. The sync re-asserts the current step with `push`, which is the standard "block the Back button" shape — the URL snaps forward and the user stays put. Use the callback to explain why, not to navigate.
+`onBlocked` fires when the frame is real but the runtime will not move to it: the transition did not opt in with `allowBack: true`, the entry declares `allowBack: false`, or a child journey is in flight. The sync re-asserts the current step — the standard "block the Back button" shape, where the URL snaps forward and the user stays put. When the port supplies `go`, it walks the browser forward by exactly the rejected distance, so a multi-entry jump that was refused (`c → a` through the history menu) leaves the whole `[a, b, c]` run intact rather than collapsing it. Without `go` it falls back to `push`, which is truthful but truncates the forward entries (the same cost the advance path documents below). Use the callback to explain why, not to navigate.
 
 ### Push, replace, and the forward stack
 
@@ -2317,6 +2327,7 @@ Push vs. replace follows the journey's own depth (`history.length`):
 
 - **advancing** pushes an entry, so Back has somewhere to go;
 - **rewinding from inside the journey** (a step's `goBack` prop, an in-app Back button) uses `port.go(-n)` so the browser's forward stack survives and Forward redoes the step;
+- **a refused Back** (a location the journey will not rewind to) walks the browser forward by the rejected distance with `port.go(+n)` — the same amount it was asked to go back — restoring the stack exactly and leaving the intermediate entries addressable; without `go`, it `push`es the current step instead, which truncates whatever was ahead;
 - **the first sync** replaces, since the host's own navigation already spent an entry getting here.
 
 `go` is optional. Without it the sync falls back to `replace`, which keeps the URL truthful but drops the forward entry — Forward will not redo the step. Supply `go` only when the journey owns a contiguous run of history entries; if your shell pushes unrelated entries mid-journey, `go(-n)` can land outside the flow (the sync reports that through `onUnresolved` rather than guessing, but `replace` would have been safer).
@@ -2330,6 +2341,10 @@ Push vs. replace follows the journey's own depth (`history.length`):
 stepToPath: (step) =>
   step.entry === "review" ? `review/${(step.input as { itemId: string }).itemId}` : step.entry;
 ```
+
+### Nested journeys
+
+A sync tracks exactly the instance you give it — **it does not follow child journeys.** When that instance `invoke`s a child, the parent pauses on its invoking step and the child runs on its own instance; the sync keeps mirroring the parent's (paused) step, and a Back press against it resolves through `onBlocked` — "a child journey is in flight" is one of the refusal reasons above. It deliberately does not splice the child's `history`/`future` into the URL: a child's steps are its own URL space, and encoding two instances' histories in one path would make neither addressable. To deep-link inside a child, mount a second sync on the child instance (typically from the child's own host). A single path that encodes both levels is out of scope for this primitive.
 
 ### Terminal journeys
 

@@ -183,7 +183,10 @@ export function JourneyOutlet(props: JourneyOutletProps): ReactNode {
         if (!record) return;
         if (record.status !== "active" && record.status !== "loading") return;
         if (record.listeners.size > 0) return;
-        runtime.end(instanceId, { reason: "unmounted" });
+        // `force`: an unmounting outlet cannot host an `onAbandon` `{ next }`
+        // (there is nothing left to render it), so guarantee the instance ends
+        // rather than advancing to an orphaned live step.
+        runtime.end(instanceId, { reason: "unmounted" }, { force: true });
       });
     };
   }, [runtime, instanceId, internals]);

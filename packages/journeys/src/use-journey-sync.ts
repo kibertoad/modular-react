@@ -79,9 +79,10 @@ export interface UseJourneySyncOptions extends JourneySyncOptions {
  *   which owns the lifecycle.
  *
  * Implementation note: the effect deliberately depends on `runtime` and
- * `instanceId` only. Everything else is reached through refs written on every
- * render, because re-creating the sync runs its initial reconcile again — and
- * that reconcile can navigate.
+ * `instanceId` only. Everything else is reached through refs written in the
+ * commit phase (not during render, so a discarded render cannot publish an
+ * uncommitted port to the live subscription), because re-creating the sync
+ * runs its initial reconcile again — and that reconcile can navigate.
  */
 export function useJourneySync(
   instanceId: InstanceId | null,
@@ -91,14 +92,25 @@ export function useJourneySync(
   const context = useJourneyContext();
   const runtime = options.runtime ?? context?.runtime ?? null;
 
-  // Latest-value refs, written unconditionally during render. Safe for the
-  // same reason `useWaitForExit` documents: nothing reads them during render,
-  // only from effects and from callbacks the effect installs, so a render
-  // React later discards leaves no trace.
+  // Latest-value refs feeding the committed sync's callbacks. Written in the
+  // commit phase, **not** during render: the ref object is shared with the
+  // committed tree, so mutating it during render would let a render React
+  // ultimately discards — a Suspense throw, an abandoned concurrent render —
+  // publish an uncommitted port or callback to the live subscription. With an
+  // inline port that means navigating through a base path, or even a router,
+  // that never made it on screen. A passive effect runs only for committed
+  // renders, so the refs track exactly what is mounted; the sync's callbacks
+  // only ever fire from router/runtime notifications (never synchronously in
+  // render), so reading a committed value one render behind is harmless. This
+  // effect is declared before the one that creates the sync, so on mount the
+  // refs are populated before `createJourneySync`'s initial reconcile reads
+  // them.
   const portRef = useRef(port);
-  portRef.current = port;
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+  useEffect(() => {
+    portRef.current = port;
+    optionsRef.current = options;
+  });
 
   // `go` is optional on the port and its *presence* is load-bearing — the
   // reconciler falls back to `replace` without it — so the proxy has to
