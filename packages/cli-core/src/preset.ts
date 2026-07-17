@@ -30,6 +30,12 @@ export interface PresetPackages {
   readonly runtime: string;
   /** Test helpers (e.g. `@react-router-modules/testing`). */
   readonly testing: string;
+  /**
+   * Journeys binding the scaffolded journey packages import from (e.g.
+   * `@modular-react/journeys`). Both React router families share the React
+   * journeys binding; a Vue preset would point this at `@modular-vue/journeys`.
+   */
+  readonly journeys: string;
   /** Underlying router (e.g. `react-router`, `@tanstack/react-router`). */
   readonly router: string;
   /** Pinned router version range (e.g. `^7.6.0`). */
@@ -49,12 +55,27 @@ export interface PresetTemplates {
   shellRootLayout(): string;
   shellShellLayout(params: ShellShellLayoutParams): string;
   shellSidebar(params: ShellSidebarParams): string;
-  shellViteDedupe: readonly string[];
+  /** `shell/vite.config.ts` — carries the framework's Vite plugin + dedupe list. */
+  shellViteConfig(): string;
+  /** `shell/index.html` — references the framework's entry module (e.g. `main.tsx`). */
+  shellIndexHtml(params: ShellIndexHtmlParams): string;
+  /** `shell/src/stores/auth.ts` — the framework's store primitive (zustand for React). */
+  shellAuthStore(params: ShellAuthStoreParams): string;
+  /** `shell/src/stores/config.ts` — the framework's store primitive. */
+  shellConfigStore(params: ShellConfigStoreParams): string;
+  /** `shell/src/components/Home.*` — the landing component in the framework's view syntax. */
+  shellHome(params: ShellHomeParams): string;
   moduleDescriptor(params: ModuleDescriptorParams): string;
   modulePage(params: ModulePageParams): string;
   moduleListPage(params: ModuleListPageParams): string;
   moduleDetailPanel(params: ModuleDetailPanelParams): string;
   moduleTest(params: ModuleTestParams): string;
+  /** `shell/src/stores/<name>.ts` — a `create store` scaffold in the framework's store primitive. */
+  storeFile(params: StoreFileParams): string;
+  /** `journeys/<name>/src/<name>.ts` — the journey definition importing the journeys binding. */
+  journeyDefinition(params: JourneyTemplateParams): string;
+  /** `shell/src/<name>-persistence.ts` — optional persistence adapter for a journey. */
+  journeyPersistence(params: JourneyTemplateParams): string;
 }
 
 export interface AppSharedIndexParams {
@@ -79,6 +100,52 @@ export interface ShellShellLayoutParams {
 
 export interface ShellSidebarParams {
   readonly projectName: string;
+}
+
+export interface ShellIndexHtmlParams {
+  readonly projectName: string;
+}
+
+export interface ShellAuthStoreParams {
+  readonly scope: string;
+}
+
+export interface ShellConfigStoreParams {
+  readonly scope: string;
+  readonly appName: string;
+}
+
+export interface ShellHomeParams {
+  readonly scope: string;
+}
+
+export interface StoreFileParams {
+  readonly scope: string;
+  /** PascalCase interface name (e.g. `NotificationsStore`). */
+  readonly interfaceName: string;
+  /** camelCase export name (e.g. `notificationsStore`). */
+  readonly exportName: string;
+}
+
+export interface JourneyTemplateModule {
+  /** The module's name as scaffolded by `create module` (e.g. `billing`). */
+  readonly moduleName: string;
+  /** The default-import name (e.g. `billing`). */
+  readonly importName: string;
+  /** The package name (e.g. `@myorg/billing-module`). */
+  readonly packageName: string;
+}
+
+export interface JourneyTemplateParams {
+  readonly scope: string;
+  /** Kebab-case journey id (e.g. `customer-onboarding`). */
+  readonly journeyName: string;
+  /** PascalCase journey base (e.g. `CustomerOnboarding`). */
+  readonly journeyPascal: string;
+  /** camelCase journey base (e.g. `customerOnboarding`). */
+  readonly journeyCamel: string;
+  readonly modules: readonly JourneyTemplateModule[];
+  readonly withPersistence: boolean;
 }
 
 export interface ModuleDescriptorParams {

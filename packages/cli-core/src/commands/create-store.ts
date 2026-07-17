@@ -8,9 +8,8 @@ import { resolveProject } from "../utils/resolve-project.js";
 import { detectScope } from "../utils/detect-scope.js";
 import { promptText } from "../utils/prompt.js";
 import { addStoreToAppShared, addStoreToMain } from "../utils/transform.js";
-import { storeFile } from "../templates/store.js";
 
-export function createCreateStoreCommand(_preset: CliPreset) {
+export function createCreateStoreCommand(preset: CliPreset) {
   return defineCommand({
     meta: {
       name: "store",
@@ -55,7 +54,7 @@ export function createCreateStoreCommand(_preset: CliPreset) {
       const interfaceName = toPascalCase(name) + "Store";
       const exportName = toCamelCase(name) + "Store";
 
-      writeFileSync(storePath, storeFile({ scope, interfaceName, exportName }));
+      writeFileSync(storePath, preset.templates.storeFile({ scope, interfaceName, exportName }));
       addStoreToAppShared(project.appSharedDir, { storeName: name, interfaceName });
       addStoreToMain(project.shellDir, { storeName: name, importName: exportName });
 

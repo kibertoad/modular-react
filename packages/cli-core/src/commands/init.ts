@@ -17,16 +17,7 @@ import {
   appSharedTsconfig,
   appSharedTypes,
 } from "../templates/app-shared.js";
-import {
-  shellPackageJson,
-  shellTsconfig,
-  shellViteConfig,
-  shellIndexHtml,
-  shellAuthStore,
-  shellConfigStore,
-  shellHttpClient,
-  shellHome,
-} from "../templates/shell.js";
+import { shellPackageJson, shellTsconfig, shellHttpClient } from "../templates/shell.js";
 import { modulePackageJson, moduleTsconfig } from "../templates/module.js";
 import { bootstrapCatalog } from "./create-catalog.js";
 
@@ -205,8 +196,11 @@ function scaffold(args: {
     shellPackageJson({ scope, moduleName, preset }),
   );
   writeFileSync(resolve(root, "shell", "tsconfig.json"), shellTsconfig());
-  writeFileSync(resolve(root, "shell", "vite.config.ts"), shellViteConfig({ preset }));
-  writeFileSync(resolve(root, "shell", "index.html"), shellIndexHtml({ projectName }));
+  writeFileSync(resolve(root, "shell", "vite.config.ts"), preset.templates.shellViteConfig());
+  writeFileSync(
+    resolve(root, "shell", "index.html"),
+    preset.templates.shellIndexHtml({ projectName }),
+  );
   writeFileSync(
     resolve(root, "shell", "src", "main.tsx"),
     preset.templates.shellMain({
@@ -216,10 +210,13 @@ function scaffold(args: {
       docsLink: docsUrl(preset.docs.shellPatterns),
     }),
   );
-  writeFileSync(resolve(root, "shell", "src", "stores", "auth.ts"), shellAuthStore({ scope }));
+  writeFileSync(
+    resolve(root, "shell", "src", "stores", "auth.ts"),
+    preset.templates.shellAuthStore({ scope }),
+  );
   writeFileSync(
     resolve(root, "shell", "src", "stores", "config.ts"),
-    shellConfigStore({ scope, appName: projectName }),
+    preset.templates.shellConfigStore({ scope, appName: projectName }),
   );
   writeFileSync(resolve(root, "shell", "src", "services", "http-client.ts"), shellHttpClient());
   writeFileSync(
@@ -234,7 +231,10 @@ function scaffold(args: {
     resolve(root, "shell", "src", "components", "Sidebar.tsx"),
     preset.templates.shellSidebar({ projectName }),
   );
-  writeFileSync(resolve(root, "shell", "src", "components", "Home.tsx"), shellHome({ scope }));
+  writeFileSync(
+    resolve(root, "shell", "src", "components", "Home.tsx"),
+    preset.templates.shellHome({ scope }),
+  );
 
   // First module (with two routes for testable routing). Mirror the
   // shape that `create module` produces — including __tests__ — so the
