@@ -421,15 +421,24 @@ describe("createJourneySync", () => {
     harness.fireExit(id, "next");
     expect(instance().step?.moduleId).toBe("b");
 
-    // The stale go(-1) finally lands. It moves the browser to `a`, but the
-    // sync catches it as stale and re-asserts the URL — synchronously, within
-    // the same notification — so the browser never rests on `a/show`.
+    // The stale go(-1) finally lands, moving the browser cursor back to `a`.
+    // The sync catches it as stale (a newer runtime advance superseded it) and
+    // re-asserts the URL. Crucially it does so by walking the cursor *forward*,
+    // not by `replace`-ing the frame the cursor landed on — so the `a/show`
+    // entry survives and Back stays pressable. That forward walk is another
+    // async `go`, queued the same way.
     deliverGo();
-
-    // The runtime keeps the newer step — the stale go did not rewind it...
+    // The runtime never followed the stale echo...
     expect(instance().step?.moduleId).toBe("b");
-    // ...and the URL matches the runtime.
+    // ...and the stack is intact — `replace` here would have clobbered `a/show`
+    // into `["b/show", "b/show"]`, silently dropping the frame Back returns to.
+    expect(base.entries).toEqual(["a/show", "b/show"]);
+
+    // The corrective forward `go(+1)` settles, landing the cursor back on `b`.
+    deliverGo();
+    expect(instance().step?.moduleId).toBe("b");
     expect(base.read()).toBe("b/show");
+    expect(base.entries).toEqual(["a/show", "b/show"]);
   });
 
   it("reports a location the journey has never visited without touching it", () => {

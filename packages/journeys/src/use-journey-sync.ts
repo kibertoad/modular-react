@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { createJourneySync, defaultStepPath } from "@modular-frontend/journeys-engine";
 import type {
@@ -98,16 +98,25 @@ export function useJourneySync(
   // ultimately discards — a Suspense throw, an abandoned concurrent render —
   // publish an uncommitted port or callback to the live subscription. With an
   // inline port that means navigating through a base path, or even a router,
-  // that never made it on screen. A passive effect runs only for committed
-  // renders, so the refs track exactly what is mounted; the sync's callbacks
-  // only ever fire from router/runtime notifications (never synchronously in
-  // render), so reading a committed value one render behind is harmless. This
-  // effect is declared before the one that creates the sync, so on mount the
-  // refs are populated before `createJourneySync`'s initial reconcile reads
-  // them.
+  // that never made it on screen.
+  //
+  // Written in a **layout** effect rather than a passive one. A passive effect
+  // runs after paint, so it leaves a window — from commit until the passive
+  // effects flush — during which a *layout* effect elsewhere in the same commit
+  // (a router that navigates from `useLayoutEffect`, say) can drive the live
+  // subscription while these refs still hold the previous render's values,
+  // firing a stale `onUnresolved`/`onBlocked`. A layout effect updates the refs
+  // within the layout phase, before that paint and before passive effects, so a
+  // committed render's values are in place before anything downstream can
+  // navigate. It still runs only for committed renders, so it keeps the
+  // discarded-render guarantee above; and the sync's callbacks only ever fire
+  // from router/runtime notifications (never synchronously during render), so a
+  // committed value is always safe to read. Declared before the effect that
+  // creates the sync, so on mount the refs are populated before
+  // `createJourneySync`'s initial reconcile reads them.
   const portRef = useRef(port);
   const optionsRef = useRef(options);
-  useEffect(() => {
+  useLayoutEffect(() => {
     portRef.current = port;
     optionsRef.current = options;
   });

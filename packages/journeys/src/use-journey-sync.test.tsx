@@ -1,6 +1,6 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-react/core";
-import { StrictMode } from "react";
+import { StrictMode, useLayoutEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -209,6 +209,45 @@ describe("useJourneySync", () => {
       port.push("/settings");
     });
 
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  it("has the newest callback in place before a same-commit layout effect can navigate", () => {
+    // The latest-value refs must be updated in the layout phase, not a passive
+    // one. A passive effect runs after paint, leaving a window in which a
+    // *layout* effect elsewhere in the same commit — a router navigating from
+    // `useLayoutEffect` — drives the live subscription while the refs still
+    // hold the previous render's callbacks, firing the stale one. Reproduce
+    // exactly that: rerender with a new `onUnresolved`, and in the same commit
+    // push an out-of-flow location from a layout effect that is declared after
+    // the hook (so it runs after the hook's own ref-updating layout effect).
+    const { runtime, id } = setup();
+    const port = createMemoryJourneySyncPort();
+    const first = vi.fn();
+    const second = vi.fn();
+
+    function Probe({ onUnresolved, navigate }: { onUnresolved: () => void; navigate: boolean }) {
+      useJourneySync(id, port, { onUnresolved });
+      useLayoutEffect(() => {
+        if (navigate) port.push("/settings");
+      }, [navigate]);
+      return null;
+    }
+
+    const view = render(
+      <JourneyProvider runtime={runtime}>
+        <Probe onUnresolved={first} navigate={false} />
+      </JourneyProvider>,
+    );
+    view.rerender(
+      <JourneyProvider runtime={runtime}>
+        <Probe onUnresolved={second} navigate={true} />
+      </JourneyProvider>,
+    );
+
+    // With a passive ref write, `first` fires here — the layout-effect push
+    // beat the ref update. The layout-phase write closes that window.
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);
   });

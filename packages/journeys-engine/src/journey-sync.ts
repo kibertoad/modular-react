@@ -405,7 +405,23 @@ export function createJourneySync(
       const superseded = runtimeEpoch !== pendingGoEpoch;
       pendingGoEpoch = null;
       if (superseded && action.kind !== "none") {
-        writeUrl();
+        // The stale `go(-n)` only moved the browser *cursor* back onto an
+        // earlier frame; it did not destroy any entries. Re-assert the URL to
+        // the runtime's current step by walking the cursor forward the same
+        // distance (`history.length - historyIndex`), which leaves the whole
+        // stack — and therefore Back — intact. `writeUrl` here would see equal
+        // depth and `replace` the frame the cursor landed on, overwriting the
+        // entry Back needs (`[a, b]` cursor on `a` -> `[b, b]`). Walking
+        // forward is itself async in a real router, so stamp a fresh epoch so
+        // a newer advance can supersede this correction in turn. `writeUrl` is
+        // the fallback only when the port cannot navigate relatively, where the
+        // forward stack is forfeit anyway.
+        if (action.kind === "rewind" && port.go) {
+          pendingGoEpoch = runtimeEpoch;
+          port.go(instance.history.length - action.historyIndex);
+        } else {
+          writeUrl();
+        }
         return;
       }
     }
