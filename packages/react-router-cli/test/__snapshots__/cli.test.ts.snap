@@ -1,0 +1,1146 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`react-router-modules generated tree snapshot > emits a stable project tree across init + create module/store/journey 1`] = `
+{
+  ".gitignore": "node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+",
+  "app-shared/package.json": "{
+  "name": "@acme/app-shared",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@lokalise/api-contracts": "^6.0.0",
+    "@lokalise/frontend-http-client": "^7.0.0",
+    "@modular-react/core": "^2.0.0",
+    "@react-router-modules/core": "^2.0.0",
+    "wretch": "^2.11.0",
+    "zod": "^3.25.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "^6.0.2",
+    "zustand": "^5.0.0"
+  }
+}",
+  "app-shared/src/index.ts": "import { createSharedHooks } from '@react-router-modules/core'
+import type { ComponentType } from 'react'
+import type { LoginCredentials, User } from './types.js'
+import type { Wretch } from 'wretch'
+
+export type { User, LoginCredentials } from './types.js'
+
+// ---- Zustand store shapes (reactive / client state) ----
+
+export interface AuthStore {
+  user: User | null
+  token: string | null
+  isAuthenticated: boolean
+  login: (credentials: LoginCredentials) => Promise<void>
+  logout: () => void
+}
+
+export interface ConfigStore {
+  apiBaseUrl: string
+  environment: 'dev' | 'staging' | 'prod'
+  appName: string
+}
+
+export interface NotificationsStore {
+  // TODO: Add store state and actions
+}
+
+// ---- The contract ----
+
+export interface AppDependencies {
+  // Zustand stores (reactive client state)
+  auth: AuthStore
+  config: ConfigStore
+  // Wretch instance for making HTTP calls via @lokalise/frontend-http-client
+  httpClient: Wretch
+  notifications: NotificationsStore
+}
+
+// ---- Slots (static contributions from every module) ----
+
+export interface CommandDefinition {
+  readonly id: string
+  readonly label: string
+  readonly group?: string
+  readonly icon?: string
+  readonly onSelect: () => void
+}
+
+export interface AppSlots {
+  commands: CommandDefinition[]
+}
+
+// ---- Zones (per-route layout regions a module can fill) ----
+// Declared on a route's \`handle\` and read by the shell via \`useZones<AppZones>()\`.
+
+export interface AppZones {
+  detailPanel?: ComponentType
+  headerActions?: ComponentType
+}
+
+// ---- Typed hooks (use these in all modules) ----
+
+export const { useStore, useService, useReactiveService, useOptional } = createSharedHooks<AppDependencies>()
+",
+  "app-shared/src/types.ts": "export interface User {
+  id: string
+  name: string
+  email: string
+  role: string
+}
+
+export interface LoginCredentials {
+  email: string
+  password: string
+}
+",
+  "app-shared/tsconfig.json": "{
+  "extends": "../tsconfig.base.json",
+  "include": [
+    "src"
+  ]
+}",
+  "catalog.config.ts": "import { defineCatalogConfig } from '@modular-react/catalog'
+
+export default defineCatalogConfig({
+  title: 'snap-app Catalog',
+  out: 'dist-catalog',
+  roots: [
+    {
+      name: 'modules',
+      pattern: 'modules/*/src/index.ts',
+      resolver: 'defaultExport',
+    },
+    {
+      name: 'journeys',
+      pattern: 'journeys/*/src/index.ts',
+      resolver: 'namedExport',
+    },
+  ],
+
+  // The harvester loads each descriptor for real, so its imports must
+  // resolve. After \`pnpm install\` the workspace packages (e.g.
+  // \`@acme/app-shared\`) are symlinked into node_modules and
+  // resolve automatically. If you harvest without installing, mirror your
+  // path aliases here:
+  // resolve: {
+  //   alias: {
+  //     '@acme/app-shared': './app-shared/src',
+  //   },
+  // },
+})
+",
+  "journeys/customer-onboarding/package.json": "{
+  "name": "@acme/customer-onboarding-journey",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modular-react/journeys": "^1.0.0",
+    "@acme/app-shared": "workspace:*",
+    "@acme/dashboard-module": "workspace:*",
+    "@acme/orders-module": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}",
+  "journeys/customer-onboarding/src/customer-onboarding.ts": "import { defineJourney, defineJourneyHandle } from '@modular-react/journeys'
+import type dashboardModule from '@acme/dashboard-module'
+import type ordersModule from '@acme/orders-module'
+
+// All module imports are \`import type\` — the runtime resolves entries by id
+// against the registered descriptors, so this package stays bundle-free of
+// module code.
+type CustomerOnboardingModules = {
+  readonly dashboard: typeof dashboardModule;
+  readonly orders: typeof ordersModule;
+}
+
+export interface CustomerOnboardingInput {
+  // TODO: shape the input the caller passes to runtime.start(handle, input).
+  readonly customerId: string;
+}
+
+export interface CustomerOnboardingState {
+  // TODO: shape the state shared across steps. Keep it serializable —
+  // persistence adapters round-trip it via JSON.
+  readonly customerId: string;
+}
+
+export const customerOnboardingJourney = defineJourney<CustomerOnboardingModules, CustomerOnboardingState>()({
+  id: 'customer-onboarding',
+  version: '1.0.0',
+  meta: {
+    name: 'CustomerOnboarding',
+  },
+
+  initialState: ({ customerId }: CustomerOnboardingInput) => ({
+    customerId,
+  }),
+
+  start: (state) => ({
+    module: 'dashboard',
+    // TODO: pick an entry name your dashboard module exposes via entryPoints.
+    entry: 'TODO_entry_name' as const,
+    input: state,
+  }),
+
+  transitions: {
+    dashboard: {
+      // TODO: list each entry name you handle and one branch per exit it can emit.
+      // Example shape:
+      //   <entry>: {
+      //     <exitName>: ({ output, state }) => ({ complete: { ... } }),
+      //     cancelled: () => ({ abort: { reason: 'cancelled' } }),
+      //   }
+    },
+  },
+})
+
+/**
+ * Typed token for opening this journey. Modules and shells import this
+ * (via \`import type\`) to call \`runtime.start(handle, input)\` with full
+ * input checking — without pulling the journey's runtime into the caller.
+ */
+export const customerOnboardingHandle = defineJourneyHandle(customerOnboardingJourney)
+export type CustomerOnboardingHandle = typeof customerOnboardingHandle
+",
+  "journeys/customer-onboarding/src/index.ts": "export {
+  customerOnboardingJourney,
+  customerOnboardingHandle,
+  type CustomerOnboardingInput,
+  type CustomerOnboardingState,
+  type CustomerOnboardingHandle,
+} from './customer-onboarding.js'
+",
+  "journeys/customer-onboarding/tsconfig.json": "{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "src"
+  ]
+}",
+  "modules/dashboard/package.json": "{
+  "name": "@acme/dashboard-module",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@modular-react/core": "^2.0.0",
+    "@react-router-modules/core": "^2.0.0",
+    "@acme/app-shared": "workspace:*",
+    "@lokalise/frontend-http-client": "^7.0.0"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.95.0",
+    "react-router": "^7.6.0",
+    "react": "^19.0.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.95.0",
+    "react-router": "^7.6.0",
+    "react": "^19.0.0",
+    "zustand": "^5.0.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^6.0.2"
+  }
+}",
+  "modules/dashboard/src/__tests__/dashboard.test.ts": "import { describe, it } from 'vitest'
+import { renderModule, createMockStore } from '@react-router-modules/testing'
+import type { AppDependencies } from '@acme/app-shared'
+import dashboard from '../index.js'
+
+const mockAuth = createMockStore<AppDependencies['auth']>({
+  user: { id: 'usr-001', name: 'Test User', email: 'test@example.com', role: 'admin' },
+  token: 'mock-token',
+  isAuthenticated: true,
+  login: async () => {},
+  logout: () => {},
+})
+
+const mockConfig = createMockStore<AppDependencies['config']>({
+  apiBaseUrl: 'http://localhost:3000/api',
+  environment: 'dev',
+  appName: 'Test',
+})
+
+describe('dashboard module', () => {
+  it('renders the index page', async () => {
+    const { getByRole } = await renderModule(dashboard, {
+      route: '/dashboard',
+      deps: { auth: mockAuth, config: mockConfig },
+    })
+
+    // \`getByRole\` throws when no match is found, so reaching the next line
+    // is the assertion. Querying by role + name avoids the dashed-name
+    // mismatch that bit a previous version of this template.
+    getByRole('heading', { name: 'Dashboard' })
+  })
+
+  it('renders the list page', async () => {
+    const { getByRole } = await renderModule(dashboard, {
+      route: '/dashboard/list',
+      deps: { auth: mockAuth, config: mockConfig },
+    })
+
+    getByRole('heading', { name: 'Dashboard List' })
+  })
+})
+",
+  "modules/dashboard/src/index.ts": "import { defineModule } from '@react-router-modules/core'
+import type { RouteObject } from 'react-router'
+import type { AppDependencies, AppSlots, AppZones } from '@acme/app-shared'
+import { DashboardDetailPanel } from './panels/DetailPanel.js'
+
+export default defineModule<AppDependencies, AppSlots>({
+  id: 'dashboard',
+  version: '0.1.0',
+
+  // Catalog metadata — the shell discovers modules via useModules() + getModuleMeta()
+  meta: {
+    name: 'Dashboard',
+    description: 'Dashboard module',
+    category: 'general',
+  },
+
+  createRoutes: (): RouteObject => ({
+    path: 'dashboard',
+    children: [
+      {
+        index: true,
+        lazy: () => import('./pages/DashboardDashboard.js').then((m) => ({ Component: m.default })),
+      },
+      {
+        path: 'list',
+        lazy: () => import('./pages/DashboardList.js').then((m) => ({ Component: m.default })),
+        // Route zone — the shell renders this in its detail panel slot while this route is active.
+        handle: { detailPanel: DashboardDetailPanel } satisfies AppZones,
+      },
+    ],
+  }),
+
+  navigation: [
+    { label: 'Dashboard', to: '/dashboard', order: 10 },
+    { label: 'Dashboard List', to: '/dashboard/list', order: 11 },
+  ],
+
+  // Commands aggregated into the shell's command palette / action bar
+  slots: {
+    commands: [
+      {
+        id: 'dashboard:refresh',
+        label: 'Refresh Dashboard',
+        group: 'actions',
+        onSelect: () => window.location.reload(),
+      },
+    ],
+  },
+
+  // To compose this module into a multi-step flow, declare entry/exit
+  // contracts here (defineEntry / defineExit) and feed them into a journey
+  // — see packages/journeys/README.md and \`create journey\`.
+  // entryPoints: { ... },
+  // exitPoints: { ... },
+
+  requires: ['auth'],
+})
+",
+  "modules/dashboard/src/pages/DashboardDashboard.tsx": "import { useStore } from '@acme/app-shared'
+import { Link } from 'react-router'
+
+export default function DashboardDashboard() {
+  const user = useStore('auth', (s) => s.user)
+
+  return (
+    <div>
+      <h2>Dashboard</h2>
+      {user ? (
+        <p>Welcome, {user.name}.</p>
+      ) : (
+        <p>Please log in to continue.</p>
+      )}
+      <nav>
+        <Link to="/dashboard/list">
+          View Dashboard List
+        </Link>
+      </nav>
+    </div>
+  )
+}
+",
+  "modules/dashboard/src/pages/DashboardList.tsx": "import { useStore } from '@acme/app-shared'
+
+export default function DashboardList() {
+  const user = useStore('auth', (s) => s.user)
+
+  return (
+    <div>
+      <h2>Dashboard List</h2>
+      {user ? (
+        <p>Showing items for {user.name}.</p>
+      ) : (
+        <p>Please log in to view the list.</p>
+      )}
+    </div>
+  )
+}
+",
+  "modules/dashboard/src/panels/DetailPanel.tsx": "// Rendered by the shell in its detail-panel zone when the list route is active.
+// See the module descriptor's \`handle: { detailPanel: ... }\` for the wiring.
+export function DashboardDetailPanel() {
+  return (
+    <div>
+      <h3 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#4a5568', marginBottom: '0.5rem' }}>
+        Dashboard details
+      </h3>
+      <p style={{ fontSize: '0.875rem', color: '#718096' }}>
+        This panel is contributed by the dashboard module via a route zone.
+      </p>
+    </div>
+  )
+}
+",
+  "modules/dashboard/tsconfig.json": "{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "src"
+  ]
+}",
+  "modules/orders/package.json": "{
+  "name": "@acme/orders-module",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@modular-react/core": "^2.0.0",
+    "@react-router-modules/core": "^2.0.0",
+    "@acme/app-shared": "workspace:*",
+    "@lokalise/frontend-http-client": "^7.0.0"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.95.0",
+    "react-router": "^7.6.0",
+    "react": "^19.0.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.95.0",
+    "react-router": "^7.6.0",
+    "react": "^19.0.0",
+    "zustand": "^5.0.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^6.0.2"
+  }
+}",
+  "modules/orders/src/__tests__/orders.test.ts": "import { describe, it } from 'vitest'
+import { renderModule, createMockStore } from '@react-router-modules/testing'
+import type { AppDependencies } from '@acme/app-shared'
+import orders from '../index.js'
+
+const mockAuth = createMockStore<AppDependencies['auth']>({
+  user: { id: 'usr-001', name: 'Test User', email: 'test@example.com', role: 'admin' },
+  token: 'mock-token',
+  isAuthenticated: true,
+  login: async () => {},
+  logout: () => {},
+})
+
+const mockConfig = createMockStore<AppDependencies['config']>({
+  apiBaseUrl: 'http://localhost:3000/api',
+  environment: 'dev',
+  appName: 'Test',
+})
+
+describe('orders module', () => {
+  it('renders the index page', async () => {
+    const { getByRole } = await renderModule(orders, {
+      route: '/orders',
+      deps: { auth: mockAuth, config: mockConfig },
+    })
+
+    // \`getByRole\` throws when no match is found, so reaching the next line
+    // is the assertion. Querying by role + name avoids the dashed-name
+    // mismatch that bit a previous version of this template.
+    getByRole('heading', { name: 'Orders' })
+  })
+
+  it('renders the list page', async () => {
+    const { getByRole } = await renderModule(orders, {
+      route: '/orders/list',
+      deps: { auth: mockAuth, config: mockConfig },
+    })
+
+    getByRole('heading', { name: 'Orders List' })
+  })
+})
+",
+  "modules/orders/src/index.ts": "import { defineModule } from '@react-router-modules/core'
+import type { RouteObject } from 'react-router'
+import type { AppDependencies, AppSlots, AppZones } from '@acme/app-shared'
+import { OrdersDetailPanel } from './panels/DetailPanel.js'
+
+export default defineModule<AppDependencies, AppSlots>({
+  id: 'orders',
+  version: '0.1.0',
+
+  // Catalog metadata — the shell discovers modules via useModules() + getModuleMeta()
+  meta: {
+    name: 'Orders',
+    description: 'Orders module',
+    category: 'general',
+  },
+
+  createRoutes: (): RouteObject => ({
+    path: 'orders',
+    children: [
+      {
+        index: true,
+        lazy: () => import('./pages/OrdersDashboard.js').then((m) => ({ Component: m.default })),
+      },
+      {
+        path: 'list',
+        lazy: () => import('./pages/OrdersList.js').then((m) => ({ Component: m.default })),
+        // Route zone — the shell renders this in its detail panel slot while this route is active.
+        handle: { detailPanel: OrdersDetailPanel } satisfies AppZones,
+      },
+    ],
+  }),
+
+  navigation: [
+    { label: 'Orders', to: '/orders', group: 'commerce', order: 10 },
+    { label: 'Orders List', to: '/orders/list', group: 'commerce', order: 11 },
+  ],
+
+  // Commands aggregated into the shell's command palette / action bar
+  slots: {
+    commands: [
+      {
+        id: 'orders:refresh',
+        label: 'Refresh Orders',
+        group: 'actions',
+        onSelect: () => window.location.reload(),
+      },
+    ],
+  },
+
+  // To compose this module into a multi-step flow, declare entry/exit
+  // contracts here (defineEntry / defineExit) and feed them into a journey
+  // — see packages/journeys/README.md and \`create journey\`.
+  // entryPoints: { ... },
+  // exitPoints: { ... },
+
+  requires: ['auth'],
+})
+",
+  "modules/orders/src/pages/OrdersDashboard.tsx": "import { useStore } from '@acme/app-shared'
+import { Link } from 'react-router'
+
+export default function OrdersDashboard() {
+  const user = useStore('auth', (s) => s.user)
+
+  return (
+    <div>
+      <h2>Orders</h2>
+      {user ? (
+        <p>Welcome, {user.name}.</p>
+      ) : (
+        <p>Please log in to continue.</p>
+      )}
+      <nav>
+        <Link to="/orders/list">
+          View Orders List
+        </Link>
+      </nav>
+    </div>
+  )
+}
+",
+  "modules/orders/src/pages/OrdersList.tsx": "import { useStore } from '@acme/app-shared'
+
+export default function OrdersList() {
+  const user = useStore('auth', (s) => s.user)
+
+  return (
+    <div>
+      <h2>Orders List</h2>
+      {user ? (
+        <p>Showing items for {user.name}.</p>
+      ) : (
+        <p>Please log in to view the list.</p>
+      )}
+    </div>
+  )
+}
+",
+  "modules/orders/src/panels/DetailPanel.tsx": "// Rendered by the shell in its detail-panel zone when the list route is active.
+// See the module descriptor's \`handle: { detailPanel: ... }\` for the wiring.
+export function OrdersDetailPanel() {
+  return (
+    <div>
+      <h3 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#4a5568', marginBottom: '0.5rem' }}>
+        Orders details
+      </h3>
+      <p style={{ fontSize: '0.875rem', color: '#718096' }}>
+        This panel is contributed by the orders module via a route zone.
+      </p>
+    </div>
+  )
+}
+",
+  "modules/orders/tsconfig.json": "{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "src"
+  ]
+}",
+  "package.json": "{
+  "name": "snap-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev": "pnpm --filter shell dev",
+    "test": "vitest run",
+    "typecheck": "tsc --build",
+    "catalog:build": "modular-react-catalog build",
+    "catalog:serve": "modular-react-catalog serve dist-catalog"
+  },
+  "devDependencies": {
+    "@modular-react/catalog": "^1.0.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0"
+  }
+}
+",
+  "pnpm-workspace.yaml": "packages:
+  - app-shared
+  - shell
+  - modules/*
+  - journeys/*
+
+onlyBuiltDependencies:
+  - esbuild
+",
+  "shell/index.html": "<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>snap-app</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a2e; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+",
+  "shell/package.json": "{
+  "name": "shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@acme/app-shared": "workspace:*",
+    "@acme/customer-onboarding-journey": "workspace:*",
+    "@acme/dashboard-module": "workspace:*",
+    "@acme/orders-module": "workspace:*",
+    "@lokalise/frontend-http-client": "^7.0.0",
+    "@modular-react/core": "^2.0.0",
+    "@modular-react/journeys": "^1.0.0",
+    "@modular-react/react": "^2.0.0",
+    "@react-router-modules/core": "^2.0.0",
+    "@react-router-modules/runtime": "^2.0.0",
+    "@tanstack/react-query": "^5.95.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router": "^7.6.0",
+    "wretch": "^2.11.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@rolldown/plugin-babel": "^0.2.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.3"
+  }
+}
+",
+  "shell/src/components/Home.tsx": "import { useStore } from '@acme/app-shared'
+
+export function Home() {
+  const appName = useStore('config', (s) => s.appName)
+  const isAuthenticated = useStore('auth', (s) => s.isAuthenticated)
+
+  return (
+    <div>
+      <h2>Welcome to {appName}</h2>
+      <p>
+        {isAuthenticated
+          ? 'Use the sidebar to navigate between modules.'
+          : 'Click "Login as Demo User" to get started.'}
+      </p>
+    </div>
+  )
+}
+",
+  "shell/src/components/RootLayout.tsx": "import { Outlet } from 'react-router'
+
+// The root layout renders for every route — public or protected.
+// It's the place for app-wide concerns that must run even on public pages:
+// analytics, feature flags, error reporting, global providers that don't
+// depend on authentication.
+//
+// The authenticated chrome (sidebar, header, detail panel) lives in
+// ShellLayout, which is mounted via \`authenticatedRoute.Component\`.
+export function RootLayout() {
+  // TODO: Add observability / analytics here. For example:
+  //   useLocation() + track page view
+  return <Outlet />
+}
+",
+  "shell/src/components/ShellLayout.tsx": "import { Outlet } from 'react-router'
+import { useSlots, useZones } from '@react-router-modules/runtime'
+import { useStore } from '@acme/app-shared'
+import type { AppSlots, AppZones } from '@acme/app-shared'
+import { Sidebar } from './Sidebar.js'
+
+// The authenticated shell chrome. Rendered under the \`authenticatedRoute\`
+// layout in main.tsx — everything below this layout has (conceptually)
+// cleared the auth guard.
+//
+// This is also where cross-cutting module contributions get rendered:
+//   - \`useSlots().commands\` — the action bar in the header
+//   - \`useZones<AppZones>().detailPanel\` — the right-hand detail panel
+export function ShellLayout() {
+  const user = useStore('auth', (s) => s.user)
+  const isAuthenticated = useStore('auth', (s) => s.isAuthenticated)
+  const login = useStore('auth', (s) => s.login)
+  const logout = useStore('auth', (s) => s.logout)
+  const { commands } = useSlots<AppSlots>()
+  const zones = useZones<AppZones>()
+  const DetailPanel = zones.detailPanel
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <Sidebar />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <header style={{
+          padding: '0.75rem 1.5rem',
+          borderBottom: '1px solid #e2e8f0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+        }}>
+          {/* Commands contributed by modules via slots.commands */}
+          {commands.map((cmd) => (
+            <button
+              key={cmd.id}
+              onClick={cmd.onSelect}
+              style={{
+                padding: '0.375rem 0.75rem',
+                borderRadius: '0.375rem',
+                border: '1px solid #e2e8f0',
+                backgroundColor: 'white',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+              }}
+            >
+              {cmd.label}
+            </button>
+          ))}
+
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            {isAuthenticated ? (
+              <>
+                <span style={{ color: '#4a5568' }}>{user?.name}</span>
+                <button
+                  onClick={logout}
+                  style={{
+                    padding: '0.375rem 0.75rem',
+                    borderRadius: '0.375rem',
+                    border: '1px solid #e2e8f0',
+                    backgroundColor: 'white',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => login({ email: 'demo@example.com', password: 'demo' })}
+                style={{
+                  padding: '0.375rem 0.75rem',
+                  borderRadius: '0.375rem',
+                  border: 'none',
+                  backgroundColor: '#3182ce',
+                  color: 'white',
+                  cursor: 'pointer',
+                }}
+              >
+                Login as Demo User
+              </button>
+            )}
+          </div>
+        </header>
+        <div style={{ flex: 1, display: 'flex' }}>
+          <main style={{ flex: 1, padding: '1.5rem' }}>
+            <Outlet />
+          </main>
+          {DetailPanel && (
+            <aside style={{
+              width: '320px',
+              borderLeft: '1px solid #e2e8f0',
+              padding: '1.5rem',
+              backgroundColor: '#f7fafc',
+            }}>
+              <DetailPanel />
+            </aside>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+",
+  "shell/src/components/Sidebar.tsx": "import { Link, useLocation } from 'react-router'
+import { useNavigation } from '@react-router-modules/runtime'
+
+export function Sidebar() {
+  const navigation = useNavigation()
+  const location = useLocation()
+
+  return (
+    <aside style={{
+      width: '240px',
+      minHeight: '100vh',
+      borderRight: '1px solid #e2e8f0',
+      padding: '1rem',
+      backgroundColor: '#f7fafc',
+    }}>
+      <h1 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', color: '#2d3748' }}>
+        snap-app
+      </h1>
+
+      <nav>
+        <Link
+          to="/"
+          style={{
+            display: 'block',
+            padding: '0.5rem 0.75rem',
+            borderRadius: '0.375rem',
+            textDecoration: 'none',
+            color: location.pathname === '/' ? '#2b6cb0' : '#4a5568',
+            backgroundColor: location.pathname === '/' ? '#ebf8ff' : 'transparent',
+            marginBottom: '0.25rem',
+          }}
+        >
+          Home
+        </Link>
+
+        {navigation.groups.map((group) => (
+          <div key={group.group} style={{ marginTop: '1rem' }}>
+            <h3 style={{
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              color: '#a0aec0',
+              marginBottom: '0.5rem',
+              padding: '0 0.75rem',
+            }}>
+              {group.group}
+            </h3>
+            {group.items
+              .filter((item) => !item.hidden)
+              .map((item) => {
+                const isActive = location.pathname.startsWith(item.to)
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    style={{
+                      display: 'block',
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: '0.375rem',
+                      textDecoration: 'none',
+                      color: isActive ? '#2b6cb0' : '#4a5568',
+                      backgroundColor: isActive ? '#ebf8ff' : 'transparent',
+                      marginBottom: '0.25rem',
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                )
+              })}
+          </div>
+        ))}
+
+        {navigation.ungrouped.length > 0 && (
+          <div style={{ marginTop: '1rem' }}>
+            {navigation.ungrouped
+              .filter((item) => !item.hidden)
+              .map((item) => {
+                const isActive = location.pathname.startsWith(item.to)
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    style={{
+                      display: 'block',
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: '0.375rem',
+                      textDecoration: 'none',
+                      color: isActive ? '#2b6cb0' : '#4a5568',
+                      backgroundColor: isActive ? '#ebf8ff' : 'transparent',
+                      marginBottom: '0.25rem',
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                )
+              })}
+          </div>
+        )}
+      </nav>
+    </aside>
+  )
+}
+",
+  "shell/src/customer-onboarding-persistence.ts": "import { createWebStoragePersistence } from '@modular-react/journeys'
+import type { CustomerOnboardingInput, CustomerOnboardingState } from '@acme/customer-onboarding-journey'
+
+/**
+ * localStorage-backed persistence for the customer-onboarding journey.
+ * One key per (customerId, journey) pair: starting the journey for the
+ * same customer twice resumes the active instance instead of minting a
+ * fresh one (see \`JourneyRuntime.start\` idempotency semantics).
+ *
+ * Pass this to \`registry.registerJourney(customerOnboardingJourney, { persistence })\`.
+ */
+export const customerOnboardingPersistence = createWebStoragePersistence<CustomerOnboardingInput, CustomerOnboardingState>({
+  keyFor: ({ journeyId, input }) => \`journey:\${input.customerId}:\${journeyId}\`,
+})
+",
+  "shell/src/main.tsx": "import { createRoot } from 'react-dom/client'
+import { createRegistry } from '@react-router-modules/runtime'
+import type { AppDependencies, AppSlots } from '@acme/app-shared'
+import dashboard from '@acme/dashboard-module'
+import { authStore } from './stores/auth.js'
+import { configStore } from './stores/config.js'
+import { notificationsStore } from './stores/notifications.js'
+import { httpClient } from './services/http-client.js'
+import { RootLayout } from './components/RootLayout.js'
+import { ShellLayout } from './components/ShellLayout.js'
+import { Home } from './components/Home.js'
+import orders from '@acme/orders-module'
+import { journeysPlugin } from '@modular-react/journeys'
+// Use customerOnboardingHandle (typed token) at call sites: runtime.start(customerOnboardingHandle, input).
+import { customerOnboardingJourney, customerOnboardingHandle } from '@acme/customer-onboarding-journey'
+import { customerOnboardingPersistence } from './customer-onboarding-persistence.js'
+
+// Create the registry with shared dependencies
+const registry = createRegistry<AppDependencies, AppSlots>({
+  stores: { auth: authStore, config: configStore, notifications: notificationsStore },
+  services: { httpClient },
+  reactiveServices: {},
+  slots: { commands: [] },
+}).use(journeysPlugin())
+
+// Register modules
+registry.register(dashboard)
+registry.register(orders)
+registry.registerJourney(customerOnboardingJourney, { persistence: customerOnboardingPersistence })
+
+// Resolve — validates everything and produces the app.
+//
+// Layout split:
+//   RootLayout  — runs for every route (public + protected). Use for observability.
+//   ShellLayout — renders the authenticated chrome (sidebar, header, detail panel).
+//
+// Auth guard is a no-op TODO. Replace \`loader\` with a real check and uncomment
+// \`shellRoutes\` to expose public pages like /login. See:
+//   https://github.com/kibertoad/modular-react/blob/main/docs/shell-patterns-react-router.md
+const { App } = registry.resolve({
+  rootComponent: RootLayout,
+  indexComponent: Home,
+
+  authenticatedRoute: {
+    loader: () => {
+      // TODO: replace with real auth check. Example:
+      //   const { isAuthenticated } = authStore.getState()
+      //   if (!isAuthenticated) throw redirect('/login')
+      return null
+    },
+    Component: ShellLayout,
+  },
+
+  // shellRoutes: () => [
+  //   { path: '/login', Component: LoginPage },
+  // ],
+})
+
+createRoot(document.getElementById('root')!).render(<App />)
+",
+  "shell/src/services/http-client.ts": "import wretch from 'wretch'
+import { authStore } from '../stores/auth.js'
+import { configStore } from '../stores/config.js'
+
+export const httpClient = wretch()
+  .defer((w) => {
+    const { apiBaseUrl } = configStore.getState()
+    const { token } = authStore.getState()
+    let instance = w.url(apiBaseUrl)
+    if (token) {
+      instance = instance.auth(\`Bearer \${token}\`)
+    }
+    return instance
+  })
+",
+  "shell/src/stores/auth.ts": "import { createStore } from 'zustand/vanilla'
+import type { AuthStore } from '@acme/app-shared'
+
+export const authStore = createStore<AuthStore>((set) => ({
+  user: null,
+  token: null,
+  isAuthenticated: false,
+
+  login: async (credentials) => {
+    // TODO: Replace with real API call
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    set({
+      user: {
+        id: 'usr-001',
+        name: 'Demo User',
+        email: credentials.email,
+        role: 'admin',
+      },
+      token: 'mock-jwt-token',
+      isAuthenticated: true,
+    })
+  },
+
+  logout: () => {
+    set({ user: null, token: null, isAuthenticated: false })
+  },
+}))
+",
+  "shell/src/stores/config.ts": "import { createStore } from 'zustand/vanilla'
+import type { ConfigStore } from '@acme/app-shared'
+
+export const configStore = createStore<ConfigStore>()(() => ({
+  apiBaseUrl: 'http://localhost:3000/api',
+  environment: 'dev' as const,
+  appName: 'snap-app',
+}))
+",
+  "shell/src/stores/notifications.ts": "import { createStore } from 'zustand/vanilla'
+import type { NotificationsStore } from '@acme/app-shared'
+
+export const notificationsStore = createStore<NotificationsStore>()(() => ({
+  // TODO: Add initial state
+}))
+",
+  "shell/tsconfig.json": "{
+  "extends": "../tsconfig.base.json",
+  "include": [
+    "src"
+  ],
+  "compilerOptions": {
+    "noEmit": true
+  }
+}",
+  "shell/vite.config.ts": "import { defineConfig } from 'vite'
+import react, { reactCompilerPreset } from '@vitejs/plugin-react'
+import babel from '@rolldown/plugin-babel'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    babel({ presets: [reactCompilerPreset()] }),
+  ],
+  resolve: {
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-router', '@tanstack/react-query', 'zustand'],
+  },
+})
+",
+  "tsconfig.base.json": "{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "jsx": "react-jsx",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true
+  }
+}",
+  "tsconfig.json": "{
+  "files": [],
+  "references": []
+}",
+}
+`;

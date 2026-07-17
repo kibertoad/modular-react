@@ -12,16 +12,10 @@ import {
   addJourneyToShellPackageJson,
   ensureJourneysInWorkspace,
 } from "../utils/transform.js";
-import {
-  journeyDefinition,
-  journeyIndex,
-  journeyPackageJson,
-  journeyPersistence,
-  journeyTsconfig,
-  type JourneyTemplateModule,
-} from "../templates/journey.js";
+import { journeyIndex, journeyPackageJson, journeyTsconfig } from "../templates/journey.js";
+import type { JourneyTemplateModule } from "../preset.js";
 
-export function createCreateJourneyCommand(_preset: CliPreset) {
+export function createCreateJourneyCommand(preset: CliPreset) {
   return defineCommand({
     meta: {
       name: "journey",
@@ -105,14 +99,17 @@ export function createCreateJourneyCommand(_preset: CliPreset) {
       mkdirSync(resolve(journeyDir, "src"), { recursive: true });
       writeFileSync(
         resolve(journeyDir, "package.json"),
-        journeyPackageJson({
-          scope,
-          journeyName: name,
-          journeyPascal,
-          journeyCamel,
-          modules,
-          withPersistence,
-        }),
+        journeyPackageJson(
+          {
+            scope,
+            journeyName: name,
+            journeyPascal,
+            journeyCamel,
+            modules,
+            withPersistence,
+          },
+          preset,
+        ),
       );
       writeFileSync(resolve(journeyDir, "tsconfig.json"), journeyTsconfig());
       writeFileSync(
@@ -128,7 +125,7 @@ export function createCreateJourneyCommand(_preset: CliPreset) {
       );
       writeFileSync(
         resolve(journeyDir, "src", `${name}.ts`),
-        journeyDefinition({
+        preset.templates.journeyDefinition({
           scope,
           journeyName: name,
           journeyPascal,
@@ -150,7 +147,7 @@ export function createCreateJourneyCommand(_preset: CliPreset) {
         const persistencePath = resolve(project.shellDir, "src", `${name}-persistence.ts`);
         writeFileSync(
           persistencePath,
-          journeyPersistence({
+          preset.templates.journeyPersistence({
             scope,
             journeyName: name,
             journeyPascal,

@@ -1,7 +1,28 @@
 import { describe, it, afterEach, beforeEach, expect } from "vitest";
 import { execCommand, FileTestHelper } from "cli-testlab";
-import { resolve } from "node:path";
-import { mkdirSync, readFileSync } from "node:fs";
+import { relative, resolve, sep } from "node:path";
+import { mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+
+/**
+ * Read every file under `root` into a `{ "relative/posix/path": contents }`
+ * map so a full generated tree can be snapshotted in one assertion. Paths are
+ * normalized to forward slashes so the snapshot is stable across platforms.
+ */
+function readGeneratedTree(root: string): Record<string, string> {
+  const tree: Record<string, string> = {};
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir).sort()) {
+      const full = resolve(dir, entry);
+      if (statSync(full).isDirectory()) {
+        walk(full);
+      } else {
+        tree[relative(root, full).split(sep).join("/")] = readFileSync(full, "utf-8");
+      }
+    }
+  };
+  walk(root);
+  return tree;
+}
 
 const CLI = resolve(import.meta.dirname, "..", "dist", "cli.js");
 const TMP = resolve(import.meta.dirname, "..", ".test-output");
@@ -335,5 +356,41 @@ describe("create catalog / init --with-catalog", { sequential: true }, () => {
       expectedErrorMessage: "already configured",
       baseDir: resolve(TMP, "cat-retrofit"),
     });
+  });
+});
+
+// Guards PR-04's "byte-identical scaffolds" acceptance: the framework
+// template bodies now live in this CLI's preset rather than in `cli-core`,
+// so snapshot the complete generated tree (init + create module/store/journey)
+// to catch any drift in what the preset emits through the shared commands.
+describe("tanstack-react-modules generated tree snapshot", { sequential: true }, () => {
+  const files = new FileTestHelper({ basePath: TMP, maxRetries: 5, retryDelay: 200 });
+
+  beforeEach(() => {
+    mkdirSync(TMP, { recursive: true });
+  });
+
+  afterEach(() => {
+    files.cleanup();
+  });
+
+  it("emits a stable project tree across init + create module/store/journey", async () => {
+    files.registerGlobForCleanup(`${TMP}/snap-app/**`);
+    files.registerGlobForCleanup(`${TMP}/snap-app`);
+
+    await execCommand(`node ${CLI} init snap-app --scope @acme --module dashboard --with-catalog`, {
+      baseDir: TMP,
+    });
+    const project = resolve(TMP, "snap-app");
+    await execCommand(`node ${CLI} create module orders --route orders --nav-group commerce`, {
+      baseDir: project,
+    });
+    await execCommand(`node ${CLI} create store notifications`, { baseDir: project });
+    await execCommand(
+      `node ${CLI} create journey customer-onboarding --modules dashboard,orders --persistence`,
+      { baseDir: project },
+    );
+
+    expect(readGeneratedTree(project)).toMatchSnapshot();
   });
 });
