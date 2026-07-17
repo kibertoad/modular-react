@@ -64,6 +64,7 @@ jobs:
             ["packages/vue-core"]="@modular-vue/core"
             ["packages/vue-runtime"]="@modular-vue/runtime"
             ["packages/vue-testing"]="@modular-vue/testing"
+            ["packages/vue-cli"]="@modular-vue/cli"
             ["packages/angular"]="@modular-angular/angular"
           )
 
