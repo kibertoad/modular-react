@@ -89,6 +89,11 @@ const module: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>({
   defaults: {
     registry: "~/modular/registry",
   },
+  /**
+   * Transpile the package (so Nuxt's build handles the `installModularApp`
+   * import from the injected plugin) and register the runtime plugin template
+   * built by {@link buildModularPluginContents}.
+   */
   setup(options, nuxt) {
     // The package ships ESM/TS; transpile it so Nuxt's build handles the
     // `installModularApp` import from the injected plugin.

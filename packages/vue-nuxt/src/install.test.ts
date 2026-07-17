@@ -26,6 +26,7 @@ interface TestSlots {
   [key: string]: readonly unknown[];
 }
 
+/** Build a fresh test registry (auth store + api service + a `commands` slot). */
 function newRegistry(user: string | null = null) {
   return createRegistry<TestDeps, TestSlots>({
     stores: { auth: createStore<TestAuth>({ user }) },
@@ -34,8 +35,10 @@ function newRegistry(user: string | null = null) {
   });
 }
 
-// A page that prints its own label plus what the modular contexts injected, so
-// tests assert both routing and provider wiring from the rendered DOM.
+/**
+ * A page that prints its own label plus what the modular contexts injected, so
+ * tests assert both routing and provider wiring from the rendered DOM.
+ */
 function page(id: string): RouteRecordRaw {
   return {
     path: `/${id}`,
@@ -56,6 +59,7 @@ function page(id: string): RouteRecordRaw {
   };
 }
 
+/** A minimal routed module: one nav entry and one route rendered by {@link page}. */
 function routedModule(id: string, navLabel: string) {
   return {
     id,
@@ -67,10 +71,12 @@ function routedModule(id: string, navLabel: string) {
 
 const Root = defineComponent({ name: "Root", render: () => h(RouterView) });
 
-// Build the minimal NuxtApp slice `installModularApp` consumes. We don't mount
-// through this `vueApp` (test-utils' mount creates its own app); we assert that
-// the manifest was installed on it, and we mount `Root` with the manifest as a
-// plugin to exercise the injected contexts end-to-end.
+/**
+ * Build the minimal NuxtApp slice `installModularApp` consumes. We don't mount
+ * through this `vueApp` (test-utils' mount creates its own app); we assert that
+ * the manifest was installed on it, and we mount `Root` with the manifest as a
+ * plugin to exercise the injected contexts end-to-end.
+ */
 function nuxtAppFor(router: Router): NuxtAppLike & { vueApp: ReturnType<typeof createApp> } {
   return { vueApp: createApp({ render: () => null }), $router: router };
 }
