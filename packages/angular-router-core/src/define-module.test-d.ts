@@ -9,10 +9,15 @@ describe("defineModule typing", () => {
     const mod = defineModule({
       id: "billing",
       version: "1.0.0",
-      createRoutes: () => [{ path: "billing" }],
+      createRoutes: (): Route[] => [{ path: "billing" }],
     });
 
-    expectTypeOf(mod.createRoutes).toEqualTypeOf<(() => Route | Route[]) | undefined>();
+    // `defineModule` now preserves the descriptor's *literal* shape (so a
+    // journey can read its entry/exit vocabulary off `typeof mod`), which means
+    // `createRoutes` keeps its authored signature rather than widening to the
+    // base `(() => Route | Route[]) | undefined`. It must still be assignable
+    // to the Angular-narrowed base signature.
+    expectTypeOf(mod.createRoutes).toExtend<(() => Route | Route[]) | undefined>();
   });
 
   it("accepts a single route, not just an array", () => {
@@ -38,7 +43,13 @@ describe("defineModule typing", () => {
       version: "1.0.0",
     });
 
-    expectTypeOf(mod).toEqualTypeOf<ModuleDescriptor<AppDeps, AppSlots>>();
+    // `defineModule` now returns the *inferred literal* rather than the widened
+    // `ModuleDescriptor<AppDeps, AppSlots>` — that is what lets a journey read
+    // a module's literal entry/exit vocabulary off `typeof mod`. The explicit
+    // `<AppDeps, AppSlots>` generics still constrain the argument, so the result
+    // stays assignable to the descriptor over the same deps/slots.
+    const asBase: ModuleDescriptor<AppDeps, AppSlots> = mod;
+    void asBase;
   });
 
   it("passes typed i18n-label keys through navigation items", () => {

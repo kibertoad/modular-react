@@ -61,6 +61,12 @@ export type {
   UseJourneyHostOptions,
 } from "./journey-host.js";
 
+// Progress for a running instance — `{ index, total }` derived from the
+// transition graph (via `resolveStepSequence`), so "Step X of N" needs no
+// hand-maintained ordered-step array.
+export { useJourneyProgress } from "./use-journey-progress.js";
+export type { JourneyProgress, UseJourneyProgressOptions } from "./use-journey-progress.js";
+
 // Journey <-> URL sync. The reconciler is framework- and router-neutral (it
 // lives in the engine); this hook is the React lifetime wrapper, and the app
 // supplies a `JourneySyncPort` for its router.
@@ -139,6 +145,16 @@ export type {
   TerminalSentinel,
 } from "@modular-frontend/journeys-engine";
 
+// Derive an ordered step list from the transition graph — URL segments,
+// "Step X of N" — instead of a hand-maintained array. `useJourneyProgress`
+// builds on this; apps that want the raw sequence import it directly.
+export { resolveStepSequence } from "@modular-frontend/journeys-engine";
+export type {
+  ResolvedJourneyStep,
+  ResolveStepSequenceOptions,
+  StepSequenceRef,
+} from "@modular-frontend/journeys-engine";
+
 export type {
   AbandonCtx,
   AnyJourneyDefinition,
@@ -164,6 +180,8 @@ export type {
   JourneyStatus,
   JourneyStep,
   JourneyStepFor,
+  JourneyStepMeta,
+  JourneyStepMetaMap,
   JourneySystemAbortReason,
   JourneySystemAbortReasonCode,
   MaybePromise,

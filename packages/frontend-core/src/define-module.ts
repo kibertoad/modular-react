@@ -17,7 +17,15 @@ import type {
  * - `TNavItem` — app-specific navigation item type. Alias
  *   `NavigationItem<TLabel, TContext, TMeta>` once in your app and pass
  *   it through, so typed i18n labels, dynamic hrefs, and typed `meta` are
- *   enforced on every module.
+ *   enforced on every module. When you don't pass it, it is **inferred from the
+ *   `navigation` array** (the `descriptor & { navigation?: readonly TNavItem[] }`
+ *   parameter shape), defaulting to `NavigationItem` only when there is no
+ *   navigation. That inference is what lets a module use **function-form** `to`
+ *   (`to: (ctx) => "/portal/" + ctx.workspaceId`) with zero generics: the old
+ *   fixed `NavigationItem` default narrowed `to` to a plain `string` and
+ *   rejected the resolver form. The inferred item stays narrow (a plain-string
+ *   `to` infers a `string`-`to` item), so the result is still assignable where
+ *   a `NavigationItem`-typed registry expects it.
  *
  * ```ts
  * interface JourneyMeta { name: string; category: string }
@@ -51,6 +59,6 @@ export function defineModule<
   TNavItem extends NavigationItemBase = NavigationItem,
   TDescriptor extends ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem> =
     ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>,
->(descriptor: TDescriptor): TDescriptor {
+>(descriptor: TDescriptor & { readonly navigation?: readonly TNavItem[] }): TDescriptor {
   return descriptor;
 }

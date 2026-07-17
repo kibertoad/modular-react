@@ -208,6 +208,50 @@ export type StepSpec<TModules extends ModuleTypeMap> =
       }[keyof TModules & string];
 
 /**
+ * Declarative per-step presentation metadata a journey attaches to a
+ * `(module, entry)` pair via {@link JourneyStepMetaMap}. Purely descriptive —
+ * the runtime never reads it to make transition decisions. Consumed by
+ * `resolveStepSequence` (to label a derived step list), a progress hook
+ * (`useJourneyProgress`), and the journey ↔ URL sync (a per-step `path`
+ * overrides the default `"moduleId/entry"` segment).
+ *
+ * Keeping it on the journey definition — rather than duplicated into every
+ * transition's returned `StepSpec` — is deliberate: the flow's ordering already
+ * lives in the transition graph, so its presentation should live beside it, in
+ * one place, instead of being re-encoded at each `next:` site.
+ */
+export interface JourneyStepMeta {
+  /**
+   * URL segment for this step. Overrides the sync's default
+   * `"moduleId/entry"` path. Should be unique within the journey — two steps
+   * that share a path are indistinguishable to the URL reconciler.
+   */
+  readonly path?: string;
+  /**
+   * Human-readable label for progress UIs (breadcrumbs, "Step X — Shipping").
+   * Surfaced on the resolved step and via `useJourneyProgress`.
+   */
+  readonly progressLabel?: string;
+}
+
+/**
+ * Per-step metadata for a journey, keyed by `[moduleId][entryName]` exactly
+ * like {@link TransitionMap}. Entry keys are filtered to journey-mountable
+ * entries, so declaring metadata for a composition-only entry (one that could
+ * never be a journey step) is a compile error. Every level is optional —
+ * annotate only the steps that need a `path` or `progressLabel`.
+ *
+ * This is the single source of truth item 4 of the production-feedback tracker
+ * asked for: URL segments and progress labels derived from the graph instead
+ * of hand-maintained ordered arrays that silently drift from the transitions.
+ */
+export type JourneyStepMetaMap<TModules extends ModuleTypeMap> = {
+  readonly [M in keyof TModules]?: {
+    readonly [E in EntryNamesByMountKindOf<TModules[M], "journey">]?: JourneyStepMeta;
+  };
+};
+
+/**
  * Snapshot of a single step in a journey's history / current position.
  * The runtime stores history as the wide `JourneyStep<unknown>` form;
  * typed simulator / harness surfaces narrow at their boundary via

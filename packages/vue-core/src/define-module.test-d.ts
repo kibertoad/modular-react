@@ -9,10 +9,14 @@ describe("defineModule typing", () => {
     const mod = defineModule({
       id: "billing",
       version: "1.0.0",
-      createRoutes: () => [{ path: "/billing", component: {} }],
+      createRoutes: (): RouteRecordRaw[] => [{ path: "/billing", component: {} }],
     });
 
-    expectTypeOf(mod.createRoutes).toEqualTypeOf<
+    // `defineModule` preserves the descriptor's *literal* shape (so journeys can
+    // read entry/exit vocabulary off `typeof mod`); `createRoutes` therefore
+    // keeps its authored signature rather than widening to the base union, but
+    // must remain assignable to the vue-router-narrowed base signature.
+    expectTypeOf(mod.createRoutes).toExtend<
       (() => RouteRecordRaw | RouteRecordRaw[]) | undefined
     >();
   });
@@ -40,7 +44,13 @@ describe("defineModule typing", () => {
       version: "1.0.0",
     });
 
-    expectTypeOf(mod).toEqualTypeOf<ModuleDescriptor<AppDeps, AppSlots>>();
+    // Returns the inferred literal rather than the widened descriptor (that is
+    // what lets a journey read a module's literal entry/exit vocabulary off
+    // `typeof mod`); the explicit `<AppDeps, AppSlots>` generics still constrain
+    // the argument, so the result stays assignable to the descriptor over the
+    // same deps/slots.
+    const asBase: ModuleDescriptor<AppDeps, AppSlots> = mod;
+    void asBase;
   });
 
   it("passes typed i18n-label keys through navigation items", () => {

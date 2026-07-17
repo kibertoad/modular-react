@@ -133,6 +133,8 @@ export type {
   StepInputSlot,
   JourneyStep,
   JourneyStepFor,
+  JourneyStepMeta,
+  JourneyStepMetaMap,
   ExitCtx,
   TransitionResult,
   EntryTransitions,

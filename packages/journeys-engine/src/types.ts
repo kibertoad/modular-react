@@ -10,6 +10,7 @@ import type {
   JourneyHandleRef,
   JourneyPersistence,
   JourneyStep,
+  JourneyStepMetaMap,
   ModuleTypeMap,
   ResumeMap,
   SerializedJourney,
@@ -43,6 +44,8 @@ export type {
   JourneyStatus,
   JourneyStep,
   JourneyStepFor,
+  JourneyStepMeta,
+  JourneyStepMetaMap,
   JourneySystemAbortReason,
   JourneySystemAbortReasonCode,
   MaybePromise,
@@ -86,6 +89,20 @@ export interface JourneyDefinition<
   readonly start: (state: TState, input: TInput) => StepSpec<TModules>;
 
   readonly transitions: TransitionMap<TModules, TState, TOutput>;
+
+  /**
+   * Declarative per-step presentation metadata, keyed by `[moduleId][entry]`
+   * exactly like {@link transitions}. Each leaf is a {@link JourneyStepMeta}
+   * (`path`, `progressLabel`). Optional and sparse — annotate only the steps
+   * that need it.
+   *
+   * This is the single source of truth for URL segments and progress labels:
+   * `resolveStepSequence` walks the transition graph and reads a step's `path`
+   * / `progressLabel` from here, so an app derives "Step X of N" and its
+   * deep-link segments from the flow itself instead of a hand-maintained
+   * ordered array that silently drifts from the transitions.
+   */
+  readonly steps?: JourneyStepMetaMap<TModules>;
 
   /**
    * Wildcard transitions — fall-through handlers matched by exit name

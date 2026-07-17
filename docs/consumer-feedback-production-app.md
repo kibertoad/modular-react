@@ -90,6 +90,29 @@ becomes mountable in one line.
 
 ## 3. Fix `defineModule` so real apps can use it (literal inference + function-form `nav.to`)
 
+> **Shipped** — both defects are fixed across every `defineModule` variant
+> (`@modular-frontend/core` plus the four router cores:
+> `@tanstack-react-modules/core`, `@react-router-modules/core`,
+> `@modular-vue/core`, `@angular-router-modules/core`).
+>
+> **(a) Literal inference.** Each `defineModule` now infers a trailing
+> `TDescriptor` from its argument and returns it verbatim, so `entryPoints` /
+> `exitPoints` keep their literal keys instead of widening to
+> `EntryPointMap` / `ExitPointMap`. The acceptance test is met:
+> `typeof someModule` drops into a journey `TransitionMap` (and `StepSpec`) with
+> zero casts, and the exit handler's `output` narrows per exit — see
+> `packages/tanstack-router-core/src/define-module.test-d.ts`.
+>
+> **(b) Function-form `to`.** `TNavItem` is now inferred from the `navigation`
+> array (the parameter is typed `TDescriptor & { navigation?: readonly TNavItem[] }`),
+> defaulting to `NavigationItem` only when there is no
+> navigation. A module that resolves its href at render time (`to: (ctx) => …`)
+> type-checks with zero generics. Inference — rather than defaulting the slot to
+> the wide `NavigationItemBase` bound — was deliberate: a fixed wide default
+> made the returned descriptor unassignable to a `NavigationItem`-typed
+> `register()`, so the inferred-narrow item keeps registration working while
+> still admitting the resolver form.
+
 **Evidence.** The app does not use `defineModule` at all. Four of its modules
 carry a near-verbatim copy of a justification comment explaining that a plain
 object literal with `as const` is used instead, because (a) `defineModule`
@@ -109,6 +132,35 @@ don't). Acceptance test: `typeof myModule` defined via `defineModule` must work
 as a `TModules` member in a journey `TransitionMap` with zero casts.
 
 ## 4. Derive step ordering and progress from the transition graph
+
+> **Shipped** — the ordering and progress primitives now live in the engine and
+> both bindings.
+>
+> - **`resolveStepSequence(definition, options?)`** (`@modular-frontend/journeys-engine`)
+>   walks the transition graph statically — following the `targets` each
+>   `defineTransition` handler already declares — and returns the ordered step
+>   list from the start step forward. Linear flows resolve on their own; a
+>   forking flow takes an `options.branch` resolver to pick the path at each
+>   fork (`options.input` / `options.start` seed the first step). Returns the
+>   linear-with-branches spine, which is all it takes to delete the
+>   hand-maintained ordered-step arrays.
+> - **Per-step metadata** rides on a new journey-level `steps` map
+>   (`steps[module][entry] = { path?, progressLabel? }`), keyed against the real
+>   modules/entries so a typo is a compile error. `path` overrides the URL sync's
+>   default `"moduleId/entry"` segment; `progressLabel` feeds progress UIs. One
+>   source of truth beside the transitions, not re-encoded at each `next:`.
+> - **`useJourneyProgress()`** ships on both React (`@modular-react/journeys`)
+>   and Vue (`@modular-vue/journeys`), returning `{ index, total, label, steps }`:
+>   `index` from the live instance (`history.length`), `total` / `label` /
+>   `steps` from `resolveStepSequence`. This is the `stepCount` that item 2
+>   deferred — now derivable because the total comes from the graph, not a
+>   hand-passed number.
+>
+> **Scope.** The walk requires annotated (`defineTransition`) handlers — a step
+> whose transitions are all bare functions has no statically-known next step, so
+> the sequence stops there (`total` reflects what is resolvable). Deriving an
+> arbitrary DAG ordering is out of scope; linear-with-branches is what the
+> evidence called for.
 
 **Evidence.** Each journey's flow is encoded twice: once as the real
 transition-map graph, and again in a ~170-line hand-maintained file of ordered
