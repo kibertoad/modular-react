@@ -50,6 +50,36 @@ export type {
   JourneyOutletNotFoundProps,
   JourneyOutletErrorProps,
 } from "./outlet.js";
+
+// Hosting a journey — owns the instance lifecycle (start on mount, end +
+// forget on unmount) so route components stop hand-rolling it.
+export { JourneyHost, useJourneyHost } from "./journey-host.js";
+export type {
+  JourneyHostProps,
+  JourneyHostRenderProps,
+  JourneyHostState,
+  UseJourneyHostOptions,
+} from "./journey-host.js";
+
+// Journey <-> URL sync. The reconciler is framework- and router-neutral (it
+// lives in the engine); this hook is the React lifetime wrapper, and the app
+// supplies a `JourneySyncPort` for its router.
+export { useJourneySync } from "./use-journey-sync.js";
+export type { UseJourneySyncOptions } from "./use-journey-sync.js";
+export {
+  createJourneySync,
+  createMemoryJourneySyncPort,
+  defaultStepPath,
+  journeyStepPath,
+  resolveJourneySyncAction,
+} from "@modular-frontend/journeys-engine";
+export type {
+  JourneySync,
+  JourneySyncAction,
+  JourneySyncCallbackCtx,
+  JourneySyncOptions,
+  JourneySyncPort,
+} from "@modular-frontend/journeys-engine";
 export { ModuleTab } from "./module-tab.js";
 export type { ModuleTabProps, ModuleTabExitEvent } from "./module-tab.js";
 export { JourneyProvider, useJourneyContext } from "./provider.js";

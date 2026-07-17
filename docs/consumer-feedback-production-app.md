@@ -17,6 +17,23 @@ a feature request in disguise. Items are ordered by estimated impact.
 
 ## 1. Ship a router-sync adapter for journeys (URL ↔ step)
 
+> **Shipped** — `createJourneySync` in `@modular-frontend/journeys-engine`, with
+> `useJourneySync` on both bindings. See the changelog's "journey hosting and URL
+> sync" entry and
+> [Deep-linking steps](../packages/journeys/README.md#deep-linking-steps---usejourneysync).
+>
+> Built router-neutral rather than as per-router packages: the reconciler is a
+> state machine over `{ status, step, history, future }` and a path string, so it
+> lives in the engine behind a 5-method `JourneySyncPort` the app fills in for its
+> router in ~6 lines. React and Vue share one implementation and one test suite.
+> Per-router adapter packages remain possible on top, but nothing needs them yet.
+>
+> One part of the suggestion was **not** built, deliberately: `pathToStep`. A
+> journey's step is derived from its state and carries no identity, so a URL
+> cannot select an arbitrary step — only frames the journey has already visited
+> (`rewindTo`) or just rewound from (`goForward`). Everything else is reported via
+> `onUnresolved` for the host to decide. Per-step `path` metadata is left to item 4.
+
 **Evidence.** The single largest piece of glue in the app is a ~300-line hook
 (plus its test file): a bespoke bidirectional reconciler between the journey
 runtime and TanStack Router history. It re-implements push/replace/goBack/
@@ -38,6 +55,24 @@ to solve this; it is subtle enough (history races, replace-vs-push, forward
 stack) that solving it once in the library is worth a lot.
 
 ## 2. Provide a first-class `JourneyHost` / journey-route primitive
+
+> **Shipped** — `<JourneyHost>` + `useJourneyHost` on both bindings (both forms,
+> as the suggestion allowed). See
+> [Hosting a journey](../packages/journeys/README.md#hosting-a-journey---journeyhost).
+> Combined with item 1, a journey is now mountable in one line.
+>
+> `{ instanceId, stepIndex }` ship; **`stepCount` does not**. The total is not
+> knowable from a running instance — the next step is computed by a transition
+> handler from live state — and accepting a hand-passed total would re-introduce
+> the duplicated flow encoding item 4 is about. It lands with
+> `resolveStepSequence`.
+>
+> Note for whoever picks up the app: the host's start is latched on a ref inside
+> an effect, not `useState(() => runtime.start(...))`. The `useState` form
+> double-invokes its initializer under StrictMode and keeps only one result;
+> without idempotent persistence the discarded `start` leaks an instance per
+> mount (deterministic persistence bounds it by converging both calls on the
+> same instance) — worth checking the app's own host for the same bug.
 
 **Evidence.** The app wraps `<JourneyOutlet>` in its own host component to add
 what every host needs: start-on-mount, a step counter, and instance cleanup on
