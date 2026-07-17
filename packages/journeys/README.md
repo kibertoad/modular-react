@@ -31,6 +31,8 @@ Routes, slots, navigation, workspaces - none of that changes. Journeys sit **on 
 - [`JourneyProvider` + context](#journeyprovider--context)
 - [Persistence](#persistence) - adapters, key design, save queue, hydrate vs start, versioning
 - [Rendering - `JourneyOutlet`](#rendering--journeyoutlet) - props, error policies, host rules
+- [Hosting a journey - `JourneyHost`](#hosting-a-journey---journeyhost) - start on mount, end + forget on unmount, step index
+- [Deep-linking steps - `useJourneySync`](#deep-linking-steps---usejourneysync) - journey ↔ URL in both directions, ports, what a URL can and cannot select
 - [Hosting plain modules - `ModuleTab`](#hosting-plain-modules--moduletab)
 - [Observation hooks](#observation-hooks)
 - [Testing](#testing) - module-level, pure simulator, integration, persistence adapters
@@ -1679,10 +1681,16 @@ interface JourneyRuntime {
   canGoForward(id: InstanceId): boolean;
 
   /**
-   * Force-terminate an instance. Fires `onAbandon` if still active;
-   * no-op if already terminal or unknown.
+   * End an instance. Fires `onAbandon` if still active; no-op if already
+   * terminal or unknown. A plain `end()` applies whatever `onAbandon`
+   * returns — so a non-terminal result (`{ next }` / `{ invoke }`) advances
+   * the flow and leaves the instance **active**, not terminal. Pass
+   * `{ force: true }` for a teardown caller (an unmounting host/outlet) that
+   * must end up terminal: a terminal `onAbandon` result is still honoured,
+   * but a non-terminal one is coerced to an abort so `forget()` can drop the
+   * record instead of leaking a live instance.
    */
-  end(id: InstanceId, reason?: unknown): void;
+  end(id: InstanceId, reason?: unknown, options?: { readonly force?: boolean }): void;
 
   /** Drop a terminal instance from memory. No-op on active/loading. */
   forget(id: InstanceId): void;
@@ -2167,7 +2175,7 @@ What it does:
 3. Resolves `step.module` + `step.entry` against the module map (prop, or the one the runtime was built with) and renders its component with a freshly bound `{ input, exit, goBack? }`. Lazy entries are wrapped in `React.lazy` + `<Suspense fallback={entry.fallback ?? loadingFallback ?? null}>` automatically — see [Pattern - lazy entry-points](#pattern---lazy-entry-points-code-splitting-per-step).
 4. Wraps the step in an error boundary and applies `onStepError` policy. Retries count against `retryLimit` globally per instance (the counter does **not** reset when a retry advances the step), so a throwing component can't bypass the cap by bumping the step token. Lazy import failures surface through this same boundary.
 5. Fires `onFinished` exactly once when the instance terminates; the outcome carries `{ status, payload, instanceId, journeyId }` so analytics can correlate without re-reading props.
-6. On unmount while still `active` **or** `loading`, abandons the instance via `runtime.end({ reason: 'unmounted' })`. Two defenses keep the instance alive when it should stay: StrictMode's simulated mount/unmount/remount cycle (same component, same `mountedRef`) and back-to-back independent outlets that hand off to each other (checked via `record.listeners.size`).
+6. On unmount while still `active` **or** `loading`, abandons the instance via `runtime.end(id, { reason: 'unmounted' }, { force: true })`. The `force` guarantees the instance ends even if `onAbandon` returns a non-terminal `{ next }` — an unmounting outlet can't host a next step, so a plain `end()` would leave it stranded and active. Two defenses keep the instance alive when it should stay: StrictMode's simulated mount/unmount/remount cycle (same component, same `mountedRef`) and back-to-back independent outlets that hand off to each other (checked via `record.listeners.size`).
 7. After each step mounts, schedules a `requestIdleCallback` (with a `setTimeout(_, 0)` fallback) to call `preload()` on every entry reachable from the current step (per `preload` mode — see the prop docs above). Effect cancels on step change so a fast advance doesn't race with the previous step's preload set.
 
 ### Error policies in depth
@@ -2187,6 +2195,192 @@ The retry counter is deliberately per-instance: a step that throws, auto-retries
 - Render the outlet wherever the step should live - tab body, modal body, route element, panel, wizard card. It doesn't care.
 - A tab that represents a journey should be the outlet's **only** long-lived mount. Unmounting = abandon. Don't swap an outlet for a placeholder and expect the journey to survive.
 - For wizards that live inside a single always-mounted container (no tab changes), you can mount the outlet inside a `<details>` or a collapsed panel and the instance stays alive even when visually hidden.
+
+## Hosting a journey - `JourneyHost`
+
+`<JourneyOutlet>` renders a journey that is already running. Something still has to start it, and end it when the user leaves. `<JourneyHost>` is that something:
+
+```tsx
+<JourneyHost handle={checkoutHandle} input={{ cartId }} />
+```
+
+That is a complete, correct journey route. The host starts the journey on mount, renders its current step, and ends + forgets the instance on unmount.
+
+### Props
+
+`<JourneyHost>` accepts **every `<JourneyOutlet>` prop** and forwards it, so error and loading policy stay exactly where they were. On top of those:
+
+```ts
+interface JourneyHostProps<TInput> {
+  handle: JourneyHandle<string, TInput, unknown>;
+  input: TInput; // optional exactly when the handle's TInput is void
+  runtime?: JourneyRuntime; // defaults to the <JourneyProvider>'s
+  children?: (host: {
+    instanceId: InstanceId;
+    instance: JourneyInstance;
+    stepIndex: number;
+    outlet: ReactNode;
+  }) => ReactNode;
+}
+```
+
+`loadingFallback` covers the first render too, before the instance exists.
+
+For chrome around the step, pass a render-prop child and place the ready-built `outlet`:
+
+```tsx
+<JourneyHost handle={checkoutHandle} input={{ cartId }} onFinished={goToReceipt}>
+  {({ stepIndex, outlet }) => (
+    <Layout title="Checkout" step={stepIndex}>
+      {outlet}
+    </Layout>
+  )}
+</JourneyHost>
+```
+
+`useJourneyHost(handle, input, options?)` is the same lifecycle without the rendering, for hosts that want to lay out the outlet themselves. It returns `{ instanceId, instance, runtime, stepIndex }`. The returned `runtime` is the one the host pinned at mount and the one `instanceId` is valid on — normally the same one a `<JourneyProvider>` would hand you, so a hand-placed outlet can keep resolving from context; it is there for the case where a shell swaps its provider value mid-flight, which the host deliberately does not follow.
+
+### Behavior
+
+- **The instance is fixed for the host's lifetime.** `handle`, `input` and `runtime` are read once, at mount. Changing them later does **not** restart the journey — silently abandoning a half-finished flow because a prop identity changed is never what the caller meant. To run a different journey — or the same journey with different `input`, or on a different runtime — remount by giving the host a `key` that encodes whatever identity should trigger the restart, e.g. `<JourneyHost key={`${journeyId}:${cartId}`} …>`. A key that tracks only part of it (say `journeyId`) will not remount when the rest changes. (An `instanceId` only means anything on the runtime that started it, so following a swapped runtime could only strand the host against one that has never heard of the instance.)
+- **Start means resume, when persistence is configured.** `runtime.start()` with a `persistence` adapter returns the in-flight instance for the same `keyFor(input)` instead of minting a new one, so a host that remounts (route change, tab switch) picks the journey back up where it was. Without persistence, every mount starts a fresh instance. See [Keys, idempotency, and "resume vs new"](#keys-idempotency-and-resume-vs-new).
+- **The journey starts from an effect, not during render.** `runtime.start()` mutates the runtime and may write to persistence, and a render React discards or replays would duplicate that. So `instanceId` is `null` for the first render and the host shows `loadingFallback` — this is also why `useState(() => runtime.start(…))`, the obvious hand-rolled version, is unsafe under StrictMode: its initializer runs twice and React keeps only one result. With deterministic persistence both calls converge on the same instance (the second `start` resumes the first), so the damage is bounded; but without idempotent persistence the discarded call leaks a live instance per mount. Starting from the effect sidesteps the question entirely.
+- **Unmount ends _and_ forgets.** `runtime.end(id, { reason: "unmounted" }, { force: true })` then `runtime.forget(id)`, deferred one microtask so StrictMode's mount/unmount/mount cycle does not tear the journey down on its first visit. `<JourneyOutlet>` on its own only ends; forgetting is what stops terminal records accumulating in a long-lived shell. The `force` is what makes "ends" reliable: `onAbandon` may return a non-terminal `{ next }` (or `{ invoke }`), which on a plain `end()` would advance the flow to a step no host renders and leave the instance active — `forget()` would then no-op and the instance (and its persistence key) would leak. Forcing coerces that to an abort while still honouring a terminal `onAbandon` choice (complete/abort).
+- **Nesting an outlet is fine.** The host renders one internally, and the two deferred teardowns are safe in either order — `end` no-ops on a terminal instance, and both force, so whichever runs first terminates and the other no-ops. That also means `onAbandon` runs once per unmount, not once per teardown.
+
+### `stepIndex`, and the absence of `stepCount`
+
+`stepIndex` is `history.length` — how many steps the user has completed, `0` on the first step. It rewinds when the journey does.
+
+There is deliberately no `stepCount`. A journey's next step is computed by a transition handler from live state, so the total is not knowable from a running instance — and a hand-passed total is exactly the duplicated flow encoding that a progress API should be removing, not requiring. Deriving the sequence from the transition graph is a separate piece of work; until it lands, render "Step 3" rather than "Step 3 of 7", or pass your own total if your flow really is fixed-length.
+
+## Deep-linking steps - `useJourneySync`
+
+`useJourneySync` keeps a journey instance and the browser URL in step, in both directions: the journey advances and the URL follows; the user presses Back or Forward and the journey follows.
+
+```tsx
+function CheckoutRoute() {
+  const { instanceId } = useJourneyHost(checkoutHandle, { cartId });
+  useJourneySync(instanceId, port, { stepToPath: (step) => step.entry });
+  return instanceId ? <JourneyOutlet instanceId={instanceId} /> : <Skeleton />;
+}
+```
+
+The host owns the instance, the sync owns the URL, and neither knows about the other.
+
+The reconciler itself is framework- and router-neutral — it lives in `@modular-frontend/journeys-engine` as `createJourneySync`, is shared with `@modular-vue/journeys`, and is tested without a DOM. This hook is the React lifetime wrapper.
+
+### The port
+
+The only router-aware code is a `JourneySyncPort`, which you write:
+
+```ts
+interface JourneySyncPort {
+  read(): string; // the current location, in whatever space stepToPath produces
+  push(path: string): void; // navigate, adding a history entry
+  replace(path: string): void; // navigate, replacing the current entry
+  go?(delta: number): void; // relative history navigation, if the router has it
+  subscribe(listener: () => void): () => void;
+}
+```
+
+Paths are **opaque strings** to the sync — it only compares them for equality. So the port owns every routing concern the sync should not know about: the base path, whether the step lives in a path segment or a search param, and any encoding.
+
+TanStack Router:
+
+```ts
+const port = useMemo<JourneySyncPort>(
+  () => ({
+    read: () => router.state.location.pathname.replace(/^\/checkout\//, ""),
+    push: (path) => router.navigate({ to: "/checkout/$step", params: { step: path } }),
+    replace: (path) =>
+      router.navigate({ to: "/checkout/$step", params: { step: path }, replace: true }),
+    go: (delta) => router.history.go(delta),
+    subscribe: (listener) => router.subscribe("onResolved", listener),
+  }),
+  [router],
+);
+```
+
+React Router:
+
+```ts
+const navigate = useNavigate();
+
+const port = useMemo<JourneySyncPort>(
+  () => ({
+    // Read the browser's own location, not React Router's `useLocation()`.
+    // This port subscribes to `popstate`, and when that listener fires React
+    // Router's state update can still be batched — a `useLocation()` value
+    // (or a ref tracking it) can point at the *previous* path for the length
+    // of the event. `window.location` is the source `popstate` reports on and
+    // is always current inside the handler, so `read()` never sees a stale
+    // path and miss a change. (Routers that expose their committed location
+    // synchronously — TanStack's `router.state.location` — can read that
+    // instead.)
+    read: () => window.location.pathname.replace(/^\/checkout\//, ""),
+    push: (path) => navigate(`/checkout/${path}`),
+    replace: (path) => navigate(`/checkout/${path}`, { replace: true }),
+    go: (delta) => navigate(delta),
+    subscribe: (listener) => {
+      window.addEventListener("popstate", listener);
+      return () => window.removeEventListener("popstate", listener);
+    },
+  }),
+  [navigate],
+);
+```
+
+The port need not be memoized for correctness — the hook reads through to whatever you passed on the latest render, so an inline literal will not rebuild the reconciler. `onUnresolved` and `onBlocked` are read the same live way. Two things are read **once**, when the sync is created, and changing them later has no effect until it is re-created (change `instanceId` or remount): `port.subscribe` — the subscription belongs to the port current at that moment — and `stepToPath`, because the engine needs a stable step→path mapping to resolve the history frames the port has already stamped, and a mapping that changed mid-flight would strand previously visited paths as unresolved.
+
+`createMemoryJourneySyncPort()` is an in-memory port over an array of entries — for tests, and for headless hosts that want journey history semantics without a browser.
+
+### What a URL can and cannot select
+
+This is the part worth reading before wiring it up.
+
+A journey's step is derived from its state, and `JourneyStep` carries no identity — it is `{ moduleId, entry, input }` and nothing more. There is no `goToStep`, and there could not be one: landing on "review" requires the state the earlier steps produced. **So a URL cannot navigate a journey to an arbitrary step.** The only positions it can select are ones the journey has already been to (`history`) or just rewound from (`future`):
+
+| The location names…                  | The sync…                                               |
+| ------------------------------------ | ------------------------------------------------------- |
+| the current step                     | does nothing                                            |
+| a frame in `history`                 | `runtime.rewindTo(id, index)`                           |
+| a frame in `future`                  | `runtime.goForward(id)`, as many times as it takes      |
+| anything else                        | fires `onUnresolved` and **does not navigate**          |
+| a frame the journey refuses to leave | re-asserts the current step's URL and fires `onBlocked` |
+
+So `onUnresolved` is where a stale bookmark, or a click on a nav link out of the flow, lands. The sync deliberately does not force the URL back there — that would trap a user who navigated away on purpose. Decide for yourself: `runtime.end(…)` to abandon, or navigate to the journey's real step to bounce a stale link. It is **not** fired for the initial reconcile: at mount the URL has not been stamped with a step yet, and a host that ends the journey on this callback would otherwise kill the instance it just started. (A stale deep link is handled by the same rule — the journey starts at its real first step and the sync rewrites the URL to match.)
+
+`onBlocked` fires when the frame is real but the runtime will not move to it: the transition did not opt in with `allowBack: true`, the entry declares `allowBack: false`, or a child journey is in flight. The sync re-asserts the current step — the standard "block the Back button" shape, where the URL snaps forward and the user stays put. When the port supplies `go`, it walks the browser forward by exactly the rejected distance, so a multi-entry jump that was refused (`c → a` through the history menu) leaves the whole `[a, b, c]` run intact rather than collapsing it. Without `go` it falls back to `push`, which is truthful but truncates the forward entries (the same cost the advance path documents below). Use the callback to explain why, not to navigate.
+
+### Push, replace, and the forward stack
+
+Push vs. replace follows the journey's own depth (`history.length`):
+
+- **advancing** pushes an entry, so Back has somewhere to go;
+- **rewinding from inside the journey** (a step's `goBack` prop, an in-app Back button) uses `port.go(-n)` so the browser's forward stack survives and Forward redoes the step;
+- **a refused Back** (a location the journey will not rewind to) walks the browser forward by the rejected distance with `port.go(+n)` — the same amount it was asked to go back — restoring the stack exactly and leaving the intermediate entries addressable; without `go`, it `push`es the current step instead, which truncates whatever was ahead;
+- **the first sync** replaces, since the host's own navigation already spent an entry getting here.
+
+`go` is optional, and its absence changes the two `go`-based cases above, each to a different fallback. An **in-app rewind** falls back to `replace`: the URL stays truthful but the forward entry is dropped, so Forward will not redo the step. A **refused Back** falls back to `push`: the URL is corrected to the current step, but pushing from the earlier entry the browser is sitting on truncates whatever was ahead. Both keep the URL honest and both forfeit forward entries — only the mechanics differ. Supply `go` only when the journey owns a contiguous run of history entries; if your shell pushes unrelated entries mid-journey, `go(-n)` can land outside the flow (the sync reports that through `onUnresolved` rather than guessing, but the fallback would have been safer).
+
+### Give steps distinct paths
+
+`stepToPath` defaults to `` `${moduleId}/${entry}` `` and should be **pure, stable, and injective**. Two frames that map to the same string are indistinguishable to the sync: it resolves to the nearest occurrence to the current step, which is right for one Back press out of a loop and wrong for three. A path is all the browser hands back, so the sync cannot do better. If a journey revisits an entry with different meaning (an edit-then-review loop), fold the distinguishing bit into the path — `step.input` is available:
+
+```ts
+// `step.input` is `unknown`, so narrow (or cast) it before reading a field.
+stepToPath: (step) =>
+  step.entry === "review" ? `review/${(step.input as { itemId: string }).itemId}` : step.entry;
+```
+
+### Nested journeys
+
+A sync tracks exactly the instance you give it — **it does not follow child journeys.** When that instance `invoke`s a child, the parent pauses on its invoking step and the child runs on its own instance; the sync keeps mirroring the parent's (paused) step, and a Back press against it resolves through `onBlocked` — "a child journey is in flight" is one of the refusal reasons above. It deliberately does not splice the child's `history`/`future` into the URL: a child's steps are its own URL space, and encoding two instances' histories in one path would make neither addressable. To deep-link inside a child, mount a second sync on the child instance (typically from the child's own host). A single path that encodes both levels is out of scope for this primitive.
+
+### Terminal journeys
+
+Once a journey completes or aborts, `step` is `null` and the sync **leaves the URL alone**. Where a finished journey sends the user is the host's call — wire it in `onFinished`.
 
 ## Hosting plain modules - `ModuleTab`
 
@@ -2650,32 +2844,40 @@ Every export you're likely to call, grouped by role.
 
 ### Rendering + context (`@modular-react/journeys`)
 
-| Export                         | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `JourneyProvider`              | Context provider for the runtime and optional `onModuleExit`. Mount once at the shell root.                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `useJourneyContext`            | Reads the current provider value, or `null`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `JourneyOutlet`                | Renders the current step of a journey instance. Handles loading, error boundary, terminal, and abandon-on-unmount. By default walks the active call chain and renders the leaf — pass `leafOnly={false}` for layered presentations.                                                                                                                                                                                                                                                                                    |
-| `useJourneyCallStack`          | `(runtime, rootId) => readonly InstanceId[]` — returns the live root → … → leaf chain. Subscribes to every link so the array re-resolves when the chain shifts.                                                                                                                                                                                                                                                                                                                                                        |
-| `useJourneyInstance`           | `(id: InstanceId \| null) => JourneyInstance \| null` — subscribes to a single instance via `useSyncExternalStore` and returns its full snapshot (`status`, `step`, `state`, `terminalPayload`, …). Reads the runtime from `<JourneyProvider>`; returns `null` for unknown ids or no provider. Tearing-free under concurrent React. Prefer this when a host needs more than `state`.                                                                                                                                   |
-| `useJourneyState`              | `<TState>(id: InstanceId \| null) => TState \| null` — sugar over `useJourneyInstance(id)?.state`. Use when the caller only needs `state` and the journey's `TState` is known at the call site.                                                                                                                                                                                                                                                                                                                        |
-| `useActiveLeafJourneyInstance` | `(rootId: InstanceId \| null) => JourneyInstance \| null` — **the recommended primitive when the host doesn't know the leaf's depth.** Walks `activeChildId` from the root to the active leaf and returns the leaf's full `JourneyInstance`. `inst.journeyId` is a natural discriminator when the leaf may be the root parent OR any invoked descendant. Re-subscribes as the chain grows / shrinks.                                                                                                                   |
-| `useActiveLeafJourneyState`    | `<TState>(rootId: InstanceId \| null) => TState \| null` — sugar over `useActiveLeafJourneyInstance(rootId)?.state`. Returns a single `T`, so callers whose leaf can be any of several journeys must type it as `<ParentState \| ChildState>` and discriminate manually — usually that's a sign the caller actually wants `useActiveLeafJourneyInstance` and `inst.journeyId` to switch on.                                                                                                                            |
-| `useWaitForExit`               | `<TExits>(exit, channels) => void` — for step components that wait on an async backend event. Composes a push `subscribe` channel, a `poll` channel, and a `timeout` arm with first-wins-latched dispatch and unmount cleanup. Channel-callback identities are ref'd internally, so callback churn between renders doesn't restart the wait; scalar shape changes (`poll.intervalMs`, `timeout.ms`, named timeout exit) do. See [Pattern - event-driven wait with timeout](#pattern---event-driven-wait-with-timeout). |
-| `ModuleTab`                    | Renders a single module entry outside a route. Non-journey counterpart to `JourneyOutlet`.                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Export                         | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JourneyProvider`              | Context provider for the runtime and optional `onModuleExit`. Mount once at the shell root.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `useJourneyContext`            | Reads the current provider value, or `null`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `JourneyOutlet`                | Renders the current step of a journey instance. Handles loading, error boundary, terminal, and abandon-on-unmount. By default walks the active call chain and renders the leaf — pass `leafOnly={false}` for layered presentations.                                                                                                                                                                                                                                                                                             |
+| `useJourneyCallStack`          | `(runtime, rootId) => readonly InstanceId[]` — returns the live root → … → leaf chain. Subscribes to every link so the array re-resolves when the chain shifts.                                                                                                                                                                                                                                                                                                                                                                 |
+| `JourneyHost`                  | `<JourneyHost handle={h} input={i} />` — starts the journey on mount, renders its step, ends + forgets the instance on unmount. Accepts and forwards every `JourneyOutlet` prop; pass a render-prop child to place the ready-built `outlet` inside your own chrome. The instance is fixed for the host's lifetime (remount with a `key` to switch journeys). See [Hosting a journey](#hosting-a-journey---journeyhost).                                                                                                         |
+| `useJourneyHost`               | `<TInput>(handle, input, options?) => { instanceId, instance, runtime, stepIndex }` — the lifecycle half of `JourneyHost` without the rendering. `instanceId` is `null` for the first render: the journey is started from an effect, since starting during render would duplicate instances on a render React discards. `runtime` is the one the host pinned at mount and the one `instanceId` is valid on. `stepIndex` is `history.length`; there is deliberately no `stepCount` (it is not knowable from a running instance). |
+| `useJourneySync`               | `(id: InstanceId \| null, port: JourneySyncPort, options?) => void` — keeps a journey and the URL in step both ways: the journey advances and the URL follows; Back/Forward drive `rewindTo`/`goForward`. Wraps the neutral `createJourneySync`. Tolerates a `null` id, and reads the port and callbacks through refs so inline literals don't rebuild (and re-navigate) the reconciler. See [Deep-linking steps](#deep-linking-steps---usejourneysync).                                                                        |
+| `useJourneyInstance`           | `(id: InstanceId \| null) => JourneyInstance \| null` — subscribes to a single instance via `useSyncExternalStore` and returns its full snapshot (`status`, `step`, `state`, `terminalPayload`, …). Reads the runtime from `<JourneyProvider>`; returns `null` for unknown ids or no provider. Tearing-free under concurrent React. Prefer this when a host needs more than `state`.                                                                                                                                            |
+| `useJourneyState`              | `<TState>(id: InstanceId \| null) => TState \| null` — sugar over `useJourneyInstance(id)?.state`. Use when the caller only needs `state` and the journey's `TState` is known at the call site.                                                                                                                                                                                                                                                                                                                                 |
+| `useActiveLeafJourneyInstance` | `(rootId: InstanceId \| null) => JourneyInstance \| null` — **the recommended primitive when the host doesn't know the leaf's depth.** Walks `activeChildId` from the root to the active leaf and returns the leaf's full `JourneyInstance`. `inst.journeyId` is a natural discriminator when the leaf may be the root parent OR any invoked descendant. Re-subscribes as the chain grows / shrinks.                                                                                                                            |
+| `useActiveLeafJourneyState`    | `<TState>(rootId: InstanceId \| null) => TState \| null` — sugar over `useActiveLeafJourneyInstance(rootId)?.state`. Returns a single `T`, so callers whose leaf can be any of several journeys must type it as `<ParentState \| ChildState>` and discriminate manually — usually that's a sign the caller actually wants `useActiveLeafJourneyInstance` and `inst.journeyId` to switch on.                                                                                                                                     |
+| `useWaitForExit`               | `<TExits>(exit, channels) => void` — for step components that wait on an async backend event. Composes a push `subscribe` channel, a `poll` channel, and a `timeout` arm with first-wins-latched dispatch and unmount cleanup. Channel-callback identities are ref'd internally, so callback churn between renders doesn't restart the wait; scalar shape changes (`poll.intervalMs`, `timeout.ms`, named timeout exit) do. See [Pattern - event-driven wait with timeout](#pattern---event-driven-wait-with-timeout).          |
+| `ModuleTab`                    | Renders a single module entry outside a route. Non-journey counterpart to `JourneyOutlet`.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 ### Runtime + validation (`@modular-react/journeys`)
 
-| Export                      | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createJourneyRuntime`      | Low-level runtime factory. Normally called by the registry; exported for advanced use (test harnesses, custom hosts).                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `validateJourneyContracts`  | Cross-checks a journey's transitions and `moduleCompat` against registered modules. Runs automatically at `resolveManifest()` / `resolve()`; exported for custom validation flows.                                                                                                                                                                                                                                                                                                                                                     |
-| `validateJourneyDefinition` | Structural sanity check on a definition's own shape. Runs automatically in `registerJourney`.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `satisfies(version, range)` | Re-exported from `@modular-react/core` for back-compat. Tests a `MAJOR.MINOR.PATCH` version against the npm-semver subset used by `moduleCompat`. Exported for apps that want to run the same compatibility math outside the journeys validator (e.g. checking a saved blob's recorded version against a current journey's compat range). See [Pattern - module compatibility (`moduleCompat`)](#pattern---module-compatibility-modulecompat) for the supported syntax. New callers should import from `@modular-react/core` directly. |
-| `compareVersions(a, b)`     | Re-exported from `@modular-react/core`. Order two version strings lexicographically by `(major, minor, patch)`. Returns `-1` / `0` / `1`. Useful for "is this saved blob older than the cutoff?" comparisons; for matching against a range use `satisfies`.                                                                                                                                                                                                                                                                            |
-| `SemverParseError`          | Re-exported from `@modular-react/core`. Thrown by `satisfies` / `compareVersions` on malformed input.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `JourneyValidationError`    | Aggregated validation error. `.issues: readonly string[]`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `JourneyHydrationError`     | Thrown from `hydrate` / async-load when the blob is unusable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `UnknownJourneyError`       | Thrown from `runtime.start(journeyId, input)` when `journeyId` is not registered. Catch this specifically in shell-state rehydration loops (see [Rehydrating shell-level work](#rehydrating-shell-level-work-tabs-task-queues-drafts)); surface anything else as a real bug.                                                                                                                                                                                                                                                           |
+| Export                        | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createJourneyRuntime`        | Low-level runtime factory. Normally called by the registry; exported for advanced use (test harnesses, custom hosts).                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `validateJourneyContracts`    | Cross-checks a journey's transitions and `moduleCompat` against registered modules. Runs automatically at `resolveManifest()` / `resolve()`; exported for custom validation flows.                                                                                                                                                                                                                                                                                                                                                     |
+| `validateJourneyDefinition`   | Structural sanity check on a definition's own shape. Runs automatically in `registerJourney`.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `satisfies(version, range)`   | Re-exported from `@modular-react/core` for back-compat. Tests a `MAJOR.MINOR.PATCH` version against the npm-semver subset used by `moduleCompat`. Exported for apps that want to run the same compatibility math outside the journeys validator (e.g. checking a saved blob's recorded version against a current journey's compat range). See [Pattern - module compatibility (`moduleCompat`)](#pattern---module-compatibility-modulecompat) for the supported syntax. New callers should import from `@modular-react/core` directly. |
+| `compareVersions(a, b)`       | Re-exported from `@modular-react/core`. Order two version strings lexicographically by `(major, minor, patch)`. Returns `-1` / `0` / `1`. Useful for "is this saved blob older than the cutoff?" comparisons; for matching against a range use `satisfies`.                                                                                                                                                                                                                                                                            |
+| `SemverParseError`            | Re-exported from `@modular-react/core`. Thrown by `satisfies` / `compareVersions` on malformed input.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `createJourneySync`           | `(runtime, id, port, options?) => { sync, stop }` — the framework- and router-neutral journey ↔ location reconciler behind `useJourneySync`, re-exported from `@modular-frontend/journeys-engine` and shared with `@modular-vue/journeys`. Reach for it directly only outside React (a headless host, a custom lifetime); in a component, prefer the hook.                                                                                                                                                                             |
+| `resolveJourneySyncAction`    | `(instance, path, stepToPath?) => JourneySyncAction` — the pure decision table the reconciler acts on: does this location mean `none`, `rewind` at an index, `forward` by N, or `unresolved`? No runtime calls, no navigation. Exported so hosts can pre-compute what a link would do (e.g. to disable a breadcrumb the journey would refuse).                                                                                                                                                                                         |
+| `journeyStepPath`             | `(instance, stepToPath?) => string \| null` — the location an instance's current step should be at, or `null` when there is no step to represent (`loading`, or terminal). `null` means "leave the URL alone", not "clear it".                                                                                                                                                                                                                                                                                                         |
+| `defaultStepPath`             | `(step) => "moduleId/entry"` — the default `stepToPath`. Injective for journeys that visit each entry at most once per run.                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `createMemoryJourneySyncPort` | In-memory `JourneySyncPort` over an array of entries, modelling a browser stack (`push` truncates the forward entries, `go` clamps). For tests, and for headless hosts that want journey history semantics without a browser.                                                                                                                                                                                                                                                                                                          |
+| `JourneyValidationError`      | Aggregated validation error. `.issues: readonly string[]`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `JourneyHydrationError`       | Thrown from `hydrate` / async-load when the blob is unusable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `UnknownJourneyError`         | Thrown from `runtime.start(journeyId, input)` when `journeyId` is not registered. Catch this specifically in shell-state rehydration loops (see [Rehydrating shell-level work](#rehydrating-shell-level-work-tabs-task-queues-drafts)); surface anything else as a real bug.                                                                                                                                                                                                                                                           |
 
 ### Runtime methods (the `JourneyRuntime` returned as `manifest.journeys`)
 

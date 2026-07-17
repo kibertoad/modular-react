@@ -186,6 +186,44 @@ describe("createJourneyRuntime — basic state machine", () => {
     expect(rt.getInstance(id)!.status).toBe("aborted");
   });
 
+  it("end({ force }) coerces a non-terminal onAbandon result to a terminal abort", () => {
+    // onAbandon may legitimately return a terminal { complete } / { abort },
+    // but a non-terminal { next } advances the flow and leaves the instance
+    // active after end() — a leak for a teardown caller, since forget() only
+    // drops terminal records.
+    const onAbandon = vi.fn().mockReturnValue({
+      next: { module: "debts", entry: "negotiate", input: { customerId: "C-9" } },
+    });
+    const rt = createJourneyRuntime(
+      [{ definition: { ...journey, onAbandon }, options: undefined }],
+      {
+        modules: { account: accountModule, debts: debtsModule },
+        debug: false,
+      },
+    );
+
+    // Without force the { next } is honoured: the instance advances, stays
+    // active, and forget() cannot drop it — the leak the force flag exists for.
+    const leaky = rt.start("collect", { customerId: "C-9" });
+    rt.end(leaky, { why: "unmounted" });
+    expect(rt.getInstance(leaky)!.status).toBe("active");
+    expect(rt.getInstance(leaky)!.step!.entry).toBe("negotiate");
+    rt.forget(leaky);
+    expect(rt.getInstance(leaky)).not.toBeNull();
+
+    // With force the same { next } is coerced to an abort: terminal, so
+    // forget() drops it.
+    const clean = rt.start("collect", { customerId: "C-9b" });
+    rt.end(clean, { why: "unmounted" }, { force: true });
+    expect(rt.getInstance(clean)!.status).toBe("aborted");
+    rt.forget(clean);
+    expect(rt.getInstance(clean)).toBeNull();
+
+    // onAbandon ran on both ends — its telemetry and terminal choice are
+    // preserved; force only overrides a *non-terminal* result.
+    expect(onAbandon).toHaveBeenCalledTimes(2);
+  });
+
   it("step tokens invalidate stale exit calls", () => {
     const rt = freshRuntime();
     const id = rt.start("collect", { customerId: "C-6" });
