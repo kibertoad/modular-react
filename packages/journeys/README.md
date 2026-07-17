@@ -57,6 +57,36 @@ Peer deps: `@modular-react/core`, `@modular-react/react`, `react`, `react-dom`.
 
 If you scaffolded your project with the modular-react CLI, you can scaffold a journey package the same way - see [§ Quickstart shortcut: scaffold the journey package](#quickstart-shortcut-scaffold-the-journey-package) below.
 
+## Using this with Vue
+
+There's a full Vue 3 binding: **`@modular-vue/journeys`** (peer deps
+`@modular-frontend/core`, `@modular-vue/vue`, `vue`). The journey _engine_ —
+`defineJourney`, transitions, branching, persistence, rewind, the runtime,
+handles, `selectModule*`, and every type — is framework-neutral (it lives in
+`@modular-frontend/journeys-engine`) and is re-exported identically by both
+bindings, so **journey definitions and module entry/exit contracts are written
+exactly the same way** whichever framework you ship.
+
+What changes is the UI layer:
+
+- Import the outlet, provider, plugin, and composables from `@modular-vue/journeys`
+  instead of `@modular-react/journeys`. `<JourneyOutlet>`, `<ModuleTab>`,
+  `<JourneyProvider>`, `journeysPlugin()`, `useJourneyState`, `useWaitForExit`
+  all have the same names and roles.
+- Journey steps are module-entry SFCs: `defineProps<ModuleEntryProps<Input, Exits>>()`
+  and call the typed `exit(name, payload)` — the analog of the React entry
+  component's props.
+- The subscription composables return **Vue refs** rather than plain values
+  (e.g. `useJourneyState` → `ComputedRef<TState | null>`), matching the rest of
+  the Vue binding; read `.value` in `<script>`, auto-unwrapped in `<template>`.
+
+See [`examples/vue/customer-onboarding-journey`](../../examples/vue/customer-onboarding-journey)
+for a runnable branching, persisted journey, and
+[Getting started with Vue Router](../../docs/getting-started-vue-router.md) for
+the surrounding shell setup. The React code below uses React imports and JSX;
+translate the imports and the entry components to SFCs for Vue — the journey and
+module contracts are unchanged.
+
 ## Mental model
 
 Three roles, strictly separated:
