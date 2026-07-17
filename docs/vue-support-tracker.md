@@ -111,10 +111,10 @@ Wired the two new scopes — `@modular-frontend/*` (the shared engines, D2) and 
 
 Two plan lines turned out to be no-ops (recorded here rather than acted on):
 
-- **`ensure-labels.yml` needs no change.** It enforces a release-*type* label (`major`/`minor`/`patch`/`skip-release`/`release-same-version`) on every PR — there are no per-package labels to extend. The plan line "extend `ensure-labels.yml` to cover the new package names" assumed a per-package label scheme this repo does not use (analogous to PR-51's discovery that `detect.ts` had no package-name checks to teach).
+- **`ensure-labels.yml` needs no change.** It enforces a release-_type_ label (`major`/`minor`/`patch`/`skip-release`/`release-same-version`) on every PR — there are no per-package labels to extend. The plan line "extend `ensure-labels.yml` to cover the new package names" assumed a per-package label scheme this repo does not use (analogous to PR-51's discovery that `detect.ts` had no package-name checks to teach).
 - **`pnpm-workspace.yaml` already matches.** The `packages/*` glob picks up every new package; confirmed, no change.
 
-npm-scope reservation / `0.0.0` placeholders (D1) are an npm-registry account action, not a repo change; the workflow is now ready to publish the real `1.0.0` (Vue) / `0.1.0` (engines) versions on the next release-labeled merge that touches them.
+npm-scope reservation / `0.0.0` placeholders (D1) are an npm-registry account action, not a repo change; the workflow is now ready to publish the real versions committed in each `package.json` — the `@modular-vue/*` family at `1.0.0`, and the `@modular-frontend/*` engines at their own versions (`core`/`testing`/`compositions-engine` at `0.1.0`, `journeys-engine` already at `1.7.1`) — on the next release-labeled merge that touches them.
 
 Pre-existing gaps found but left out of scope (they predate this initiative and belong to the React/Angular families, not the new Vue scopes): `publish.yml` also omits `@modular-react/compositions` and both Angular packages (`@modular-angular/angular`, `@angular-router-modules/core`), and `ci.yml` omits `packages/angular-router-core`. Recommend a separate follow-up to close those; this PR stays scoped to the `@modular-frontend/*` + `@modular-vue/*` scopes.
 
