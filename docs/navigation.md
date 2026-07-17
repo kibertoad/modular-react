@@ -264,6 +264,7 @@ a ref. The Vue equivalent of the `Sidebar.tsx` above:
 <!-- components/Sidebar.vue -->
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { useNavigation } from "@modular-vue/vue";
 import { resolveNavHref } from "@modular-frontend/core";
 import type { AppNavItem } from "@myorg/app-shared";
@@ -271,6 +272,7 @@ import { usePermissions } from "./permissions";
 import { useWorkspaceId } from "./workspace";
 
 const manifest = useNavigation<AppNavItem>();
+const { t } = useI18n();
 const { canPerform } = usePermissions();
 const workspaceId = useWorkspaceId();
 

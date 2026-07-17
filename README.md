@@ -49,8 +49,8 @@ Once a workspace has accumulated more modules than any one team can keep in thei
 - `@tanstack-react-modules/*`: **v1.x**, considered stable for the APIs documented in the guides below.
 - `@modular-react/{core,react,testing}`: the shared foundation, stable at `1.x`. The router-integration packages depend on these and version independently.
 - `@modular-react/compositions`: **v0.1.x**, the surface and behavior are documented in [its README](packages/compositions/README.md) but breaking changes between 0.x minor versions are still possible.
-- `@modular-vue/*` (`core`, `runtime`, `vue`, `testing`, `journeys`, `compositions`): the Vue 3 + vue-router family, **v1.0**, at feature parity with `@react-router-modules/*` (see the [parity audit](docs/vue-support-tracker.md#parity-audit-pr-42)). Start with [Getting started with Vue Router](docs/getting-started-vue-router.md). The `@modular-vue/cli` scaffolder is still on the roadmap; until it lands, set the workspace up manually per the getting-started guide.
-- `@modular-frontend/*` (`core`, `testing`, `journeys-engine`, `compositions-engine`): the framework-neutral shared engine and core the React and Vue families both build on. Stable at the version of the package each was extracted from.
+- `@modular-vue/*` (`core`, `runtime`, `vue`, `testing`, `journeys`, `compositions`): the Vue 3 + vue-router family, **v1.0**, at feature parity with `@react-router-modules/*` apart from two tracked follow-ups (see the [parity audit](docs/vue-support-tracker.md#parity-audit-pr-42)). Start with [Getting started with Vue Router](docs/getting-started-vue-router.md). The `@modular-vue/cli` scaffolder is still on the roadmap; until it lands, set the workspace up manually per the getting-started guide.
+- `@modular-frontend/*` (`core`, `testing`, `journeys-engine`, `compositions-engine`): the framework-neutral shared engine and core the React and Vue families both build on. `journeys-engine` carries the **1.x** version of the package it was extracted from; `core`, `testing`, and `compositions-engine` are **0.1.x**. The binding families peer-depend on these with tight (`^0.1.0`-style) ranges, so any `@modular-frontend/*` bump ships with coordinated peer-range bumps and releases of every dependent binding package in the same batch — see the [versioning policy](docs/vue-support-tracker.md#versioning-and-release).
 
 The React families target **React 19**; the Vue family targets **Vue ^3.5** and **vue-router ^4.5**. All target **Node 22+**. The docs and CLI scaffolder assume **pnpm workspaces**, but nothing in the runtime or CLI is pnpm-specific; any local package resolution that understands the `workspace:*` protocol (Yarn Berry, Bun) will work after scaffolding with a few script edits. See each getting-started guide for the full pinned version set.
 
@@ -278,14 +278,14 @@ See [`examples/README.md`](examples/README.md) for how to run them and how to ad
 
 ### Vue Router integration
 
-| Package                                                  | Description                                                                                                                                  |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@modular-vue/vue`](packages/vue)                       | Vue bindings: injection contexts, composables (`useStore`, `useSlots`, `useNavigation`, …), scoped stores, entry resolution, error boundary. |
-| [`@modular-vue/core`](packages/vue-core)                 | Module definition with vue-router `RouteRecordRaw` support (`createRoutes()`), `defineSlots`, the `RouteMeta` convention.                    |
-| [`@modular-vue/runtime`](packages/vue-runtime)           | Registry, `router.addRoute()` route builder, `resolve()` / `resolveManifest()` app assembly, zones and route data.                           |
-| [`@modular-vue/testing`](packages/vue-testing)           | `renderModule`, `renderJourney`, `resolveModule`, `createMockStore`, `preloadEntries`.                                                       |
-| [`@modular-vue/journeys`](packages/vue-journeys)         | Vue journey provider, composables, `<JourneyOutlet>`, `<ModuleTab>`, `useWaitForExit`, registry plugin.                                      |
-| [`@modular-vue/compositions`](packages/vue-compositions) | Vue composition provider, panel/host composables, `<CompositionOutlet>` (scoped-slot), registry plugin.                                      |
+| Package                                                  | Description                                                                                                                                                                                           |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@modular-vue/vue`](packages/vue)                       | Vue bindings: injection contexts, composables (`useSlots`, `useNavigation`, …), the `createSharedComposables` factory (`useStore`, `useService`, …), scoped stores, entry resolution, error boundary. |
+| [`@modular-vue/core`](packages/vue-core)                 | Module definition with vue-router `RouteRecordRaw` support (`createRoutes()`), `defineSlots`, the `RouteMeta` convention.                                                                             |
+| [`@modular-vue/runtime`](packages/vue-runtime)           | Registry, `router.addRoute()` route builder, `resolve()` / `resolveManifest()` app assembly, zones and route data.                                                                                    |
+| [`@modular-vue/testing`](packages/vue-testing)           | `renderModule`, `renderJourney`, `resolveModule`, `createMockStore`, `preloadEntries`.                                                                                                                |
+| [`@modular-vue/journeys`](packages/vue-journeys)         | Vue journey provider, composables, `<JourneyOutlet>`, `<ModuleTab>`, `useWaitForExit`, registry plugin.                                                                                               |
+| [`@modular-vue/compositions`](packages/vue-compositions) | Vue composition provider, panel/host composables, `<CompositionOutlet>` (scoped-slot), registry plugin.                                                                                               |
 
 ### Framework-neutral engine (shared by React and Vue)
 

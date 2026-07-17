@@ -465,8 +465,10 @@ full zones story.
 
 Stores are the reactive state surface shared across modules. The framework ships
 a small `createStore` (a `zustand`-shaped vanilla store — decision D3) so you
-don't need a state library to get going; Pinia interop is documented in
-[Shell Patterns](shell-patterns.md).
+don't need a state library to get going. A dedicated Pinia-interop guide section
+is a tracked follow-up of decision D3 (see the
+[tracker](vue-support-tracker.md#decisions)); until it lands, anything exposing
+`getState` / `setState` / `subscribe` satisfies the `Store<T>` contract.
 
 Declare the store's **state** shape in the contract (modules see the state, not
 the store instance), then implement it in the shell:
@@ -495,8 +497,9 @@ import type { NotificationsState } from "@myorg/app-shared";
 export const notificationsStore = createStore<NotificationsState>({ unreadCount: 3 });
 
 // Actions are plain functions that call `setState` (partial-merged by default).
-// Prefer colocated actions? A zustand vanilla store also satisfies `Store<T>` —
-// see the state-library interop note in Shell Patterns (Fundamentals).
+// Prefer colocated actions? A zustand vanilla store (`createStore` from
+// `zustand/vanilla`) also satisfies `Store<T>`, so you can hand one straight
+// to the registry.
 export function markAllRead(): void {
   notificationsStore.setState({ unreadCount: 0 });
 }

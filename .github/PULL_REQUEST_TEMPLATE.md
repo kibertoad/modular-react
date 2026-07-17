@@ -20,6 +20,7 @@ Delete any section that genuinely doesn't apply.
       testing) or adds a capability to a React binding, it also states whether the
       Vue family (`@modular-vue/*`) needs the same change — and either makes it or
       files a follow-up row in
-      [`docs/vue-support-tracker.md`](../docs/vue-support-tracker.md). Framework-neutral
+      [`docs/vue-support-tracker.md`](https://github.com/kibertoad/modular-react/blob/main/docs/vue-support-tracker.md)
+      (relative links don't resolve in rendered PR descriptions). Framework-neutral
       changes that land in a shared `@modular-frontend/*` package usually need no Vue
       follow-up; say so explicitly. (N/A for docs-only or Vue-only PRs.)
