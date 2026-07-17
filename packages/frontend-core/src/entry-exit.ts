@@ -287,11 +287,21 @@ export function validateModuleEntryExit(
         issues.push(`entry "${name}" is not an object`);
         continue;
       }
-      const hasComponent = typeof (entry as { component?: unknown }).component === "function";
+      // A component may be a function (React function component, Vue functional
+      // component) or a non-null object (a Vue SFC / `defineComponent` options
+      // object, a `React.memo` / `forwardRef` result). The core is
+      // framework-neutral, so accept both shapes; each binding's renderer knows
+      // how to mount its own component kind.
+      const componentValue = (entry as { component?: unknown }).component;
+      const hasComponent =
+        typeof componentValue === "function" ||
+        (typeof componentValue === "object" &&
+          componentValue !== null &&
+          !Array.isArray(componentValue));
       const hasLazy = typeof (entry as { lazy?: unknown }).lazy === "function";
       if (!hasComponent && !hasLazy) {
         issues.push(
-          `entry "${name}" must declare a React component or a lazy importer (got component: ${typeof (entry as { component?: unknown }).component}, lazy: ${typeof (entry as { lazy?: unknown }).lazy})`,
+          `entry "${name}" must declare a component (function or component object) or a lazy importer (got component: ${typeof (entry as { component?: unknown }).component}, lazy: ${typeof (entry as { lazy?: unknown }).lazy})`,
         );
       } else if (hasComponent && hasLazy) {
         issues.push(

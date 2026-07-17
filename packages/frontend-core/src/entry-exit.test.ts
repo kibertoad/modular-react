@@ -75,7 +75,29 @@ describe("validateModuleEntryExit", () => {
     });
     const issues = validateModuleEntryExit(m);
     expect(issues).toHaveLength(1);
-    expect(issues[0]).toMatch(/broken.*React component or a lazy importer/);
+    expect(issues[0]).toMatch(
+      /broken.*component \(function or component object\) or a lazy importer/,
+    );
+  });
+
+  it("accepts an object component (Vue SFC / defineComponent, React memo/forwardRef)", () => {
+    const m = mod({
+      // SFCs and `defineComponent(...)` compile to a plain options object, not
+      // a function — the neutral validator must accept that shape.
+      entryPoints: { review: { component: { name: "ReviewProfile", render: () => null } } as any },
+    });
+    expect(validateModuleEntryExit(m)).toEqual([]);
+  });
+
+  it("flags an entry whose component is an array", () => {
+    const m = mod({
+      entryPoints: { broken: { component: [] as any } },
+    });
+    const issues = validateModuleEntryExit(m);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatch(
+      /broken.*component \(function or component object\) or a lazy importer/,
+    );
   });
 
   it("accepts an entry with only a lazy importer", () => {

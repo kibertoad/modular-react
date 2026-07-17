@@ -1,0 +1,214 @@
+import { defineJourney, defineJourneyHandle, defineTransition } from "@modular-vue/journeys";
+import type { PlanHint, SubscriptionPlan } from "@example-vue-onboarding/app-shared";
+import type profileModule from "@example-vue-onboarding/profile-module";
+import type planModule from "@example-vue-onboarding/plan-module";
+import type billingModule from "@example-vue-onboarding/billing-module";
+
+// All three imports are `import type` — modules are NOT pulled into this
+// package's bundle. The runtime resolves step components by id against the
+// registered descriptors. The journey definition is framework-neutral: it is
+// identical to the React example bar the import source (`@modular-vue/journeys`
+// instead of `@modular-react/journeys`) and the Vue module packages.
+type OnboardingModules = {
+  readonly profile: typeof profileModule;
+  readonly plan: typeof planModule;
+  readonly billing: typeof billingModule;
+};
+
+export interface OnboardingInput {
+  readonly customerId: string;
+}
+
+export interface OnboardingState {
+  readonly customerId: string;
+  readonly hint: PlanHint | null;
+  readonly selectedPlan: SubscriptionPlan | null;
+  readonly outcome:
+    | { readonly kind: "paid"; readonly reference: string; readonly amount: number }
+    | { readonly kind: "trial"; readonly trialId: string; readonly trialEndsAt: string }
+    | null;
+}
+
+// Bind `defineTransition` to the journey's modules + state once so every
+// wrapped handler below gets contextual narrowing on `next.module` /
+// `next.entry` and autocomplete on `targets`. Bare-function handlers stay
+// fully supported — only the handlers that fan out to lazy steps need to
+// migrate.
+const transition = defineTransition<OnboardingModules, OnboardingState>();
+
+export const customerOnboardingJourney = defineJourney<OnboardingModules, OnboardingState>()({
+  id: "customer-onboarding",
+  version: "1.0.0",
+  meta: {
+    name: "Customer onboarding",
+    category: "growth",
+  },
+
+  // OPTIONAL — declare the module version ranges this journey was authored
+  // against. The journeys plugin checks each one against the registered
+  // module's `version` at `resolveManifest()` time and refuses to come up
+  // if any module shipped a backwards-incompatible bump.
+  moduleCompat: {
+    profile: "^1.0.0",
+    plan: "^1.0.0",
+    billing: "^1.0.0",
+  },
+
+  initialState: ({ customerId }: OnboardingInput) => ({
+    customerId,
+    hint: null,
+    selectedPlan: null,
+    outcome: null,
+  }),
+
+  start: (state) => ({
+    module: "profile",
+    entry: "review",
+    input: { customerId: state.customerId },
+  }),
+
+  transitions: {
+    profile: {
+      review: {
+        // `transition({ targets })` lets `<JourneyOutlet preload="precise">`
+        // (the default) speculatively warm the chunks for the steps this exit
+        // can advance into. With billing/collect lazy-loaded, declaring the
+        // targets here ensures the chunk is hot before the rep clicks into it.
+        profileComplete: transition({
+          targets: [{ module: "plan", entry: "choose" }],
+          handle: ({ output, state }) => ({
+            state: { ...state, hint: output.hint },
+            next: {
+              module: "plan",
+              entry: "choose",
+              input: { customerId: state.customerId, hint: output.hint },
+            },
+          }),
+        }),
+        readyToBuy: transition({
+          targets: [{ module: "billing", entry: "collect" }],
+          handle: ({ output }) => ({
+            next: {
+              module: "billing",
+              entry: "collect",
+              input: { customerId: output.customerId, amount: output.amount },
+            },
+          }),
+        }),
+        needsMoreDetails: ({ output }) => ({
+          abort: { reason: "profile-incomplete", missing: output.missing },
+        }),
+        // Terminal-only annotation: `targets: ["abort"]` tells the catalog
+        // harvester this handler may abort (no AST walk needed) and constrains
+        // the handler return to just the abort arm at compile time.
+        cancelled: transition({
+          targets: ["abort"],
+          handle: () => ({ abort: { reason: "rep-cancelled" } }),
+        }),
+      },
+    },
+    plan: {
+      choose: {
+        allowBack: true,
+        choseStandard: transition({
+          targets: [{ module: "billing", entry: "collect" }],
+          handle: ({ output, state }) => ({
+            state: { ...state, selectedPlan: output.plan },
+            next: {
+              module: "billing",
+              entry: "collect",
+              input: { customerId: state.customerId, amount: output.plan.monthly },
+            },
+          }),
+        }),
+        choseWithTrial: transition({
+          targets: [{ module: "billing", entry: "startTrial" }],
+          handle: ({ output, state }) => ({
+            state: { ...state, selectedPlan: output.plan },
+            next: {
+              module: "billing",
+              entry: "startTrial",
+              input: { customerId: state.customerId, plan: output.plan },
+            },
+          }),
+        }),
+        noFit: ({ output }) => ({
+          abort: { reason: "plan-no-fit", detail: output.reason },
+        }),
+        cancelled: () => ({ abort: { reason: "rep-cancelled" } }),
+      },
+    },
+    billing: {
+      collect: {
+        allowBack: true,
+        paid: ({ output, state }) => ({
+          state: {
+            ...state,
+            outcome: {
+              kind: "paid",
+              reference: output.reference,
+              amount: output.amount,
+            } as const,
+          },
+          complete: { kind: "paid", reference: output.reference, amount: output.amount },
+        }),
+        failed: ({ output }) => ({
+          abort: { reason: "payment-failed", detail: output.reason },
+        }),
+        cancelled: () => ({ abort: { reason: "rep-cancelled" } }),
+      },
+      startTrial: {
+        trialActivated: ({ output, state }) => ({
+          state: {
+            ...state,
+            outcome: {
+              kind: "trial",
+              trialId: output.trialId,
+              trialEndsAt: output.trialEndsAt,
+            } as const,
+          },
+          complete: {
+            kind: "trial",
+            trialId: output.trialId,
+            trialEndsAt: output.trialEndsAt,
+          },
+        }),
+        failed: ({ output }) => ({
+          abort: { reason: "trial-failed", detail: output.reason },
+        }),
+        cancelled: () => ({ abort: { reason: "rep-cancelled" } }),
+      },
+    },
+  },
+
+  onAbandon: ({ step, state }) => ({
+    // Project only non-identifying fields — the full state carries `customerId`,
+    // and shell-level analytics sinks would exfiltrate it by default if it rode
+    // along in the abort payload.
+    abort: {
+      reason: "abandoned",
+      at: step?.moduleId,
+      hint: state.hint,
+      selectedPlan: state.selectedPlan,
+      outcome: state.outcome,
+    },
+  }),
+
+  onHydrate: (blob) => {
+    if (blob.version !== "1.0.0") {
+      throw new Error(`Unknown customer-onboarding journey version: ${blob.version}`);
+    }
+    return blob;
+  },
+});
+
+export type CustomerOnboardingJourney = typeof customerOnboardingJourney;
+
+/**
+ * Typed token for opening this journey. Modules and shells import the handle
+ * (via `import type`) to call `runtime.start(handle, input)` with full input
+ * checking — without pulling the journey's runtime code into the caller's
+ * bundle.
+ */
+export const customerOnboardingHandle = defineJourneyHandle(customerOnboardingJourney);
+export type CustomerOnboardingHandle = typeof customerOnboardingHandle;

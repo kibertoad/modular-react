@@ -61,8 +61,8 @@ jobs:
             ["packages/vue"]="@modular-vue/vue"
             ["packages/vue-compositions"]="@modular-vue/compositions"
             ["packages/vue-journeys"]="@modular-vue/journeys"
-            ["packages/vue-router-core"]="@modular-vue/core"
-            ["packages/vue-router-runtime"]="@modular-vue/runtime"
+            ["packages/vue-core"]="@modular-vue/core"
+            ["packages/vue-runtime"]="@modular-vue/runtime"
             ["packages/vue-testing"]="@modular-vue/testing"
             ["packages/angular"]="@modular-angular/angular"
           )
@@ -206,6 +206,25 @@ jobs:
             example_path: examples/tanstack-router/editor-composition
             runtime_path: packages/tanstack-router-runtime
             core_path: packages/tanstack-router-core
+          # Vue examples — exercise the @modular-vue/* family mounted in
+          # a real vue-router shell: sibling modules, a journey, and a
+          # composition. Same duplicate-module / provider-plumbing regressions
+          # the React/TanStack entries guard, on the Vue runtime.
+          - shell: "@example-vue-integration-manager/shell"
+            shell_artifact: "example-vue-integration-manager-shell"
+            example_path: examples/vue/integration-manager
+            runtime_path: packages/vue-runtime
+            core_path: packages/vue-core
+          - shell: "@example-vue-onboarding/shell"
+            shell_artifact: "example-vue-onboarding-shell"
+            example_path: examples/vue/customer-onboarding-journey
+            runtime_path: packages/vue-runtime
+            core_path: packages/vue-core
+          - shell: "@example-vue-editor/shell"
+            shell_artifact: "example-vue-editor-shell"
+            example_path: examples/vue/editor-composition
+            runtime_path: packages/vue-runtime
+            core_path: packages/vue-core
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -228,6 +247,12 @@ jobs:
             packages/compositions/**
             packages/react/**
             packages/core/**
+            packages/vue/**
+            packages/vue-journeys/**
+            packages/vue-compositions/**
+            packages/journeys-engine/**
+            packages/compositions-engine/**
+            packages/frontend-core/**
             .github/workflows/ci.yml
           # Skip docs-only and test-only edits — neither changes the
           # shipped dist bundle that the shell links against, so they
