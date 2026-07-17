@@ -1,0 +1,50 @@
+{
+  "name": "@angular-router-modules/core",
+  "version": "0.1.0",
+  "description": "Angular Router core for @modular-angular modules: defineModule with createRoutes(): Route[], defineSlots, shared injectors, scoped stores, and the route-data convention.",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kibertoad/modular-react.git",
+    "directory": "packages/angular-router-core"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@angular/core": "^22.0.0",
+    "@angular/router": "^22.0.0",
+    "@modular-angular/angular": "workspace:*",
+    "@modular-frontend/core": "workspace:*",
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.66.0",
+    "rolldown-plugin-dts": "^0.26.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.3",
+    "vitest": "^4.1.10"
+  },
+  "peerDependencies": {
+    "@angular/core": "^20.0.0 || ^21.0.0 || ^22.0.0",
+    "@angular/router": "^20.0.0 || ^21.0.0 || ^22.0.0",
+    "@modular-angular/angular": "^0.1.0",
+    "@modular-frontend/core": "^0.1.0"
+  }
+}
