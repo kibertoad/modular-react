@@ -17,6 +17,7 @@ export default defineConfig(({ command }) => ({
         "@modular-frontend/testing",
         "@modular-vue/core",
         "@modular-vue/journeys",
+        "@modular-vue/journeys/testing",
         "@modular-vue/vue",
       ],
     },
