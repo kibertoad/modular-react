@@ -149,11 +149,11 @@ through vue-router's global `RouteMeta` augmentation:
 
 ```ts
 // app-shared/src/app-types.ts
-import type { Component } from "vue";
+import type { UiComponent } from "@modular-frontend/core";
 
 export interface AppZones {
-  detailPanel?: Component;
-  headerActions?: Component;
+  detailPanel?: UiComponent;
+  headerActions?: UiComponent;
 }
 
 export interface AppRouteData {
@@ -161,6 +161,14 @@ export interface AppRouteData {
   pageTitle?: string;
 }
 ```
+
+> **Why `UiComponent`, not vue's `Component`?** `useZones<AppZones>()` constrains
+> each zone value to the framework-neutral `UiComponent`
+> (`(props) => any | new (props) => any`) so the merge logic stays shared across
+> bindings. A `<script setup>` SFC's default export satisfies it; vue's broader
+> `Component` union (which includes plain options objects) does not, so typing a
+> zone as `Component` fails the `useZones` type constraint. Use `UiComponent` for
+> component zones and keep plain data (`pageTitle`, flags) in `AppRouteData`.
 
 ```ts
 // app-shared/src/vue-router-meta.ts
@@ -343,5 +351,7 @@ createRoutes: (): RouteRecordRaw => ({
   running two-module app.
 - [Navigation: typed labels, dynamic hrefs, meta](navigation.md) — includes a
   Vue reading example.
+- [Framework-mode (Nuxt 3)](framework-mode-nuxt.md) — run the family inside a
+  Nuxt app with `@modular-vue/nuxt`.
 - `@modular-vue/runtime` README — `createRegistry`, `resolve`, `resolveManifest`,
   and the composables.

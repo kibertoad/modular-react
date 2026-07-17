@@ -21,31 +21,62 @@ import {
 } from "./templates/module.js";
 import { storeFile } from "./templates/store.js";
 import { journeyDefinition, journeyPersistence } from "./templates/journey.js";
+import {
+  appSharedPackageJson,
+  appSharedTsconfig,
+  journeyPackageJson,
+  journeyTsconfig,
+  moduleTsconfig,
+  modulePackageJson,
+  rootPackageJson,
+  rootVitestConfig,
+  shellPackageJson,
+  shellTsconfig,
+  tsconfigBase,
+  MODULAR_VUE_VERSION,
+} from "./templates/scaffold.js";
 
-const ROUTER_VERSION = "^7.6.0";
+const ROUTER_VERSION = "^4.5.0";
 
 // Source the CLI version from this package's own `package.json` so
 // `--version` stays in sync with the published package across releases.
 const pkg = createRequire(import.meta.url)("../package.json") as { version: string };
 
-export const reactRouterPreset: CliPreset = {
-  cliName: "react-router-modules",
+export const vuePreset: CliPreset = {
+  cliName: "modular-vue",
   cliVersion: pkg.version,
-  cliDescription: "modular-react CLI (React Router integration)",
+  cliDescription: "modular-react CLI (Vue 3 + vue-router integration)",
   packages: {
-    core: "@react-router-modules/core",
-    runtime: "@react-router-modules/runtime",
-    testing: "@react-router-modules/testing",
-    journeys: "@modular-react/journeys",
-    router: "react-router",
+    core: "@modular-vue/core",
+    runtime: "@modular-vue/runtime",
+    testing: "@modular-vue/testing",
+    journeys: "@modular-vue/journeys",
+    // Pin the shell's direct journeys dep to the Vue family range (not
+    // cli-core's React `RUNTIME_VERSIONS.journeys`), matching the generated
+    // journey packages.
+    journeysVersion: MODULAR_VUE_VERSION,
+    router: "vue-router",
     routerVersion: ROUTER_VERSION,
   },
   docs: {
-    shellPatterns: "shell-patterns-react-router.md",
+    shellPatterns: "shell-patterns-vue-router.md",
   },
   scaffold: {
-    entryMain: "main.tsx",
-    viewExt: "tsx",
+    entryMain: "main.ts",
+    viewExt: "vue",
+    // Vue-family package.json / tsconfig bodies. When these are present,
+    // `cli-core` emits them instead of its React defaults.
+    rootPackageJson,
+    rootVitestConfig,
+    tsconfigBase,
+    modulePackageJson,
+    moduleTsconfig,
+    shellPackageJson,
+    shellTsconfig,
+    appSharedPackageJson,
+    appSharedTsconfig,
+    journeyPackageJson,
+    journeyTsconfig,
   },
   templates: {
     appSharedIndex,

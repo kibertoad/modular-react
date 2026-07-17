@@ -43,6 +43,10 @@ export const tanstackRouterPreset: CliPreset = {
   docs: {
     shellPatterns: "shell-patterns-tanstack-router.md",
   },
+  scaffold: {
+    entryMain: "main.tsx",
+    viewExt: "tsx",
+  },
   templates: {
     appSharedIndex,
     appSharedExtraDeps: {

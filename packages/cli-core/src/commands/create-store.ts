@@ -56,7 +56,11 @@ export function createCreateStoreCommand(preset: CliPreset) {
 
       writeFileSync(storePath, preset.templates.storeFile({ scope, interfaceName, exportName }));
       addStoreToAppShared(project.appSharedDir, { storeName: name, interfaceName });
-      addStoreToMain(project.shellDir, { storeName: name, importName: exportName });
+      addStoreToMain(project.shellDir, {
+        storeName: name,
+        importName: exportName,
+        mainFile: preset.scaffold.entryMain,
+      });
 
       if (!isNonInteractive) {
         p.note(
