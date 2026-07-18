@@ -127,3 +127,7 @@ walkthrough and the SSR considerations.
 - [Getting started with Vue Router](../../docs/getting-started-vue-router.md)
 - [`@modular-vue/runtime`](../vue-runtime/README.md) — `createRegistry`,
   `resolve`, `resolveManifest`.
+- [Troubleshooting: duplicate `vue-router` instances](../../docs/troubleshooting-vue-router-instances.md)
+  — if `vue-tsc` reports `RouteRecordRaw` "not assignable to" `RouteRecordRaw`,
+  your app resolved two copies of `vue-router`; this explains the cause and the
+  one-line dedupe.

@@ -47,7 +47,7 @@ function run(cmd, args, cwd) {
 }
 
 const failures = [];
-for (const { name, dir } of packages) {
+for (const { name, dir, manifest } of packages) {
   if (!existsSync(join(dir, "dist"))) {
     failures.push({
       name,
@@ -60,15 +60,22 @@ for (const { name, dir } of packages) {
 
   // publint: manifest + exports correctness (strict = warnings fail too).
   const pub = run("pnpm", ["exec", "publint", "--strict", dir], root);
-  // attw: pack the package and verify types resolve for a consumer. The
-  // @modular-* packages are intentionally ESM-only (`"type": "module"`, no CJS
-  // export), so `--profile esm-only` treats the expected "CJS must use dynamic
-  // import" note as OK while still catching genuinely broken type resolution.
-  const attw = run("pnpm", ["exec", "attw", "--pack", dir, "--profile", "esm-only"], root);
 
   const pkgFailures = [];
   if (!pub.ok) pkgFailures.push({ tool: "publint", out: pub.out });
-  if (!attw.ok) pkgFailures.push({ tool: "attw", out: attw.out });
+
+  // attw checks that an *imported* entry resolves to types. Bin-only CLI
+  // packages expose no importable entry (only `bin`, no exports/main/types), so
+  // attw has nothing to resolve and reports a false NoResolution. Run attw only
+  // for packages with a library entry point.
+  const hasEntry = Boolean(manifest.exports || manifest.main || manifest.module || manifest.types);
+  if (hasEntry) {
+    // The @modular-* packages are intentionally ESM-only (`"type": "module"`,
+    // no CJS export), so `--profile esm-only` treats the expected "CJS must use
+    // dynamic import" note as OK while still catching broken type resolution.
+    const attw = run("pnpm", ["exec", "attw", "--pack", dir, "--profile", "esm-only"], root);
+    if (!attw.ok) pkgFailures.push({ tool: "attw", out: attw.out });
+  }
 
   if (pkgFailures.length === 0) {
     console.log(`✓ ${name}`);

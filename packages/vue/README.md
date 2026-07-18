@@ -86,3 +86,11 @@ const api = useService("httpClient"); // plain service → static
   <p>Signed in as {{ user }}</p>
 </template>
 ```
+
+## Troubleshooting
+
+- [Duplicate `vue-router` instances](../../docs/troubleshooting-vue-router-instances.md)
+  — if `vue-tsc` reports `RouteRecordRaw` "not assignable to" `RouteRecordRaw`
+  (same version, different import path), your app resolved two copies of
+  `vue-router`. That doc explains why (vue-router 5's optional `vite` peer) and
+  how to dedupe with a one-line override.
