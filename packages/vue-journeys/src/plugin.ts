@@ -1,5 +1,9 @@
 import { defineComponent, h } from "vue";
-import type { ModuleExitHandler, VueAppProvidingPlugin } from "@modular-vue/vue";
+import {
+  provideBinding,
+  type ModuleExitHandler,
+  type VueAppProvidingPlugin,
+} from "@modular-vue/vue";
 import type {
   JourneyRuntime,
   ModuleTypeMap,
@@ -223,12 +227,17 @@ export function journeysPlugin<TNavItem extends NavigationItemBase = JourneyDefa
     // exactly how `navigationKey` / `modulesKey` reach the app there. The runtime
     // never imports `journeyKey`; the plugin supplies key + value.
     //
-    // Only the journey runtime is bound here — the `<ModuleExitProvider>` the
-    // component form also mounts is a render-time concern; in the router-owning
-    // path module exits are threaded to hosts through `resolve({ onModuleExit })`.
+    // Journey context ONLY is bound here (single responsibility). The component
+    // form's `<JourneyProvider>` additionally composes `<ModuleExitProvider>`,
+    // but module-exit dispatching is the module-hosting layer's concern, not the
+    // journeys binding's: in the router-owning path, exits fired outside a step
+    // are the shell's to wire (it can read `manifest.onModuleExit`). Binding a
+    // module-exit dispatcher off the journeys plugin here would conflate the two
+    // and compete with that channel. `onModuleExit` stays on the value only for
+    // introspection parity with the component provider.
     appProvides({ runtime }) {
       const value: JourneyProviderValue = { runtime, onModuleExit: options.onModuleExit };
-      return [{ key: journeyKey, value }];
+      return [provideBinding(journeyKey, value)];
     },
   };
 }

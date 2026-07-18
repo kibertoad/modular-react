@@ -60,6 +60,7 @@ export type { PiniaStoreLike } from "./pinia-store.js";
 // registry plugin contributes for the router-owning install path — the
 // install-mode twin of the neutral `providers()` wrapping components. Consumed
 // by `@modular-vue/runtime`'s `resolve()`; emitted by e.g. the journeys plugin.
+export { provideBinding } from "./plugin-app-provide.js";
 export type { AppProvide, VueAppProvidingPlugin } from "./plugin-app-provide.js";
 
 // Vue-specific: slots context + composables

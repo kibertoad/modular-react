@@ -366,7 +366,6 @@ export function createRegistry<
       slotFilter: assembly.slotFilter,
       slotsSignal: assembly.slotsSignal,
       recalculateSlots: assembly.recalculateSlots,
-      pluginAppProvides: assembly.pluginAppProvides,
     };
   }
 
@@ -476,7 +475,11 @@ export function createRegistry<
       // `<JourneyOutlet>` through `journeyKey` without the shell hand-wiring
       // `<JourneyProvider>`. The framework-mode `resolveManifest()` path owns a
       // `Providers` component and threads the wrapping components automatically.
-      const plugin = createModularProvidersPlugin(toProvidersConfig(assembly), options.providers);
+      const plugin = createModularProvidersPlugin(
+        toProvidersConfig(assembly),
+        options.providers,
+        assembly.pluginAppProvides,
+      );
 
       return {
         install: plugin.install,

@@ -53,3 +53,21 @@ export interface VueAppProvidingPlugin<TRuntime = unknown> {
    */
   readonly appProvides?: (ctx: { readonly runtime: TRuntime }) => readonly AppProvide[];
 }
+
+/**
+ * Build an {@link AppProvide} with the key and value checked against each other.
+ * Prefer this over an object literal in a plugin's `appProvides` — the return
+ * type of `appProvides` is `readonly AppProvide[]` (with the pairing erased to
+ * `unknown`), so a bare `{ key, value }` literal would let a mismatched value
+ * slip through. `provideBinding(key, value)` enforces `value: T` against the
+ * key's `InjectionKey<T>` at the authoring site.
+ *
+ * ```ts
+ * appProvides({ runtime }) {
+ *   return [provideBinding(myContextKey, { runtime })];
+ * }
+ * ```
+ */
+export function provideBinding<T>(key: InjectionKey<T>, value: T): AppProvide<T> {
+  return { key, value };
+}
