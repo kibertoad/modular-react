@@ -1,6 +1,6 @@
 {
   "name": "@modular-vue/testing",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Testing utilities for @modular-vue modules: mock stores, module resolution, and lazy-entry preloading.",
   "repository": {
     "type": "git",
