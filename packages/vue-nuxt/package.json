@@ -57,6 +57,6 @@
     "@modular-frontend/core": "^0.1.0",
     "@modular-vue/runtime": "^1.0.0",
     "vue": "^3.5.40",
-    "vue-router": "^4.5.0"
+    "vue-router": "^4.5.0 || ^5.0.0"
   }
 }
