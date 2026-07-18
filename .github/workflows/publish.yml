@@ -28,7 +28,8 @@ jobs:
       )
     runs-on: ubuntu-latest
     permissions:
-      contents: read # checkout + dorny/paths-filter read the repo and PR file list
+      contents: read # checkout reads the repo
+      pull-requests: read # dorny/paths-filter reads the PR's changed-file list via the API
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
       has_changes: ${{ steps.build-matrix.outputs.has_changes }}
