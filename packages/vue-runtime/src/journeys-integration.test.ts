@@ -252,4 +252,53 @@ describe("journeys via resolve() — shell-wrapped context", () => {
       payload: { via: "B" },
     });
   });
+
+  it("auto-provides the journey runtime app-wide via the plugin's appProvides — no <JourneyProvider> wrap", async () => {
+    const registry = newRegistry();
+
+    const onFinished = vi.fn();
+    const WizardRoute = defineComponent({
+      name: "WizardRoute",
+      setup() {
+        // No shell wrapper: the context must come from the installed manifest,
+        // which app.provides `journeyKey` through the journeys plugin's
+        // `appProvides` hook.
+        const ctx = useJourneyContext();
+        if (!ctx) throw new Error("expected journey context from app.provide");
+        const instanceId = ctx.runtime.start("wizard", {});
+        return () => h(JourneyOutlet, { instanceId, onFinished });
+      },
+    });
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/wizard", name: "wizard", component: WizardRoute }],
+    });
+    const manifest = registry.resolve({ router });
+
+    // The root renders <router-view> directly — it does NOT wrap it in
+    // <JourneyProvider>. Installing `manifest` as a plugin is the only thing
+    // threading the runtime.
+    const Root = defineComponent({
+      name: "Root",
+      setup: () => () => h(RouterView),
+    });
+
+    await router.push("/wizard");
+    const wrapper = mount(Root, { global: { plugins: [router, manifest] } });
+    await router.isReady();
+    await flushPromises();
+
+    expect(wrapper.find(".chooser").exists()).toBe(true);
+
+    await wrapper.find('[data-testid="pick-b"]').trigger("click");
+    await flushPromises();
+    await wrapper.find('[data-testid="done-b"]').trigger("click");
+    await flushPromises();
+
+    expect(onFinished.mock.calls[0][0]).toMatchObject({
+      status: "completed",
+      payload: { via: "B" },
+    });
+  });
 });

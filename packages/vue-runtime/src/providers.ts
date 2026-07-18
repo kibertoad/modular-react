@@ -28,6 +28,7 @@ import {
   resolveReactiveSlots,
   sharedDependenciesKey,
   slotsKey,
+  type AppProvide,
   type ReactiveSlotsInput,
   type SlotsSignal,
 } from "@modular-vue/vue";
@@ -137,10 +138,21 @@ function provideModularContexts(
 export function createModularProvidersPlugin(
   config: ModularProvidersConfig,
   userPlugins?: Plugin[],
+  pluginAppProvides: readonly AppProvide[] = [],
 ): { install: (app: App) => void } {
   return {
     install(app: App) {
       provideModularContexts((key, value) => app.provide(key, value), config);
+
+      // Plugin-contributed app-level bindings (e.g. the journeys runtime under
+      // `journeyKey`). This is an install-mode-only concept — the framework-mode
+      // component form receives the same plugins' wrapping components instead, so
+      // these bindings are threaded as a dedicated argument rather than through
+      // the shared `ModularProvidersConfig`. Applied after the core contexts and
+      // before user plugins, which may depend on plugin context.
+      for (const { key, value } of pluginAppProvides) {
+        app.provide(key, value);
+      }
 
       if (hasDynamicSlots(config)) {
         const slotsRef = shallowRef(computeDynamicSlots(config));

@@ -1,6 +1,6 @@
 # @modular-vue/nuxt
 
-Nuxt 3 integration for the [`@modular-vue`](../../README.md) family. Nuxt owns
+Nuxt 4 integration for the [`@modular-vue`](../../README.md) family. Nuxt owns
 the Vue app and the vue-router instance, so this package is the router-owning
 seam over `@modular-vue/runtime`: it grafts every module's `createRoutes()`
 subtree onto Nuxt's router and installs the modular contexts (shared
@@ -18,8 +18,10 @@ dependencies, navigation, slots, modules) on the Nuxt Vue app.
 npm install @modular-vue/nuxt @modular-vue/runtime @modular-vue/core @modular-vue/vue
 ```
 
-`@modular-vue/nuxt` peer-depends on `@modular-vue/runtime`, `vue`, and
-`vue-router` (all provided by a Nuxt 3 app).
+`@modular-vue/nuxt` peer-depends on `nuxt` (**4.4+**), `@modular-vue/runtime`,
+`vue`, and `vue-router` (all provided by a Nuxt 4.4+ app). The `vue-router@^5`
+peer is only satisfiable on **Nuxt 4.4 or newer** — that's the release where
+Nuxt integrated Vue Router 5; earlier Nuxt 4.x ships Vue Router 4.
 
 ## Two ways to wire it
 
@@ -125,3 +127,7 @@ walkthrough and the SSR considerations.
 - [Getting started with Vue Router](../../docs/getting-started-vue-router.md)
 - [`@modular-vue/runtime`](../vue-runtime/README.md) — `createRegistry`,
   `resolve`, `resolveManifest`.
+- [Troubleshooting: duplicate `vue-router` instances](../../docs/troubleshooting-vue-router-instances.md)
+  — if `vue-tsc` reports `RouteRecordRaw` "not assignable to" `RouteRecordRaw`,
+  your app resolved two copies of `vue-router`; this explains the cause and the
+  one-line dedupe.
