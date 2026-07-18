@@ -1,6 +1,6 @@
 # @modular-vue/nuxt
 
-Nuxt 3 integration for the [`@modular-vue`](../../README.md) family. Nuxt owns
+Nuxt 4 integration for the [`@modular-vue`](../../README.md) family. Nuxt owns
 the Vue app and the vue-router instance, so this package is the router-owning
 seam over `@modular-vue/runtime`: it grafts every module's `createRoutes()`
 subtree onto Nuxt's router and installs the modular contexts (shared
@@ -19,7 +19,7 @@ npm install @modular-vue/nuxt @modular-vue/runtime @modular-vue/core @modular-vu
 ```
 
 `@modular-vue/nuxt` peer-depends on `@modular-vue/runtime`, `vue`, and
-`vue-router` (all provided by a Nuxt 3 app).
+`vue-router` (all provided by a Nuxt 4 app).
 
 ## Two ways to wire it
 

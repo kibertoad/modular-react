@@ -35,6 +35,19 @@ minimumReleaseAgeExclude:
   - "@vitest/spy@4.1.10"
   - "@vitest/utils@4.1.10"
   - vitest@4.1.10
+  # Nuxt 4 stack for the examples/vue/nuxt-modal-journey example — the freshly
+  # released 4.5.0 family + Pinia 4, allowed through the release-age gate so a
+  # fresh resolve doesn't stall on them. (The @nuxt/kit / @nuxt/schema 3.x that
+  # @modular-vue/nuxt pulls are old enough and need no exclusion.)
+  - nuxt@4.5.0
+  - "@nuxt/kit@4.5.0"
+  - "@nuxt/schema@4.5.0"
+  - "@nuxt/nitro-server@4.5.0"
+  - "@nuxt/vite-builder@4.5.0"
+  - "@pinia/nuxt@1.0.1"
+  - pinia@4.0.2
+  # vue-router 5 is now the whole Vue family's baseline (Nuxt 4 requires it).
+  - vue-router@5.2.0
 
 onlyBuiltDependencies:
   - esbuild

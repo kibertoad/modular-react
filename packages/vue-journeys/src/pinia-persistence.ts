@@ -12,10 +12,15 @@ import type { SerializedJourney, SyncJourneyPersistence } from "@modular-fronten
  * owns, not a reason for every `@modular-vue/journeys` consumer to pull Pinia.
  */
 export interface PiniaJourneyPersistenceStore {
-  /** The store's reactive state object (`store.$state`). */
-  readonly $state: Record<string, unknown>;
+  /**
+   * The store's reactive state object (`store.$state`). Typed as `object`
+   * rather than `Record<string, unknown>` so a concrete Pinia store — whose
+   * `$state` is an interface without an index signature — is structurally
+   * assignable without the caller casting. The adapter narrows internally.
+   */
+  readonly $state: object;
   /** Apply a mutation to `$state` (`store.$patch((s) => { … })`). */
-  $patch(mutator: (state: Record<string, unknown>) => void): void;
+  $patch(mutator: (state: any) => void): void;
 }
 
 export interface PiniaJourneyPersistenceOptions<TInput> {
@@ -108,7 +113,7 @@ export function createPiniaJourneyPersistence<TInput, TState>(
   const readRecord = (
     s: PiniaJourneyPersistenceStore,
   ): Record<string, SerializedJourney<TState>> | undefined => {
-    const rec = s.$state[stateKey];
+    const rec = (s.$state as Record<string, unknown>)[stateKey];
     return rec && typeof rec === "object"
       ? (rec as Record<string, SerializedJourney<TState>>)
       : undefined;

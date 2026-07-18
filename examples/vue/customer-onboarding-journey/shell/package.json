@@ -19,7 +19,7 @@
     "@modular-vue/journeys": "workspace:*",
     "@modular-vue/runtime": "workspace:*",
     "vue": "^3.5.40",
-    "vue-router": "^4.5.0"
+    "vue-router": "^5.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

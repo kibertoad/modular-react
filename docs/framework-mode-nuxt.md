@@ -1,7 +1,7 @@
-# Framework-Mode Integration (Nuxt 3)
+# Framework-Mode Integration (Nuxt 4)
 
 This guide shows how to run the `@modular-vue` family inside a
-[Nuxt 3](https://nuxt.com) app with
+[Nuxt 4](https://nuxt.com) app with
 [`@modular-vue/nuxt`](../packages/vue-nuxt/README.md). Nuxt owns the Vue app and
 the vue-router instance, so the integration is the **router-owning** path over
 `@modular-vue/runtime` (`registry.resolve()`): the runtime grafts every module's
@@ -119,7 +119,7 @@ Write the plugin yourself when you need the non-serializable options —
 `authGuard`, `providers`, `slotFilter`, or `onModuleExit`:
 
 ```ts
-// plugins/modular-vue.ts
+// app/plugins/modular-vue.ts
 import { installModularApp } from "@modular-vue/nuxt/runtime";
 import buildRegistry from "~/modular/registry";
 
@@ -156,7 +156,7 @@ load or refresh straight onto `/billing`), Nuxt's route table must already
 contain a match. Two ways to guarantee that:
 
 1. **Declare a shell page and graft under it.** Give Nuxt a real page — e.g.
-   `pages/[...modular].vue` (a catch-all) or a named `pages/app.vue` — and pass
+   `app/pages/[...modular].vue` (a catch-all) or a named `app/pages/app.vue` — and pass
    its route name as `parentRouteName`. Nuxt's initial resolution matches the
    shell page; the grafted child renders inside its `<NuxtPage>` /
    `<router-view>`. This is the recommended pattern.

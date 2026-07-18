@@ -54,10 +54,12 @@ interface EnvSetupState {
   preflightOk?: boolean;
 }
 
-export const envSetup = defineJourney<Modules, EnvSetupInput>()({
+// `defineJourney<Modules, State, Output?>()` — `Input` is inferred from
+// `initialState`'s parameter annotation.
+export const envSetup = defineJourney<Modules, EnvSetupState>()({
   id: "env-setup",
   version: "1.0.0",
-  initialState: ({ frameId }) => ({ frameId }),
+  initialState: ({ frameId }: EnvSetupInput) => ({ frameId }),
   start: (s) => ({ module: "pick", entry: "pick", input: { frameId: s.frameId } }),
   transitions: {
     pick: {
@@ -72,10 +74,9 @@ export const envSetup = defineJourney<Modules, EnvSetupInput>()({
 });
 
 // A handle lets modules/shells open the journey with typed `input` without
-// importing the runtime.
-export const envSetupHandle = defineJourneyHandle<"env-setup", EnvSetupInput, { saved: boolean }>(
-  "env-setup",
-);
+// importing the runtime. Built from the definition; runtime identity is just
+// its `id`.
+export const envSetupHandle = defineJourneyHandle(envSetup);
 ```
 
 Register it through the plugin when you build the registry:
@@ -143,76 +144,102 @@ Outlet props (`onFinished`, `onStepError`, `errorComponent`, `preload`,
 
 These match the React binding exactly:
 
-1. **Start means resume under persistence.** `useJourneyHost` calls
-   `runtime.start()` on mount. With a persistence adapter configured, `start()`
-   returns the in-flight instance for the same `keyFor(input)` instead of
-   minting a new one — this is what lets a modal close and reopen and pick the
-   wizard back up.
-2. **The instance is fixed for the host's lifetime.** `handle` / `input` /
-   `runtime` are read once at setup. Changing `input` later does **not**
-   restart. To run a different journey (or restart), remount with `:key`.
-3. **Abandon on unmount, deferred one microtask.** An open → close → reopen
-   within a tick, a `<KeepAlive>` toggle, or an HMR/transition-driven remount
-   won't tear the instance down.
+1. **Start rehydrates from persistence.** `runtime.start(id, input)` is
+   idempotent when a persistence adapter is configured: if a blob exists for
+   `keyFor(input)`, it returns that instance instead of minting a new one. This
+   recovers an in-flight journey across a **reload** (the fresh boot's `start()`
+   rehydrates the persisted blob), and lets reopening the same frame resume
+   rather than restart — _as long as the instance wasn't ended in between_
+   (rule 3).
+2. **A host's instance is fixed for its lifetime.** `useJourneyHost` reads
+   `handle` / `input` / `runtime` once at setup; changing `input` later does
+   **not** restart. To run a different journey, remount with `:key`.
+3. **Host and outlet END the instance on unmount (deferred one microtask).**
+   `<JourneyHost>` and `<JourneyOutlet>` call `runtime.end(force)` on unmount —
+   which aborts the instance and, on that terminal, **removes its persisted
+   blob**. The one-microtask defer lets a same-tick handoff survive (a `:key`
+   swap, `<KeepAlive>` toggle, HMR), and the outlet **skips** the end while any
+   listener is still subscribed to the record (`record.listeners.size > 0`). But
+   a genuine `v-if` close is many ticks later with no remaining subscriber, so
+   it _does_ end the journey — see §4 for how to keep one alive across a modal
+   close.
 4. **`instanceId` may be `null` on the first render.** Every composable no-ops
    on `null`, so you can call them unconditionally above an early return.
 
 ---
 
-## 4. Modal-mounted journeys (no URL) — the primary recipe
+## 4. Modal-mounted journeys (no URL)
 
 The board-app case: the wizard lives in a modal opened by a store boolean, runs
-entirely outside route navigation, and resumes where it left off when reopened.
-**No `useRoute` / `useRouter` anywhere.**
+outside route navigation, and survives close/reopen. **No `useRoute` /
+`useRouter` anywhere.**
+
+### Which host?
+
+`<JourneyHost>` is the one-liner for a **route or tab** host: it starts on mount
+and **ends the instance on unmount** (rule 3). That's wrong for a modal you close
+and reopen with `v-if` — the close unmounts the host, ends the journey, and
+removes its persisted blob, so reopening starts fresh.
+
+For a modal that must **survive close**, start the instance yourself and keep it
+alive across the outlet's unmount:
+
+- start with `runtime.start(handle.id, input)` — idempotent under persistence, so
+  the same frame resolves to the same instance;
+- render a plain `<JourneyOutlet :instance-id>` inside the `v-if` modal;
+- hold an always-mounted subscription to the instance (`useJourneyInstance`) so
+  the outlet's abandon-on-unmount is skipped (it only ends when
+  `record.listeners.size === 0`).
+
+```ts
+// A composable with the runtime from context (threaded app-wide — §7).
+export function useWizardControls() {
+  const ctx = useJourneyContext();
+  const ui = useUiStore();
+  function open(frameId: string) {
+    ui.instanceId = ctx!.runtime.start(envSetupHandle.id, { frameId });
+    ui.isOpen = true;
+  }
+  return { open };
+}
+```
 
 ```vue
+<!-- Always mounted (e.g. in the app root). Keeps the instance alive across a
+     modal close so reopening resumes the LIVE instance. -->
 <script setup lang="ts">
-import { JourneyHost } from "@modular-vue/journeys";
-import { envSetupHandle } from "~/journeys/env-setup";
-
-const ui = useUiStore(); // ui.envSetupOpen is a boolean
-const props = defineProps<{ frameId: string }>();
-
-function onFinished() {
-  ui.envSetupOpen = false; // terminal exit closes the modal
-}
+import { useJourneyInstance } from "@modular-vue/journeys";
+import { storeToRefs } from "pinia";
+const { instanceId } = storeToRefs(useUiStore());
+useJourneyInstance(instanceId);
 </script>
+<template><span hidden /></template>
+```
 
+```vue
+<!-- The modal: v-if, a plain outlet, and no <JourneyProvider> — the runtime is
+     resolved from app-level context. -->
 <template>
-  <UModal v-model:open="ui.envSetupOpen">
-    <!-- Fresh instance per frame: keying on frameId means re-targeting a
-         different frame is a new instance, not a hand-cleared old one. This is
-         what replaces resetFlowState(). -->
-    <JourneyHost
-      :key="frameId"
-      :handle="envSetupHandle"
-      :input="{ frameId }"
-      @finished="onFinished"
-    >
-      <template #default="{ stepIndex, instance, outlet }">
-        <WizardChrome :step="stepIndex" :total="4">
-          <component :is="outlet" />
-          <template #footer>
-            <!-- Cancel semantics — pick one:
-                 rewind a step:   runtime.goBack(instance.id)
-                 close & keep:    ui.envSetupOpen = false   (persistence resumes on reopen)
-                 close & discard: runtime.abandon(instance.id); ui.envSetupOpen = false -->
-            <button data-testid="wizard-back" @click="runtime.goBack(instance.id)">Back</button>
-          </template>
-        </WizardChrome>
-      </template>
-    </JourneyHost>
+  <UModal v-if="ui.isOpen && ui.instanceId" v-model:open="ui.isOpen">
+    <JourneyOutlet :instance-id="ui.instanceId" :on-finished="onFinished" />
   </UModal>
 </template>
 ```
 
-**Cancel vs. close.** Closing the modal without abandoning leaves the instance
-persisted — reopening resumes it. `runtime.goBack(id)` rewinds one step;
-`runtime.abandon(id)` drops the in-flight instance so the next open starts
-fresh.
+**Resume, two ways.** In-session close → reopen resumes the _live_ instance (the
+subscription kept it from being torn down). A full **reload** resumes via
+persistence: the fresh boot's `start()` rehydrates the blob — provided the
+backing store is durable (the Pinia adapter is in-memory unless you also persist
+the store to `localStorage`).
 
-To resume-on-reopen, configure a persistence adapter (next section). Without
-one, each open of a freshly-keyed host starts a new instance.
+**Cancel semantics.** `runtime.goBack(id)` rewinds a step. To discard, drop the
+subscription and let the outlet end the instance (or call `runtime.end(id, …)`)
+— the terminal removes the persisted blob. Finishing (a terminal exit) does the
+same and fires `onFinished`.
+
+> A complete, runnable version — a real Nuxt app with Pinia persistence and
+> `appProvides` threading — is in
+> [`examples/vue/nuxt-modal-journey`](../examples/vue/nuxt-modal-journey).
 
 ---
 
@@ -365,7 +392,7 @@ import { createTestHarness } from "@modular-vue/journeys/testing";
 
 ## See also
 
-- [Framework-Mode Integration (Nuxt 3)](./framework-mode-nuxt.md) — the
+- [Framework-Mode Integration (Nuxt 4)](./framework-mode-nuxt.md) — the
   router-owning install path this guide's §7 builds on.
 - [Vue support tracker](./vue-support-tracker.md) — decisions D3 (Pinia
   interop) and D4 (authoring style) behind this binding.
