@@ -67,7 +67,7 @@ Runnable reference: [`remote-capabilities`](../examples/react-router/remote-capa
 
 ## What a remote manifest can carry
 
-Remote manifests are a **strict subset** of a [`ModuleDescriptor`](../packages/core/src/types.ts) — only data that survives a round trip through JSON.
+Remote manifests are a **strict subset** of a [`ModuleDescriptor`](../packages/frontend-core/src/types.ts) — only data that survives a round trip through JSON.
 
 | Contribution                              | Remote? | Why                                                                                  |
 | ----------------------------------------- | ------- | ------------------------------------------------------------------------------------ |
@@ -85,7 +85,7 @@ The library ships a narrowed type that enforces this subset at compile time:
 import type { RemoteModuleManifest, RemoteNavigationItem } from "@modular-react/core";
 ```
 
-`RemoteNavigationItem` narrows `to` to `string` and `icon` to `string` — the two fields on a regular [`NavigationItem`](../packages/core/src/types.ts) that aren't JSON-safe. `RemoteModuleManifest` refuses the non-serializable `ModuleDescriptor` fields up front, so the type itself documents the wire contract.
+`RemoteNavigationItem` narrows `to` to `string` and `icon` to `string` — the two fields on a regular [`NavigationItem`](../packages/frontend-core/src/types.ts) that aren't JSON-safe. `RemoteModuleManifest` refuses the non-serializable `ModuleDescriptor` fields up front, so the type itself documents the wire contract.
 
 ## Architecture
 
@@ -444,6 +444,6 @@ Two complete walkthroughs live under `examples/react-router/`, one per topology.
 
 ## Reference
 
-- Type: [`RemoteModuleManifest`](../packages/core/src/remote-manifest.ts) — JSON-safe subset of `ModuleDescriptor`.
-- Type: [`RemoteNavigationItem`](../packages/core/src/remote-manifest.ts) — JSON-safe subset of `NavigationItem`.
-- Helper: [`mergeRemoteManifests`](../packages/core/src/remote-manifest.ts) — merges an array into `{ slots, navigation, meta }`, throwing on duplicate ids.
+- Type: [`RemoteModuleManifest`](../packages/frontend-core/src/remote-manifest.ts) — JSON-safe subset of `ModuleDescriptor`.
+- Type: [`RemoteNavigationItem`](../packages/frontend-core/src/remote-manifest.ts) — JSON-safe subset of `NavigationItem`.
+- Helper: [`mergeRemoteManifests`](../packages/frontend-core/src/remote-manifest.ts) — merges an array into `{ slots, navigation, meta }`, throwing on duplicate ids.

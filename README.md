@@ -45,9 +45,9 @@ Once a workspace has accumulated more modules than any one team can keep in thei
 
 ## Project status
 
-- `@react-router-modules/*`: **v2.x**, considered stable for the APIs documented in the guides below.
-- `@tanstack-react-modules/*`: **v1.x**, considered stable for the APIs documented in the guides below.
-- `@modular-react/{core,react,testing}`: the shared foundation, stable at `1.x`. The router-integration packages depend on these and version independently.
+- `@react-router-modules/*`: `core` / `runtime` at **v2.x**, `cli` / `testing` at **v3.x** — considered stable for the APIs documented in the guides below.
+- `@tanstack-react-modules/*`: the same spread — `core` / `runtime` at **v2.x**, `cli` / `testing` at **v3.x** — considered stable for the APIs documented in the guides below.
+- `@modular-react/{core,react,testing}`: the shared foundation — `core` / `react` at **v2.x**, `testing` at **v1.x**. The router-integration packages depend on these and version independently.
 - `@modular-react/compositions`: **v0.1.x**, the surface and behavior are documented in [its README](packages/compositions/README.md) but breaking changes between 0.x minor versions are still possible.
 - `@modular-vue/*` (`core`, `runtime`, `vue`, `testing`, `journeys`, `compositions`): the Vue 3 + vue-router family, **v1.0**, at full feature parity with `@react-router-modules/*` (see the [parity audit](docs/vue-support-tracker.md#parity-audit-pr-42)). Start with [Getting started with Vue Router](docs/getting-started-vue-router.md). The `@modular-vue/cli` scaffolder (binary `modular-vue`) ships alongside the family — `modular-vue init` bootstraps a workspace and `modular-vue create module|store|journey` extends it; the getting-started guide also shows the equivalent manual setup.
 - `@modular-vue/nuxt`: the Nuxt 3 integration, **v0.1.x, experimental**. Grafts module routes onto Nuxt's vue-router and installs the modular contexts on the Nuxt Vue app, either via a Nuxt module or the `installModularApp` helper in your own plugin. See [Framework-mode (Nuxt 3)](docs/framework-mode-nuxt.md).
@@ -233,7 +233,7 @@ See [Getting started with Vue Router](docs/getting-started-vue-router.md) and [S
 
 ## Examples
 
-Runnable examples live under [`examples/`](examples/), split by router integration. Each is a self-contained pnpm workspace that resolves the library packages from this repo, so changes in `packages/*` are reflected the next time you run the example (some examples pin `workspace:*` on every dep, others declare library deps with semver ranges and rely on the repo's `.npmrc` `link-workspace-packages=true` — either way the local source wins):
+Runnable examples live under [`examples/`](examples/), split by router integration. Each is a self-contained pnpm workspace that resolves the library packages from this repo, so changes in `packages/*` are reflected the next time you run the example (examples pin `workspace:*` on their library deps, so the local source always wins):
 
 - [`examples/react-router/integration-manager/`](examples/react-router/integration-manager) — sibling modules sharing a screen (React Router)
 - [`examples/tanstack-router/integration-manager/`](examples/tanstack-router/integration-manager) — sibling modules sharing a screen (TanStack Router)

@@ -3000,7 +3000,9 @@ interface JourneyNavContribution<TInput = unknown> {
 }
 ```
 
-**Journey-contributed nav.** Set `options.nav` on `registerJourney` when the journey is reachable from a top-level navbar entry without a dedicated launcher module. The journeys plugin collects every `nav` block at manifest time and merges them into `manifest.navigation` alongside module-contributed items. Items the plugin emits carry an `action: { kind: "journey-start", journeyId, buildInput }` - the framework stays agnostic about how the shell dispatches the action; the shell's navbar renderer switches on `action` to start the journey via `runtime.start(journeyId, buildInput?.())`.
+#### Journey-contributed nav
+
+Set `options.nav` on `registerJourney` when the journey is reachable from a top-level navbar entry without a dedicated launcher module. The journeys plugin collects every `nav` block at manifest time and merges them into `manifest.navigation` alongside module-contributed items. Items the plugin emits carry an `action: { kind: "journey-start", journeyId, buildInput }` - the framework stays agnostic about how the shell dispatches the action; the shell's navbar renderer switches on `action` to start the journey via `runtime.start(journeyId, buildInput?.())`.
 
 Apps with a narrowed `TNavItem` (typed i18n labels, typed action union, typed meta bag) should supply a `buildNavItem` adapter on `journeysPlugin({ buildNavItem })` to reshape the plugin's default item into the app-narrowed type:
 

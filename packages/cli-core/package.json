@@ -1,7 +1,7 @@
 {
   "name": "@modular-react/cli-core",
   "version": "1.0.0",
-  "description": "Shared command implementations and templates for the modular-react CLI binaries (@react-router-modules/cli, @tanstack-react-modules/cli).",
+  "description": "Shared command implementations and templates for the modular-react CLI binaries (@react-router-modules/cli, @tanstack-react-modules/cli, @modular-vue/cli).",
   "repository": {
     "type": "git",
     "url": "git://github.com/kibertoad/modular-react.git",
