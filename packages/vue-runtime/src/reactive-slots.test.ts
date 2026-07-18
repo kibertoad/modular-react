@@ -1,12 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { defineComponent, h, nextTick, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
-import {
-  createMemoryHistory,
-  createRouter,
-  RouterView,
-  type RouteRecordRaw,
-} from "vue-router";
+import { createMemoryHistory, createRouter, RouterView, type RouteRecordRaw } from "vue-router";
 import { useReactiveSlots } from "@modular-vue/vue";
 import { createRegistry } from "./registry.js";
 import { createModularApp } from "./app.js";
@@ -51,14 +46,15 @@ describe("useReactiveSlots via resolve()", () => {
     const app = createModularApp(registry, {
       router,
       slotFilter: (slots, deps) => ({
-        nav: slots.nav.filter((i) => i.gate == null || (deps.gates as Record<string, boolean>)?.[i.gate]),
+        nav: slots.nav.filter(
+          (i) => i.gate == null || (deps.gates as Record<string, boolean>)?.[i.gate],
+        ),
       }),
     });
 
-    const wrapper = mount(
-      defineComponent({ setup: () => () => h(RouterView) }),
-      { global: { plugins: [router, app] } },
-    );
+    const wrapper = mount(defineComponent({ setup: () => () => h(RouterView) }), {
+      global: { plugins: [router, app] },
+    });
     await router.isReady();
     await flushPromises();
 

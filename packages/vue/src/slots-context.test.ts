@@ -157,4 +157,39 @@ describe("useReactiveSlots", () => {
     canWrite.value = false;
     expect(result().value.nav.map((i) => i.id)).toEqual(["always"]);
   });
+
+  it("tracks a reactive source read through a reactiveService getSnapshot", () => {
+    const isAdmin = ref(false);
+    // A reactiveService whose getSnapshot() reads reactive state: the snapshot is
+    // rebuilt inside the computed (buildDepsSnapshot calls getSnapshot there), so
+    // the ref read is tracked even though the deps arrive through the
+    // reactiveServices bucket rather than a plain service reference.
+    const gates = {
+      subscribe: () => () => {},
+      getSnapshot: () => ({ isAdmin: isAdmin.value }),
+    };
+    const factory = (deps: any) =>
+      deps.gates?.isAdmin ? { commands: [{ id: "admin" }] } : { commands: [] };
+
+    const { result } = renderComposable(() => useReactiveSlots<{ commands: { id: string }[] }>(), {
+      provide: {
+        [reactiveSlotsConfigKey as symbol]: {
+          baseSlots: { commands: [{ id: "static" }] },
+          factories: [factory],
+          filter: undefined,
+        },
+        [sharedDependenciesKey as symbol]: {
+          stores: {},
+          services: {},
+          reactiveServices: { gates },
+        },
+      },
+    });
+
+    expect(result().value.commands).toEqual([{ id: "static" }]);
+
+    // Flip the reactive source the snapshot reads — the computed recomputes.
+    isAdmin.value = true;
+    expect(result().value.commands).toEqual([{ id: "static" }, { id: "admin" }]);
+  });
 });

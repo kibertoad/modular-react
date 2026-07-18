@@ -241,7 +241,9 @@ for consumers:
 import { createRegistry } from "@modular-vue/runtime";
 import type { AnyModuleDescriptor } from "@modular-vue/core";
 
-const firstParty: readonly AnyModuleDescriptor[] = [/* the layer's own modules */];
+const firstParty: readonly AnyModuleDescriptor[] = [
+  /* the layer's own modules */
+];
 const contributed: AnyModuleDescriptor[] = [];
 
 /** Consumers call this from their own plugin, before the layer resolves. */

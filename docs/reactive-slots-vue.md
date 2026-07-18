@@ -35,13 +35,13 @@ between the two paths.
 
 ## When to use which
 
-| Situation | Path | Why |
-| --- | --- | --- |
-| Gating on Vue-reactive state the host owns (RBAC permissions, connection-availability flags, feature toggles in `ref`/`reactive`/Pinia) | `useReactiveSlots` | No invalidation call sites to maintain, so it can't go stale by omission; fine-grained tracking recomputes only on the state that actually changed |
-| Gating on a non-reactive `Store`/zustand snapshot or an external `subscribe`/`getSnapshot` source read via `getState()`/`getSnapshot()` | signal | A `computed` reading a plain snapshot tracks nothing. Either bridge the source into a ref first, or invalidate explicitly with `recalculateSlots()` |
-| A framework-neutral module used in both a React and a Vue host | signal | The shared contract is `dynamicSlots(deps)` + `recalculateSlots()`. (The factory itself is agnostic to how it's invoked, so a portable factory still runs fine under the reactive path in the Vue host — but the invalidation contract you author against is the signal.) |
-| Several async-staged changes that should recompute the manifest **once** at the end, not on each intermediate tick | signal | An explicit `recalculateSlots()` after the transaction gives one clean recompute. Vue already batches synchronous writes within a tick, so this only matters for async multi-step changes |
-| The trigger is an imperative event, not persisted reactive state ("reload config" button, a websocket message) | signal | The signal is the direct expression of "recompute now" |
+| Situation                                                                                                                               | Path               | Why                                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gating on Vue-reactive state the host owns (RBAC permissions, connection-availability flags, feature toggles in `ref`/`reactive`/Pinia) | `useReactiveSlots` | No invalidation call sites to maintain, so it can't go stale by omission; fine-grained tracking recomputes only on the state that actually changed                                                                                                                        |
+| Gating on a non-reactive `Store`/zustand snapshot or an external `subscribe`/`getSnapshot` source read via `getState()`/`getSnapshot()` | signal             | A `computed` reading a plain snapshot tracks nothing. Either bridge the source into a ref first, or invalidate explicitly with `recalculateSlots()`                                                                                                                       |
+| A framework-neutral module used in both a React and a Vue host                                                                          | signal             | The shared contract is `dynamicSlots(deps)` + `recalculateSlots()`. (The factory itself is agnostic to how it's invoked, so a portable factory still runs fine under the reactive path in the Vue host — but the invalidation contract you author against is the signal.) |
+| Several async-staged changes that should recompute the manifest **once** at the end, not on each intermediate tick                      | signal             | An explicit `recalculateSlots()` after the transaction gives one clean recompute. Vue already batches synchronous writes within a tick, so this only matters for async multi-step changes                                                                                 |
+| The trigger is an imperative event, not persisted reactive state ("reload config" button, a websocket message)                          | signal             | The signal is the direct expression of "recompute now"                                                                                                                                                                                                                    |
 
 Rule of thumb: **reactive path when the gating inputs are reactive state the host
 owns; signal path when they are non-reactive/external, or when you need
@@ -61,13 +61,30 @@ anything. A Vue `computed` does not behave that way:
   two, not on unrelated store mutations. This is more precise than
   `recalculateSlots()`, which is coarse: one call rebuilds the whole manifest
   regardless of what changed.
-- **Value-gated downstream.** Wrapped in a computed/`shallowRef`, watchers only
-  wake when the produced array reference actually changes.
+- **Value-gated downstream.** `useReactiveSlots` returns a plain `computed`, and
+  each recompute produces a fresh manifest object, so `slots.value` itself
+  changes reference on every recompute. The value-gating pays off one level
+  down: derive what a component actually consumes (`computed(() => slots.value.nav)`)
+  and, where the selected value is a stable primitive rather than a new array,
+  the downstream computed/watcher only wakes when that value truly changes.
 
 So the recompute edge is `reactive source -> computed slots -> render`. The
 source change is the trigger, the same producer-driven model as a manual
 `recalculateSlots()`, except Vue wires that edge declaratively instead of by
 hand.
+
+### Cost scales per consumer, not per app
+
+`useReactiveSlots()` returns a **new `computed` per call**, so each component
+that calls it re-evaluates the factories/filter independently on a relevant
+change (whereas the signal path shares a single resolved `Ref` across all
+consumers, recomputing once per `recalculateSlots()`). Evaluation is a cheap
+merge + filter and each computed is lazy and cached, so for the handful of
+shells that read the manifest (a sidebar, a command bar, a toolbar) this is
+negligible. If you ever have many concurrent consumers and evaluation is
+expensive, read it **once** high in the tree and hand the result down —
+`const slots = useReactiveSlots<AppSlots>(); provide(appSlotsKey, slots)` — so
+the single computed is shared instead of duplicated per consumer.
 
 ## Host-owned RBAC gating (the canonical shape)
 
@@ -79,17 +96,21 @@ already-gated manifest and stays a dumb renderer.
 
 ```ts
 // In the host plugin, where Pinia/composables are available:
-const access = useWorkspaceAccess() // reactive computeds
+const access = useWorkspaceAccess(); // reactive computeds
 const gates = {
-  get 'board.write'() { return access.canWriteBoard.value },
-  get 'integrations.manage'() { return access.canManageIntegrations.value },
+  get "board.write"() {
+    return access.canWriteBoard.value;
+  },
+  get "integrations.manage"() {
+    return access.canManageIntegrations.value;
+  },
   // ...
-}
+};
 
 const registry = createRegistry<AppDeps, AppSlots>({
   services: { gates }, // passed by reference, read live inside the computed
   slots: { nav: [] },
-})
+});
 // register modules that contribute nav items as data, each with a `gate` key...
 
 const manifest = installModularApp(nuxtApp, registry, {
@@ -97,13 +118,13 @@ const manifest = installModularApp(nuxtApp, registry, {
     ...slots,
     nav: slots.nav.filter((i) => i.gate == null || deps.gates[i.gate]),
   }),
-})
+});
 ```
 
 ```ts
 // In the SideBar / CommandBar / Toolbar shells:
-const slots = useReactiveSlots<AppSlots>()
-const navItems = computed(() => slots.value.nav) // updates when a permission flips
+const slots = useReactiveSlots<AppSlots>();
+const navItems = computed(() => slots.value.nav); // updates when a permission flips
 ```
 
 When a permission flips (the snapshot the auth layer attached changes), the
@@ -114,7 +135,7 @@ recomputes. No `recalculateSlots()` call anywhere.
 ## API
 
 ```ts
-function useReactiveSlots<TSlots>(): ComputedRef<TSlots>
+function useReactiveSlots<TSlots>(): ComputedRef<TSlots>;
 ```
 
 Injects the reactive-slots config the runtime provides at install time (base
