@@ -17,6 +17,14 @@ allowBuilds:
   # `onlyBuiltDependencies` below, so the script stays unrun) is what keeps a
   # `--frozen-lockfile` install from failing with ERR_PNPM_IGNORED_BUILDS.
   vue-demi: false
+  # Pulled in transitively by `nuxt@4.5.0` (the Nuxt 4 modal-journey example).
+  # @parcel/watcher ships platform-specific prebuilt binaries as optional deps
+  # (`@parcel/watcher-linux-x64-glibc` etc.), so its own node-gyp build script
+  # is unnecessary — the prebuild is loaded at runtime. Recording the decision
+  # here (`false`, and left out of `onlyBuiltDependencies` below, so the script
+  # stays unrun) keeps a `--frozen-lockfile` install from failing with
+  # ERR_PNPM_IGNORED_BUILDS.
+  "@parcel/watcher": false
 
 overrides:
   # Guard: pin the rolldown backend that rolldown-plugin-dts resolves to a
