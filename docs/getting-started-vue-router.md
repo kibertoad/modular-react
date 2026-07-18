@@ -597,7 +597,10 @@ per-route and role-based variants.
 - [Journeys](../packages/journeys/README.md) and
   [Compositions](../packages/compositions/README.md) — compose several modules
   into a typed workflow or a shared multi-zone screen (both have Vue bindings:
-  `@modular-vue/journeys`, `@modular-vue/compositions`).
+  `@modular-vue/journeys`, `@modular-vue/compositions`). The Vue journey
+  composables mirror the React hooks — `useJourneyHost` to mount and run a
+  journey, `useJourneyProgress` for "Step X of N" and the current step's label,
+  and `useJourneySync` to bind the active step to the URL.
 - Working examples: [`examples/vue/`](../examples/vue) ships three runnable apps
   — `integration-manager` (sibling modules sharing a screen),
   `customer-onboarding-journey` (a persisted journey), and `editor-composition`

@@ -222,7 +222,7 @@ The CLI:
 
 The generated definition has TODO markers for the `start` step and the per-module `transitions` map. Fill those in by declaring `entryPoints` / `exitPoints` on each composed module (`defineEntry` / `defineExit` from `@modular-react/core`) and wiring the exit branches to the next step.
 
-See [`@modular-react/journeys`](../packages/journeys/README.md) for the full mental model, the `JourneyOutlet`/`ModuleTab` rendering surfaces, and the runtime hooks. Two end-to-end examples:
+See [`@modular-react/journeys`](../packages/journeys/README.md) for the full mental model, the `JourneyOutlet`/`ModuleTab` rendering surfaces, and the runtime hooks — including `<JourneyHost>` / `useJourneyHost` (mount, run, and clean up a journey in one place), `useJourneyProgress` (derive "Step X of N" and the current step's label from the transition graph, no hand-maintained step array), and `useJourneySync` (bind the active step to the URL so Back/Forward drive the journey). Two end-to-end examples:
 
 - [`examples/react-router/customer-onboarding-journey/`](../examples/react-router/customer-onboarding-journey) — three-module branching flow with reload-safe persistence.
 - [`examples/react-router/integration-setup-journey/`](../examples/react-router/integration-setup-journey) — slot-driven chooser feeding `selectModuleOrDefault` dispatch (some kinds get dedicated modules, the rest funnel through a generic fallback). Useful when the next module depends on a value chosen earlier in the flow.
