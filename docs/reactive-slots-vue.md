@@ -73,26 +73,25 @@ source change is the trigger, the same producer-driven model as a manual
 `recalculateSlots()`, except Vue wires that edge declaratively instead of by
 hand.
 
-### Cost scales per consumer, not per app
+### One shared source, evaluated once per change
 
-`useReactiveSlots()` returns a **new `computed` per call**, so each component
-that calls it re-evaluates the factories/filter independently on a relevant
-change (whereas the signal path shares a single resolved `Ref` across all
-consumers, recomputing once per `recalculateSlots()`). Evaluation is a cheap
-merge + filter and each computed is lazy and cached, so for the handful of
-shells that read the manifest (a sidebar, a command bar, a toolbar) this is
-negligible. If you ever have many concurrent consumers and evaluation is
-expensive, read it **once** high in the tree and hand the result down —
-`const slots = useReactiveSlots<AppSlots>(); provide(appSlotsKey, slots)` — so
-the single computed is shared instead of duplicated per consumer.
+The runtime resolves the reactive manifest **once** at install
+(`resolveReactiveSlots`) into a single `computed` and provides it;
+`useReactiveSlots()` is a thin reader that injects that same `computed`. So no
+matter how many shells read it (a sidebar, a command bar, a toolbar), a relevant
+change re-evaluates the factories/filter **once**, and every consumer sees the
+same manifest object. This mirrors the signal path, which likewise resolves one
+shared `Ref` that all `useSlots()` consumers read — both paths are "runtime
+resolves once → provide → composable injects", differing only in what triggers a
+recompute (a tracked reactive read here, an explicit `recalculateSlots()` there).
 
 ## Host-owned RBAC gating (the canonical shape)
 
-Register the gating state as a **reactive service** (a plain service object whose
-getters read your reactive permission/availability state), then express the
-gating as a `slotFilter` that reads it. Modules contribute their nav/command
-items as plain data, each tagging the permission it needs. The shell reads the
-already-gated manifest and stays a dumb renderer.
+Register the gating state as a **plain service** (a service object whose getters
+read your reactive permission/availability state), then express the gating as a
+`slotFilter` that reads it. Modules contribute their nav/command items as plain
+data, each tagging the permission it needs. The shell reads the already-gated
+manifest and stays a dumb renderer.
 
 ```ts
 // In the host plugin, where Pinia/composables are available:
@@ -127,10 +126,13 @@ const slots = useReactiveSlots<AppSlots>();
 const navItems = computed(() => slots.value.nav); // updates when a permission flips
 ```
 
-When a permission flips (the snapshot the auth layer attached changes), the
-`gates` getter returns a new value, the `slotFilter` reads it inside the
-`useReactiveSlots` computed, and every shell reading `slots.value.nav`
-recomputes. No `recalculateSlots()` call anywhere.
+`gates` is a **plain service passed by reference** — nothing about it is
+re-attached, refreshed, or replaced. When a permission flips, only the reactive
+state its getters read (`access.canWriteBoard`, …) changes. Because those getters
+are invoked _inside_ the shared `useReactiveSlots` computed — the `slotFilter`
+reads `deps.gates[i.gate]` during evaluation — that read is registered as a
+tracked dependency, so the computed re-evaluates and every shell reading
+`slots.value.nav` recomputes. No `recalculateSlots()` call anywhere.
 
 ## API
 
@@ -138,11 +140,14 @@ recomputes. No `recalculateSlots()` call anywhere.
 function useReactiveSlots<TSlots>(): ComputedRef<TSlots>;
 ```
 
-Injects the reactive-slots config the runtime provides at install time (base
-slots, collected `dynamicSlots` factories, the global `slotFilter`) plus the
-shared-dependency buckets, and returns a `computed` that re-runs
-`evaluateDynamicSlots` on each recompute. Throws if called outside an installed
-modular app.
+Injects the single resolved reactive-slots `computed` the runtime builds once at
+install time and returns it. Throws if called outside an installed modular app.
+The runtime builds that source with `resolveReactiveSlots(input)` — which closes
+over the base slots, collected `dynamicSlots` factories, the global `slotFilter`,
+and the shared-dependency buckets, and returns a `computed` that rebuilds the
+deps snapshot and re-runs `evaluateDynamicSlots` inside its getter (so reactive
+reads are tracked). Consumers never touch `resolveReactiveSlots` directly; it is
+the runtime-facing building block behind `useReactiveSlots`.
 
 The signal path is unchanged: `useSlots()` returns the `Ref`, and
 `useRecalculateSlots()` returns the invalidation trigger. Both remain available;

@@ -54,15 +54,16 @@ export type { ScopedStore } from "./scoped-store.js";
 export {
   slotsKey,
   recalculateSlotsKey,
-  reactiveSlotsConfigKey,
+  reactiveSlotsKey,
   provideSlots,
   useSlots,
   useReactiveSlots,
+  resolveReactiveSlots,
   useRecalculateSlots,
   DynamicSlotsProvider,
   createSlotsSignal,
 } from "./slots-context.js";
-export type { SlotsSignal, ReactiveSlotsConfig } from "./slots-context.js";
+export type { SlotsSignal, ReactiveSlotsInput } from "./slots-context.js";
 
 // Vue-specific: navigation context + composable
 export { navigationKey, provideNavigation, useNavigation } from "./navigation-context.js";

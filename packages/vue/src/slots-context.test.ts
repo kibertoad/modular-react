@@ -1,17 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { defineComponent, h, ref, shallowRef, type Ref } from "vue";
+import { defineComponent, h, ref, shallowRef, type ComputedRef, type Ref } from "vue";
 import { mount } from "@vue/test-utils";
 import { createStore } from "@modular-frontend/core";
 import {
   createSlotsSignal,
   DynamicSlotsProvider,
-  reactiveSlotsConfigKey,
+  reactiveSlotsKey,
+  resolveReactiveSlots,
   slotsKey,
   useReactiveSlots,
   useRecalculateSlots,
   useSlots,
 } from "./slots-context.js";
-import { sharedDependenciesKey } from "./context.js";
 import { renderComposable } from "./test-render.js";
 
 describe("useSlots", () => {
@@ -84,11 +84,7 @@ describe("DynamicSlotsProvider", () => {
   });
 });
 
-describe("useReactiveSlots", () => {
-  it("throws outside a modular app", () => {
-    expect(() => renderComposable(() => useReactiveSlots())).toThrow(/useReactiveSlots/);
-  });
-
+describe("resolveReactiveSlots", () => {
   it("re-evaluates dynamic slots on a reactive change with no recalculate signal", () => {
     const isAdmin = ref(false);
     // A plain service whose getter reads a reactive ref: reading it inside the
@@ -101,26 +97,20 @@ describe("useReactiveSlots", () => {
     const factory = (deps: any) =>
       deps.gates?.isAdmin ? { commands: [{ id: "admin" }] } : { commands: [] };
 
-    const { result } = renderComposable(() => useReactiveSlots<{ commands: { id: string }[] }>(), {
-      provide: {
-        [reactiveSlotsConfigKey as symbol]: {
-          baseSlots: { commands: [{ id: "static" }] },
-          factories: [factory],
-          filter: undefined,
-        },
-        [sharedDependenciesKey as symbol]: {
-          stores: {},
-          services: { gates },
-          reactiveServices: {},
-        },
-      },
-    });
+    const slots = resolveReactiveSlots({
+      baseSlots: { commands: [{ id: "static" }] },
+      factories: [factory],
+      filter: undefined,
+      stores: {},
+      services: { gates },
+      reactiveServices: {},
+    }) as ComputedRef<{ commands: { id: string }[] }>;
 
-    expect(result().value.commands).toEqual([{ id: "static" }]);
+    expect(slots.value.commands).toEqual([{ id: "static" }]);
 
     // Flip the reactive source only — the computed recomputes on next read.
     isAdmin.value = true;
-    expect(result().value.commands).toEqual([{ id: "static" }, { id: "admin" }]);
+    expect(slots.value.commands).toEqual([{ id: "static" }, { id: "admin" }]);
   });
 
   it("applies a reactive slotFilter (RBAC-style gating)", () => {
@@ -136,26 +126,20 @@ describe("useReactiveSlots", () => {
       ),
     });
 
-    const { result } = renderComposable(() => useReactiveSlots<{ nav: { id: string }[] }>(), {
-      provide: {
-        [reactiveSlotsConfigKey as symbol]: {
-          baseSlots: { nav: [{ id: "always" }, { id: "guarded", gate: "canWrite" }] },
-          factories: [],
-          filter,
-        },
-        [sharedDependenciesKey as symbol]: {
-          stores: {},
-          services: { gates },
-          reactiveServices: {},
-        },
-      },
-    });
+    const slots = resolveReactiveSlots({
+      baseSlots: { nav: [{ id: "always" }, { id: "guarded", gate: "canWrite" }] },
+      factories: [],
+      filter,
+      stores: {},
+      services: { gates },
+      reactiveServices: {},
+    }) as ComputedRef<{ nav: { id: string }[] }>;
 
-    expect(result().value.nav.map((i) => i.id)).toEqual(["always", "guarded"]);
+    expect(slots.value.nav.map((i) => i.id)).toEqual(["always", "guarded"]);
 
     // Revoke the permission — the guarded item drops with no signal fired.
     canWrite.value = false;
-    expect(result().value.nav.map((i) => i.id)).toEqual(["always"]);
+    expect(slots.value.nav.map((i) => i.id)).toEqual(["always"]);
   });
 
   it("tracks a reactive source read through a reactiveService getSnapshot", () => {
@@ -171,25 +155,63 @@ describe("useReactiveSlots", () => {
     const factory = (deps: any) =>
       deps.gates?.isAdmin ? { commands: [{ id: "admin" }] } : { commands: [] };
 
-    const { result } = renderComposable(() => useReactiveSlots<{ commands: { id: string }[] }>(), {
-      provide: {
-        [reactiveSlotsConfigKey as symbol]: {
-          baseSlots: { commands: [{ id: "static" }] },
-          factories: [factory],
-          filter: undefined,
-        },
-        [sharedDependenciesKey as symbol]: {
-          stores: {},
-          services: {},
-          reactiveServices: { gates },
-        },
-      },
-    });
+    const slots = resolveReactiveSlots({
+      baseSlots: { commands: [{ id: "static" }] },
+      factories: [factory],
+      filter: undefined,
+      stores: {},
+      services: {},
+      reactiveServices: { gates },
+    }) as ComputedRef<{ commands: { id: string }[] }>;
 
-    expect(result().value.commands).toEqual([{ id: "static" }]);
+    expect(slots.value.commands).toEqual([{ id: "static" }]);
 
     // Flip the reactive source the snapshot reads — the computed recomputes.
     isAdmin.value = true;
-    expect(result().value.commands).toEqual([{ id: "static" }, { id: "admin" }]);
+    expect(slots.value.commands).toEqual([{ id: "static" }, { id: "admin" }]);
+  });
+});
+
+describe("useReactiveSlots", () => {
+  it("throws outside a modular app", () => {
+    expect(() => renderComposable(() => useReactiveSlots())).toThrow(/useReactiveSlots/);
+  });
+
+  it("returns the single shared reactive source the runtime provides", () => {
+    const isAdmin = ref(false);
+    const gates = {
+      get isAdmin() {
+        return isAdmin.value;
+      },
+    };
+    const factory = (deps: any) =>
+      deps.gates?.isAdmin ? { commands: [{ id: "admin" }] } : { commands: [] };
+    // The runtime resolves the source once and provides it; the composable is a
+    // thin reader over that one `computed`.
+    const shared = resolveReactiveSlots({
+      baseSlots: { commands: [{ id: "static" }] },
+      factories: [factory],
+      filter: undefined,
+      stores: {},
+      services: { gates },
+      reactiveServices: {},
+    });
+
+    const a = renderComposable(() => useReactiveSlots<{ commands: { id: string }[] }>(), {
+      provide: { [reactiveSlotsKey as symbol]: shared },
+    });
+    const b = renderComposable(() => useReactiveSlots<{ commands: { id: string }[] }>(), {
+      provide: { [reactiveSlotsKey as symbol]: shared },
+    });
+
+    // Every consumer injects the *same* computed instance — no per-consumer rebuild.
+    expect(a.result()).toBe(shared);
+    expect(b.result()).toBe(shared);
+    expect(a.result().value.commands).toEqual([{ id: "static" }]);
+
+    // One reactive change updates the shared source both consumers read.
+    isAdmin.value = true;
+    expect(a.result().value.commands).toEqual([{ id: "static" }, { id: "admin" }]);
+    expect(b.result().value.commands).toEqual([{ id: "static" }, { id: "admin" }]);
   });
 });

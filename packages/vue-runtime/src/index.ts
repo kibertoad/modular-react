@@ -56,9 +56,9 @@ export {
   useSlots,
   useReactiveSlots,
   useRecalculateSlots,
-  reactiveSlotsConfigKey,
+  reactiveSlotsKey,
   useModules,
   getModuleMeta,
   ModuleErrorBoundary,
 } from "@modular-vue/vue";
-export type { SlotsSignal, ReactiveSlotsConfig } from "@modular-vue/vue";
+export type { SlotsSignal } from "@modular-vue/vue";
