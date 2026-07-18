@@ -1,5 +1,5 @@
 import { defineComponent, h } from "vue";
-import type { ModuleExitHandler } from "@modular-vue/vue";
+import type { ModuleExitHandler, VueAppProvidingPlugin } from "@modular-vue/vue";
 import type {
   JourneyRuntime,
   ModuleTypeMap,
@@ -22,7 +22,7 @@ import type {
   RegisteredJourney,
 } from "@modular-frontend/journeys-engine";
 
-import { JourneyProvider } from "./provider.js";
+import { JourneyProvider, journeyKey, type JourneyProviderValue } from "./provider.js";
 
 /**
  * Methods the journeys plugin contributes to the registry. Registered plugins
@@ -133,7 +133,8 @@ export interface JourneysPluginOptions<
  */
 export function journeysPlugin<TNavItem extends NavigationItemBase = JourneyDefaultNavItem>(
   options: JourneysPluginOptions<TNavItem> = {},
-): RegistryPlugin<"journeys", JourneysPluginExtension, JourneyRuntime> {
+): RegistryPlugin<"journeys", JourneysPluginExtension, JourneyRuntime> &
+  VueAppProvidingPlugin<JourneyRuntime> {
   const registered: RegisteredJourney[] = [];
 
   return {
@@ -213,6 +214,21 @@ export function journeysPlugin<TNavItem extends NavigationItemBase = JourneyDefa
         },
       });
       return [BoundJourneyProvider as unknown as UiComponent<{ children: UiNode }>];
+    },
+
+    // Install-mode twin of `providers()`. The framework-mode component form
+    // (`resolveManifest`) mounts the `<JourneyProvider>` above; the router-owning
+    // form (`resolve()` / Nuxt) has no root component to wrap, so it threads the
+    // journey runtime app-wide via `app.provide` from this binding instead —
+    // exactly how `navigationKey` / `modulesKey` reach the app there. The runtime
+    // never imports `journeyKey`; the plugin supplies key + value.
+    //
+    // Only the journey runtime is bound here — the `<ModuleExitProvider>` the
+    // component form also mounts is a render-time concern; in the router-owning
+    // path module exits are threaded to hosts through `resolve({ onModuleExit })`.
+    appProvides({ runtime }) {
+      const value: JourneyProviderValue = { runtime, onModuleExit: options.onModuleExit };
+      return [{ key: journeyKey, value }];
     },
   };
 }

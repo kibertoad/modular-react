@@ -54,7 +54,17 @@ npm install @modular-vue/journeys
   to contribute `registerJourney(...)`, validate journey contracts against
   registered modules, produce the `JourneyRuntime` on
   `manifest.extensions.journeys`, and wrap the provider stack in
-  `<JourneyProvider>`.
+  `<JourneyProvider>`. In the router-owning install path it also threads the
+  runtime app-wide via its `appProvides` hook, so `app.use(manifest)` provides
+  `journeyKey` with no shell wiring.
+- **`createPiniaJourneyPersistence(options)`** — a `JourneyPersistence` backed
+  by a Pinia store you own (keyed like `createWebStoragePersistence`), so
+  in-flight journeys live in your Pinia tree and resume across a modal
+  close/reopen. Structural store shape — takes no `pinia` dependency.
+- **`provideJourneyRuntime(app, runtime, options?)`** — the app-level twin of
+  `<JourneyProvider>` (analog of `provideNavigation` / `provideSlots`), for
+  wiring a hand-built runtime without the plugin. Usually unnecessary — the
+  plugin auto-threads via `app.use(manifest)`.
 
 ## Usage
 

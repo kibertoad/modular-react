@@ -9,7 +9,7 @@ import { defineJourney, JourneyValidationError } from "@modular-frontend/journey
 import type { AnyJourneyDefinition, JourneyRuntime } from "@modular-frontend/journeys-engine";
 import { journeysPlugin } from "./plugin.js";
 import type { JourneysPluginExtension } from "./plugin.js";
-import { useJourneyContext } from "./provider.js";
+import { journeyKey, useJourneyContext } from "./provider.js";
 
 const exits = { confirmed: defineExit<{ id: string }>() } as const;
 
@@ -51,6 +51,17 @@ function setup(options?: Parameters<typeof journeysPlugin>[0]) {
 describe("journeysPlugin", () => {
   it("names itself 'journeys'", () => {
     expect(journeysPlugin().name).toBe("journeys");
+  });
+
+  it("appProvides contributes the runtime under journeyKey for the install path", () => {
+    const onModuleExit = vi.fn();
+    const plugin = journeysPlugin({ onModuleExit });
+    const runtime = { __fake: true } as unknown as JourneyRuntime;
+
+    const bindings = plugin.appProvides?.({ runtime });
+    expect(bindings).toHaveLength(1);
+    expect(bindings?.[0]!.key).toBe(journeyKey);
+    expect(bindings?.[0]!.value).toEqual({ runtime, onModuleExit });
   });
 
   it("registerJourney validates the definition shape and rejects malformed journeys", () => {

@@ -52,6 +52,17 @@ the Vue analog of React's `useSyncExternalStore`. Subscriptions are torn down on
 dedupes by `Object.is`, which gives selector equality: re-selecting the same
 value from an unrelated update does not wake watchers.
 
+### Pinia interop — `createPiniaStoreAdapter`
+
+`createPiniaStoreAdapter(store)` presents a Pinia store behind the neutral
+`Store<T>` contract (`getState` / `getInitialState` / `setState` / `subscribe`),
+so a Pinia store can fill a registry-owned store / reactive-service DI slot — the
+same slot a zustand or built-in `createStore` store fills — instead of running a
+parallel state layer. It caches a shallow snapshot and refreshes it from a
+synchronous `$subscribe`, so consumers see a fresh snapshot identity per change
+(the signal `useSyncExternalStore` / `storeRef` need). Structural store shape —
+**no `pinia` dependency**; you pass the store in.
+
 ## Example
 
 ```ts

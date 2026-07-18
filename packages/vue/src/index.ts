@@ -50,6 +50,18 @@ export type { SharedDependenciesContextValue } from "./context.js";
 export { createScopedStore } from "./scoped-store.js";
 export type { ScopedStore } from "./scoped-store.js";
 
+// Vue-ecosystem: present a Pinia store behind the neutral `Store<T>` contract
+// so it can fill a registry-owned store / reactive-service DI slot. Structural
+// store shape — no `pinia` dependency (decision D3).
+export { createPiniaStoreAdapter } from "./pinia-store.js";
+export type { PiniaStoreLike } from "./pinia-store.js";
+
+// Vue-specific plugin contract extension: app-level injection bindings a
+// registry plugin contributes for the router-owning install path — the
+// install-mode twin of the neutral `providers()` wrapping components. Consumed
+// by `@modular-vue/runtime`'s `resolve()`; emitted by e.g. the journeys plugin.
+export type { AppProvide, VueAppProvidingPlugin } from "./plugin-app-provide.js";
+
 // Vue-specific: slots context + composables
 export {
   slotsKey,

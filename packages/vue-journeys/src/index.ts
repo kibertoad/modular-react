@@ -65,6 +65,22 @@ export type {
   WaitForExitTimeoutChannel,
 } from "./use-wait-for-exit.js";
 
+// Vue-specific: app-level twin of `<JourneyProvider>` — install the runtime on
+// a Vue `App` (used by the router-owning / Nuxt install path, which does not
+// thread the plugin's `<JourneyProvider>` app-wide).
+export { provideJourneyRuntime } from "./provide-journey-runtime.js";
+export type { ProvideJourneyRuntimeOptions } from "./provide-journey-runtime.js";
+
+// Vue-ecosystem: Pinia-backed journey persistence — the Vue analog of
+// `createWebStoragePersistence`, keyed the same way, but backed by a Pinia
+// store the caller owns. Takes no `pinia` dependency (structural store shape),
+// honoring decision D3 ("no Pinia dependency in runtime packages").
+export { createPiniaJourneyPersistence } from "./pinia-persistence.js";
+export type {
+  PiniaJourneyPersistenceOptions,
+  PiniaJourneyPersistenceStore,
+} from "./pinia-persistence.js";
+
 // Vue-specific: plugin — pass `journeysPlugin()` to
 // `createRegistry({ plugins: [...] })` to enable journey registration.
 export { journeysPlugin } from "./plugin.js";

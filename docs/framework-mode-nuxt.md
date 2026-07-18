@@ -329,6 +329,9 @@ selecting id crosses the wire.
   `recalculateSlots()` signal path, the tradeoffs, and the host-owned RBAC-gating
   shape a layer's nav/command shells use.
 - [`@modular-vue/nuxt`](../packages/vue-nuxt/README.md) — package reference.
+- [Journeys in Vue](journeys-vue.md) — hosting multi-step journeys (incl.
+  modal-mounted, no-URL wizards); §7 covers how the journeys plugin threads its
+  runtime app-wide through this router-owning install path.
 - [Getting started with Vue Router](getting-started-vue-router.md) — modules,
   registry, stores, the manual SPA setup.
 - [Shell Patterns for Vue Router](shell-patterns-vue-router.md) — router-owning

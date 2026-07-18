@@ -28,6 +28,7 @@ import {
   resolveReactiveSlots,
   sharedDependenciesKey,
   slotsKey,
+  type AppProvide,
   type ReactiveSlotsInput,
   type SlotsSignal,
 } from "@modular-vue/vue";
@@ -52,6 +53,15 @@ export interface ModularProvidersConfig {
   slotFilter?: SlotFilter;
   slotsSignal: SlotsSignal;
   recalculateSlots: () => void;
+  /**
+   * App-level injection bindings contributed by plugins via their `appProvides`
+   * hook (e.g. the journeys plugin's `journeyKey` → runtime). Applied by the
+   * router-owning plugin form ({@link createModularProvidersPlugin}) via
+   * `app.provide` — the install-mode counterpart of the wrapping components the
+   * framework-mode form receives as `userProviders`. Empty when no plugin
+   * contributes any.
+   */
+  pluginAppProvides: readonly AppProvide[];
 }
 
 function hasDynamicSlots(config: ModularProvidersConfig): boolean {
@@ -141,6 +151,16 @@ export function createModularProvidersPlugin(
   return {
     install(app: App) {
       provideModularContexts((key, value) => app.provide(key, value), config);
+
+      // Plugin-contributed app-level bindings (e.g. the journeys runtime under
+      // `journeyKey`). The framework-mode component form receives the same
+      // plugins' wrapping components instead; here there is no root to wrap, so
+      // the plugin's `appProvides` bindings are the vehicle. Applied after the
+      // core contexts so a plugin could, in principle, read them — and before
+      // user plugins, which may depend on plugin context.
+      for (const { key, value } of config.pluginAppProvides) {
+        app.provide(key, value);
+      }
 
       if (hasDynamicSlots(config)) {
         const slotsRef = shallowRef(computeDynamicSlots(config));

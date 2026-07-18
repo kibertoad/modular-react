@@ -25,7 +25,7 @@ import type {
   Store,
 } from "@modular-frontend/core";
 import { createSlotsSignal } from "@modular-vue/vue";
-import type { SlotsSignal } from "@modular-vue/vue";
+import type { AppProvide, SlotsSignal, VueAppProvidingPlugin } from "@modular-vue/vue";
 import type { Component } from "vue";
 import type { RouteRecordRaw } from "vue-router";
 import type { ModuleDescriptor, LazyModuleDescriptor } from "@modular-vue/core";
@@ -147,6 +147,15 @@ interface CommonAssembly<
    * plugin form does not consume these.
    */
   pluginProviders: Component[];
+  /**
+   * App-level injection bindings contributed by plugins via the Vue-specific
+   * `appProvides` hook ({@link VueAppProvidingPlugin}), in plugin-registration
+   * order. Applied via `app.provide` by the router-owning `resolve()` plugin
+   * form — the install-mode counterpart of `pluginProviders`. The framework-mode
+   * component form uses `pluginProviders` (wrapping components) instead, so it
+   * does not consume these.
+   */
+  pluginAppProvides: AppProvide[];
 }
 
 export function createRegistry<
@@ -292,6 +301,7 @@ export function createRegistry<
     // without an explicit opt-in.
     const extensions: Record<string, unknown> = {};
     const pluginProviders: Component[] = [];
+    const pluginAppProvides: AppProvide[] = [];
     const debug = isDevEnv();
     for (const plugin of plugins) {
       const runtime = plugin.onResolve?.({
@@ -305,6 +315,13 @@ export function createRegistry<
         // Plugin providers are typed to the neutral `UiComponent` seam; in Vue a
         // UiComponent is a Vue component, so the cast is a no-op at runtime.
         pluginProviders.push(...(contributed as unknown as Component[]));
+      }
+      // Vue-specific `appProvides` hook (not on the neutral `RegistryPlugin`):
+      // app-level bindings for the router-owning install path. A plugin that
+      // doesn't implement it contributes nothing.
+      const appProvides = (plugin as Partial<VueAppProvidingPlugin>).appProvides?.({ runtime });
+      if (appProvides && appProvides.length > 0) {
+        pluginAppProvides.push(...appProvides);
       }
     }
 
@@ -328,6 +345,7 @@ export function createRegistry<
       slotFilter,
       extensions,
       pluginProviders,
+      pluginAppProvides,
     };
   }
 
@@ -348,6 +366,7 @@ export function createRegistry<
       slotFilter: assembly.slotFilter,
       slotsSignal: assembly.slotsSignal,
       recalculateSlots: assembly.recalculateSlots,
+      pluginAppProvides: assembly.pluginAppProvides,
     };
   }
 
@@ -447,14 +466,16 @@ export function createRegistry<
         options.router.beforeEach(options.authGuard);
       }
 
-      // Plugin-contributed providers (`assembly.pluginProviders`) are NOT
-      // threaded here: they are wrapping components, and the router-owning path
-      // returns an installable Vue plugin (`app.provide` app-wide), which has no
-      // library-owned root to wrap around. A shell that wants the journeys
-      // context in this mode wraps its own `<router-view>` in
-      // `<JourneyProvider :runtime="manifest.journeys">` (or passes `runtime`
-      // straight to `<JourneyOutlet>`); the framework-mode `resolveManifest()`
-      // path owns a `Providers` component and threads them automatically.
+      // Plugin-contributed WRAPPING COMPONENTS (`assembly.pluginProviders`) are
+      // not threaded here — they need a library-owned root to wrap, and the
+      // router-owning path returns an installable Vue plugin whose app root is
+      // the user's own `<router-view>` shell. Plugins that need app-level context
+      // in this mode contribute it via their `appProvides` hook instead
+      // (`assembly.pluginAppProvides`), which `createModularProvidersPlugin`
+      // applies with `app.provide` — so e.g. the journeys runtime reaches
+      // `<JourneyOutlet>` through `journeyKey` without the shell hand-wiring
+      // `<JourneyProvider>`. The framework-mode `resolveManifest()` path owns a
+      // `Providers` component and threads the wrapping components automatically.
       const plugin = createModularProvidersPlugin(toProvidersConfig(assembly), options.providers);
 
       return {
