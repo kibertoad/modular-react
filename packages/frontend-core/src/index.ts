@@ -89,6 +89,21 @@ export type {
   MergedRemoteManifests,
 } from "./remote-manifest.js";
 
+// Component registry & pairing — read-side projection of a resolved slot that
+// pairs wire-delivered manifest data with code-shipped, locally-registered
+// components by id. Pure helpers, not a registration path.
+export { resolveComponentRegistry, pairById } from "./component-registry.js";
+export type {
+  ComponentEntry,
+  ComponentRegistry,
+  OnDuplicateComponentId,
+} from "./component-registry.js";
+export { componentPairingPlugin } from "./component-pairing-plugin.js";
+export type {
+  ComponentPairingPluginOptions,
+  ComponentRefSpec,
+} from "./component-pairing-plugin.js";
+
 // Validation
 export {
   validateNoDuplicateIds,

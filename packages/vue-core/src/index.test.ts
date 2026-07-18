@@ -20,6 +20,24 @@ describe("@modular-vue/core public surface", () => {
     expect(core.separateDeps).toBeTypeOf("function");
   });
 
+  it("re-exports the remote-manifest surface from the engine", () => {
+    expect(core.mergeRemoteManifests).toBeTypeOf("function");
+    // Merges an array of manifests into { slots, navigation, meta } at runtime.
+    expect(core.mergeRemoteManifests([])).toEqual({ slots: {}, navigation: [], meta: {} });
+  });
+
+  it("re-exports the component-registry pairing helpers and plugin", () => {
+    expect(core.resolveComponentRegistry).toBeTypeOf("function");
+    expect(core.pairById).toBeTypeOf("function");
+    expect(core.componentPairingPlugin).toBeTypeOf("function");
+
+    const registry = core.resolveComponentRegistry([{ id: "v", component: { n: 1 } }]);
+    expect(registry.get("v")).toEqual({ n: 1 });
+    expect(core.componentPairingPlugin({ componentSlot: "views", staticRefs: () => [] }).name).toBe(
+      "componentPairing",
+    );
+  });
+
   it("re-exports the Vue binding's shared composables and scoped store", () => {
     expect(core.createSharedComposables).toBeTypeOf("function");
     expect(core.provideSharedDependencies).toBeTypeOf("function");

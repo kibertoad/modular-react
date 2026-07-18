@@ -298,6 +298,15 @@ fine (the per-request-factory rule only bites under SSR). Registering the same
 id twice throws at resolve via duplicate-id validation, which is the guard you
 want.
 
+This same `registerAppModule` seam is how a consumer lights up a
+**backend-driven** capability that the layer knows nothing about: the consumer
+registers a module contributing its own code-shipped components (as
+`ComponentEntry` items) to a shared slot, and a remote capability manifest then
+selects one by a string id at render time. See [Pairing wire-safe manifests with
+code-shipped components](remote-capability-manifests.md#pairing-wire-safe-manifests-with-code-shipped-components)
+for that join — the components ship as code through the seam above; only the
+selecting id crosses the wire.
+
 ## Rules of thumb
 
 - **Registry as a factory, called in the plugin.** This is the one rule that
