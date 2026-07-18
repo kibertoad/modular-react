@@ -20,7 +20,24 @@ first package of the [Vue support initiative](../../docs/vue-support-tracker.md)
 - **Contexts** — typed `InjectionKey`s plus `provide*` helpers and `use*`
   composables for the modules list (`useModules`, `getModuleMeta`), the
   navigation manifest (`useNavigation`), and slot contributions (`useSlots`,
-  `useRecalculateSlots`, `DynamicSlotsProvider`, `createSlotsSignal`).
+  `useReactiveSlots`, `useRecalculateSlots`, `DynamicSlotsProvider`,
+  `createSlotsSignal`).
+
+### Slot evaluation: reactive vs signal
+
+Two ways to read the resolved slots, chosen per source:
+
+- `useReactiveSlots()` returns the slots as a `computed`, re-evaluated
+  automatically when the reactive state its factories/filter read changes. Use it
+  when the gating inputs are Vue-reactive state the host owns (RBAC permissions,
+  availability flags).
+- `useSlots()` + `useRecalculateSlots()` is the framework-neutral signal path: a
+  `Ref` that re-evaluates only on an explicit `recalculateSlots()`. Use it for
+  non-reactive/external sources, transactional recompute, or event-driven
+  invalidation.
+
+Full tradeoffs and the RBAC-gating shape:
+[Reactive slots in Vue](../../docs/reactive-slots-vue.md).
 
 Rendering pieces (lazy entry resolution, module host/exit, error capture) land
 in PR-11; the runtime plugin that installs these contexts lands with the

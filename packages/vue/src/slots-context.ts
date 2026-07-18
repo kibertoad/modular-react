@@ -1,10 +1,12 @@
 import {
+  computed,
   defineComponent,
   inject,
   isRef,
   onScopeDispose,
   provide,
   shallowRef,
+  type ComputedRef,
   type InjectionKey,
   type PropType,
   type Ref,
@@ -16,6 +18,7 @@ import type {
   Store,
 } from "@modular-frontend/core";
 import { buildDepsSnapshot, evaluateDynamicSlots } from "@modular-frontend/core";
+import { sharedDependenciesKey } from "./context.js";
 
 /**
  * Injection key holding the resolved slot contributions. Always a `Ref` so
@@ -27,6 +30,27 @@ const noop = () => {};
 
 /** Injection key holding the imperative "recalculate dynamic slots" trigger. */
 export const recalculateSlotsKey: InjectionKey<() => void> = Symbol("modular-vue.recalculateSlots");
+
+/**
+ * The pieces {@link useReactiveSlots} needs to re-evaluate the slot manifest on
+ * its own: the static base slots, the collected `dynamicSlots` factories, and
+ * the optional global `slotFilter`. The runtime provides this alongside the
+ * resolved `slotsKey` ref so a component can opt into Vue-reactive evaluation
+ * (evaluate inside a `computed`) instead of the imperative signal path.
+ */
+export interface ReactiveSlotsConfig {
+  baseSlots: object;
+  factories: readonly DynamicSlotFactory[];
+  filter?: SlotFilter;
+}
+
+/**
+ * Injection key holding the {@link ReactiveSlotsConfig}. Provided by the runtime
+ * at install time; consumed only by {@link useReactiveSlots}.
+ */
+export const reactiveSlotsConfigKey: InjectionKey<ReactiveSlotsConfig> = Symbol(
+  "modular-vue.reactiveSlotsConfig",
+);
 
 /**
  * Provide a static set of slot contributions. Accepts a plain object or an
@@ -61,6 +85,83 @@ export function useSlots<
     throw new Error("[@modular-vue/vue] useSlots must be used within a modular app.");
   }
   return slots as Ref<TSlots>;
+}
+
+/**
+ * Access the resolved slot contributions as a Vue-reactive `computed`, evaluated
+ * on read and re-evaluated automatically whenever the reactive state its
+ * `dynamicSlots` factories / `slotFilter` touch changes — no `recalculateSlots()`
+ * call required.
+ *
+ * This is the Vue-idiomatic alternative to {@link useSlots} + the imperative
+ * {@link useRecalculateSlots} signal. The factories and filter run inside a
+ * `computed`, so any reactive source they read *live* during evaluation (a
+ * reactive service object, a `ref`/`reactive` closed over by a factory, a store
+ * whose `getState()` returns a reactive proxy) becomes a tracked dependency:
+ * Vue recomputes lazily on next read after a relevant change, tracking exactly
+ * the state actually read.
+ *
+ * ## When to use which
+ *
+ * Choose the reactive path (this) when the gating inputs are **Vue-reactive
+ * state the host owns** — e.g. RBAC permissions, connection-availability flags,
+ * feature toggles held in `ref`/`reactive`/Pinia. It needs no invalidation call
+ * sites, so it can't go stale by omission, and its fine-grained tracking only
+ * recomputes on the specific state that changed.
+ *
+ * Choose the signal path ({@link useSlots} + {@link useRecalculateSlots}) when:
+ * - the gating inputs are **not Vue-reactive** — a plain `Store`/zustand snapshot,
+ *   or an external `subscribe`/`getSnapshot` source read via `getState()` /
+ *   `getSnapshot()` (a `computed` reading a plain snapshot tracks nothing, so it
+ *   would never recompute); either bridge those into refs first or invalidate
+ *   explicitly;
+ * - you need **transactional** recompute — apply several async-staged changes and
+ *   recompute once at the end rather than on each intermediate reactive tick;
+ * - the trigger is an **imperative event** that is not persisted reactive state.
+ *
+ * The two paths coexist and read the same underlying config; pick per source.
+ *
+ * @remarks
+ * `dynamicSlots(deps)` factories themselves stay framework-neutral — they receive
+ * a plain deps snapshot either way. Reactivity is the host's concern here: this
+ * composable rebuilds the snapshot inside the tracked `computed` on every
+ * recompute, so a factory/filter that reads a reactive dep tracks it. A factory
+ * that only reads non-reactive deps simply never triggers a recompute (same
+ * result the signal path would give without a `recalculateSlots()` call).
+ *
+ * @example
+ * // Host-owned RBAC gating, expressed as a reactive slotFilter reading a
+ * // reactive `gates` service registered on the registry:
+ * const slots = useReactiveSlots<AppSlots>()
+ * const navItems = computed(() => slots.value.nav)  // updates when a permission flips
+ */
+export function useReactiveSlots<
+  TSlots extends { [K in keyof TSlots]: readonly unknown[] },
+>(): ComputedRef<TSlots> {
+  const config = inject(reactiveSlotsConfigKey, null);
+  const deps = inject(sharedDependenciesKey, null);
+  if (!config || !deps) {
+    throw new Error(
+      "[@modular-vue/vue] useReactiveSlots must be used within a modular app " +
+        "(install the resolved manifest so the reactive-slots config is provided).",
+    );
+  }
+  return computed(() => {
+    // Rebuild the snapshot INSIDE the computed so reactive reads performed by the
+    // factories / filter (through reactive service objects or reactive stores)
+    // are tracked as dependencies of this computed.
+    const snapshot = buildDepsSnapshot<Record<string, unknown>>({
+      stores: deps.stores,
+      services: deps.services,
+      reactiveServices: deps.reactiveServices,
+    });
+    return evaluateDynamicSlots(
+      config.baseSlots as TSlots,
+      config.factories,
+      snapshot,
+      config.filter,
+    );
+  });
 }
 
 /**

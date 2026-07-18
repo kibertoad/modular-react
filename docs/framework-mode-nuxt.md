@@ -314,6 +314,9 @@ want.
 
 ## See also
 
+- [Reactive slots in Vue](reactive-slots-vue.md) — `useReactiveSlots` vs the
+  `recalculateSlots()` signal path, the tradeoffs, and the host-owned RBAC-gating
+  shape a layer's nav/command shells use.
 - [`@modular-vue/nuxt`](../packages/vue-nuxt/README.md) — package reference.
 - [Getting started with Vue Router](getting-started-vue-router.md) — modules,
   registry, stores, the manual SPA setup.

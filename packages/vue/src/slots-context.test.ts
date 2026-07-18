@@ -1,14 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { defineComponent, h, shallowRef, type Ref } from "vue";
+import { defineComponent, h, ref, shallowRef, type Ref } from "vue";
 import { mount } from "@vue/test-utils";
 import { createStore } from "@modular-frontend/core";
 import {
   createSlotsSignal,
   DynamicSlotsProvider,
+  reactiveSlotsConfigKey,
   slotsKey,
+  useReactiveSlots,
   useRecalculateSlots,
   useSlots,
 } from "./slots-context.js";
+import { sharedDependenciesKey } from "./context.js";
 import { renderComposable } from "./test-render.js";
 
 describe("useSlots", () => {
@@ -78,5 +81,80 @@ describe("DynamicSlotsProvider", () => {
     signal.notify();
 
     expect(captured.value.commands).toEqual([{ id: "static" }, { id: "admin" }]);
+  });
+});
+
+describe("useReactiveSlots", () => {
+  it("throws outside a modular app", () => {
+    expect(() => renderComposable(() => useReactiveSlots())).toThrow(/useReactiveSlots/);
+  });
+
+  it("re-evaluates dynamic slots on a reactive change with no recalculate signal", () => {
+    const isAdmin = ref(false);
+    // A plain service whose getter reads a reactive ref: reading it inside the
+    // evaluation `computed` tracks the ref, so no recalculateSlots() is needed.
+    const gates = {
+      get isAdmin() {
+        return isAdmin.value;
+      },
+    };
+    const factory = (deps: any) =>
+      deps.gates?.isAdmin ? { commands: [{ id: "admin" }] } : { commands: [] };
+
+    const { result } = renderComposable(() => useReactiveSlots<{ commands: { id: string }[] }>(), {
+      provide: {
+        [reactiveSlotsConfigKey as symbol]: {
+          baseSlots: { commands: [{ id: "static" }] },
+          factories: [factory],
+          filter: undefined,
+        },
+        [sharedDependenciesKey as symbol]: {
+          stores: {},
+          services: { gates },
+          reactiveServices: {},
+        },
+      },
+    });
+
+    expect(result().value.commands).toEqual([{ id: "static" }]);
+
+    // Flip the reactive source only — the computed recomputes on next read.
+    isAdmin.value = true;
+    expect(result().value.commands).toEqual([{ id: "static" }, { id: "admin" }]);
+  });
+
+  it("applies a reactive slotFilter (RBAC-style gating)", () => {
+    const canWrite = ref(true);
+    const gates = {
+      get canWrite() {
+        return canWrite.value;
+      },
+    };
+    const filter = (slots: any, deps: any) => ({
+      nav: (slots.nav as { id: string; gate?: string }[]).filter(
+        (i) => i.gate == null || deps.gates?.[i.gate],
+      ),
+    });
+
+    const { result } = renderComposable(() => useReactiveSlots<{ nav: { id: string }[] }>(), {
+      provide: {
+        [reactiveSlotsConfigKey as symbol]: {
+          baseSlots: { nav: [{ id: "always" }, { id: "guarded", gate: "canWrite" }] },
+          factories: [],
+          filter,
+        },
+        [sharedDependenciesKey as symbol]: {
+          stores: {},
+          services: { gates },
+          reactiveServices: {},
+        },
+      },
+    });
+
+    expect(result().value.nav.map((i) => i.id)).toEqual(["always", "guarded"]);
+
+    // Revoke the permission — the guarded item drops with no signal fired.
+    canWrite.value = false;
+    expect(result().value.nav.map((i) => i.id)).toEqual(["always"]);
   });
 });

@@ -54,9 +54,11 @@ export {
   createSlotsSignal,
   useNavigation,
   useSlots,
+  useReactiveSlots,
   useRecalculateSlots,
+  reactiveSlotsConfigKey,
   useModules,
   getModuleMeta,
   ModuleErrorBoundary,
 } from "@modular-vue/vue";
-export type { SlotsSignal } from "@modular-vue/vue";
+export type { SlotsSignal, ReactiveSlotsConfig } from "@modular-vue/vue";

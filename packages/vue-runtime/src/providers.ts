@@ -22,6 +22,7 @@ import {
   DynamicSlotsProvider,
   modulesKey,
   navigationKey,
+  reactiveSlotsConfigKey,
   recalculateSlotsKey,
   sharedDependenciesKey,
   slotsKey,
@@ -92,6 +93,15 @@ function provideModularContexts(
   provideFn(navigationKey, config.navigation);
   provideFn(modulesKey, config.modules);
   provideFn(recalculateSlotsKey, config.recalculateSlots);
+  // The config `useReactiveSlots()` needs to re-evaluate the manifest itself
+  // inside a Vue `computed` (the reactive alternative to the recalculate signal).
+  // Provided in both the plugin and component forms so either install path
+  // supports the reactive path.
+  provideFn(reactiveSlotsConfigKey, {
+    baseSlots: config.slots,
+    factories: config.dynamicSlotFactories,
+    filter: config.slotFilter,
+  });
 }
 
 /**
