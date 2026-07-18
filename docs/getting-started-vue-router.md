@@ -23,7 +23,7 @@ Two sibling docs go deeper once you're past setup:
 ## Prerequisites
 
 - **Node 22+** and **pnpm** (the workspace uses `workspace:*` deps).
-- **Vue ^3.5** and **vue-router ^4.5** (decision D5 — the supported baseline).
+- **Vue ^3.5** and **vue-router ^5.0** (decision D5 — the supported baseline).
 - Familiarity with Vue's Composition API and vue-router's `RouteRecordRaw`
   shape.
 
@@ -149,7 +149,7 @@ package under `modules/`:
     "@myorg/app-shared": "workspace:*",
     "@modular-vue/core": "^1.0.0",
   },
-  "peerDependencies": { "vue": "^3.5.0", "vue-router": "^4.5.0" },
+  "peerDependencies": { "vue": "^3.5.0", "vue-router": "^5.0.0" },
 }
 ```
 
@@ -234,7 +234,7 @@ dependency:
     "@myorg/dashboard-module": "workspace:*",
     "@modular-vue/runtime": "^1.0.0",
     "vue": "^3.5.0",
-    "vue-router": "^4.5.0",
+    "vue-router": "^5.0.0",
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

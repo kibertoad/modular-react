@@ -16,6 +16,27 @@ export type {
 // Detection helpers (framework-neutral, re-exported from the engine)
 export { isStoreApi, isReactiveService, separateDeps } from "@modular-frontend/core";
 
+// Remote capability manifests (JSON-safe descriptor subset) — surfaced through
+// the Vue binding so consumers never reach into the neutral engine directly.
+export { mergeRemoteManifests } from "@modular-frontend/core";
+export type {
+  RemoteModuleManifest,
+  RemoteNavigationItem,
+  MergedRemoteManifests,
+} from "@modular-frontend/core";
+
+// Component registry & pairing — read-side helpers (framework-neutral) that pair
+// a remote manifest's string ids with code-shipped components registered in a
+// local slot. A Vue `computed` re-runs them on reactive change with no glue.
+export { resolveComponentRegistry, pairById, componentPairingPlugin } from "@modular-frontend/core";
+export type {
+  ComponentEntry,
+  ComponentRegistry,
+  OnDuplicateComponentId,
+  ComponentPairingPluginOptions,
+  ComponentRefSpec,
+} from "@modular-frontend/core";
+
 // Module definition
 export { defineModule } from "./define-module.js";
 export { defineSlots } from "./define-slots.js";

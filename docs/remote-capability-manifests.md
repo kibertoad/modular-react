@@ -28,7 +28,7 @@ The net effect: **adding a new generic capability is a backend-only change.** Th
 
 Remote manifests deliberately do **not** deliver React components, routes, or business logic. If the new capability needs any of those, it must ship as code. Signals you're fighting the pattern:
 
-- You're trying to encode a component reference as a string and map it in the FE. That reinvents the module system. Ship the module as code and use [`registerLazy`](shell-patterns.md) for code-splitting.
+- You're trying to make the manifest **conjure a component the build didn't ship** — encoding a component reference as a string so the FE materializes or hand-maps a component that isn't a first-class registered thing. That reinvents the module system. Ship the module as code and use [`registerLazy`](shell-patterns.md) for code-splitting. (Selecting among components that _are_ already shipped and slot-registered, by a data id, is a different and supported thing — see [Pairing wire-safe manifests with code-shipped components](#pairing-wire-safe-manifests-with-code-shipped-components).)
 - You're trying to ship per-capability logic (validators, effects, route loaders) via JSON. Keep that in a local module; let the manifest only carry data.
 - Capabilities are few and stable. One line per capability in a local module array is simpler than a fetch + store + `dynamicSlots` round trip.
 - Each capability needs its own route, component, or module-level logic, and the set is known at build time. Then you want [sibling modules sharing a screen](sibling-modules-shared-screen.md) — one module per capability, each owning its route and rendering a shared component with its own typed config. Same "generic screen, per-item variance" idea, but with compile-time types and per-module lifecycle rather than runtime JSON.
@@ -39,7 +39,7 @@ Almost every real use of remote manifests falls into one of two shapes. The libr
 
 1. **Catalog / navigation enumeration.** The manifests tell the shell "here are the things that exist": a tile per tenant-licensed integration, a command-palette entry per installed partner app, a menu entry per reporting pack. The slot item type is usually slim (id / name / icon / link), and the shell renders one card or one nav entry per item. Adding an item = new manifest row. This is the "flat tile grid" mental model.
 
-2. **Capability-gated shared component.** The manifests tell the shell "here is what each thing supports": a single shared component (detail page, editor, dashboard) reads the item's `authentication`, `filters`, `capabilities`, etc. and conditionally renders UI — unsupported buttons are hidden, supported filters show, known capabilities light up their affordance. One React component renders every integration in the catalog without ever naming a specific partner. Adding an integration = new manifest row _and_ the shared component automatically picks up whatever capabilities it declared.
+2. **Capability-gated shared component.** The manifests tell the shell "here is what each thing supports": a single shared component (detail page, editor, dashboard) reads the item's `authentication`, `filters`, `capabilities`, etc. and conditionally renders UI — unsupported buttons are hidden, supported filters show, known capabilities light up their affordance. One React component renders every integration in the catalog without ever naming a specific partner. Adding an integration = new manifest row _and_ the shared component automatically picks up whatever capabilities it declared. When one shared component isn't enough — the items genuinely need _different_ components selected by a data field — the component still ships as code and the manifest carries a string id that selects it; see [Pairing wire-safe manifests with code-shipped components](#pairing-wire-safe-manifests-with-code-shipped-components).
 
 Both shapes coexist in the same app and often in the same slot — the example repo ships both flavours on one page: each card is a catalogue entry (pattern 1), and the auth/filter/capability details inside that card are rendered by a shared component that never hard-codes an integration name (pattern 2).
 
@@ -86,6 +86,110 @@ import type { RemoteModuleManifest, RemoteNavigationItem } from "@modular-react/
 ```
 
 `RemoteNavigationItem` narrows `to` to `string` and `icon` to `string` — the two fields on a regular [`NavigationItem`](../packages/frontend-core/src/types.ts) that aren't JSON-safe. `RemoteModuleManifest` refuses the non-serializable `ModuleDescriptor` fields up front, so the type itself documents the wire contract.
+
+## Pairing wire-safe manifests with code-shipped components
+
+Sometimes a manifest entry needs to select **which component** renders it — a result view per agent kind, an inspector panel per block type, a window chrome per run. The component can't cross the wire (previous section), so the manifest carries a **string id** and the component ships as code, registered locally. The host **pairs** the two by id at render time.
+
+This is the sanctioned shape of "backend data lights up a locally-installed view." It is deliberately narrow: read [Why this isn't the anti-pattern](#why-this-isnt-the-anti-pattern) below before reaching for it, because a sloppy version — a shell-owned `string → component` map used to dodge shipping code — is exactly the [anti-pattern](#anti-patterns-to-avoid) this guide otherwise warns against.
+
+### The shape
+
+**1. Components ship as code and register through the normal module → slot path.** A first-party module contributes `ComponentEntry[]` to a component-registry slot; a consumer deployment contributes its own entries to the _same_ slot via the app's registration seam — no layer fork.
+
+```ts
+// A local module — first-party or consumer — contributes code-shipped views.
+import { defineSlots } from "@modular-react/core"; // or "@modular-vue/core"
+import type { ComponentEntry } from "@modular-react/core";
+
+export default defineSlots<AppDeps, AppSlots>("result-views", {
+  resultViews: [
+    { id: "summary", component: SummaryView },
+    { id: "diff", component: DiffView },
+    // …the rest of the built-in windows
+  ] satisfies ComponentEntry<AppComponent>[],
+});
+```
+
+**2. The manifest carries the id as plain data** — a **discriminator**, not a component reference:
+
+```json
+{
+  "id": "kind:security-review",
+  "version": "1.0.0",
+  "slots": {
+    "agentKinds": [{ "kind": "security-review", "resultView": "acme:security-report" }]
+  }
+}
+```
+
+**3. The host pairs manifest data against the slot at read time:**
+
+```ts
+import { resolveComponentRegistry, pairById } from "@modular-react/core"; // or "@modular-vue/core"
+
+const registry = resolveComponentRegistry(slots.resultViews);
+const { paired, missing, unref } = pairById(
+  agentKinds,
+  registry,
+  (kind) => kind.resultView, // undefined → this item requests no view
+);
+```
+
+`resolveComponentRegistry` indexes the slot into an id → component lookup (`get` / `has` / `ids` / `entries` / `getEntry`). `pairById` partitions the manifest entries into three explicit buckets — `paired` (id resolved to a component), `missing` (an id was requested but no component is installed — a dangling reference), and `unref` (`idOf` returned `undefined` — route it to the generic panel) — so the host handles each outcome deliberately instead of re-deriving the split, and instead of a silent miss.
+
+Both are **pure functions**. In Vue, call them inside a `computed` fed by `useReactiveSlots()` + the reactive capabilities service — they re-run on any slot or manifest change with no library-specific glue. In React, a `useMemo` over the resolved slot does the same. That reactivity-neutrality is why they live in the neutral engine and are re-exported unchanged by both `@modular-react/core` and `@modular-vue/core`.
+
+### Why this isn't the anti-pattern
+
+The pairing helpers are a **read-side projection of an already-resolved slot** — they register nothing and introduce no new module type. Components still enter only through the single ingress (modules → slots); `resolveComponentRegistry` reads the slot the registry already built, exactly like the shell reads any other slot to render it. The wire never carries a component — only a discriminator — and an id that names no installed component lands in `missing` and degrades. **The wire can _reference_ installed code; it can never _conjure_ code the build didn't ship.**
+
+Contrast the [anti-pattern](#anti-patterns-to-avoid): a shell-hand-rolled `Record<string, Component>` keyed by a wire string, standing in as a _substitute_ for shipping and registering a module. That reinvents the module system; this **consumes** it. The line between the two is whether the component is a first-class slot contribution from a real module (fine) or a lookup the shell fakes to avoid one (not fine).
+
+### Id namespacing and duplicate policy
+
+Register first-party ids bare (`requirements-review`, `diff`). A consumer's own view ids SHOULD be namespaced (`acme:security-report`) so a consumer view can't accidentally collide with — or silently shadow — a first-party one. `resolveComponentRegistry` **throws on a duplicate id by default** (the same fail-loud stance as duplicate module ids and `mergeRemoteManifests`); pass `onDuplicate: "last-wins"` / `"first-wins"` only when a deployment _intends_ to shadow a first-party view with its own.
+
+### Handling the `missing` bucket
+
+Treat a dangling reference as a predictable degrade, not a crash or a silent disappearance. The recommended default is dev-warn plus a generic fallback:
+
+```ts
+if (import.meta.env.DEV && missing.length > 0) {
+  console.warn(
+    `[result-views] manifest references unregistered view id(s): ${missing.map((m) => m.id).join(", ")}`,
+  );
+}
+// Render registry.get(p.id) for each `paired` item; render a generic panel for `missing` + `unref`.
+```
+
+This is the runtime counterpart to the closed-picklist a backend might otherwise enforce: when the build and the backend drift (a backend names a view this build doesn't ship yet), the surface degrades to the generic panel instead of breaking.
+
+### Optional: fail fast on statically-known references
+
+For references known at resolve time — a manifest registered as a module slot rather than fetched — `componentPairingPlugin` turns a dangling reference into a resolve-time error, a peer of the duplicate-id validator:
+
+```ts
+import { componentPairingPlugin } from "@modular-react/core"; // or "@modular-vue/core"
+
+registry.use(
+  componentPairingPlugin({
+    componentSlot: "resultViews",
+    // The ids your data slots reference — here, every `resultView` across the
+    // modules' statically-registered `agentKinds` entries. `from` makes a
+    // dangling-reference error name the module that made it.
+    staticRefs: (modules) =>
+      modules.flatMap((m) => {
+        const kinds = (m.slots?.agentKinds ?? []) as readonly { resultView?: string }[];
+        return kinds
+          .filter((k) => k.resultView !== undefined)
+          .map((k) => ({ id: k.resultView!, from: `module "${m.id}"` }));
+      }),
+  }),
+);
+```
+
+It sees **static** slot contributions only — `dynamicSlots` factories and async remote manifests aren't evaluated at validate time, so `pairById`'s `missing` bucket stays the runtime path for anything backend-delivered. Use the plugin to catch build-time-known typos early; use `pairById` for everything that arrives over the wire.
 
 ## Architecture
 
@@ -429,7 +533,7 @@ Note that `resolveModule` will invoke `lifecycle.onRegister` — provide a stub 
 
 ## Anti-patterns to avoid
 
-- **Don't synthesize `component` or `createRoutes` from strings.** Mapping `"IntegrationTile"` to a local component registry reinvents the module system. If a feature legitimately needs its own component, ship it as code and use `registerLazy` for code-splitting.
+- **Don't synthesize `component` or `createRoutes` from strings.** Hand-rolling a shell-side `Record<string, Component>` keyed by a wire string — so the manifest can name a component that isn't a first-class registered thing — reinvents the module system. If a feature legitimately needs its own component, ship it as code and use `registerLazy` for code-splitting. (The narrow, supported exception is **selecting among components that already ship as code and are slot-registered**, by a data-id discriminator, with graceful missing-handling — see [Pairing wire-safe manifests with code-shipped components](#pairing-wire-safe-manifests-with-code-shipped-components). The distinction is whether the wire _references_ installed code, or tries to _introduce_ code the build never shipped.)
 - **Don't register remote manifests directly via `registry.register(...)`.** Registration is locked after `resolve()` / `resolveManifest()`. Even if you boot-fetch, the "one module owns remote contributions" pattern is strictly simpler — and it's the only option once you also support late-arriving updates.
 - **Don't skip validation because the type is narrow.** A TypeScript type is not a runtime guarantee. The wire boundary is where you earn the types you declared; `mergeRemoteManifests` and the rest of the library trust them past that point.
 - **Don't concatenate manifests into a fake single descriptor.** Keep them as an array; `mergeRemoteManifests` is what folds them into the shapes the shell actually consumes.
@@ -447,3 +551,6 @@ Two complete walkthroughs live under `examples/react-router/`, one per topology.
 - Type: [`RemoteModuleManifest`](../packages/frontend-core/src/remote-manifest.ts) — JSON-safe subset of `ModuleDescriptor`.
 - Type: [`RemoteNavigationItem`](../packages/frontend-core/src/remote-manifest.ts) — JSON-safe subset of `NavigationItem`.
 - Helper: [`mergeRemoteManifests`](../packages/frontend-core/src/remote-manifest.ts) — merges an array into `{ slots, navigation, meta }`, throwing on duplicate ids.
+- Helper: [`resolveComponentRegistry`](../packages/frontend-core/src/component-registry.ts) — indexes a slot of `ComponentEntry` into an id → component registry; throws on duplicate ids (`onDuplicate` to override).
+- Helper: [`pairById`](../packages/frontend-core/src/component-registry.ts) — pairs manifest data with a component registry by id, partitioning into `paired` / `missing` / `unref`.
+- Plugin: [`componentPairingPlugin`](../packages/frontend-core/src/component-pairing-plugin.ts) — resolve-time validator that fails assembly when a statically-registered manifest reference has no registered component.

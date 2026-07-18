@@ -1,7 +1,7 @@
-# Framework-Mode Integration (Nuxt 3)
+# Framework-Mode Integration (Nuxt 4)
 
 This guide shows how to run the `@modular-vue` family inside a
-[Nuxt 3](https://nuxt.com) app with
+[Nuxt 4](https://nuxt.com) app with
 [`@modular-vue/nuxt`](../packages/vue-nuxt/README.md). Nuxt owns the Vue app and
 the vue-router instance, so the integration is the **router-owning** path over
 `@modular-vue/runtime` (`registry.resolve()`): the runtime grafts every module's
@@ -119,7 +119,7 @@ Write the plugin yourself when you need the non-serializable options —
 `authGuard`, `providers`, `slotFilter`, or `onModuleExit`:
 
 ```ts
-// plugins/modular-vue.ts
+// app/plugins/modular-vue.ts
 import { installModularApp } from "@modular-vue/nuxt/runtime";
 import buildRegistry from "~/modular/registry";
 
@@ -156,7 +156,7 @@ load or refresh straight onto `/billing`), Nuxt's route table must already
 contain a match. Two ways to guarantee that:
 
 1. **Declare a shell page and graft under it.** Give Nuxt a real page — e.g.
-   `pages/[...modular].vue` (a catch-all) or a named `pages/app.vue` — and pass
+   `app/pages/[...modular].vue` (a catch-all) or a named `app/pages/app.vue` — and pass
    its route name as `parentRouteName`. Nuxt's initial resolution matches the
    shell page; the grafted child renders inside its `<NuxtPage>` /
    `<router-view>`. This is the recommended pattern.
@@ -218,6 +218,95 @@ export default defineNuxtPlugin((nuxtApp) => {
 passed a `slotFilter`, so the subscription is cheap to wire even when nothing is
 dynamic.
 
+## Nuxt layers: letting a consumer contribute modules
+
+A [Nuxt layer](https://nuxt.com/docs/getting-started/layers) is published once
+and `extends`ed by many deployments. The interesting case is a layer that owns a
+_base_ registry (its own first-party modules) but lets each consuming app add its
+own — the frontend analog of a backend plugin registry. This works, with two
+things to get right.
+
+**Use Option B, not the module.** The zero-config module (Option A) resolves its
+`registry: "~/modular/registry"` path against the **consumer's** srcDir, the same
+`~`/`@` rebinding every Nuxt layer hits. So the layer's own base registry and the
+consumer's additions never compose through Option A. Instead the layer ships its
+own `defineNuxtPlugin` (Option B) that builds the base registry and installs it.
+
+**Expose a registration seam and mind plugin order.** The layer keeps a module
+list its plugin reads at resolve time, and exports an `addModule`-style function
+for consumers:
+
+```ts
+// layer: app/modular/registry.ts
+import { createRegistry } from "@modular-vue/runtime";
+import type { AnyModuleDescriptor } from "@modular-vue/core";
+
+const firstParty: readonly AnyModuleDescriptor[] = [
+  /* the layer's own modules */
+];
+const contributed: AnyModuleDescriptor[] = [];
+
+/** Consumers call this from their own plugin, before the layer resolves. */
+export function registerAppModule(module: AnyModuleDescriptor): void {
+  contributed.push(module);
+}
+
+export function buildRegistry() {
+  const registry = createRegistry({});
+  for (const m of [...firstParty, ...contributed]) registry.register(m);
+  return registry;
+}
+```
+
+```ts
+// layer: app/plugins/modular.ts
+import { installModularApp } from "@modular-vue/nuxt/runtime";
+import { buildRegistry } from "~/modular/registry";
+
+// `enforce: "post"` is the load-bearing detail — see below.
+export default defineNuxtPlugin({
+  name: "modular",
+  enforce: "post",
+  setup(nuxtApp) {
+    const manifest = installModularApp(
+      { vueApp: nuxtApp.vueApp, $router: nuxtApp.$router },
+      buildRegistry(),
+    );
+    return { provide: { modular: manifest } };
+  },
+});
+```
+
+```ts
+// consumer deployment: app/plugins/my-modules.ts (a normal, default-order plugin)
+export default defineNuxtPlugin(() => {
+  registerAppModule(myModule); // registerAppModule is auto-imported from the layer
+});
+```
+
+Nuxt loads a layer's plugins **before** the consuming app's plugins within one
+enforce bucket, so a consumer registering from a default plugin would otherwise
+run _after_ the layer already resolved, and its module would be missed. Marking
+the layer's install plugin `enforce: "post"` flips the order: the consumer's
+default-bucket registration runs first, then the layer resolves with everything
+present. So the rule for consumers is "register from a `default` (or `pre`)
+plugin," and the layer's install plugin is always `post`.
+
+For an `ssr: false` layer this is the simple case: the plugin runs once on the
+client, so the module-level `contributed` array and a singleton registry are
+fine (the per-request-factory rule only bites under SSR). Registering the same
+id twice throws at resolve via duplicate-id validation, which is the guard you
+want.
+
+This same `registerAppModule` seam is how a consumer lights up a
+**backend-driven** capability that the layer knows nothing about: the consumer
+registers a module contributing its own code-shipped components (as
+`ComponentEntry` items) to a shared slot, and a remote capability manifest then
+selects one by a string id at render time. See [Pairing wire-safe manifests with
+code-shipped components](remote-capability-manifests.md#pairing-wire-safe-manifests-with-code-shipped-components)
+for that join — the components ship as code through the seam above; only the
+selecting id crosses the wire.
+
 ## Rules of thumb
 
 - **Registry as a factory, called in the plugin.** This is the one rule that
@@ -229,10 +318,20 @@ dynamic.
 - **Reach for Option B when you need behavior.** The module (Option A) carries
   only serializable config; auth guards, provider plugins, slot filters, and
   exit handlers live in your own `defineNuxtPlugin`.
+- **Layers own the plugin; consumers register from a `default` plugin.** A layer
+  that lets consumers contribute modules ships its own Option-B plugin marked
+  `enforce: "post"` and exports a registration seam; consumers add modules from a
+  normal-order plugin. See [Nuxt layers](#nuxt-layers-letting-a-consumer-contribute-modules).
 
 ## See also
 
+- [Reactive slots in Vue](reactive-slots-vue.md) — `useReactiveSlots` vs the
+  `recalculateSlots()` signal path, the tradeoffs, and the host-owned RBAC-gating
+  shape a layer's nav/command shells use.
 - [`@modular-vue/nuxt`](../packages/vue-nuxt/README.md) — package reference.
+- [Journeys in Vue](journeys-vue.md) — hosting multi-step journeys (incl.
+  modal-mounted, no-URL wizards); §7 covers how the journeys plugin threads its
+  runtime app-wide through this router-owning install path.
 - [Getting started with Vue Router](getting-started-vue-router.md) — modules,
   registry, stores, the manual SPA setup.
 - [Shell Patterns for Vue Router](shell-patterns-vue-router.md) — router-owning

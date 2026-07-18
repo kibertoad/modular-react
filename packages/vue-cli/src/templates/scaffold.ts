@@ -25,7 +25,7 @@ const V = {
   /** `@modular-frontend/*` shared engine/core (0.x — tight range, see D-policy). */
   modularFrontend: "^0.1.0",
   vue: "^3.5.0",
-  vueRouter: "^4.5.0",
+  vueRouter: "^5.0.0",
   vueTsc: "^3.3.0",
   vitePluginVue: "^6.0.0",
   vite: "^8.1.3",

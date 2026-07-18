@@ -1,6 +1,6 @@
 {
   "name": "@modular-react/core",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "React binding facade over @modular-frontend/core. Re-exports the framework-neutral primitives (types, slots, navigation, validation, journey contracts, store) for modular React applications.",
   "repository": {
     "type": "git",

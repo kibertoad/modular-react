@@ -20,7 +20,24 @@ first package of the [Vue support initiative](../../docs/vue-support-tracker.md)
 - **Contexts** — typed `InjectionKey`s plus `provide*` helpers and `use*`
   composables for the modules list (`useModules`, `getModuleMeta`), the
   navigation manifest (`useNavigation`), and slot contributions (`useSlots`,
-  `useRecalculateSlots`, `DynamicSlotsProvider`, `createSlotsSignal`).
+  `useReactiveSlots`, `useRecalculateSlots`, `DynamicSlotsProvider`,
+  `createSlotsSignal`).
+
+### Slot evaluation: reactive vs signal
+
+Two ways to read the resolved slots, chosen per source:
+
+- `useReactiveSlots()` returns the slots as a `computed`, re-evaluated
+  automatically when the reactive state its factories/filter read changes. Use it
+  when the gating inputs are Vue-reactive state the host owns (RBAC permissions,
+  availability flags).
+- `useSlots()` + `useRecalculateSlots()` is the framework-neutral signal path: a
+  `Ref` that re-evaluates only on an explicit `recalculateSlots()`. Use it for
+  non-reactive/external sources, transactional recompute, or event-driven
+  invalidation.
+
+Full tradeoffs and the RBAC-gating shape:
+[Reactive slots in Vue](../../docs/reactive-slots-vue.md).
 
 Rendering pieces (lazy entry resolution, module host/exit, error capture) land
 in PR-11; the runtime plugin that installs these contexts lands with the
@@ -34,6 +51,17 @@ the Vue analog of React's `useSyncExternalStore`. Subscriptions are torn down on
 `onScopeDispose` (component unmount), so there is no listener leak. `shallowRef`
 dedupes by `Object.is`, which gives selector equality: re-selecting the same
 value from an unrelated update does not wake watchers.
+
+### Pinia interop — `createPiniaStoreAdapter`
+
+`createPiniaStoreAdapter(store)` presents a Pinia store behind the neutral
+`Store<T>` contract (`getState` / `getInitialState` / `setState` / `subscribe`),
+so a Pinia store can fill a registry-owned store / reactive-service DI slot — the
+same slot a zustand or built-in `createStore` store fills — instead of running a
+parallel state layer. It caches a shallow snapshot and refreshes it from a
+synchronous `$subscribe`, so consumers see a fresh snapshot identity per change
+(the signal `useSyncExternalStore` / `storeRef` need). Structural store shape —
+**no `pinia` dependency**; you pass the store in.
 
 ## Example
 
@@ -58,3 +86,11 @@ const api = useService("httpClient"); // plain service → static
   <p>Signed in as {{ user }}</p>
 </template>
 ```
+
+## Troubleshooting
+
+- [Duplicate `vue-router` instances](../../docs/troubleshooting-vue-router-instances.md)
+  — if `vue-tsc` reports `RouteRecordRaw` "not assignable to" `RouteRecordRaw`
+  (same version, different import path), your app resolved two copies of
+  `vue-router`. That doc explains why (vue-router 5's optional `vite` peer) and
+  how to dedupe with a one-line override.

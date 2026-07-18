@@ -36,7 +36,7 @@ import {
   MODULAR_VUE_VERSION,
 } from "./templates/scaffold.js";
 
-const ROUTER_VERSION = "^4.5.0";
+const ROUTER_VERSION = "^5.0.0";
 
 // Source the CLI version from this package's own `package.json` so
 // `--version` stays in sync with the published package across releases.

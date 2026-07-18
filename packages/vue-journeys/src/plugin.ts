@@ -1,5 +1,9 @@
 import { defineComponent, h } from "vue";
-import type { ModuleExitHandler } from "@modular-vue/vue";
+import {
+  provideBinding,
+  type ModuleExitHandler,
+  type VueAppProvidingPlugin,
+} from "@modular-vue/vue";
 import type {
   JourneyRuntime,
   ModuleTypeMap,
@@ -22,7 +26,7 @@ import type {
   RegisteredJourney,
 } from "@modular-frontend/journeys-engine";
 
-import { JourneyProvider } from "./provider.js";
+import { JourneyProvider, journeyKey, type JourneyProviderValue } from "./provider.js";
 
 /**
  * Methods the journeys plugin contributes to the registry. Registered plugins
@@ -133,7 +137,8 @@ export interface JourneysPluginOptions<
  */
 export function journeysPlugin<TNavItem extends NavigationItemBase = JourneyDefaultNavItem>(
   options: JourneysPluginOptions<TNavItem> = {},
-): RegistryPlugin<"journeys", JourneysPluginExtension, JourneyRuntime> {
+): RegistryPlugin<"journeys", JourneysPluginExtension, JourneyRuntime> &
+  VueAppProvidingPlugin<JourneyRuntime> {
   const registered: RegisteredJourney[] = [];
 
   return {
@@ -213,6 +218,26 @@ export function journeysPlugin<TNavItem extends NavigationItemBase = JourneyDefa
         },
       });
       return [BoundJourneyProvider as unknown as UiComponent<{ children: UiNode }>];
+    },
+
+    // Install-mode twin of `providers()`. The framework-mode component form
+    // (`resolveManifest`) mounts the `<JourneyProvider>` above; the router-owning
+    // form (`resolve()` / Nuxt) has no root component to wrap, so it threads the
+    // journey runtime app-wide via `app.provide` from this binding instead —
+    // exactly how `navigationKey` / `modulesKey` reach the app there. The runtime
+    // never imports `journeyKey`; the plugin supplies key + value.
+    //
+    // Journey context ONLY is bound here (single responsibility). The component
+    // form's `<JourneyProvider>` additionally composes `<ModuleExitProvider>`,
+    // but module-exit dispatching is the module-hosting layer's concern, not the
+    // journeys binding's: in the router-owning path, exits fired outside a step
+    // are the shell's to wire (it can read `manifest.onModuleExit`). Binding a
+    // module-exit dispatcher off the journeys plugin here would conflate the two
+    // and compete with that channel. `onModuleExit` stays on the value only for
+    // introspection parity with the component provider.
+    appProvides({ runtime }) {
+      const value: JourneyProviderValue = { runtime, onModuleExit: options.onModuleExit };
+      return [provideBinding(journeyKey, value)];
     },
   };
 }

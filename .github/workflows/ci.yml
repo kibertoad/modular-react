@@ -127,6 +127,13 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Fail fast if a guarded package (vue-router, vue, vite, pinia) resolved
+      # to more than one physical instance of the same version — the
+      # peer-context split that surfaces downstream as a cryptic cross-instance
+      # `vue-tsc` "not assignable" error. See docs/troubleshooting-vue-router-instances.md.
+      - name: Check lockfile dedupe
+        run: pnpm check:lockfile-dedup
+
       - name: Lint
         run: pnpm lint
 
@@ -370,10 +377,45 @@ jobs:
           path: examples/catalog/playwright-report/
           retention-days: 7
 
+  publish-checks:
+    name: Publish hygiene
+    # publint + attw on every published package's packed tarball: enforces
+    # exports/type-resolution correctness and peer hygiene (vue/vue-router/pinia
+    # must stay peerDependencies, not bundled deps) — the packaging invariants a
+    # real downstream consumer depends on. Exercises the tarball, not the
+    # workspace symlink, so misclassification can't hide behind local hoisting.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+
+      - name: Install pnpm
+        # Pin pnpm via `packageManager` in package.json (see ci.common.yml).
+        run: corepack enable
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Packing checks the emitted dist/, so the packages must be built first.
+      - name: Build library packages
+        run: pnpm turbo run build --filter="./packages/*"
+
+      - name: Check publish hygiene (publint + attw)
+        run: pnpm check:publish
+
   automerge:
     name: Auto-merge dependabot PRs
-    needs: [build, lint, examples, examples-e2e, catalog-e2e]
-    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.lint.result == 'success') && (needs.examples.result == 'success') && (needs.examples-e2e.result == 'success' || needs.examples-e2e.result == 'skipped') && (needs.catalog-e2e.result == 'success' || needs.catalog-e2e.result == 'skipped')
+    needs: [build, lint, examples, examples-e2e, catalog-e2e, publish-checks]
+    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped') && (needs.lint.result == 'success') && (needs.examples.result == 'success') && (needs.examples-e2e.result == 'success' || needs.examples-e2e.result == 'skipped') && (needs.catalog-e2e.result == 'success' || needs.catalog-e2e.result == 'skipped') && (needs.publish-checks.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write # fastify/github-action-merge-dependabot approves the dependabot PR

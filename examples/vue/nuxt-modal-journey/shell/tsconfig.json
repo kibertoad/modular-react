@@ -1,0 +1,5 @@
+{
+  // Nuxt generates `.nuxt/tsconfig.json` on `nuxi prepare`; extend it so the
+  // shell picks up Nuxt's auto-import + alias types.
+  "extends": "./.nuxt/tsconfig.json"
+}

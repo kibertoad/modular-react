@@ -29,12 +29,12 @@ dist/
   },
   "peerDependencies": {
     "vue": "^3.5.0",
-    "vue-router": "^4.5.0"
+    "vue-router": "^5.0.0"
   },
   "devDependencies": {
     "typescript": "^6.0.2",
     "vue": "^3.5.0",
-    "vue-router": "^4.5.0",
+    "vue-router": "^5.0.0",
     "vue-tsc": "^3.3.0"
   }
 }",
@@ -292,7 +292,7 @@ export type CustomerOnboardingHandle = typeof customerOnboardingHandle
   },
   "peerDependencies": {
     "vue": "^3.5.0",
-    "vue-router": "^4.5.0"
+    "vue-router": "^5.0.0"
   },
   "devDependencies": {
     "@modular-vue/testing": "^1.0.0",
@@ -301,7 +301,7 @@ export type CustomerOnboardingHandle = typeof customerOnboardingHandle
     "typescript": "^6.0.2",
     "vitest": "^4.1.0",
     "vue": "^3.5.0",
-    "vue-router": "^4.5.0",
+    "vue-router": "^5.0.0",
     "vue-tsc": "^3.3.0"
   }
 }",
@@ -491,7 +491,7 @@ const user = useStore('auth', (s) => s.user)
   },
   "peerDependencies": {
     "vue": "^3.5.0",
-    "vue-router": "^4.5.0"
+    "vue-router": "^5.0.0"
   },
   "devDependencies": {
     "@modular-vue/testing": "^1.0.0",
@@ -500,7 +500,7 @@ const user = useStore('auth', (s) => s.user)
     "typescript": "^6.0.2",
     "vitest": "^4.1.0",
     "vue": "^3.5.0",
-    "vue-router": "^4.5.0",
+    "vue-router": "^5.0.0",
     "vue-tsc": "^3.3.0"
   }
 }",
@@ -739,7 +739,7 @@ onlyBuiltDependencies:
     "@modular-vue/runtime": "^1.0.0",
     "@modular-vue/vue": "^1.0.0",
     "vue": "^3.5.0",
-    "vue-router": "^4.5.0",
+    "vue-router": "^5.0.0",
     "wretch": "^2.11.0"
   },
   "devDependencies": {

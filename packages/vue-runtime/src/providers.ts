@@ -1,5 +1,6 @@
 import {
   defineComponent,
+  effectScope,
   h,
   provide,
   shallowRef,
@@ -22,9 +23,13 @@ import {
   DynamicSlotsProvider,
   modulesKey,
   navigationKey,
+  reactiveSlotsKey,
   recalculateSlotsKey,
+  resolveReactiveSlots,
   sharedDependenciesKey,
   slotsKey,
+  type AppProvide,
+  type ReactiveSlotsInput,
   type SlotsSignal,
 } from "@modular-vue/vue";
 
@@ -75,10 +80,31 @@ function computeDynamicSlots(config: ModularProvidersConfig): object {
 }
 
 /**
+ * The evaluation inputs the reactive slots source ({@link resolveReactiveSlots})
+ * needs: the base slots, factories and filter, plus the three dependency buckets
+ * the snapshot is rebuilt from inside the tracked `computed`.
+ */
+function reactiveSlotsInput(config: ModularProvidersConfig): ReactiveSlotsInput {
+  return {
+    baseSlots: config.slots,
+    factories: config.dynamicSlotFactories,
+    filter: config.slotFilter,
+    stores: config.stores,
+    services: config.services,
+    reactiveServices: config.reactiveServices,
+  };
+}
+
+/**
  * Provide the four always-present modular contexts through either the app-level
  * `app.provide` (plugin form) or the component-scoped `provide` (component
  * form). Keeps the context set enumerated in one place so both forms expose an
  * identical injection surface.
+ *
+ * The reactive-slots source ({@link reactiveSlotsKey}) is provided separately by
+ * each form: its resolved `computed` needs an owning effect scope, which differs
+ * between the app-level plugin (an explicit `effectScope`) and the component
+ * (its own `setup` scope).
  */
 function provideModularContexts(
   provideFn: <T>(key: InjectionKey<T>, value: T) => void,
@@ -112,10 +138,21 @@ function provideModularContexts(
 export function createModularProvidersPlugin(
   config: ModularProvidersConfig,
   userPlugins?: Plugin[],
+  pluginAppProvides: readonly AppProvide[] = [],
 ): { install: (app: App) => void } {
   return {
     install(app: App) {
       provideModularContexts((key, value) => app.provide(key, value), config);
+
+      // Plugin-contributed app-level bindings (e.g. the journeys runtime under
+      // `journeyKey`). This is an install-mode-only concept — the framework-mode
+      // component form receives the same plugins' wrapping components instead, so
+      // these bindings are threaded as a dedicated argument rather than through
+      // the shared `ModularProvidersConfig`. Applied after the core contexts and
+      // before user plugins, which may depend on plugin context.
+      for (const { key, value } of pluginAppProvides) {
+        app.provide(key, value);
+      }
 
       if (hasDynamicSlots(config)) {
         const slotsRef = shallowRef(computeDynamicSlots(config));
@@ -129,6 +166,17 @@ export function createModularProvidersPlugin(
       } else {
         app.provide(slotsKey, shallowRef(config.slots));
       }
+
+      // Reactive path: one shared `computed` resolved once, read by every
+      // `useReactiveSlots()` consumer. Owned by a detached `effectScope` stopped
+      // on app unmount so the computed's effect doesn't outlive the app (same
+      // multi-install hygiene as the signal subscription above).
+      const reactiveScope = effectScope(true);
+      const reactiveSlots = reactiveScope.run(() =>
+        resolveReactiveSlots(reactiveSlotsInput(config)),
+      )!;
+      app.onUnmount(() => reactiveScope.stop());
+      app.provide(reactiveSlotsKey, reactiveSlots);
 
       if (userPlugins) {
         for (const plugin of userPlugins) app.use(plugin);
@@ -162,6 +210,10 @@ export function createModularProvidersComponent(
       // Static slots are provided here; dynamic slots are provided by the
       // nested DynamicSlotsProvider in the render function below.
       if (!dynamic) provide(slotsKey, shallowRef(config.slots));
+      // Reactive path: the one shared `computed` every `useReactiveSlots()`
+      // consumer reads. Created in this component's `setup` scope, so its effect
+      // is disposed when ModularProviders unmounts (no explicit scope needed).
+      provide(reactiveSlotsKey, resolveReactiveSlots(reactiveSlotsInput(config)));
 
       return () => {
         const children = () => renderSlots.default?.();
