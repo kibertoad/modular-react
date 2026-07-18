@@ -1,5 +1,5 @@
 {
-  "name": "@angular-router-modules/core",
+  "name": "@modular-angular/core",
   "version": "0.1.0",
   "description": "Angular Router core for @modular-angular modules: defineModule with createRoutes(): Route[], defineSlots, shared injectors, scoped stores, and the route-data convention.",
   "repository": {
