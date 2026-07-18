@@ -56,34 +56,35 @@ overrides:
   vite: 8.1.5 # or your single chosen vite version
 ```
 
-```jsonc
-// package.json (non-workspace pnpm)
+Non-workspace pnpm — in your app's `package.json`:
+
+```json
 {
   "pnpm": {
     "overrides": {
-      "vite": "8.1.5",
-    },
-  },
+      "vite": "8.1.5"
+    }
+  }
 }
 ```
 
-**npm:**
+**npm** — in `package.json`:
 
-```jsonc
+```json
 {
   "overrides": {
-    "vite": "8.1.5",
-  },
+    "vite": "8.1.5"
+  }
 }
 ```
 
-**yarn:**
+**yarn** — in `package.json`:
 
-```jsonc
+```json
 {
   "resolutions": {
-    "vite": "8.1.5",
-  },
+    "vite": "8.1.5"
+  }
 }
 ```
 
