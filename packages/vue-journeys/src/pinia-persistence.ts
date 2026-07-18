@@ -43,7 +43,12 @@ export interface PiniaJourneyPersistenceOptions<TInput> {
    * When true (default), stored blobs are deep-cloned on both `save` and
    * `load`, so `load` returns a plain object detached from the store: callers
    * mutating it cannot corrupt the reactive state, and a mutated source blob
-   * cannot corrupt what was persisted.
+   * cannot corrupt what was persisted. The clone is a structural JSON round-trip
+   * (`JSON.parse(JSON.stringify(...))`), which matches the `SerializedJourney`
+   * contract the engine persists — plain JSON — but, like any storage adapter,
+   * drops `undefined` fields and cannot carry `Date` / `Map` / `Set`. Journey
+   * blobs are already JSON by construction, so this only bites if a custom
+   * persistence layer routes non-serializable state through here.
    *
    * When false, the clone is skipped. Note Pinia still wraps stored state in a
    * reactive proxy, so `load` never returns the exact reference passed to

@@ -54,6 +54,14 @@ export interface PiniaStoreLike<T extends object> {
  * closest faithful equivalent (capture the adapter over a freshly created
  * store to make it meaningful).
  *
+ * The snapshot is a **shallow** clone (`{ ...$state }`), matching the built-in
+ * `createStore`. Top-level identity is fresh per change, so top-level selectors
+ * and `Object.is` equality behave as expected; nested objects, however, are
+ * shared by reference between the previous and current snapshot, so a
+ * `subscribe` consumer diffing a deep path (`prev.a.b` vs `next.a.b`) sees
+ * equal references even when that value changed. Select on top-level slices, or
+ * keep state shallow, as with the other stores in this family.
+ *
  * ```ts
  * const store = useWizardStore();               // a Pinia store
  * const adapted = createPiniaStoreAdapter(store); // satisfies Store<WizardState>

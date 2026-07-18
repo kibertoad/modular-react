@@ -10,6 +10,13 @@ packages:
 allowBuilds:
   esbuild: false
   msw: false
+  # Pulled in transitively by `pinia` (a tests-only devDependency of
+  # `@modular-vue/vue` + `@modular-vue/journeys`). vue-demi's postinstall only
+  # picks a Vue 2 vs Vue 3 entry shim; the workspace resolves Vue 3, so the
+  # script is unnecessary. Recording the decision here (`false`, and left out of
+  # `onlyBuiltDependencies` below, so the script stays unrun) is what keeps a
+  # `--frozen-lockfile` install from failing with ERR_PNPM_IGNORED_BUILDS.
+  vue-demi: false
 
 overrides:
   # Guard: pin the rolldown backend that rolldown-plugin-dts resolves to a
