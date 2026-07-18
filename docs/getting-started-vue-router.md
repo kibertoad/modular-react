@@ -60,7 +60,7 @@ Three contract interfaces live in `app-shared`:
   detail panel on the right). In vue-router these ride on the route's `meta`.
 
 Every route-owning module's descriptor is typed as
-`defineModule<AppDependencies, AppSlots>({ … })`. That's how TypeScript catches,
+`defineModule<AppDependencies, AppSlots>()({ … })`. That's how TypeScript catches,
 at compile time, a module asking for a store the shell doesn't provide.
 
 ## 1. Create the workspace
@@ -167,7 +167,7 @@ import type { RouteRecordRaw } from "vue-router";
 import type { AppDependencies, AppSlots } from "@myorg/app-shared";
 import DashboardPage from "./DashboardPage.vue";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "dashboard",
   version: "0.1.0",
 
@@ -377,7 +377,7 @@ import type { RouteRecordRaw } from "vue-router";
 import type { AppDependencies, AppSlots } from "@myorg/app-shared";
 import BillingPage from "./BillingPage.vue";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "billing",
   version: "0.1.0",
   requires: ["auth"],

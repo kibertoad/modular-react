@@ -36,6 +36,40 @@ test("plain-string `to` still type-checks with ZERO explicit generics", () => {
   void m;
 });
 
+test("curried form: function-form `to` type-checks with explicit deps/slots", () => {
+  // The scaffolded shape — a typed shell pins `TSharedDependencies` / `TSlots`
+  // while `to` resolves from render-time context. Partial generics on a single
+  // call (`defineModule<AppDeps, AppSlots>({...})`) would default `TNavItem`
+  // back to `NavigationItem` and reject this; the curried call keeps it inferred.
+  interface AppDeps {
+    readonly logger: { info(m: string): void };
+  }
+  type AppSlots = Record<string, never[]>;
+
+  const m = defineModule<AppDeps, AppSlots>()({
+    id: "portal",
+    version: "1.0.0",
+    navigation: [
+      { label: "Requests", to: (ctx: { workspaceId: string }) => `/portal/${ctx.workspaceId}` },
+    ],
+  });
+  void m;
+});
+
+test("curried form: plain-string `to` still type-checks with explicit deps/slots", () => {
+  interface AppDeps {
+    readonly logger: { info(m: string): void };
+  }
+  type AppSlots = Record<string, never[]>;
+
+  const m = defineModule<AppDeps, AppSlots>()({
+    id: "settings",
+    version: "1.0.0",
+    navigation: [{ label: "Settings", to: "/settings" }],
+  });
+  void m;
+});
+
 test("an explicitly-narrowed TNavItem is still honored", () => {
   type AppNavItem = NavigationItem<"nav.billing", { orgId: string }, { badge?: "beta" }>;
 

@@ -124,7 +124,7 @@ export interface AppSlots {
 ```typescript
 import { defineModule } from "@react-router-modules/core"; // or '@tanstack-react-modules/core'
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "billing",
   slots: {
     commands: [
@@ -432,7 +432,7 @@ This is syntactic sugar: the registry sees a normal `ModuleDescriptor` with `ver
 Modules can declare dependencies they can function without using `optionalRequires`. Missing optional deps log a warning at resolve time instead of throwing:
 
 ```typescript
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "billing",
   version: "0.1.0",
   requires: ["httpClient"], // hard requirement: throws if missing

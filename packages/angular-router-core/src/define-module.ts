@@ -14,6 +14,9 @@ import type { ModuleDescriptor, SlotMap, SlotMapOf } from "./types.js";
  * type AppNavItem = NavigationItem<ParseKeys, { workspaceId: string }, { action?: Action }>
  *
  * export default defineModule<AppDeps, AppSlots, JourneyMeta, AppNavItem>({ ... })
+ *
+ * // Curried — pin app-wide deps/slots while navigation `to` stays inferred:
+ * export default defineModule<AppDeps, AppSlots>()({ ... })
  * ```
  *
  * Two inference guarantees matter for journeys built on `typeof someModule`:
@@ -41,6 +44,18 @@ export function defineModule<
   TNavItem extends NavigationItemBase = NavigationItem,
   TDescriptor extends ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem> =
     ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>,
->(descriptor: TDescriptor & { readonly navigation?: readonly TNavItem[] }): TDescriptor {
-  return descriptor;
+>(descriptor: TDescriptor & { readonly navigation?: readonly TNavItem[] }): TDescriptor;
+export function defineModule<
+  TSharedDependencies extends Record<string, any>,
+  TSlots extends SlotMapOf<TSlots>,
+  TMeta extends { [K in keyof TMeta]: unknown } = Record<string, unknown>,
+>(): <
+  TNavItem extends NavigationItemBase = NavigationItem,
+  TDescriptor extends ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem> =
+    ModuleDescriptor<TSharedDependencies, TSlots, TMeta, TNavItem>,
+>(
+  descriptor: TDescriptor & { readonly navigation?: readonly TNavItem[] },
+) => TDescriptor;
+export function defineModule(descriptor?: unknown): unknown {
+  return descriptor === undefined ? (inner: unknown) => inner : descriptor;
 }

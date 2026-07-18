@@ -78,7 +78,7 @@ import { defineModule } from "@modular-vue/core";
 import type { RouteRecordRaw } from "vue-router";
 import BillingPage from "./BillingPage.vue";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "billing",
   version: "1.0.0",
   createRoutes: (): RouteRecordRaw => ({

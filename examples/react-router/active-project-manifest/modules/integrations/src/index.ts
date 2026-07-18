@@ -14,7 +14,7 @@ import type { AppDependencies, AppSlots } from "@example-active/app-shared";
  * No `onRegister` hook: there's nothing to fetch at boot. Fetching happens
  * on demand when the UI calls `selectProject`.
  */
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "integrations",
   version: "1.0.0",
   requires: ["integrations"],

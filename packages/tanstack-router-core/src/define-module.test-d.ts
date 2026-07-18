@@ -120,3 +120,38 @@ test("an undeclared entry key in the transition map is a compile error", () => {
   };
   void transitions;
 });
+
+// -----------------------------------------------------------------------------
+// Curried form — a typed shell pins `TSharedDependencies` / `TSlots` explicitly
+// while function-form `to` stays inferred. Partial generics on a single call
+// (`defineModule<AppDeps, AppSlots>({...})`) would default `TNavItem` back to
+// the string-`to` shape and reject the resolver form; the curried call keeps it
+// inferred (guarantee 2) without losing the literal entry/exit shapes
+// (guarantee 1).
+// -----------------------------------------------------------------------------
+
+test("curried defineModule<Deps, Slots>() keeps function-form `to` inferred", () => {
+  interface AppDeps {
+    readonly logger: { info(m: string): void };
+  }
+  type AppSlots = Record<string, never[]>;
+
+  const curried = defineModule<AppDeps, AppSlots>()({
+    id: "plan",
+    version: "1.0.0",
+    navigation: [
+      { label: "Plan", to: (ctx: { workspaceId: string }) => `/plan/${ctx.workspaceId}` },
+    ],
+    exitPoints: { chosen: defineExit<{ readonly tier: string }>() },
+    entryPoints: {
+      choose: defineEntry({
+        component: (() => null) as never,
+        input: schema<{ readonly recommended: string }>(),
+      }),
+    },
+  });
+
+  // Literal entry/exit vocabulary still survives the curried call.
+  expectTypeOf<EntryNamesOf<typeof curried>>().toEqualTypeOf<"choose">();
+  expectTypeOf<ExitNamesOf<typeof curried>>().toEqualTypeOf<"chosen">();
+});

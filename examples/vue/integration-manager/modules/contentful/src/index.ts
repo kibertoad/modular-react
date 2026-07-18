@@ -4,7 +4,7 @@ import type { AppDependencies, AppSlots } from "@example-vue-integration-manager
 import ContentfulPage from "./ContentfulPage.vue";
 import { contentfulConfig } from "./config.js";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "contentful",
   version: "0.0.0",
   requires: ["auth"],

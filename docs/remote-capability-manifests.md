@@ -302,7 +302,7 @@ import type { AppDependencies, AppSlots } from "@myorg/app-shared";
 import { fetchIntegrationManifests } from "../../services/integrations-client";
 import { integrationsStore } from "../../stores/integrations-store";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "integrations",
   version: "1.0.0",
   requires: ["httpClient"],
@@ -339,7 +339,7 @@ Now: when the fetch completes, the store updates, `recalculateSlots()` fires, `d
 For the **swap topology**, the same module is shorter: no `onRegister` (fetching is UI-driven), and `dynamicSlots` reads the active manifest directly without a merge helper:
 
 ```ts
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "integrations",
   version: "1.0.0",
   requires: ["integrations"],

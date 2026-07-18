@@ -27,7 +27,7 @@ const handle = {
   pageTitle: "Strapi",
 } satisfies AppRouteData;
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "strapi",
   version: "0.0.0",
   requires: ["auth"],

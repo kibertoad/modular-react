@@ -33,7 +33,7 @@ Three roles, one contract:
   - **`AppSlots`**: the static contributions the shell collects across all modules (e.g. a `commands` bar).
   - **`AppZones`**: per-route layout regions a module can fill (e.g. a detail panel on the right). The active route's contributions are what the shell renders. On TanStack Router, zones ride on the route's `staticData` field, which `app-shared` tightens via a `declare module` augmentation so the types line up.
 
-Every module signature looks like `defineModule<AppDependencies, AppSlots>({ … })`. That's how TypeScript catches, at compile time, a module asking for a store the shell doesn't provide.
+Every module signature looks like `defineModule<AppDependencies, AppSlots>()({ … })`. That's how TypeScript catches, at compile time, a module asking for a store the shell doesn't provide.
 
 ## 1. Scaffold a project
 
@@ -129,7 +129,7 @@ import { createRoute, lazyRouteComponent } from "@tanstack/react-router";
 import type { AppDependencies, AppSlots } from "@myorg/app-shared";
 import { DashboardDetailPanel } from "./panels/DetailPanel.js";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "dashboard",
   version: "0.1.0",
 
