@@ -27,12 +27,28 @@ allowBuilds:
   "@parcel/watcher": false
 
 overrides:
-  # Guard: pin the rolldown backend that rolldown-plugin-dts resolves to a
-  # single version. pnpm's peer resolution otherwise picks whatever rolldown
-  # is in the tree, so a package pulling an older vite (older bundled rolldown)
-  # would make dts generate through a different backend than the rest of the
-  # workspace. Keeps every package's plugin on vite 8.1.x's rolldown@1.1.4.
-  rolldown-plugin-dts>rolldown: 1.1.4
+  # Collapse rolldown to a single version workspace-wide. vue-router 5's key
+  # (see the vite note below) transitively includes vite's own rolldown, so a
+  # rolldown split (the nuxt/unplugin stack pulls 1.2.0; vite 8.1.5 prefers
+  # ~1.1.5; rolldown-plugin-dts@0.26 hard-pins 1.1.4) fractured vue-router the
+  # same way a vite split does. Pin the whole tree to 1.1.4 — the version
+  # rolldown-plugin-dts@0.26 requires and that the package `build`/dts jobs
+  # already pass on (vite 8.1.5 runs fine against it too). This globalizes the
+  # old scoped `rolldown-plugin-dts>rolldown: 1.1.4` pin so every vue-router
+  # consumer — packages and examples alike — shares one instance.
+  rolldown: 1.1.4
+  # Collapse vite 8 to a single version workspace-wide. vue-router 5 declares
+  # `vite` as an OPTIONAL peer (it folded in unplugin-vue-router), so pnpm keys
+  # vue-router's virtual-store dir by the resolved vite. With vite floating
+  # between 8.1.3 and 8.1.5 the workspace grew multiple vue-router instances,
+  # and vue-router's branded types (unique symbols + module augmentation) are
+  # not assignable across instances — surfacing as spurious `RouteRecordRaw is
+  # not assignable to RouteRecordRaw` typecheck errors in the Vue examples.
+  # Pinning vite 8 to one version keeps vue-router a single instance. Scoped to
+  # `vite@8` so the catalog SPA (vite 7, non-Vue) is untouched. NOTE: this is a
+  # workspace-local guard only — it does NOT reach published consumers; see the
+  # duplicate-vue-router guidance in the package READMEs for the downstream story.
+  "vite@8": 8.1.5
 
 minimumReleaseAgeExclude:
   - "@vitest/expect@4.1.10"
