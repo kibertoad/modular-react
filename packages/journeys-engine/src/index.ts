@@ -69,7 +69,9 @@ export { resolveStepSequence } from "./resolve-step-sequence.js";
 export type {
   ResolvedJourneyStep,
   ResolveStepSequenceOptions,
+  StepSequenceOptionsArg,
   StepSequenceRef,
+  StepSequenceWalkOptions,
 } from "./resolve-step-sequence.js";
 
 // Handles — open a journey with typed `input` without importing its runtime.

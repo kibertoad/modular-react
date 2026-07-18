@@ -22,17 +22,19 @@ export interface StepSequenceRef {
   readonly entry: string;
 }
 
-export interface ResolveStepSequenceOptions<TInput = unknown> {
-  /**
-   * Input handed to `definition.initialState` / `definition.start` to compute
-   * the first step. Omit for void-input journeys. Ignored when {@link start}
-   * is supplied.
-   */
-  readonly input?: TInput;
+/**
+ * Walk-tuning options that never depend on the journey's input type — always
+ * optional. The input-carrying `input` field lives on
+ * {@link ResolveStepSequenceOptions}, which requires it (or `start`) for a
+ * non-void-input journey.
+ */
+export interface StepSequenceWalkOptions {
   /**
    * Explicit first step. Skips calling `initialState` / `start` — useful when
    * the start step is dynamic on input in a way that does not affect the
-   * sequence, or when resolving a sub-sequence from a mid-flow step.
+   * sequence, or when resolving a sub-sequence from a mid-flow step. Supplying
+   * this satisfies the start requirement for a non-void-input journey, since
+   * the input-consuming factories are never called.
    */
   readonly start?: StepSequenceRef;
   /**
@@ -55,6 +57,44 @@ export interface ResolveStepSequenceOptions<TInput = unknown> {
    */
   readonly maxSteps?: number;
 }
+
+/**
+ * Options for {@link resolveStepSequence}.
+ *
+ * For a **void-input** journey every field is optional — `resolveStepSequence(def)`
+ * is valid. For a journey whose `initialState` / `start` need a **non-void**
+ * input, the options must supply the start of the walk explicitly: either
+ * `input` (handed to the factories to compute the first step, ignored when
+ * `start` is present) or `start` (naming the first step and skipping the
+ * factories). This makes `resolveStepSequence(def)` a compile error exactly
+ * when omitting `input` would otherwise call `initialState(undefined)`.
+ */
+export type ResolveStepSequenceOptions<TInput = unknown> = StepSequenceWalkOptions &
+  ([TInput] extends [void]
+    ? {
+        /** Input handed to the factories. Optional for void-input journeys. */
+        readonly input?: TInput;
+      }
+    :
+        | {
+            /** Input handed to `initialState` / `start` to compute the first step. */
+            readonly input: TInput;
+          }
+        | {
+            /** Explicit first step — skips (and so does not need) `input`. */
+            readonly start: StepSequenceRef;
+          });
+
+/**
+ * Trailing options argument for {@link resolveStepSequence}: optional for a
+ * void-input journey, required (carrying `input` or `start`) when the journey
+ * needs a non-void input — so omitting it is a compile error precisely when it
+ * would call `initialState(undefined)`. Consumers that forward options to
+ * `resolveStepSequence` (e.g. the `useJourneyProgress` hooks) reuse this tuple.
+ */
+export type StepSequenceOptionsArg<TInput> = [TInput] extends [void]
+  ? [options?: ResolveStepSequenceOptions<TInput>]
+  : [options: ResolveStepSequenceOptions<TInput>];
 
 const DEFAULT_MAX_STEPS = 256;
 
@@ -101,12 +141,16 @@ export function resolveStepSequence<
   TMeta extends { [K in keyof TMeta]: unknown },
 >(
   definition: JourneyDefinition<TModules, TState, TInput, TOutput, TMeta>,
-  options: ResolveStepSequenceOptions<TInput> = {},
+  ...[options]: StepSequenceOptionsArg<TInput>
 ): readonly ResolvedJourneyStep[] {
-  const maxSteps = normalizeMaxSteps(options.maxSteps);
+  // Read against the erased shape: `input` sits on a conditional branch of
+  // `ResolveStepSequenceOptions<TInput>` that TS can't index while `TInput` is
+  // still generic, so normalize to a flat readable view (the type guarantees a
+  // non-void journey supplied `input` or `start` before we get here).
+  const opts = (options ?? {}) as StepSequenceWalkOptions & { readonly input?: TInput };
+  const maxSteps = normalizeMaxSteps(opts.maxSteps);
 
-  let current: StepSequenceRef | undefined =
-    options.start ?? deriveStart(definition, options.input);
+  let current: StepSequenceRef | undefined = opts.start ?? deriveStart(definition, opts.input);
 
   const sequence: ResolvedJourneyStep[] = [];
   const visited = new Set<string>();
@@ -133,7 +177,7 @@ export function resolveStepSequence<
       // Fork — the resolver picks. Its return is matched back against `targets`
       // by `module` + `entry` (identity not required), so a `undefined` return
       // or a ref that isn't one of the declared targets stops the sequence here.
-      const picked: StepSequenceRef | undefined = options.branch?.({
+      const picked: StepSequenceRef | undefined = opts.branch?.({
         module: current.module,
         entry: current.entry,
         targets,

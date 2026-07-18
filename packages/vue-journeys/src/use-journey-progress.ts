@@ -6,22 +6,41 @@ import {
   type ModuleTypeMap,
   type ResolvedJourneyStep,
   type ResolveStepSequenceOptions,
+  type StepSequenceOptionsArg,
 } from "@modular-frontend/journeys-engine";
 import { useInstanceSnapshot } from "./instance-hooks.js";
 import { useJourneyContext } from "./provider.js";
 
-export interface UseJourneyProgressOptions<TInput = unknown> {
+interface UseJourneyProgressBase {
   /**
    * Runtime the `instanceId` belongs to. Defaults to the one provided by a
    * surrounding `<JourneyProvider>`.
    */
   readonly runtime?: JourneyRuntime;
-  /**
-   * Forwarded to `resolveStepSequence` — chiefly `branch`, to linearize a
-   * forking flow, and `input`, when the start step depends on it.
-   */
-  readonly sequence?: ResolveStepSequenceOptions<TInput>;
 }
+
+/**
+ * Options for {@link useJourneyProgress}.
+ *
+ * `sequence` is forwarded to `resolveStepSequence` — chiefly `branch`, to
+ * linearize a forking flow, and `input`, when the start step depends on it.
+ * Mirroring `resolveStepSequence`, `sequence` is optional for a void-input
+ * journey but required (carrying `input` or `start`) when the journey's
+ * `initialState` / `start` need a non-void input.
+ */
+export type UseJourneyProgressOptions<TInput = unknown> = UseJourneyProgressBase &
+  ([TInput] extends [void]
+    ? { readonly sequence?: ResolveStepSequenceOptions<TInput> }
+    : { readonly sequence: ResolveStepSequenceOptions<TInput> });
+
+/**
+ * Trailing options argument for {@link useJourneyProgress}: optional for a
+ * void-input journey, required when the journey needs a non-void input so the
+ * mandatory `sequence.input` / `sequence.start` can't be omitted.
+ */
+export type UseJourneyProgressArgs<TInput> = [TInput] extends [void]
+  ? [options?: UseJourneyProgressOptions<TInput>]
+  : [options: UseJourneyProgressOptions<TInput>];
 
 export interface JourneyProgress {
   /**
@@ -78,18 +97,26 @@ export function useJourneyProgress<
 >(
   instanceId: MaybeRefOrGetter<InstanceId | null>,
   definition: JourneyDefinition<TModules, TState, TInput, TOutput, TMeta>,
-  options: UseJourneyProgressOptions<TInput> = {},
+  ...[options]: UseJourneyProgressArgs<TInput>
 ): JourneyProgress {
+  const opts = (options ?? {}) as UseJourneyProgressBase & {
+    readonly sequence?: ResolveStepSequenceOptions<TInput>;
+  };
   const ctx = useJourneyContext();
   // `toRaw` for the same reason the host/outlet do it — a runtime that arrived
   // through a reactive prop is a proxy, and the runtime keys on raw identity.
-  const runtime = toRaw(options.runtime ?? ctx?.runtime ?? undefined) ?? null;
+  const runtime = toRaw(opts.runtime ?? ctx?.runtime ?? undefined) ?? null;
 
   const instance = useInstanceSnapshot(runtime, instanceId);
 
   // `definition` / `options` are plain values (not reactive), so the sequence
-  // is resolved once at setup — the same read the React hook memoizes.
-  const steps = resolveStepSequence(definition, options.sequence);
+  // is resolved once at setup — the same read the React hook memoizes. The
+  // tuple cast localizes the engine's documented "TInput is generic here"
+  // erasure; `opts.sequence` already satisfies the input-or-start requirement.
+  const steps = resolveStepSequence(
+    definition,
+    ...((opts.sequence === undefined ? [] : [opts.sequence]) as StepSequenceOptionsArg<TInput>),
+  );
 
   const index = computed(() => (instance.value ? instance.value.history.length : 0));
   const total = computed(() => (steps.length > 0 ? steps.length : null));

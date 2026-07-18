@@ -6,6 +6,7 @@
 import { test } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-frontend/core";
 import { defineJourney } from "./define-journey.js";
+import { resolveStepSequence } from "./resolve-step-sequence.js";
 
 const plan = defineModule({
   id: "plan",
@@ -74,4 +75,54 @@ test("`steps` rejects an unknown key on JourneyStepMeta", () => {
     },
     transitions: {},
   });
+});
+
+// --- `resolveStepSequence` options: input required for non-void journeys -----
+// A journey whose `initialState` consumes a non-void input must not be walked
+// without supplying that input (or an explicit `start`) — otherwise the walk
+// calls `initialState(undefined)`. The type must reject the bare call.
+
+// `initialState` takes no parameter → `TInput` is `void`.
+const voidInput = defineJourney<Modules, State>()({
+  id: "j",
+  version: "1.0.0",
+  initialState: () => ({ done: false }),
+  start: () => ({ module: "plan", entry: "choose", input: { x: 1 } }),
+  transitions: {},
+});
+
+// `initialState` consumes an input → `TInput` is `{ token: string }`.
+const nonVoidInput = defineJourney<Modules, State>()({
+  id: "j",
+  version: "1.0.0",
+  initialState: (input: { readonly token: string }) => ({ done: input.token === "" }),
+  start: () => ({ module: "plan", entry: "choose", input: { x: 1 } }),
+  transitions: {},
+});
+
+test("resolveStepSequence: void-input journey needs no options", () => {
+  resolveStepSequence(voidInput);
+  resolveStepSequence(voidInput, {});
+  resolveStepSequence(voidInput, { maxSteps: 2 });
+});
+
+test("resolveStepSequence: non-void-input journey rejects a missing/empty start", () => {
+  // @ts-expect-error — non-void input: `input` or `start` is required.
+  resolveStepSequence(nonVoidInput);
+  // @ts-expect-error — empty options still omit `input`/`start`.
+  resolveStepSequence(nonVoidInput, {});
+  // @ts-expect-error — walk-only options don't satisfy the input requirement.
+  resolveStepSequence(nonVoidInput, { maxSteps: 2 });
+});
+
+test("resolveStepSequence: non-void-input journey accepts `input` or `start`", () => {
+  resolveStepSequence(nonVoidInput, { input: { token: "t" } });
+  resolveStepSequence(nonVoidInput, { start: { module: "plan", entry: "choose" } });
+  // `start` skips the factories, so it may stand alone alongside walk options.
+  resolveStepSequence(nonVoidInput, { start: { module: "plan", entry: "choose" }, maxSteps: 2 });
+});
+
+test("resolveStepSequence: non-void-input journey rejects a wrong-typed `input`", () => {
+  // @ts-expect-error — `input` must match the journey's `TInput`.
+  resolveStepSequence(nonVoidInput, { input: { token: 1 } });
 });
