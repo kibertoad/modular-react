@@ -3,6 +3,7 @@ import type { RegistryPlugin } from "./plugin.js";
 import {
   resolveComponentRegistry,
   type ComponentEntry,
+  type ComponentRegistry,
   type OnDuplicateComponentId,
 } from "./component-registry.js";
 
@@ -65,8 +66,23 @@ export function componentPairingPlugin(
       }
 
       // Reuse the same duplicate-id validation as the runtime pairing path, so a
-      // duplicate component id surfaces here at resolve time too.
-      const registry = resolveComponentRegistry(entries, { onDuplicate });
+      // duplicate component id surfaces here at resolve time too. Re-attribute
+      // the error to this plugin: the consumer's stack ends at `resolve()`, and
+      // an error naming a helper they never called wouldn't point them at the
+      // plugin (or the slot) that tripped it.
+      let registry: ComponentRegistry<unknown>;
+      try {
+        registry = resolveComponentRegistry(entries, { onDuplicate });
+      } catch (error) {
+        const detail =
+          error instanceof Error
+            ? error.message.replace(/^\[@modular-frontend\/core\] resolveComponentRegistry: /, "")
+            : String(error);
+        throw new Error(
+          `[@modular-frontend/core] componentPairingPlugin: component slot "${componentSlot}" ` +
+            `failed to resolve: ${detail}`,
+        );
+      }
 
       const dangling = staticRefs(ctx.modules)
         .map((ref) => (typeof ref === "string" ? { id: ref } : ref))

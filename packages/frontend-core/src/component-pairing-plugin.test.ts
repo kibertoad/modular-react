@@ -64,9 +64,8 @@ describe("componentPairingPlugin", () => {
     ];
 
     expect(() => plugin.validate!({ modules })).toThrow(
-      /no registered component in slot "resultViews"/,
+      /no registered component in slot "resultViews": "ghost" \(from module "kinds"\)/,
     );
-    expect(() => plugin.validate!({ modules })).toThrow(/"ghost" \(from module "kinds"\)/);
   });
 
   it("accepts bare-string refs", () => {
@@ -86,7 +85,11 @@ describe("componentPairingPlugin", () => {
       mod("views-b", { resultViews: views("summary") }),
     ];
 
-    expect(() => plugin.validate!({ modules })).toThrow(/duplicate component id "summary"/);
+    // The error is attributed to the plugin and its slot, not to the internal
+    // resolveComponentRegistry call the consumer never made.
+    expect(() => plugin.validate!({ modules })).toThrow(
+      /componentPairingPlugin: component slot "resultViews" failed to resolve: duplicate component id "summary"/,
+    );
   });
 
   it("honors onDuplicate so an intentional consumer override does not fail resolve", () => {

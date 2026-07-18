@@ -175,7 +175,16 @@ import { componentPairingPlugin } from "@modular-react/core"; // or "@modular-vu
 registry.use(
   componentPairingPlugin({
     componentSlot: "resultViews",
-    staticRefs: (modules) => /* the referenced ids across the modules' data slots */,
+    // The ids your data slots reference — here, every `resultView` across the
+    // modules' statically-registered `agentKinds` entries. `from` makes a
+    // dangling-reference error name the module that made it.
+    staticRefs: (modules) =>
+      modules.flatMap((m) => {
+        const kinds = (m.slots?.agentKinds ?? []) as readonly { resultView?: string }[];
+        return kinds
+          .filter((k) => k.resultView !== undefined)
+          .map((k) => ({ id: k.resultView!, from: `module "${m.id}"` }));
+      }),
   }),
 );
 ```

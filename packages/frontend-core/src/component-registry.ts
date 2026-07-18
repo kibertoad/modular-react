@@ -92,16 +92,18 @@ export function resolveComponentRegistry<C, TMeta = unknown>(
     order.push(entry.id);
   }
 
+  // Built once: the registry is immutable after construction, so `ids` and
+  // `entries` keep a stable identity across reads (safe to feed into memoized
+  // render paths) and callers can't reach the internal order array.
+  const ids: readonly string[] = [...order];
+  const resolvedEntries: readonly ComponentEntry<C, TMeta>[] = order.map((id) => byId.get(id)!);
+
   return {
     get: (id) => byId.get(id)?.component,
     getEntry: (id) => byId.get(id),
     has: (id) => byId.has(id),
-    get ids() {
-      return order;
-    },
-    get entries() {
-      return order.map((id) => byId.get(id)!);
-    },
+    ids,
+    entries: resolvedEntries,
   };
 }
 
@@ -146,11 +148,12 @@ export function pairById<T, C, TMeta = unknown>(
       unref.push(item);
       continue;
     }
-    if (!registry.has(id)) {
+    const entry = registry.getEntry(id);
+    if (entry === undefined) {
       missing.push({ item, id });
       continue;
     }
-    paired.push({ item, id, component: registry.get(id)! });
+    paired.push({ item, id, component: entry.component });
   }
 
   return { paired, missing, unref };

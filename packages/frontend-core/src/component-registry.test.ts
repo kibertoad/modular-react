@@ -32,6 +32,15 @@ describe("resolveComponentRegistry", () => {
     expect(registry.entries.map((e) => e.id)).toEqual(["b", "a", "c"]);
   });
 
+  it("keeps ids and entries referentially stable across reads", () => {
+    // The registry is immutable after construction, so repeated property reads
+    // return the same arrays — safe to feed into memoized render paths.
+    const registry = resolveComponentRegistry(entries(["a", comp("A")]));
+
+    expect(registry.ids).toBe(registry.ids);
+    expect(registry.entries).toBe(registry.entries);
+  });
+
   it("exposes the full entry (component + meta) via getEntry", () => {
     const a = comp("A");
     const registry = resolveComponentRegistry(entries(["a", a, { title: "Alpha" }]));
