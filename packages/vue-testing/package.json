@@ -55,6 +55,6 @@
     "@modular-vue/vue": "^1.0.0",
     "@vue/test-utils": "^2.4.6",
     "vue": "^3.5.40",
-    "vue-router": "^4.5.0"
+    "vue-router": "^4.5.0 || ^5.0.0"
   }
 }
