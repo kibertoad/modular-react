@@ -1,6 +1,6 @@
 {
   "name": "@modular-vue/journeys",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Vue 3 journeys for @modular-vue: JourneyProvider, instance composables (useJourneyState / useActiveLeafJourneyInstance), and the journeys registry plugin over @modular-frontend/journeys-engine.",
   "repository": {
     "type": "git",
