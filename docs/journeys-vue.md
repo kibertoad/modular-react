@@ -155,7 +155,7 @@ These match the React binding exactly:
    `handle` / `input` / `runtime` once at setup; changing `input` later does
    **not** restart. To run a different journey, remount with `:key`.
 3. **Host and outlet END the instance on unmount (deferred one microtask).**
-   `<JourneyHost>` and `<JourneyOutlet>` call `runtime.end(force)` on unmount —
+   `<JourneyHost>` and `<JourneyOutlet>` call `runtime.end(id, …, { force: true })` on unmount —
    which aborts the instance and, on that terminal, **removes its persisted
    blob**. The one-microtask defer lets a same-tick handoff survive (a `:key`
    swap, `<KeepAlive>` toggle, HMR), and the outlet **skips** the end while any

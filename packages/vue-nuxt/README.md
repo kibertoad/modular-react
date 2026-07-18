@@ -18,8 +18,10 @@ dependencies, navigation, slots, modules) on the Nuxt Vue app.
 npm install @modular-vue/nuxt @modular-vue/runtime @modular-vue/core @modular-vue/vue
 ```
 
-`@modular-vue/nuxt` peer-depends on `@modular-vue/runtime`, `vue`, and
-`vue-router` (all provided by a Nuxt 4 app).
+`@modular-vue/nuxt` peer-depends on `nuxt` (**4.4+**), `@modular-vue/runtime`,
+`vue`, and `vue-router` (all provided by a Nuxt 4.4+ app). The `vue-router@^5`
+peer is only satisfiable on **Nuxt 4.4 or newer** — that's the release where
+Nuxt integrated Vue Router 5; earlier Nuxt 4.x ships Vue Router 4.
 
 ## Two ways to wire it
 

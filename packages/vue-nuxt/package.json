@@ -34,14 +34,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nuxt/kit": "^4.0.0"
+    "@nuxt/kit": "^4.4.0"
   },
   "devDependencies": {
     "@modular-frontend/core": "workspace:*",
     "@modular-vue/core": "workspace:*",
     "@modular-vue/runtime": "workspace:*",
     "@modular-vue/vue": "workspace:*",
-    "@nuxt/schema": "^4.0.0",
+    "@nuxt/schema": "^4.4.0",
     "@vue/test-utils": "^2.4.6",
     "happy-dom": "^20.9.0",
     "oxfmt": "^0.51.0",
@@ -56,6 +56,7 @@
   "peerDependencies": {
     "@modular-frontend/core": "^0.1.0 || ^0.2.0",
     "@modular-vue/runtime": "^1.0.0",
+    "nuxt": "^4.4.0",
     "vue": "^3.5.40",
     "vue-router": "^5.0.0"
   }
