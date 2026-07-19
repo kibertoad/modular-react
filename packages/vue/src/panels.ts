@@ -95,8 +95,11 @@ export function usePanelSubject<TSubject>(): ComputedRef<TSubject> {
  * evaluate the same factories over the same deps, so the latest evaluation is
  * always the correct one; panels therefore update on *either* path, matching
  * the React host (whose single context carries both).
+ *
+ * Package-internal (shared with the overlay host; deliberately not exported
+ * from the package index).
  */
-function injectSlotsSource(): () => Record<string, readonly unknown[]> {
+export function injectSlotsSource(caller = "usePanels"): () => Record<string, readonly unknown[]> {
   const reactive = inject(reactiveSlotsKey, null);
   const signal = inject(slotsKey, null);
   if (reactive && signal) {
@@ -125,7 +128,7 @@ function injectSlotsSource(): () => Record<string, readonly unknown[]> {
   if (reactive) return () => reactive.value as Record<string, readonly unknown[]>;
   if (signal) return () => signal.value as Record<string, readonly unknown[]>;
   throw new Error(
-    "[@modular-vue/vue] usePanels must be used within a modular app " +
+    `[@modular-vue/vue] ${caller} must be used within a modular app ` +
       "(install the resolved manifest so a slots source is provided).",
   );
 }
