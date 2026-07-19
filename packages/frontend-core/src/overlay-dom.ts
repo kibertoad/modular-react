@@ -1,8 +1,7 @@
 /**
  * Client-only DOM behaviour shared by the bindings' overlay hosts — the single
  * implementation of the modal behaviour *semantics* that must not drift
- * between React and Vue (the `collapseEntriesById` argument, applied to focus
- * and scroll): which elements count as focusable, how Tab wraps at the
+ * between React and Vue: which elements count as focusable, how Tab wraps at the
  * dialog's edges, how the body scroll lock is counted, and the one app-wide
  * {@link sharedOverlayStack} every overlay registers on.
  *
