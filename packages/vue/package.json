@@ -43,7 +43,7 @@
     "vue": "^3.5.40"
   },
   "peerDependencies": {
-    "@modular-frontend/core": "^0.1.0 || ^0.2.0",
+    "@modular-frontend/core": "^0.1.0 || ^0.2.0 || ^0.3.0",
     "vue": "^3.5.40"
   }
 }

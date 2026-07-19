@@ -3,6 +3,13 @@ import type { ErrorInfo, ReactNode } from "react";
 
 interface Props {
   moduleId: string;
+  /**
+   * Noun used in the failure notice and console message for what crashed
+   * (default `"Module"`). Hosts wrapping non-module contributions pass their
+   * own — e.g. `<PanelsOutlet>` passes `"Panel"` — so the error names the
+   * actual failing unit instead of mislabeling it a module.
+   */
+  label?: string;
   fallback?: ReactNode;
   children: ReactNode;
 }
@@ -21,7 +28,7 @@ export class ModuleErrorBoundary extends Component<Props, State> {
 
   override componentDidCatch(error: Error, info: ErrorInfo) {
     console.error(
-      `[@modular-react/react] Module "${this.props.moduleId}" encountered an error:`,
+      `[@modular-react/react] ${this.props.label ?? "Module"} "${this.props.moduleId}" encountered an error:`,
       error,
       info,
     );
@@ -42,7 +49,7 @@ export class ModuleErrorBoundary extends Component<Props, State> {
           }}
         >
           <h3 style={{ color: "#e53e3e", margin: "0 0 0.5rem 0" }}>
-            Module &quot;{this.props.moduleId}&quot; encountered an error
+            {this.props.label ?? "Module"} &quot;{this.props.moduleId}&quot; encountered an error
           </h3>
           <pre style={{ fontSize: "0.875rem", color: "#718096", whiteSpace: "pre-wrap" }}>
             {this.state.error?.message}
