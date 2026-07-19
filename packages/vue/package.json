@@ -1,6 +1,6 @@
 {
   "name": "@modular-vue/vue",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Vue 3 bindings for @modular-frontend/core: store composables, scoped stores, and injection-key contexts for modules, navigation, and slots.",
   "repository": {
     "type": "git",
