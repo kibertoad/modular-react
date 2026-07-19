@@ -34,7 +34,7 @@
  * pattern, both bindings' hosts, and the reactivity caveat.
  */
 
-import type { OnDuplicateComponentId } from "./component-registry.js";
+import { collapseEntriesById, type OnDuplicateComponentId } from "./component-registry.js";
 import type { UiComponent } from "./ui-types.js";
 
 /**
@@ -71,7 +71,9 @@ export interface PanelEntry<TSubject> {
   readonly order?: number;
   /**
    * Extra props merged with the injected `{ subject }` by a binding's outlet.
-   * The engine never reads these — it only carries them for the host.
+   * The engine never reads these — it only carries them for the host. The
+   * injected subject wins: a `subject` key placed here is overwritten by the
+   * outlet's own injection, so don't use `props` to try to override it.
    */
   readonly props?: Record<string, unknown>;
 }
@@ -115,15 +117,16 @@ export function definePanelGroup<TSubject>(slotKey: string): PanelGroupHandle<TS
  *
  * Semantics, in order:
  *
- * 1. **Null subject → empty.** A `null` / `undefined` subject (nothing
- *    selected) resolves to no panels — no predicate runs.
- * 2. **Duplicate ids throw by default.** Two modules contributing the same
+ * 1. **Duplicate ids throw by default.** Two modules contributing the same
  *    panel id is a bug, mirroring {@link resolveComponentRegistry}'s stance
  *    (and duplicate-module-id validation). `onDuplicate: "last-wins"` /
  *    `"first-wins"` opt out when a deployment intentionally shadows a
- *    first-party id with its own. Dedup runs over *all* contributions, before
- *    the `when` filter, so the outcome is deterministic regardless of which
- *    panels the current subject makes visible.
+ *    first-party id with its own. Validation runs over *all* contributions,
+ *    before the null-subject guard and the `when` filter, so a registration
+ *    bug surfaces deterministically on first resolve — including the common
+ *    initial state where nothing is selected yet.
+ * 2. **Null subject → empty.** A `null` / `undefined` subject (nothing
+ *    selected) resolves to no panels — no predicate runs.
  * 3. **Filter by predicate.** Panels without a `when` are always kept; those
  *    with one are kept iff it returns `true` for the (non-null) subject.
  * 4. **Stable sort by `order`.** Ascending, `order ?? 0`; ties keep
@@ -144,50 +147,46 @@ export function resolvePanels<TSubject>(
   subject: TSubject | null | undefined,
   opts?: { onDuplicate?: OnDuplicateComponentId },
 ): readonly PanelEntry<TSubject>[] {
-  // Nothing selected → nothing to render. Guard first so `when` predicates
-  // never see a null subject (their parameter is the resolved, non-null value).
-  if (subject === null || subject === undefined) return [];
-
+  // Validate registration before anything selection-dependent: duplicate ids
+  // are a contribution bug whatever is (or isn't) selected, so the throw (or
+  // collapse) happens deterministically on first resolve — not only once the
+  // user selects something.
   const deduped = dedupeById(entries, opts?.onDuplicate ?? "throw");
 
+  // Nothing selected → nothing to render. Guarded before the filter so `when`
+  // predicates never see a null subject (their parameter is the resolved,
+  // non-null value).
+  if (subject === null || subject === undefined) return [];
+
+  // `filter` allocates a fresh array, so the in-place sort below never touches
+  // the caller's slot array.
   const visible = deduped.filter((entry) => (entry.when ? entry.when(subject) : true));
 
   // Stable sort by `order` (ascending, absent = 0). Array.prototype.sort is
-  // stable, so equal `order` values keep their contribution order. Sort a copy
-  // — the caller's slot array is never mutated.
-  return [...visible].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // stable, so equal `order` values keep their contribution order.
+  return visible.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
 /**
- * Collapse duplicate ids per {@link OnDuplicateComponentId}, preserving each
- * id's first-seen position. Factored out of {@link resolvePanels} so the
- * duplicate stance reads identically to `resolveComponentRegistry`.
+ * Collapse duplicate ids per {@link OnDuplicateComponentId} via the shared
+ * {@link collapseEntriesById}, so the duplicate stance is the same
+ * implementation `resolveComponentRegistry` uses — not a lookalike copy.
  */
 function dedupeById<TSubject>(
   entries: readonly PanelEntry<TSubject>[],
   onDuplicate: OnDuplicateComponentId,
 ): readonly PanelEntry<TSubject>[] {
-  const byId = new Map<string, PanelEntry<TSubject>>();
-  const order: string[] = [];
-
-  for (const entry of entries) {
-    if (byId.has(entry.id)) {
-      if (onDuplicate === "throw") {
-        throw new Error(
-          `[@modular-frontend/core] resolvePanels: duplicate panel id "${entry.id}". ` +
-            `Two modules contributed the same panel id to one group. Namespace consumer ids ` +
-            `(e.g. "acme:run-state") so they can't collide with first-party ones, or pass ` +
-            `onDuplicate: "last-wins" / "first-wins" to intentionally shadow an id.`,
-        );
-      }
-      if (onDuplicate === "first-wins") continue;
-      // last-wins: replace the entry but keep the id's first-seen position.
-      byId.set(entry.id, entry);
-      continue;
-    }
-    byId.set(entry.id, entry);
-    order.push(entry.id);
-  }
+  const { byId, order } = collapseEntriesById(
+    entries,
+    onDuplicate,
+    (id) =>
+      new Error(
+        `[@modular-frontend/core] resolvePanels: duplicate panel id "${id}". ` +
+          `Two modules contributed the same panel id to one group. Namespace consumer ids ` +
+          `(e.g. "acme:run-state") so they can't collide with first-party ones, or pass ` +
+          `onDuplicate: "last-wins" / "first-wins" to intentionally shadow an id.`,
+      ),
+  );
 
   // Fast path: no duplicates collapsed, so the input order is already correct.
   if (order.length === entries.length) return entries;

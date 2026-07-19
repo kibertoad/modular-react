@@ -54,7 +54,7 @@ describe("usePanels", () => {
     expect(result().value.map((p) => p.id)).toEqual(["leaf"]);
   });
 
-  it("prefers the reactive slots source when both are provided", () => {
+  it("starts from the reactive slots source when both are provided", () => {
     const reactive = entries({ id: "from-reactive", component: Probe });
     const signal = entries({ id: "from-signal", component: Probe });
     const { result } = renderComposable(
@@ -66,6 +66,36 @@ describe("usePanels", () => {
         },
       },
     );
+    expect(result().value.map((p) => p.id)).toEqual(["from-reactive"]);
+  });
+
+  it("tracks both slot sources: updates on the recalculateSlots signal path and the reactive path", () => {
+    // In a real app both sources evaluate the same factories; here they start
+    // identical and diverge so the test can see which one served each update.
+    const reactiveInner = shallowRef(entries({ id: "base", component: Probe }));
+    const signalRef = shallowRef(entries({ id: "base", component: Probe }));
+    const { result } = renderComposable(
+      () => usePanels(group, ref<Block | null>({ level: "frame", type: "x" })),
+      {
+        provide: {
+          [reactiveSlotsKey as symbol]: computed(() => reactiveInner.value),
+          [slotsKey as symbol]: signalRef,
+        },
+      },
+    );
+    expect(result().value.map((p) => p.id)).toEqual(["base"]);
+
+    // recalculateSlots() path: the runtime reassigns the signal Ref. A
+    // dynamicSlots factory over non-reactive deps only ever updates this
+    // source — panels must not go stale on it.
+    signalRef.value = entries(
+      { id: "base", component: Probe },
+      { id: "recalculated", component: Probe },
+    );
+    expect(result().value.map((p) => p.id)).toEqual(["base", "recalculated"]);
+
+    // ...and a later reactive-path evaluation is served again.
+    reactiveInner.value = entries({ id: "from-reactive", component: Probe });
     expect(result().value.map((p) => p.id)).toEqual(["from-reactive"]);
   });
 
@@ -151,10 +181,70 @@ describe("PanelsOutlet", () => {
     });
     // The boundary swaps to its notice on the re-render its `error` ref queues.
     await nextTick();
-    // The healthy panel still renders; the boom panel is swapped for the notice.
+    // The healthy panel still renders; the boom panel is swapped for the
+    // notice, labeled as a panel (not mislabeled a module).
     expect(wrapper.find(".panel").exists()).toBe(true);
-    expect(wrapper.text()).toContain("boom");
+    expect(wrapper.text()).toContain('Panel "boom"');
     spy.mockRestore();
+  });
+
+  it("forwards onDuplicate to the resolver and reacts to it changing after mount", async () => {
+    // The shadowed entry never matches, so the two stances render differently:
+    // first-wins keeps the always-visible entry, last-wins keeps the hidden one.
+    const dup = entries(
+      { id: "dup", component: Probe },
+      { id: "dup", component: Probe, when: () => false },
+    );
+    const wrapper = mount(PanelsOutlet, {
+      props: {
+        group,
+        subject: { level: "frame", type: "frontend" } as Block,
+        onDuplicate: "first-wins" as const,
+      },
+      global: { provide: { [slotsKey as symbol]: shallowRef(dup) } },
+    });
+    expect(wrapper.findAll(".panel")).toHaveLength(1);
+
+    await wrapper.setProps({ onDuplicate: "last-wins" });
+    expect(wrapper.findAll(".panel")).toHaveLength(0);
+  });
+
+  // Captures its first subject at setup, so tests can tell a reused instance
+  // (stale capture survives) from a remounted one (fresh capture).
+  const Sticky = defineComponent({
+    props: { subject: { type: Object, required: true } },
+    setup(props) {
+      const initial = (props.subject as Block).type;
+      return () => h("div", { class: "panel" }, initial);
+    },
+  });
+
+  it("keeps a panel's instance state across subject changes without subjectKey", async () => {
+    const wrapper = mount(PanelsOutlet, {
+      props: { group, subject: { level: "frame", type: "one" } as Block },
+      global: {
+        provide: { [slotsKey as symbol]: shallowRef(entries({ id: "sticky", component: Sticky })) },
+      },
+    });
+    await wrapper.setProps({ subject: { level: "frame", type: "two" } as Block });
+    // Keyed on entry.id alone → same instance, first capture survives.
+    expect(wrapper.find(".panel").text()).toBe("one");
+  });
+
+  it("remounts panel content when subjectKey changes with the subject", async () => {
+    const wrapper = mount(PanelsOutlet, {
+      props: {
+        group,
+        subject: { level: "frame", type: "one" } as Block,
+        subjectKey: (b: unknown) => (b as Block).type,
+      },
+      global: {
+        provide: { [slotsKey as symbol]: shallowRef(entries({ id: "sticky", component: Sticky })) },
+      },
+    });
+    await wrapper.setProps({ subject: { level: "frame", type: "two" } as Block });
+    // The subject's identity is folded into the key → fresh mount, new capture.
+    expect(wrapper.find(".panel").text()).toBe("two");
   });
 
   it("exposes the subject to descendants via usePanelSubject", () => {

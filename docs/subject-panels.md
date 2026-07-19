@@ -84,17 +84,40 @@ export interface PanelEntry<TSubject> {
 }
 ```
 
+The injected subject wins over `props`: a `subject` key placed in `props` is
+overwritten by the outlet's own injection.
+
+### `when` vs `dynamicSlots` — which conditional goes where
+
+Both gate contributions on runtime state, at different altitudes, and they
+compose rather than compete:
+
+- **`dynamicSlots`** decides which entries **exist** in the resolved manifest —
+  app-level state that changes rarely and applies to every render (roles,
+  permissions, feature flags). "Admins get the audit panel at all" is a
+  `dynamicSlots` conditional.
+- **`when(subject)`** decides which existing entries **show for the current
+  selection** — per-render, per-subject. "This panel applies to frame-level
+  frontend blocks" is a `when` predicate.
+
+Rule of thumb: if the condition doesn't mention the subject, it belongs in
+`dynamicSlots`; if it does, it belongs in `when`. A panel can use both — a
+`dynamicSlots`-contributed entry still carries its own `when`.
+
 ## The resolver
 
 `resolvePanels` is pure over its inputs, so a React `useMemo` or a Vue `computed`
 re-runs it on change with no framework glue. Semantics, in order:
 
-1. **Null subject → empty.** A `null` / `undefined` subject (nothing selected)
-   resolves to no panels; no predicate runs.
-2. **Duplicate ids throw** by default — two modules contributing the same panel
+1. **Duplicate ids throw** by default — two modules contributing the same panel
    id to one group is a bug, the same stance as `resolveComponentRegistry` and
    duplicate-module-id validation. Pass `onDuplicate: "first-wins"` /
    `"last-wins"` when a deployment intentionally shadows a first-party id.
+   Validation runs before the null-subject guard, so a registration bug
+   surfaces on first resolve — including the usual initial state where nothing
+   is selected yet.
+2. **Null subject → empty.** A `null` / `undefined` subject (nothing selected)
+   resolves to no panels; no predicate runs.
 3. **Filter by predicate.** Panels without `when` always pass; those with one
    pass iff it returns `true` for the (non-null) subject.
 4. **Stable-sort by `order`** (ascending, absent = `0`); ties keep contribution
@@ -246,6 +269,13 @@ already qualifies: an app's `selectedBlock` is typically a Pinia `computed`
 (`ui.selectedBlockId → board.getBlock`), which _is_ reactive, so mutable
 run-state predicates track correctly. Pass the subject as a ref/getter over
 reactive state and you get subject-reactive panels for free.
+
+The **contributions** need no such care: `usePanels` tracks **both** slot
+sources the runtime provides — the tracked reactive computed _and_ the
+imperatively-refreshed signal `Ref` — so panels contributed through
+`dynamicSlots` re-resolve on either path: a reactive dependency changing, or a
+`recalculateSlots()` call after non-reactive state changed. Whichever path your
+app already uses for dynamic slots, panels follow it.
 
 React has no ambient reactivity to worry about here: `usePanels` re-runs on
 render like any hook, keyed by its `subject` argument.

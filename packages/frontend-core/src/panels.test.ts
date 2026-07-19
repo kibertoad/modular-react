@@ -99,6 +99,18 @@ describe("resolvePanels", () => {
     expect(() => resolvePanels(entries, frame)).toThrow(/duplicate panel id "dup"/);
   });
 
+  it("throws on a duplicate id even while nothing is selected (null subject)", () => {
+    // Registration is validated before the null-subject guard: a duplicate id
+    // is a contribution bug whatever is selected, and the common initial state
+    // is exactly "nothing selected yet" — the bug must not hide there.
+    expect(() => resolvePanels([panel("dup"), panel("dup")], null)).toThrow(
+      /duplicate panel id "dup"/,
+    );
+    expect(() => resolvePanels([panel("dup"), panel("dup")], undefined)).toThrow(
+      /duplicate panel id "dup"/,
+    );
+  });
+
   it("keeps the first contribution under onDuplicate: 'first-wins'", () => {
     const first = panel("dup", { order: 1 });
     const resolved = resolvePanels([first, panel("dup", { order: 2 })], frame, {
@@ -115,8 +127,8 @@ describe("resolvePanels", () => {
       frame,
       { onDuplicate: "last-wins" },
     );
-    // The shadowed "dup" keeps its first-seen slot in the contribution order,
-    // then the whole set is order-sorted: a(1) → dup(5) → b(3)? no — order wins.
+    // last-wins replaces the entry (dup takes `last`'s order 5, not 9), then
+    // the survivors sort by `order`: a(1), b(3), dup(5).
     expect(resolved.map((p) => p.id)).toEqual(["a", "b", "dup"]);
     expect(resolved.find((p) => p.id === "dup")).toBe(last);
   });

@@ -69,13 +69,18 @@ export function usePanelSubject<TSubject>(): TSubject {
  * const panels = usePanels(inspectorPanels, selectedBlock)
  * ```
  */
+// Stable identity for "this group has no contributions", so the `useMemo`
+// below doesn't see a fresh `[]` on every render (which would defeat the memo
+// and hand consumers an unstable empty result).
+const NO_ENTRIES: readonly PanelEntry<never>[] = [];
+
 export function usePanels<TSubject>(
   group: PanelGroupHandle<TSubject>,
   subject: TSubject | null | undefined,
   opts?: { onDuplicate?: OnDuplicateComponentId },
 ): readonly PanelEntry<TSubject>[] {
   const slots = useSlots<Record<string, readonly PanelEntry<TSubject>[]>>();
-  const entries = (slots[group.slotKey] ?? []) as readonly PanelEntry<TSubject>[];
+  const entries = (slots[group.slotKey] ?? NO_ENTRIES) as readonly PanelEntry<TSubject>[];
   const onDuplicate = opts?.onDuplicate;
   return useMemo(
     () => resolvePanels(entries, subject, onDuplicate ? { onDuplicate } : undefined),
@@ -151,7 +156,7 @@ export function PanelsOutlet<TSubject>({
             ? entry.id
             : `${entry.id}:${typeof subjectKey === "function" ? subjectKey(present) : subjectKey}`;
         return (
-          <ModuleErrorBoundary key={key} moduleId={entry.id}>
+          <ModuleErrorBoundary key={key} moduleId={entry.id} label="Panel">
             {inner}
           </ModuleErrorBoundary>
         );

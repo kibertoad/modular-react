@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { useState } from "react";
 import { render, renderHook } from "@testing-library/react";
 import { definePanelGroup, type PanelEntry } from "@modular-react/core";
 import { PanelsOutlet, usePanels, usePanelSubject } from "./panels.js";
@@ -14,6 +15,13 @@ const group = definePanelGroup<Block>("inspectorPanels");
 // A panel that renders the subject it received, so tests can assert injection.
 function Probe({ subject }: { subject: Block }) {
   return <div className="panel">{subject.type}</div>;
+}
+
+// Captures its first subject in state, so tests can tell a reused instance
+// (stale capture survives) from a remounted one (fresh capture).
+function Sticky({ subject }: { subject: Block }) {
+  const [initial] = useState(subject.type);
+  return <div className="panel">{initial}</div>;
 }
 
 const withSlots =
@@ -113,10 +121,60 @@ describe("PanelsOutlet", () => {
       <PanelsOutlet group={group} subject={{ level: "frame", type: "frontend" }} />,
       { wrapper: withSlots(slots) },
     );
-    // The healthy panel still renders; the boom panel shows the boundary notice.
+    // The healthy panel still renders; the boom panel shows the boundary
+    // notice, labeled as a panel (not mislabeled a module).
     expect(container.querySelector(".panel")).not.toBeNull();
-    expect(container.textContent).toContain("boom");
+    expect(container.textContent).toContain('Panel "boom"');
     spy.mockRestore();
+  });
+
+  it("forwards onDuplicate to the resolver", () => {
+    const dup = slotsOf(
+      { id: "dup", component: Probe, order: 1 },
+      { id: "dup", component: Probe, order: 2 },
+    );
+    const { container } = render(
+      <PanelsOutlet
+        group={group}
+        subject={{ level: "frame", type: "frontend" }}
+        onDuplicate="first-wins"
+      />,
+      { wrapper: withSlots(dup) },
+    );
+    expect(container.querySelectorAll(".panel")).toHaveLength(1);
+  });
+
+  it("keeps a panel's instance state across subject changes without subjectKey", () => {
+    const slots = slotsOf({ id: "sticky", component: Sticky });
+    const { container, rerender } = render(
+      <PanelsOutlet group={group} subject={{ level: "frame", type: "one" }} />,
+      { wrapper: withSlots(slots) },
+    );
+    rerender(<PanelsOutlet group={group} subject={{ level: "frame", type: "two" }} />);
+    // Keyed on entry.id alone → same instance, first capture survives.
+    expect(container.querySelector(".panel")?.textContent).toBe("one");
+  });
+
+  it("remounts panel content when subjectKey changes with the subject", () => {
+    const slots = slotsOf({ id: "sticky", component: Sticky });
+    const subjectKey = (b: Block) => b.type;
+    const { container, rerender } = render(
+      <PanelsOutlet
+        group={group}
+        subject={{ level: "frame", type: "one" }}
+        subjectKey={subjectKey}
+      />,
+      { wrapper: withSlots(slots) },
+    );
+    rerender(
+      <PanelsOutlet
+        group={group}
+        subject={{ level: "frame", type: "two" }}
+        subjectKey={subjectKey}
+      />,
+    );
+    // The subject's identity is folded into the key → fresh mount, new capture.
+    expect(container.querySelector(".panel")?.textContent).toBe("two");
   });
 
   it("exposes the subject to descendants via usePanelSubject", () => {

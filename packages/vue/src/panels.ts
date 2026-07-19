@@ -42,6 +42,11 @@ import { ModuleErrorBoundary } from "./error-boundary.js";
  * same source-boundary rule `useReactiveSlots` documents (see
  * `docs/reactive-slots-vue.md`); pass the subject as a ref/getter over reactive
  * state and mutable-run-state predicates track correctly.
+ *
+ * The **contributions** carry no such caveat: `usePanels` tracks both slot
+ * sources the runtime provides, so panels contributed through `dynamicSlots`
+ * update on either path — a reactive dependency changing *or* an imperative
+ * `recalculateSlots()` call (see {@link injectSlotsSource}).
  */
 
 /**
@@ -78,16 +83,46 @@ export function usePanelSubject<TSubject>(): ComputedRef<TSubject> {
 }
 
 /**
- * Inject the resolved-slots source, preferring the reactive `computed`
- * ({@link reactiveSlotsKey}) over the imperatively-updated signal `Ref`
- * ({@link slotsKey}) so panels contributed through `dynamicSlots` also update.
- * Either way the source is read *inside* {@link usePanels}' `computed`, so its
- * reactivity is tracked.
+ * Inject the resolved-slots source. The runtime provides **two** parallel
+ * sources with different update semantics: the tracked `computed`
+ * ({@link reactiveSlotsKey}), re-evaluated when a *reactive* dependency read by
+ * a `dynamicSlots` factory changes, and the signal `Ref` ({@link slotsKey}),
+ * reassigned when `recalculateSlots()` is called (the documented path for
+ * factories over *non-reactive* deps). Neither is universally fresher — each
+ * update channel moves only its own source — so when both are present the
+ * returned getter reads **both** (tracking both inside {@link usePanels}'
+ * `computed`) and serves whichever produced the more recent evaluation. Both
+ * evaluate the same factories over the same deps, so the latest evaluation is
+ * always the correct one; panels therefore update on *either* path, matching
+ * the React host (whose single context carries both).
  */
 function injectSlotsSource(): () => Record<string, readonly unknown[]> {
   const reactive = inject(reactiveSlotsKey, null);
-  if (reactive) return () => reactive.value as Record<string, readonly unknown[]>;
   const signal = inject(slotsKey, null);
+  if (reactive && signal) {
+    let prevReactive: object | undefined;
+    let prevSignal: object | undefined;
+    let current!: object;
+    return () => {
+      // Read both so the enclosing computed tracks both update channels.
+      const r = reactive.value;
+      const s = signal.value;
+      if (prevReactive === undefined) {
+        // First read: both sources describe the same initial state; start from
+        // the tracked computed.
+        current = r;
+      } else {
+        // Serve the source that changed since the last read. If both changed,
+        // they re-evaluated over the same state — prefer the tracked computed.
+        if (s !== prevSignal) current = s;
+        if (r !== prevReactive) current = r;
+      }
+      prevReactive = r;
+      prevSignal = s;
+      return current as Record<string, readonly unknown[]>;
+    };
+  }
+  if (reactive) return () => reactive.value as Record<string, readonly unknown[]>;
   if (signal) return () => signal.value as Record<string, readonly unknown[]>;
   throw new Error(
     "[@modular-vue/vue] usePanels must be used within a modular app " +
@@ -98,11 +133,13 @@ function injectSlotsSource(): () => Record<string, readonly unknown[]> {
 /**
  * Resolve a panel group against a subject as a reactive `computed`.
  *
- * The subject is a `MaybeRefOrGetter` — pass a `ref`, a getter, or a Pinia
- * `computed` so the panels re-resolve when it changes (see the reactivity
- * caveat above). Reads the group's slot key from the slots context and runs
- * the pure `resolvePanels` inside a `computed`, so it recomputes on either the
- * slot contributions or the subject changing.
+ * Every input is a `MaybeRefOrGetter`, resolved *inside* the `computed` so it
+ * is live: pass the subject as a `ref`, a getter, or a Pinia `computed` so the
+ * panels re-resolve when it changes (see the reactivity caveat above), and
+ * pass `group` / `onDuplicate` reactively too if they can change (plain values
+ * work as usual — group handles are typically module-level constants). The
+ * pure `resolvePanels` recomputes on the slot contributions, the subject, or
+ * either option changing.
  *
  * @example
  * ```ts
@@ -111,16 +148,16 @@ function injectSlotsSource(): () => Record<string, readonly unknown[]> {
  * ```
  */
 export function usePanels<TSubject>(
-  group: PanelGroupHandle<TSubject>,
+  group: MaybeRefOrGetter<PanelGroupHandle<TSubject>>,
   subject: MaybeRefOrGetter<TSubject | null | undefined>,
-  opts?: { onDuplicate?: OnDuplicateComponentId },
+  opts?: { onDuplicate?: MaybeRefOrGetter<OnDuplicateComponentId | undefined> },
 ): ComputedRef<readonly PanelEntry<TSubject>[]> {
   const readSlots = injectSlotsSource();
   return computed(() =>
     resolvePanels(
-      (readSlots()[group.slotKey] ?? []) as readonly PanelEntry<TSubject>[],
+      (readSlots()[toValue(group).slotKey] ?? []) as readonly PanelEntry<TSubject>[],
       toValue(subject),
-      opts,
+      { onDuplicate: toValue(opts?.onDuplicate) },
     ),
   );
 }
@@ -173,11 +210,15 @@ export const PanelsOutlet = defineComponent({
     },
   },
   setup(props, { slots }) {
-    // The subject flows into `usePanels` as a getter so the computed tracks it,
-    // and is provided as a computed so nested `usePanelSubject()` stays reactive.
-    const panels = usePanels<unknown>(props.group, () => props.subject, {
-      onDuplicate: props.onDuplicate,
-    });
+    // Every prop flows into `usePanels` as a getter so the computed tracks it —
+    // reading `props.x` here in setup would freeze its mount-time value. The
+    // subject is additionally provided as a computed so nested
+    // `usePanelSubject()` stays reactive.
+    const panels = usePanels<unknown>(
+      () => props.group,
+      () => props.subject,
+      { onDuplicate: () => props.onDuplicate },
+    );
     const subjectRef = computed(() => props.subject);
     provide(panelSubjectKey, subjectRef);
 
@@ -196,7 +237,11 @@ export const PanelsOutlet = defineComponent({
           : content;
         return h(
           ModuleErrorBoundary,
-          { key: keyFor(entry, props.subjectKey, props.subject), moduleId: entry.id },
+          {
+            key: keyFor(entry, props.subjectKey, props.subject),
+            moduleId: entry.id,
+            label: "Panel",
+          },
           () => inner,
         );
       });

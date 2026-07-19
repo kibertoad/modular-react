@@ -54,6 +54,40 @@ export interface ComponentRegistry<C, TMeta = unknown> {
 export type OnDuplicateComponentId = "throw" | "last-wins" | "first-wins";
 
 /**
+ * Collapse duplicate ids per {@link OnDuplicateComponentId}, preserving each
+ * id's first-seen position (`last-wins` replaces the entry but keeps the slot
+ * it first appeared in). The single implementation behind
+ * {@link resolveComponentRegistry} and `resolvePanels`, so the library's
+ * duplicate-id stance can't drift between the pick-one and render-all
+ * reductions. `duplicateError` supplies the caller-specific message for the
+ * `throw` stance.
+ *
+ * Package-internal — deliberately not exported from the package index.
+ */
+export function collapseEntriesById<E extends { readonly id: string }>(
+  entries: readonly E[],
+  onDuplicate: OnDuplicateComponentId,
+  duplicateError: (id: string) => Error,
+): { readonly byId: Map<string, E>; readonly order: readonly string[] } {
+  const byId = new Map<string, E>();
+  const order: string[] = [];
+
+  for (const entry of entries) {
+    if (byId.has(entry.id)) {
+      if (onDuplicate === "throw") throw duplicateError(entry.id);
+      if (onDuplicate === "first-wins") continue;
+      // last-wins: replace the entry but keep the id's first-seen position.
+      byId.set(entry.id, entry);
+      continue;
+    }
+    byId.set(entry.id, entry);
+    order.push(entry.id);
+  }
+
+  return { byId, order };
+}
+
+/**
  * Index a slot of {@link ComponentEntry} into an id → component registry.
  *
  * Duplicate ids THROW by default. `onDuplicate: 'last-wins'` / `'first-wins'` opt
@@ -69,33 +103,23 @@ export function resolveComponentRegistry<C, TMeta = unknown>(
   entries: readonly ComponentEntry<C, TMeta>[],
   opts?: { onDuplicate?: OnDuplicateComponentId },
 ): ComponentRegistry<C, TMeta> {
-  const onDuplicate = opts?.onDuplicate ?? "throw";
-  const byId = new Map<string, ComponentEntry<C, TMeta>>();
-  const order: string[] = [];
-
-  for (const entry of entries) {
-    if (byId.has(entry.id)) {
-      if (onDuplicate === "throw") {
-        throw new Error(
-          `[@modular-frontend/core] resolveComponentRegistry: duplicate component id "${entry.id}". ` +
-            `Two modules registered the same component id. Namespace consumer ids (e.g. "acme:security-report") ` +
-            `so they can't collide with first-party ones, or pass onDuplicate: "last-wins" / "first-wins" to ` +
-            `intentionally shadow an id.`,
-        );
-      }
-      if (onDuplicate === "first-wins") continue;
-      // last-wins: replace the component but keep the id's first-seen position.
-      byId.set(entry.id, entry);
-      continue;
-    }
-    byId.set(entry.id, entry);
-    order.push(entry.id);
-  }
+  const { byId, order } = collapseEntriesById(
+    entries,
+    opts?.onDuplicate ?? "throw",
+    (id) =>
+      new Error(
+        `[@modular-frontend/core] resolveComponentRegistry: duplicate component id "${id}". ` +
+          `Two modules registered the same component id. Namespace consumer ids (e.g. "acme:security-report") ` +
+          `so they can't collide with first-party ones, or pass onDuplicate: "last-wins" / "first-wins" to ` +
+          `intentionally shadow an id.`,
+      ),
+  );
 
   // Built once: the registry is immutable after construction, so `ids` and
   // `entries` keep a stable identity across reads (safe to feed into memoized
-  // render paths) and callers can't reach the internal order array.
-  const ids: readonly string[] = [...order];
+  // render paths). The `order` array is created fresh per collapse, so exposing
+  // it directly can't leak shared mutable state.
+  const ids: readonly string[] = order;
   const resolvedEntries: readonly ComponentEntry<C, TMeta>[] = order.map((id) => byId.get(id)!);
 
   return {
