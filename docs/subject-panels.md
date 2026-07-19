@@ -280,6 +280,93 @@ app already uses for dynamic slots, panels follow it.
 React has no ambient reactivity to worry about here: `usePanels` re-runs on
 render like any hook, keyed by its `subject` argument.
 
+## End-to-end walkthrough — an inspector rail
+
+The fragments above assemble into one small, complete scenario. A design tool
+has a board of blocks; selecting one opens an inspector rail whose panels each
+decide whether they apply to the selection.
+
+**1. The subject type** — the value the group is keyed on, defined once and
+shared:
+
+```ts
+// inspector/types.ts
+export interface BoardBlock {
+  readonly id: string;
+  readonly label: string;
+  readonly level: "frame" | "leaf";
+  readonly type: "frontend" | "backend" | "acme-secure";
+}
+```
+
+**2. The group handle** — one slot key, subject type pinned, exported for both
+the host and every contributor:
+
+```ts
+// inspector/panels.ts
+import { definePanelGroup } from "@modular-react/react"; // or "@modular-vue/core"
+import type { BoardBlock } from "./types";
+
+export const inspectorPanels = definePanelGroup<BoardBlock>("inspectorPanels");
+```
+
+**3. Two first-party panels**, contributed as ordinary slot entries — one always
+shown, one gated to frame-level frontend blocks:
+
+```ts
+export default defineModule({
+  id: "inspector-core",
+  slots: {
+    inspectorPanels: [
+      // No `when` → always shown once something is selected. `order: 0`.
+      { id: "identity", component: Identity, order: 0 },
+      // Only for frame-level frontend blocks. Renders after `identity`.
+      {
+        id: "frontend-config",
+        component: FrontendConfig,
+        order: 20,
+        when: (b) => b.level === "frame" && b.type === "frontend",
+      },
+    ],
+  },
+});
+```
+
+**4. A consumer panel** for a block type the host never knew about — added by a
+deployment's own module with a namespaced id, no host edit, slotted between the
+two above by `order`:
+
+```ts
+defineModule({
+  id: "acme-inspector-extras",
+  slots: {
+    inspectorPanels: [
+      {
+        id: "acme:security-report",
+        component: SecurityReport,
+        order: 10,
+        when: (b) => b.type === "acme-secure",
+      },
+    ],
+  },
+});
+```
+
+**5. What `<PanelsOutlet group={inspectorPanels} subject={selected} />` renders**,
+traced across selections (ordered by `order`, ties by contribution order):
+
+| `selected`                                        | Panels rendered, in order                | Why                                                                        |
+| ------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------- |
+| `null` (nothing selected)                         | _none_ → `empty` / `#empty`              | Null subject short-circuits to `[]` before any predicate runs              |
+| `{ level: "leaf", type: "backend" }`              | `identity`                               | `identity` has no `when`; the other two predicates are false               |
+| `{ level: "frame", type: "frontend" }`            | `identity`, `frontend-config`            | `frontend-config`'s `when` matches; `order` 0 then 20                      |
+| `{ level: "frame", type: "acme-secure" }`         | `identity`, `acme:security-report`       | The consumer panel matches; `order` 0 then 10 — no host change was needed  |
+
+Note the last row: the host module (`inspector-core`) has no knowledge of the
+`acme-secure` type, yet a consumer panel appears for it, correctly ordered,
+because contribution flows through the same `module.slots` path every module
+already uses. That is the open-contribution property panels exist to provide.
+
 ## `subjectKey` — remounting on selection change
 
 By default a panel's rendered instance is keyed on `entry.id` alone, so moving
