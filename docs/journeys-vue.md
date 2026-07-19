@@ -134,6 +134,13 @@ import { envSetupHandle } from "~/journeys/env-setup";
 </template>
 ```
 
+The slot's `outlet` is a **functional component** (not a raw VNode), so
+`<component :is="outlet" />` mounts it cleanly and patches — not remounts — it
+across steps. If you'd rather spell the outlet yourself, the slot also hands you
+`instanceId` and `runtime`, so `<JourneyOutlet :instance-id="instanceId"
+:runtime="runtime" />` is an equivalent, idiomatic alternative (pass `runtime`
+so the outlet resolves the same runtime the host pinned).
+
 Outlet props (`onFinished`, `onStepError`, `errorComponent`, `preload`,
 `leafOnly`, `retryLimit`, …) pass straight through `<JourneyHost>` to the inner
 `<JourneyOutlet>`.
@@ -232,10 +239,32 @@ persistence: the fresh boot's `start()` rehydrates the blob — provided the
 backing store is durable (the Pinia adapter is in-memory unless you also persist
 the store to `localStorage`).
 
-**Cancel semantics.** `runtime.goBack(id)` rewinds a step. To discard, drop the
-subscription and let the outlet end the instance (or call `runtime.end(id, …)`)
-— the terminal removes the persisted blob. Finishing (a terminal exit) does the
-same and fires `onFinished`.
+**Close vs. cancel — the load-bearing distinction.** These look identical (both
+unmount the outlet) but mean opposite things for the persisted blob:
+
+- **Soft close** ("resume later"): do **nothing** to the runtime. The keep-alive
+  subscription holds the instance active, so the blob survives and reopening
+  resumes. This is the whole point of the keep-alive above.
+- **Hard cancel** ("throw it away"): call **`runtime.discard(ui.instanceId)`**.
+  It force-ends the instance — which removes the persisted blob, as any terminal
+  transition does — and forgets the record, in one call. No need to re-derive
+  `persistence.keyFor(input)` and call `persistence.remove` by hand; `discard`
+  is addressable by `instanceId`.
+
+```ts
+// A "Cancel" button on the modal: drop the flow and its saved progress.
+function cancel() {
+  if (ui.instanceId) ctx!.runtime.discard(ui.instanceId);
+  ui.isOpen = false;
+  ui.instanceId = null;
+}
+```
+
+`runtime.goBack(id)` rewinds a single step (not a cancel). Finishing (a terminal
+exit) also removes the blob and additionally fires `onFinished`. `discard` runs
+the journey's `onAbandon` first (so its telemetry still fires) and forces the
+outcome terminal, so a non-terminal `onAbandon` can't leave the instance
+dangling.
 
 > A complete, runnable version — a real Nuxt app with Pinia persistence and
 > `appProvides` threading — is in

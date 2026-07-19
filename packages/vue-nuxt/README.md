@@ -100,7 +100,19 @@ export default defineNuxtPlugin((nuxtApp) => {
   `nuxtApp.$router`).
 
 Returns the `ApplicationManifest` (`router`, `navigation`, `slots`, `modules`,
-`recalculateSlots`, …).
+`recalculateSlots`, …). Plugin extensions are preserved: a registry carrying
+`journeysPlugin()` yields `manifest.extensions.journeys` (and the
+`manifest.journeys` alias) typed as `JourneyRuntime` with **no cast** — the
+extension map is inferred from the registry's `resolve()` return. That same
+install threads the journey runtime app-wide via the plugin's `appProvides` hook,
+so `<JourneyOutlet>` resolves it from context without a `<JourneyProvider>` (or a
+manual `provideJourneyRuntime`).
+
+> **Typing under `defineNuxtPlugin`.** `return { provide: { modular: manifest } }`
+> can trip TS7022 ("referenced directly or indirectly in its own initializer")
+> when the manifest carries a large plugin runtime. Annotate the binding —
+> `const manifest: ApplicationManifest<AppSlots, AppNavItem, { journeys: JourneyRuntime }> = installModularApp(…)`
+> — to break the cycle. See the [Nuxt framework-mode guide](../../docs/framework-mode-nuxt.md).
 
 ## SSR and per-request state
 

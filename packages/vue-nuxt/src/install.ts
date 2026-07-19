@@ -6,7 +6,11 @@ import type {
   SlotMap,
   SlotMapOf,
 } from "@modular-frontend/core";
-import type { ApplicationManifest, ModuleExitEvent, ModuleRegistry } from "@modular-vue/runtime";
+import type {
+  ApplicationManifest,
+  InstallableRegistry,
+  ModuleExitEvent,
+} from "@modular-vue/runtime";
 
 /**
  * The minimal slice of Nuxt's `NuxtApp` the installer needs: the Vue app to
@@ -95,17 +99,42 @@ export interface InstallModularAppOptions<
  * and a module-level singleton registry would throw on the second request. For
  * a client-only app (`ssr: false`) a singleton is fine because the plugin runs
  * once.
+ *
+ * **Plugin extensions survive.** The manifest's extension map (`TExtensions`) is
+ * inferred from the registry's `resolve()` return, so the returned manifest keeps
+ * `extensions.journeys: JourneyRuntime` — and the `manifest.journeys` convenience
+ * alias — with no cast when the registry carries `journeysPlugin()`. A registry
+ * with no plugins yields an empty extension map, exactly as before. (The plugin
+ * *tuple* itself can't be recovered by inference — it hides behind
+ * `PluginRuntimesOf<TPlugins>` — so the extensions are read off the manifest,
+ * where they sit plainly; see {@link InstallableRegistry}.)
+ *
+ * **Typing `manifest` under `defineNuxtPlugin`.** Returning
+ * `{ provide: { modular: manifest } }` makes Nuxt infer the plugin's provide
+ * types from `manifest`. When the manifest carries a large plugin runtime (e.g.
+ * the journeys runtime), that structural inference can trip TypeScript's
+ * self-reference guard (TS7022, "referenced directly or indirectly in its own
+ * initializer"). Annotate the binding to break the cycle — the precise type is
+ * now nameable thanks to the `TPlugins` threading above:
+ *
+ * ```ts
+ * import type { ApplicationManifest } from "@modular-vue/nuxt/runtime";
+ * const manifest: ApplicationManifest<AppSlots, AppNavItem, { journeys: JourneyRuntime }> =
+ *   installModularApp(nuxtApp, registry);
+ * return { provide: { modular: manifest } };
+ * ```
  */
 export function installModularApp<
   TSharedDependencies extends Record<string, any>,
   TSlots extends SlotMapOf<TSlots> = SlotMap,
   TNavItem extends NavigationItemBase = NavigationItem,
+  TExtensions extends Record<string, unknown> = Record<string, unknown>,
 >(
   nuxtApp: NuxtAppLike,
-  registry: ModuleRegistry<TSharedDependencies, TSlots, TNavItem, any>,
+  registry: InstallableRegistry<TSharedDependencies, TSlots, TNavItem, TExtensions>,
   options?: InstallModularAppOptions<TSharedDependencies, TSlots>,
-): ApplicationManifest<TSlots, TNavItem> {
-  const manifest = registry.resolve({
+): ApplicationManifest<TSlots, TNavItem, TExtensions> {
+  const manifest: ApplicationManifest<TSlots, TNavItem, TExtensions> = registry.resolve({
     router: nuxtApp.$router,
     parentRouteName: options?.parentRouteName,
     authGuard: options?.authGuard,

@@ -49,6 +49,27 @@ test("modal journey: appProvides threading, Pinia persistence, in-session + relo
   await expect(page.getByTestId("step-choose")).toBeVisible();
 });
 
+test("cancel discards the flow and its persisted blob", async ({ page }) => {
+  await page.goto("/");
+
+  // Open frame A and advance so a blob is persisted.
+  await page.getByTestId("open-frame-a").click();
+  await page.getByTestId("plan-pro").check();
+  await page.getByTestId("wizard-continue").click();
+  await expect(page.getByTestId("step-confirm")).toBeVisible();
+  await expect(page.getByTestId("persisted-keys")).toHaveText("journey:A:setup-wizard");
+
+  // Cancel = runtime.discard(id): ends the instance AND removes the blob, unlike
+  // Close (which keeps it). The persisted key set goes empty.
+  await page.getByTestId("wizard-cancel").click();
+  await expect(page.getByTestId("wizard-modal")).toBeHidden();
+  await expect(page.getByTestId("persisted-keys")).toHaveText("");
+
+  // Reopen → fresh step 1, not a resume: the flow was thrown away.
+  await page.getByTestId("open-frame-a").click();
+  await expect(page.getByTestId("step-choose")).toBeVisible();
+});
+
 test("a different frame runs an independent instance", async ({ page }) => {
   await page.goto("/");
 

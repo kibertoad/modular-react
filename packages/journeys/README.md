@@ -1695,6 +1695,16 @@ interface JourneyRuntime {
   /** Drop a terminal instance from memory. No-op on active/loading. */
   forget(id: InstanceId): void;
 
+  /**
+   * Cancel an instance AND discard its persisted blob — `end(id, reason,
+   * { force: true })` + `forget(id)` in one call. The "throw the flow away"
+   * affordance a Cancel button wants, addressable by id so a shell never
+   * re-derives `persistence.keyFor(input)` to remove the blob by hand. (Ending
+   * is what deletes persistence: any terminal transition removes the blob, and
+   * a *soft* close that keeps it for resume simply does not end the instance.)
+   */
+  discard(id: InstanceId, reason?: unknown): void;
+
   /** Drop every terminal instance in one call. Returns the drop count. */
   forgetTerminal(): number;
 }
@@ -1714,6 +1724,7 @@ Both `start` overloads resolve to the same runtime call; the handle form only ex
 | Shell wants to react to state changes (tab title, breadcrumb).        | `runtime.subscribe(id, listener)`                                |
 | User closes a journey tab before it completes.                        | Let `<JourneyOutlet>` unmount - it calls `end()`.                |
 | Shell explicitly cancels (e.g. "end shift").                          | `runtime.end(id, { reason: 'end-of-shift' })`                    |
+| A "Cancel" button that throws the flow away AND its saved progress.   | `runtime.discard(id)` - end + forget + remove blob, in one call. |
 | Long-running workspace accumulated finished journeys; free memory.    | `runtime.forgetTerminal()`                                       |
 | After `onFinished`, prune this specific terminal instance.            | `runtime.forget(id)`                                             |
 

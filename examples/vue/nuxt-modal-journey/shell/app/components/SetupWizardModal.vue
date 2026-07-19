@@ -2,9 +2,11 @@
 import { storeToRefs } from "pinia";
 import { JourneyOutlet } from "@modular-vue/journeys";
 import { useUiStore } from "../stores/ui";
+import { useWizardControls } from "../composables/useWizardControls";
 
 const ui = useUiStore();
 const { isOpen, instanceId } = storeToRefs(ui);
+const { cancel } = useWizardControls();
 
 // Terminal exit (confirm → complete) — clear the instance and close.
 function onFinished() {
@@ -48,6 +50,12 @@ function onFinished() {
            (JourneyKeepAlive) holds the instance, so reopening resumes it. -->
       <button type="button" data-testid="wizard-close" @click="ui.close()">
         Close (progress kept)
+      </button>
+
+      <!-- Cancel throws the flow away: runtime.discard(id) ends the instance
+           and removes its persisted blob in one call. Reopening starts fresh. -->
+      <button type="button" data-testid="wizard-cancel" @click="cancel()">
+        Cancel (discard progress)
       </button>
     </div>
   </div>

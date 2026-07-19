@@ -48,9 +48,46 @@ const selfBuilding = defineModule({
   },
 });
 
+// The same two entries, but authored as INLINE object literals inside
+// `defineModule` — no `defineEntry` wrapper. This is the path a downstream
+// consumer flagged as not detecting `buildInput` (so `input` stayed required)
+// before #83 taught `defineModule` to preserve the literal `entryPoints` shape.
+// With that preservation in place, an inline `buildInput` member survives into
+// `typeof mod`, so `EntryDeclaresBuildInput` sees it and `input` goes optional —
+// exactly as with the wrapped form. These cases lock that equivalence in.
+const inlinePlain = defineModule({
+  id: "inline-plain",
+  version: "1.0.0",
+  exitPoints: { next: defineExit() } as const,
+  entryPoints: {
+    enter: {
+      component: (() => null) as never,
+      input: schema<{ readonly seed: string }>(),
+    },
+  },
+});
+
+const inlineSelfBuilding = defineModule({
+  id: "inline-self-building",
+  version: "1.0.0",
+  exitPoints: { next: defineExit() } as const,
+  entryPoints: {
+    enter: {
+      component: (() => null) as never,
+      input: schema<{ readonly previousName: string }>(),
+      buildInput: buildInputFor<FormState>()((state) => ({ previousName: state.draftName })),
+    },
+  },
+});
+
 type Modules = {
   readonly plain: typeof plain;
   readonly "self-building": typeof selfBuilding;
+};
+
+type InlineModules = {
+  readonly "inline-plain": typeof inlinePlain;
+  readonly "inline-self-building": typeof inlineSelfBuilding;
 };
 
 // -----------------------------------------------------------------------------
@@ -122,4 +159,27 @@ test("StepSpec<any> falls back to a loose shape, not never", () => {
   expectTypeOf<StepSpec<any>>().not.toBeNever();
   const loose: StepSpec<any> = { module: "anything", entry: "atall" };
   void loose;
+});
+
+// -----------------------------------------------------------------------------
+// INLINE-authored entries (no `defineEntry` wrapper) behave identically — the
+// regression the consumer feedback specifically called out to verify.
+// -----------------------------------------------------------------------------
+
+test("INLINE buildInput entry → StepSpec `input` is optional", () => {
+  const omitted: StepSpec<InlineModules> = { module: "inline-self-building", entry: "enter" };
+  void omitted;
+  // A stamped value is still shape-checked.
+  const stamped: StepSpec<InlineModules> = {
+    module: "inline-self-building",
+    entry: "enter",
+    input: { previousName: "p" },
+  };
+  void stamped;
+});
+
+test("INLINE plain entry → StepSpec `input` stays required", () => {
+  // @ts-expect-error — no `buildInput` on the inline literal, so `input` is required.
+  const bad: StepSpec<InlineModules> = { module: "inline-plain", entry: "enter" };
+  void bad;
 });
