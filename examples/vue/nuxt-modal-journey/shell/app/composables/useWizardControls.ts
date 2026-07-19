@@ -32,7 +32,7 @@ export function useWizardControls() {
   /**
    * Hard cancel: throw the flow away. `runtime.discard(id)` ends the instance
    * (which removes the persisted blob, as any terminal does) and forgets the
-   * record — no re-deriving `keyFor(frameId)` and calling `persistence.remove`
+   * record — no re-deriving `keyFor(input)` and calling `persistence.remove`
    * by hand. Contrast `ui.close()`, the *soft* close that keeps the blob for
    * resume by leaving the instance alive.
    */

@@ -4,6 +4,7 @@ export type { ModuleRegistry } from "./registry.js";
 
 // App shell — router-owning resolve() convenience
 export { createModularApp } from "./app.js";
+export type { InstallableRegistry } from "./app.js";
 
 // Route builder (graft module routes onto a live vue-router instance)
 export { graftModuleRoutes, createLazyModuleRoute } from "./route-builder.js";

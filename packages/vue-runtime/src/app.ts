@@ -13,17 +13,24 @@ import type { ApplicationManifest, ResolveOptions } from "./types.js";
  * inferable `TExtensions`. The registry's plugin *tuple* can't be recovered by
  * inference — it hides behind `PluginRuntimesOf<TPlugins>` — but the resolved
  * extensions ride plainly on {@link ApplicationManifest}'s third type argument,
- * so matching the `resolve` return recovers them. This is what lets
- * {@link createModularApp} hand back a manifest that keeps `extensions.journeys`
+ * so matching the `resolve` return recovers them. This is what lets an installer
+ * wrapper — {@link createModularApp} here, `installModularApp` in
+ * `@modular-vue/nuxt` — hand back a manifest that keeps `extensions.journeys`
  * (and the `manifest.journeys` alias) typed against the plugin's runtime rather
  * than collapsing to `Record<string, unknown>` / `unknown`.
  *
- * The base `resolve` is `Omit`ted and re-declared so this is the single call
- * signature — `TExtensions` is then inferred, and the body's `registry.resolve()`
+ * The plugin position is left as the wide constraint (`readonly RegistryPlugin[]`)
+ * so any registry — plugin-carrying or not — satisfies it; the concrete
+ * extension shape flows through `TExtensions` off the `resolve` signature. The
+ * base `resolve` is `Omit`ted and re-declared so this is the single call
+ * signature — `TExtensions` is then inferred, and a wrapper's `registry.resolve()`
  * returns it, unambiguously (no intersection-overload ordering to pick the wide
  * base return).
+ *
+ * Exported so the Nuxt installer (and any downstream installer wrapper) shares
+ * this one definition rather than re-declaring it.
  */
-type InstallableRegistry<
+export type InstallableRegistry<
   TSharedDependencies extends Record<string, any>,
   TSlots extends SlotMapOf<TSlots>,
   TNavItem extends NavigationItemBase,

@@ -3,15 +3,13 @@ import type { NavigationGuard, RouteRecordName, Router } from "vue-router";
 import type {
   NavigationItem,
   NavigationItemBase,
-  RegistryPlugin,
   SlotMap,
   SlotMapOf,
 } from "@modular-frontend/core";
 import type {
   ApplicationManifest,
+  InstallableRegistry,
   ModuleExitEvent,
-  ModuleRegistry,
-  ResolveOptions,
 } from "@modular-vue/runtime";
 
 /**
@@ -70,43 +68,6 @@ export interface InstallModularAppOptions<
   /** Called when a module emits an exit outside a journey host. */
   onModuleExit?: (event: ModuleExitEvent) => void;
 }
-
-/**
- * A registry whose `resolve()` return exposes its plugin-extension map as an
- * inferable `TExtensions`. The extensions ride on {@link ApplicationManifest}'s
- * third type argument, which — unlike the registry's opaque plugin tuple, buried
- * behind `PluginRuntimesOf<TPlugins>` and not recoverable by inference — TS can
- * recover by structurally matching the `resolve` return. This is what lets
- * {@link installModularApp} hand back a manifest that keeps `extensions.journeys`
- * (and the `manifest.journeys` alias) typed against the plugin's runtime instead
- * of collapsing to `Record<string, unknown>` / `unknown`.
- *
- * The plugin position is left as the wide constraint (`readonly RegistryPlugin[]`)
- * so any registry — plugin-carrying or not — satisfies it; the concrete
- * extension shape flows through `TExtensions` off the `resolve` signature.
- */
-type InstallableRegistry<
-  TSharedDependencies extends Record<string, any>,
-  TSlots extends SlotMapOf<TSlots>,
-  TNavItem extends NavigationItemBase,
-  TExtensions extends Record<string, unknown>,
-> = Omit<
-  ModuleRegistry<
-    TSharedDependencies,
-    TSlots,
-    TNavItem,
-    readonly RegistryPlugin<string, any, any>[]
-  >,
-  "resolve"
-> & {
-  // `resolve` is re-declared (base signature omitted) so it is the *single*
-  // call signature here: `TExtensions` is inferred from — and the body's
-  // `registry.resolve()` returns — this manifest type unambiguously, with no
-  // intersection-overload ordering to pick the wide base return.
-  resolve(
-    options: ResolveOptions<TSharedDependencies, TSlots>,
-  ): ApplicationManifest<TSlots, TNavItem, TExtensions>;
-};
 
 /**
  * Wire a `@modular-vue` registry into a Nuxt app from inside a Nuxt plugin.

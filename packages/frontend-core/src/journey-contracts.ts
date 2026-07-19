@@ -990,8 +990,13 @@ export interface JourneyRuntime {
    * runs, and any terminal choice it returns is honoured; a non-terminal one
    * is coerced to an abort so teardown is guaranteed), which removes the
    * persisted blob — any terminal transition does, persistence tracks only
-   * *active* instances — and the terminal record is then dropped. Cascades to
-   * an active child.
+   * *active* instances — and the terminal record is then dropped.
+   *
+   * The force-end **cascades to an active child** — the child is
+   * force-terminated and its blob removed too. `forget`, though, drops only
+   * *this* instance's record; a cascaded child is left as a (blob-less)
+   * terminal record for the normal terminal cleanup — `forget(childId)` or
+   * `forgetTerminal()` — exactly as a plain `end` leaves it.
    *
    * This is the deliberate counterpart to a **soft close**, which keeps the
    * blob for resume by *not* ending the instance at all (e.g. a modal that
