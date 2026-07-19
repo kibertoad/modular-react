@@ -175,7 +175,9 @@ const ui = useUiStore();
 
 Props: `host`, `activeId`, `subject`, `subjectKey`, `onDuplicate`, `to` (teleport
 target, default `"body"`), `teleportDisabled`, `closeOnBackdrop` (default `true`),
-`backdropClass`, `panelClass`. Emits `close`. Also exported: `useOverlay(host,
+`backdropClass`, `panelClass`, `ariaLabelledby` (the `id` of a heading the window
+renders in `#wrap`, for a title-less window — forwarded to the dialog's
+`aria-labelledby`). Emits `close`. Also exported: `useOverlay(host,
 activeId, opts?)` (a `computed` over the slots context — every argument is a
 `MaybeRefOrGetter`), `useOverlaySubject<TSubject>()` (reads the provided subject inside
 the window, no prop-drilling; throws outside an outlet), `overlaySubjectKey`.
@@ -208,8 +210,9 @@ import { resultViews } from "../overlay-hosts";
 ```
 
 Same surface with props instead of slots (`empty` / `wrap` are props), `to` /
-`portalDisabled` for the portal target, and `useOverlay` / `useOverlaySubject` /
-`OverlaySubjectContext` as the hook-shaped reads.
+`portalDisabled` for the portal target, `ariaLabelledby` for a title-less
+window, and `useOverlay` / `useOverlaySubject` / `OverlaySubjectContext` as the
+hook-shaped reads.
 
 ## What the managed shell guarantees (both bindings)
 
@@ -230,7 +233,8 @@ Same surface with props instead of slots (`empty` / `wrap` are props), `to` /
 - **Scroll**: body scroll locked while any overlay is open, restored when the last
   closes.
 - **A11y**: `role="dialog"`, `aria-modal="true"`, `aria-label` from `title` resolved
-  against the subject, `tabindex="-1"` on the panel.
+  against the subject (or `aria-labelledby` pointed at a heading the window renders
+  in `wrap` when it ships no `title`), `tabindex="-1"` on the panel.
 - **Stable e2e hooks**: `data-modular-overlay-backdrop`, `data-modular-overlay-panel`,
   `data-overlay-id="<entry.id>"` — no configuration, no per-app drift.
 - **Containment**: the window body renders inside `ModuleErrorBoundary` (label

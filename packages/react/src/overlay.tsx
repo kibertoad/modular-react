@@ -280,6 +280,14 @@ export interface OverlayOutletProps<TSubject> {
   /** The app's styling for the two host-rendered elements. Headless otherwise. */
   readonly backdropClassName?: string;
   readonly panelClassName?: string;
+  /**
+   * `id` of an element that names the dialog — forwarded to the dialog's
+   * `aria-labelledby`. Use when a window omits `title` (so no `aria-label` is
+   * set) but renders its own heading in `wrap`: point this at that heading's
+   * `id` so the modal is still named for assistive tech. Per ARIA,
+   * `aria-labelledby` wins over `aria-label` when both are present.
+   */
+  readonly ariaLabelledby?: string;
   /** Rendered (in place, not portaled) when no window is active. */
   readonly empty?: ReactNode;
   /**
@@ -296,7 +304,8 @@ export interface OverlayOutletProps<TSubject> {
  * shell: portaled (default `document.body`), backdrop click-self → `onClose`,
  * focus trap + focus return, body scroll lock, shared-stack registration
  * (Escape closes the top overlay first), `role="dialog"` / `aria-modal` /
- * `aria-label` (from the entry's `title`, resolved against the subject).
+ * `aria-label` (from the entry's `title`, resolved against the subject) or
+ * `aria-labelledby` (pointed at a heading the window renders in `wrap`).
  *
  * The backdrop and dialog carry stable, namespaced hooks for e2e suites:
  * `data-modular-overlay-backdrop`, `data-modular-overlay-panel`, and
@@ -334,6 +343,7 @@ export function OverlayOutlet<TSubject>({
   closeOnBackdrop = true,
   backdropClassName,
   panelClassName,
+  ariaLabelledby,
   empty,
   wrap,
 }: OverlayOutletProps<TSubject>): ReactNode {
@@ -400,6 +410,7 @@ export function OverlayOutlet<TSubject>({
           role="dialog"
           aria-modal="true"
           aria-label={resolveOverlayTitle(entry, subject)}
+          aria-labelledby={ariaLabelledby}
           tabIndex={-1}
           className={panelClassName}
           data-modular-overlay-panel=""

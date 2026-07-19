@@ -137,6 +137,17 @@ describe("OverlayOutlet — shell and a11y", () => {
     );
   });
 
+  it("forwards ariaLabelledby to the dialog for a title-less window (no aria-label)", () => {
+    // `merger-verdict` has no `title`, so `aria-label` is absent; the app names
+    // the dialog with a heading it renders in `#wrap`, via `ariaLabelledby`.
+    const wrapper = track(
+      mountOutlet({ activeId: "merger-verdict", ariaLabelledby: "wrap-heading" }),
+    );
+    const panel = wrapper.find("[data-modular-overlay-panel]");
+    expect(panel.attributes("aria-label")).toBeUndefined();
+    expect(panel.attributes("aria-labelledby")).toBe("wrap-heading");
+  });
+
   it("passes entry props through with the injected subject winning", () => {
     seen.length = 0;
     const slots = entries({

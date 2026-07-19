@@ -279,7 +279,8 @@ function keyFor(entry: OverlayEntry<unknown>, subjectKey: unknown, subject: unkn
  * shell: teleported (default `body`), backdrop click-self → `close`, focus
  * trap + focus return, body scroll lock, shared-stack registration (Escape
  * closes the top overlay first), `role="dialog"` / `aria-modal` /
- * `aria-label` (from the entry's `title`, resolved against the subject).
+ * `aria-label` (from the entry's `title`, resolved against the subject) or
+ * `aria-labelledby` (pointed at a heading the window renders in `#wrap`).
  *
  * - `host` — the {@link OverlayHostHandle} from `defineOverlayHost`.
  * - `activeId` — the active window id from app state; `null` renders the
@@ -343,6 +344,11 @@ export const OverlayOutlet = defineComponent({
     closeOnBackdrop: { type: Boolean, default: true },
     backdropClass: { type: null as unknown as PropType<unknown>, default: undefined as unknown },
     panelClass: { type: null as unknown as PropType<unknown>, default: undefined as unknown },
+    // `id` of an element that names the dialog — forwarded to `aria-labelledby`.
+    // Use when a window omits `title` (so no `aria-label` is set) but renders
+    // its own heading in `#wrap`: point this at that heading's `id` so the modal
+    // is still named for assistive tech.
+    ariaLabelledby: { type: String, default: undefined },
   },
   emits: ["close"],
   setup(props, { slots, emit }) {
@@ -435,6 +441,7 @@ export const OverlayOutlet = defineComponent({
                 role: "dialog",
                 "aria-modal": "true",
                 "aria-label": resolveOverlayTitle(active, props.subject),
+                "aria-labelledby": props.ariaLabelledby,
                 tabindex: -1,
                 class: props.panelClass,
                 "data-modular-overlay-panel": "",
