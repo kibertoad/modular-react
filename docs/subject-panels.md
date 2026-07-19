@@ -142,7 +142,7 @@ stated in exactly one place.
 
 ```ts
 // inspector/panels.ts
-import { definePanelGroup } from "@modular-react/react"; // or "@modular-vue/core"
+import { definePanelGroup } from "@modular-react/core"; // or "@modular-vue/core"
 import type { BoardBlock } from "./types";
 
 export const inspectorPanels = definePanelGroup<BoardBlock>("inspectorPanels");
@@ -304,7 +304,7 @@ the host and every contributor:
 
 ```ts
 // inspector/panels.ts
-import { definePanelGroup } from "@modular-react/react"; // or "@modular-vue/core"
+import { definePanelGroup } from "@modular-react/core"; // or "@modular-vue/core"
 import type { BoardBlock } from "./types";
 
 export const inspectorPanels = definePanelGroup<BoardBlock>("inspectorPanels");
@@ -371,9 +371,12 @@ already uses. That is the open-contribution property panels exist to provide.
 
 By default a panel's rendered instance is keyed on `entry.id` alone, so moving
 between two subjects of the same type reuses the component instance (state and
-DOM persist). Pass `subjectKey` — a string, or `(subject) => string | number` —
-to fold the subject's identity into the key, forcing a remount when the selection
-changes. Use it whenever a panel holds per-subject local state (a scroll
+DOM persist). Pass `subjectKey` to fold the subject's identity into the key,
+forcing a remount when the selection changes. It is re-read on every render:
+pass a `(subject) => string | number` to have the outlet derive the discriminator
+from the current subject, or a string you compute from the subject in the caller
+and update as the selection changes (a literal constant never varies, so it won't
+drive remounts). Use it whenever a panel holds per-subject local state (a scroll
 position, an expanded/collapsed toggle, an in-progress edit) that must not leak
 across selections.
 

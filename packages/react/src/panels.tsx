@@ -101,9 +101,13 @@ export interface PanelsOutletProps<TSubject> {
   /** The value the panels key on; `null` / `undefined` renders `empty`. */
   readonly subject: TSubject | null | undefined;
   /**
-   * Optional string, or `(subject) => string | number`, folded into each
-   * rendered panel's React key so switching subjects remounts panel content
-   * rather than reusing a stale instance. Absent = key on `entry.id` alone.
+   * Optional discriminator folded into each rendered panel's React key so
+   * switching subjects remounts panel content rather than reusing a stale
+   * instance. Re-read on every render: pass a `(subject) => string | number` to
+   * have the outlet derive it from the current subject, or a string you compute
+   * from the subject in the caller and update as the selection changes (a literal
+   * constant never varies, so it won't drive remounts). Absent = key on
+   * `entry.id` alone.
    */
   readonly subjectKey?: string | ((subject: TSubject) => string | number);
   /** Duplicate-id stance forwarded to `resolvePanels` (default: throw). */
