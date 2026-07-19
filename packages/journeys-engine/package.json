@@ -1,6 +1,6 @@
 {
   "name": "@modular-frontend/journeys-engine",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "Framework-neutral journey engine: runtime, validation, persistence, authoring helpers, handles, and types for typed, serializable multi-module workflows. No UI-framework dependency — the outlet and hooks live in a binding package.",
   "repository": {
     "type": "git",
@@ -33,10 +33,8 @@
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@modular-frontend/core": "workspace:*"
-  },
   "devDependencies": {
+    "@modular-frontend/core": "workspace:*",
     "happy-dom": "^20.9.0",
     "oxfmt": "^0.51.0",
     "oxlint": "^1.66.0",
@@ -44,5 +42,8 @@
     "typescript": "^6.0.3",
     "vite": "^8.1.3",
     "vitest": "^4.1.10"
+  },
+  "peerDependencies": {
+    "@modular-frontend/core": ">=0.1.0 <2.0.0"
   }
 }

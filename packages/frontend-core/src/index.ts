@@ -104,6 +104,13 @@ export type {
   ComponentRefSpec,
 } from "./component-pairing-plugin.js";
 
+// Subject-keyed panels — the render-all, predicate-gated, open-contribution
+// sibling of the pick-one component-pairing helpers. A pure resolver over a
+// slot's entries plus a caller-supplied subject; the thin per-binding hosts
+// (`usePanels` / `<PanelsOutlet>`) live in the framework packages.
+export { definePanelGroup, resolvePanels } from "./panels.js";
+export type { PanelEntry, PanelGroupHandle } from "./panels.js";
+
 // Validation
 export {
   validateNoDuplicateIds,

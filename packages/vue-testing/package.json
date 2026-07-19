@@ -1,6 +1,6 @@
 {
   "name": "@modular-vue/testing",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Testing utilities for @modular-vue modules: mock stores, module resolution, and lazy-entry preloading.",
   "repository": {
     "type": "git",
@@ -48,7 +48,7 @@
     "vue-router": "^5.0.0"
   },
   "peerDependencies": {
-    "@modular-frontend/core": "^0.1.0",
+    "@modular-frontend/core": ">=0.1.0 <2.0.0",
     "@modular-frontend/testing": "^0.1.0",
     "@modular-vue/core": "^1.0.0",
     "@modular-vue/journeys": "^1.0.0",

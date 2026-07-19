@@ -37,6 +37,13 @@ export type {
   ComponentRefSpec,
 } from "@modular-frontend/core";
 
+// Subject-keyed panels — render-all, predicate-gated projection over a slot.
+// The pure engine surface plus the Vue host, both surfaced here so consumers
+// import panels from the Vue binding rather than reaching into the engine.
+export { definePanelGroup, resolvePanels } from "@modular-frontend/core";
+export type { PanelEntry, PanelGroupHandle } from "@modular-frontend/core";
+export { usePanels, PanelsOutlet, usePanelSubject, panelSubjectKey } from "@modular-vue/vue";
+
 // Module definition
 export { defineModule } from "./define-module.js";
 export { defineSlots } from "./define-slots.js";

@@ -93,6 +93,8 @@ Sometimes a manifest entry needs to select **which component** renders it — a 
 
 This is the sanctioned shape of "backend data lights up a locally-installed view." It is deliberately narrow: read [Why this isn't the anti-pattern](#why-this-isnt-the-anti-pattern) below before reaching for it, because a sloppy version — a shell-owned `string → component` map used to dodge shipping code — is exactly the [anti-pattern](#anti-patterns-to-avoid) this guide otherwise warns against.
 
+> **Pairing is pick-one; panels are render-all.** `resolveComponentRegistry` / `pairById` select **one** component per id. When a region should instead show **every** contribution that applies to a runtime selection — an inspector rail where several detail panels light up for the selected item, keyed by a `when(subject)` predicate rather than an id — that is the render-all sibling, [subject-keyed panels](subject-panels.md). Same slot substrate, different reduction.
+
 ### The shape
 
 **1. Components ship as code and register through the normal module → slot path.** A first-party module contributes `ComponentEntry[]` to a component-registry slot; a consumer deployment contributes its own entries to the _same_ slot via the app's registration seam — no layer fork.

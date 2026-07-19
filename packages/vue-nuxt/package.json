@@ -1,6 +1,6 @@
 {
   "name": "@modular-vue/nuxt",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Nuxt 4 integration for @modular-vue: a Nuxt module plus a runtime installer that grafts module routes onto Nuxt's vue-router and installs the modular contexts on the Nuxt Vue app.",
   "repository": {
     "type": "git",
@@ -54,7 +54,7 @@
     "vue-router": "^5.0.0"
   },
   "peerDependencies": {
-    "@modular-frontend/core": "^0.1.0 || ^0.2.0",
+    "@modular-frontend/core": ">=0.1.0 <2.0.0",
     "@modular-vue/runtime": "^1.0.0",
     "nuxt": "^4.4.0",
     "vue": "^3.5.40",
