@@ -44,6 +44,31 @@ export { definePanelGroup, resolvePanels } from "@modular-frontend/core";
 export type { PanelEntry, PanelGroupHandle } from "@modular-frontend/core";
 export { usePanels, PanelsOutlet, usePanelSubject, panelSubjectKey } from "@modular-vue/vue";
 
+// State-keyed overlay host — the pick-one, modal sibling of the render-all
+// panels. The pure engine surface plus the Vue managed modal host, both
+// surfaced here so consumers import overlays from the Vue binding rather than
+// reaching into the engine.
+export {
+  createOverlayStack,
+  defineOverlayHost,
+  resolveOverlay,
+  resolveOverlayTitle,
+  sharedOverlayStack,
+} from "@modular-frontend/core";
+export type {
+  OverlayEntry,
+  OverlayHostHandle,
+  OverlayStack,
+  OverlayStackTicket,
+} from "@modular-frontend/core";
+export {
+  useOverlay,
+  OverlayOutlet,
+  useOverlaySubject,
+  overlaySubjectKey,
+  useModalBehavior,
+} from "@modular-vue/vue";
+
 // Module definition
 export { defineModule } from "./define-module.js";
 export { defineSlots } from "./define-slots.js";

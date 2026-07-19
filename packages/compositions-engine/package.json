@@ -1,6 +1,6 @@
 {
   "name": "@modular-frontend/compositions-engine",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Framework-neutral compositions engine: runtime, scoped stores, validation, authoring helpers, and types for arranging modules into named zones on a single screen. No UI-framework dependency — the outlet and hooks live in a binding package.",
   "repository": {
     "type": "git",

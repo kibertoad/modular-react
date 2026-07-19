@@ -215,6 +215,17 @@ jobs:
             example_path: examples/tanstack-router/editor-composition
             runtime_path: packages/tanstack-router-runtime
             core_path: packages/tanstack-router-core
+          # Overlay-host examples — exercise the state-keyed overlay
+          # (`<OverlayOutlet>` / `useOverlay` / `useModalBehavior`) in each
+          # binding. The managed modal behaviour (focus trap, shared Escape
+          # stack, scroll lock) is engine-first in packages/frontend-core, so
+          # the React and Vue hosts must observe the identical contract — both
+          # are covered to catch drift in either binding's glue.
+          - shell: "@example-rr-overlay-windows/shell"
+            shell_artifact: "example-rr-overlay-windows-shell"
+            example_path: examples/react-router/overlay-result-windows
+            runtime_path: packages/react-router-runtime
+            core_path: packages/react-router-core
           # Vue examples — exercise the @modular-vue/* family mounted in
           # a real vue-router shell: sibling modules, a journey, and a
           # composition. Same duplicate-module / provider-plumbing regressions
@@ -232,6 +243,11 @@ jobs:
           - shell: "@example-vue-editor/shell"
             shell_artifact: "example-vue-editor-shell"
             example_path: examples/vue/editor-composition
+            runtime_path: packages/vue-runtime
+            core_path: packages/vue-core
+          - shell: "@example-vue-overlay-windows/shell"
+            shell_artifact: "example-vue-overlay-windows-shell"
+            example_path: examples/vue/overlay-result-windows
             runtime_path: packages/vue-runtime
             core_path: packages/vue-core
     steps:

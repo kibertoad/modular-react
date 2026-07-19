@@ -13,6 +13,7 @@ examples/
 │   ├── customer-onboarding-journey/  Multi-module workflow via @modular-react/journeys (React Router)
 │   ├── editor-composition/           Multi-module screen via @modular-react/compositions (React Router)
 │   ├── inspector-panels/             Subject-keyed panels — render-all inspector rail via <PanelsOutlet>
+│   ├── overlay-result-windows/       State-keyed overlay host — pick-one managed modal via <OverlayOutlet>
 │   ├── remote-capabilities/          Slots/navigation driven by a backend-served remote manifest
 │   └── active-project-manifest/      Per-project remote manifests swapped at runtime
 ├── tanstack-router/
@@ -25,7 +26,8 @@ examples/
 ├── vue/
 │   ├── integration-manager/          Sibling modules sharing a screen (Vue Router)
 │   ├── customer-onboarding-journey/  Multi-module workflow via @modular-vue/journeys (Vue Router)
-│   └── editor-composition/           Multi-module screen via @modular-vue/compositions (Vue Router)
+│   ├── editor-composition/           Multi-module screen via @modular-vue/compositions (Vue Router)
+│   └── overlay-result-windows/       State-keyed overlay host — pick-one managed modal via <OverlayOutlet>
 └── catalog/                          Demo discovery portal built from the tanstack-router examples
 ```
 
@@ -67,6 +69,10 @@ An editor screen with main canvas, integration source picker, and inspector pane
 ### `inspector-panels`
 
 A design board whose inspector rail is driven by **subject-keyed panels**. Selecting a block is the runtime **subject**; each contributed panel decides via its own `when(block)` predicate whether it applies, and `<PanelsOutlet>` renders **every** match, ordered — the render-all counterpart to compositions' pick-one zones. A first-party module (`inspector-core`) contributes an always-on `identity` panel plus a frontend-only `frontend-config` panel; a **consumer** module (`acme-extras`) adds a panel for its own `acme-secure` block type with no edit to the host, showing the open-contribution property. Documented in [docs/subject-panels.md](../docs/subject-panels.md).
+
+### `overlay-result-windows`
+
+An agent run whose result windows are driven by the **state-keyed overlay host** — the pick-one, modal sibling of `inspector-panels`. Which window is open is app state (`activeView`); `<OverlayOutlet>` mounts the one matching window inside a framework-managed modal shell (teleport/portal, focus trap + return, body scroll lock, a shared Escape stack, a11y wiring) and hands the body to the app's `wrap` chrome. A first-party module (`run-core`) contributes `test-report` and `run-logs` windows — `test-report` nests a bespoke `useModalBehavior` confirm on the same stack — and a **consumer** module (`acme-extras`) adds its own `acme:security-report` window with no edit to the host. Built for **both** bindings (React Router and Vue Router) since the behaviour is engine-first, with matching e2e suites. Documented in [docs/overlay-host.md](../docs/overlay-host.md).
 
 ### `remote-capabilities`
 
