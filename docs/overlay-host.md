@@ -159,7 +159,13 @@ const ui = useUiStore();
     <template #wrap="{ entry, subject, close, children }">
       <!-- YOUR chrome: header, icon from entry.meta, close button, … -->
       <ResultWindowChrome :entry="entry" :subject="subject" @close="close">
-        <component :is="() => children" />
+        <!-- Render `children` (a VNode) through a component with STABLE
+             identity — a functional component defined once, `const RenderVNode =
+             (p: { node: VNode }) => p.node`. An inline `<component
+             :is="() => children" />` gets a fresh identity on every parent
+             re-render (e.g. when a nested overlay bumps the shared stack) and
+             would remount the window, dropping its local state. -->
+        <component :is="RenderVNode" :node="children" />
       </ResultWindowChrome>
     </template>
     <template #empty><!-- optional: rendered in place while closed --></template>
@@ -294,8 +300,20 @@ stack. (`<OverlayOutlet>` is implemented on exactly this composable/hook.)
 
 ## End-to-end: an app shell over the host
 
-The intended division of labor, using the agent-run "result windows" shape as the
-example:
+Two runnable examples build exactly this — the agent-run "result windows" shape,
+one per binding, with matching Playwright suites that assert the whole behaviour
+contract (open/close, Escape, backdrop press-and-release, focus trap + return,
+window swap, consumer contribution, the shared stack, and the dangling-id
+stance):
+
+- **React Router** — [`examples/react-router/overlay-result-windows`](../examples/react-router/overlay-result-windows)
+- **Vue Router** — [`examples/vue/overlay-result-windows`](../examples/vue/overlay-result-windows)
+
+They are the pick-one, modal sibling of the [`inspector-panels`](../examples/react-router/inspector-panels)
+panels example, and read side by side to show the one engine-first contract
+observed by both bindings.
+
+The intended division of labor, using that same "result windows" shape:
 
 1. The app declares the host (`defineOverlayHost<StepRef>("resultViews")`) and mounts
    **one** `<OverlayOutlet>` in its shell, driving `activeId` from its ui store and

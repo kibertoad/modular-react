@@ -206,7 +206,11 @@ export const PanelsOutlet = defineComponent({
   name: "PanelsOutlet",
   props: {
     group: { type: Object as PropType<PanelGroupHandle<unknown>>, required: true },
-    subject: { type: null as unknown as PropType<unknown>, default: null },
+    // The `default` is cast to the prop's declared type so `ExtractPropTypes`
+    // keeps `unknown`; an un-cast `default: null` collapses the inferred
+    // `$props["subject"]` to `null`, which makes `<PanelsOutlet :subject="…">`
+    // reject a real subject in a typed template (vue-tsc). See OverlayOutlet.
+    subject: { type: null as unknown as PropType<unknown>, default: null as unknown },
     subjectKey: {
       type: null as unknown as PropType<string | ((subject: unknown) => string | number)>,
       default: undefined,

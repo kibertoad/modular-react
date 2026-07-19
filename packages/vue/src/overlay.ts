@@ -326,7 +326,13 @@ export const OverlayOutlet = defineComponent({
   props: {
     host: { type: Object as PropType<OverlayHostHandle<unknown>>, required: true },
     activeId: { type: String as PropType<string | null>, default: null },
-    subject: { type: null as unknown as PropType<unknown>, default: null },
+    // `type: null` accepts any runtime value (subject / class bindings are
+    // opaque to the host). The `default` is cast to the prop's declared type so
+    // `ExtractPropTypes` keeps `unknown` — an un-cast `default: null` /
+    // `default: undefined` collapses the inferred `$props` type to `null` /
+    // `undefined`, which makes `<OverlayOutlet :subject="…" :panel-class="…">`
+    // reject real values in a typed template (vue-tsc).
+    subject: { type: null as unknown as PropType<unknown>, default: null as unknown },
     subjectKey: {
       type: null as unknown as PropType<string | ((subject: unknown) => string | number)>,
       default: undefined,
@@ -335,8 +341,8 @@ export const OverlayOutlet = defineComponent({
     to: { type: [String, Object] as PropType<string | HTMLElement>, default: "body" },
     teleportDisabled: { type: Boolean, default: false },
     closeOnBackdrop: { type: Boolean, default: true },
-    backdropClass: { type: null as unknown as PropType<unknown>, default: undefined },
-    panelClass: { type: null as unknown as PropType<unknown>, default: undefined },
+    backdropClass: { type: null as unknown as PropType<unknown>, default: undefined as unknown },
+    panelClass: { type: null as unknown as PropType<unknown>, default: undefined as unknown },
   },
   emits: ["close"],
   setup(props, { slots, emit }) {
