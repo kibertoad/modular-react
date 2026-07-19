@@ -469,6 +469,109 @@ importers:
         specifier: 8.1.5
         version: 8.1.5(@types/node@25.6.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
 
+  examples/react-router/inspector-panels/app-shared:
+    dependencies:
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/inspector-panels/modules/acme-extras:
+    dependencies:
+      '@example-rr-inspector-panels/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@react-router-modules/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/react-router-core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/inspector-panels/modules/inspector-core:
+    dependencies:
+      '@example-rr-inspector-panels/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../../packages/react
+      '@react-router-modules/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/react-router-core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/inspector-panels/shell:
+    dependencies:
+      '@example-rr-inspector-panels/acme-extras':
+        specifier: workspace:*
+        version: link:../modules/acme-extras
+      '@example-rr-inspector-panels/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-rr-inspector-panels/inspector-core':
+        specifier: workspace:*
+        version: link:../modules/inspector-core
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../packages/react
+      '@react-router-modules/core':
+        specifier: workspace:*
+        version: link:../../../../packages/react-router-core
+      '@react-router-modules/runtime':
+        specifier: workspace:*
+        version: link:../../../../packages/react-router-runtime
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.6(react@19.2.6)
+      react-router:
+        specifier: ^7.0.0
+        version: 7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.1(vite@8.1.5(@types/node@25.6.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: 8.1.5
+        version: 8.1.5(@types/node@25.6.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
+
   examples/react-router/integration-manager/app-shared:
     devDependencies:
       '@types/react':

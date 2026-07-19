@@ -19,6 +19,13 @@ export const ModuleErrorBoundary = defineComponent({
   props: {
     moduleId: { type: String, required: true },
     /**
+     * Noun used in the failure notice and console message for what crashed
+     * (default `"Module"`). Hosts wrapping non-module contributions pass their
+     * own — e.g. `<PanelsOutlet>` passes `"Panel"` — so the error names the
+     * actual failing unit instead of mislabeling it a module.
+     */
+    label: { type: String, default: "Module" },
+    /**
      * Optional replacement UI shown instead of the built-in notice. Accepts a
      * VNode or a zero-arg function returning one; mirrors the React boundary's
      * `fallback` node prop.
@@ -30,7 +37,10 @@ export const ModuleErrorBoundary = defineComponent({
 
     onErrorCaptured((err) => {
       error.value = err instanceof Error ? err : new Error(String(err));
-      console.error(`[@modular-vue/vue] Module "${props.moduleId}" encountered an error:`, err);
+      console.error(
+        `[@modular-vue/vue] ${props.label} "${props.moduleId}" encountered an error:`,
+        err,
+      );
       // Stop propagation — the boundary has handled it.
       return false;
     });
@@ -54,7 +64,7 @@ export const ModuleErrorBoundary = defineComponent({
             h(
               "h3",
               { style: { color: "#e53e3e", margin: "0 0 0.5rem 0" } },
-              `Module "${props.moduleId}" encountered an error`,
+              `${props.label} "${props.moduleId}" encountered an error`,
             ),
             h(
               "pre",

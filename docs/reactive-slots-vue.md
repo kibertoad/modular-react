@@ -160,3 +160,6 @@ The signal path is unchanged: `useSlots()` returns the `Ref`, and
 - [Navigation](navigation.md) — the navigation manifest and item shape.
 - [Remote capability manifests](remote-capability-manifests.md) — backend-driven
   slot/nav contributions, which compose with either path.
+- [Subject-keyed panels](subject-panels.md) — `usePanels` / `<PanelsOutlet>`
+  rely on the same reactive-source boundary: a subject-keyed `when(subject)`
+  predicate only re-runs when the subject is reactive Vue state.

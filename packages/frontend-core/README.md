@@ -23,6 +23,7 @@ Most apps depend on a framework binding (`@modular-react/core`, and downstream `
 - **Store**: `createStore` (a lightweight zustand-compatible store, no middleware)
 - **Detection**: `isStore`, `isStoreApi` (alias), `isReactiveService`, `separateDeps`
 - **Helpers**: `defineModule`, `defineSlots`, `buildDepsSnapshot`, `runLifecycleHooks`
+- **Subject-keyed panels**: `definePanelGroup`, `resolvePanels`, and the `PanelEntry` / `PanelGroupHandle` types — the pure, framework-neutral engine for a render-**all**, predicate-gated, open-contribution slot projection (the render-all sibling of the component-pairing helpers). The thin per-binding hosts (`usePanels` / `<PanelsOutlet>`) live in `@modular-react/react` and `@modular-vue/vue`. See [docs/subject-panels.md](../../docs/subject-panels.md)
 - **Journey contracts**: type-only surfaces describing a journey runtime (implemented in `@modular-react/journeys`)
 - **Semver subset**: `satisfies`, `parseRange`, `parseVersion`, `compareVersions`
 

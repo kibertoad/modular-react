@@ -22,6 +22,16 @@ first package of the [Vue support initiative](../../docs/vue-support-tracker.md)
   navigation manifest (`useNavigation`), and slot contributions (`useSlots`,
   `useReactiveSlots`, `useRecalculateSlots`, `DynamicSlotsProvider`,
   `createSlotsSignal`).
+- **Subject-keyed panels** — `usePanels` (a reactive `computed` over the slots
+  source + subject), `<PanelsOutlet>` (renders every matching panel, ordered,
+  subject injected as a prop **and** via `provide`, each in a
+  `ModuleErrorBoundary`, with `#empty` / `#wrap` slots), and `usePanelSubject` /
+  `panelSubjectKey` for reading the injected subject reactively in panel bodies.
+  This is the Vue host over the framework-neutral engine (`definePanelGroup` /
+  `resolvePanels`, re-exported from `@modular-vue/core`); mind the
+  [Vue reactivity caveat](../../docs/reactive-slots-vue.md) when a `when`
+  predicate reads non-reactive state. See
+  [docs/subject-panels.md](../../docs/subject-panels.md).
 
 ### Slot evaluation: reactive vs signal
 

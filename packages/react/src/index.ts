@@ -64,6 +64,14 @@ export { ModulesContext, useModules, getModuleMeta } from "./modules-context.js"
 // React-specific: error boundary
 export { ModuleErrorBoundary } from "./error-boundary.js";
 
+// React host for subject-keyed panels — the render-all, predicate-gated,
+// open-contribution sibling of the pick-one pairing surface. The pure resolver
+// (`resolvePanels` / `definePanelGroup`) is re-exported from `@modular-react/core`;
+// this binding adds the `usePanels` hook, the `<PanelsOutlet>` host, and
+// `usePanelSubject`.
+export { usePanels, PanelsOutlet, usePanelSubject, PanelSubjectContext } from "./panels.js";
+export type { PanelsOutletProps, PanelWrapArgs } from "./panels.js";
+
 // React-specific: module-exit plumbing (hosted by ModuleTab / ModuleRoute;
 // the "step 0" pattern — modules fire exits outside a journey, composition
 // root decides what they mean).

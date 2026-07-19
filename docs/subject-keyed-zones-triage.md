@@ -2,8 +2,11 @@
 
 Downstream request: [kibertoad/cat-factory#1205](https://github.com/kibertoad/cat-factory/pull/1205)
 (`docs/initiatives/modular-vue-slice4-upstream-zones.md` on their side). Status here:
-**triaged — accepted in substance, redirected in shape.** This document is the upstream
-half of the co-evolution artifact: what we agree to build, what we decline, and why.
+**triaged — accepted in substance, redirected in shape — and now implemented.** This
+document is the upstream half of the co-evolution artifact: what we agree to build, what
+we decline, and why. See [Resolution](#resolution--implemented) at the bottom for what
+shipped and how the maintainer decisions landed; the guide is
+[`docs/subject-panels.md`](subject-panels.md).
 
 ## Verdict in one paragraph
 
@@ -271,3 +274,36 @@ panel group whose subject is the selected step — same handle, resolver, and ou
 3. **Duplicate-id stance in `resolvePanels`** — throw (recommended, matches
    `resolveComponentRegistry`) vs dev-warn; an `onDuplicate` escape hatch can mirror the
    pairing API if a deployment needs intentional shadowing.
+
+## Resolution — implemented
+
+All three decisions landed on the recommended option, and the counter-proposal shipped
+as-scoped (no new package, no descriptor change, no `/testing` subpath, no Nuxt manifest
+threading):
+
+1. **Name — `panels`.** `definePanelGroup` / `resolvePanels` (engine),
+   `usePanels` / `<PanelsOutlet>` / `usePanelSubject` (bindings). "zones" rejected.
+2. **React host in the same train — yes.** Engine + Vue + React all shipped together;
+   Angular gets `injectPanels` when its gate opens (the engine part is already done for it).
+3. **Duplicate-id stance — throw by default**, with an `onDuplicate: "first-wins" |
+"last-wins"` escape hatch mirroring `resolveComponentRegistry`.
+
+What shipped:
+
+- **Engine** (`@modular-frontend/core`): `PanelEntry<TSubject>`, `PanelGroupHandle<TSubject>`,
+  `definePanelGroup`, `resolvePanels` — a pure resolver (null subject → empty; `when`
+  filter; stable `order` sort; duplicate-id throw). Re-exported by `@modular-react/core`
+  and `@modular-vue/core`.
+- **Vue** (`@modular-vue/vue`): `usePanels` (computed over the slots source + subject),
+  `<PanelsOutlet>` (render-all, subject injected as prop + `provide`, per-panel
+  `ModuleErrorBoundary`, `#empty` / `#wrap` slots), `usePanelSubject`. Re-exported by
+  `@modular-vue/core`.
+- **React** (`@modular-react/react`): `usePanels`, `<PanelsOutlet>`, `usePanelSubject` —
+  the same surface with `useMemo` / context.
+- **Docs**: [`docs/subject-panels.md`](subject-panels.md); the compositions README's
+  comparison table extended from three primitives to four; cross-links from
+  [`reactive-slots-vue.md`](reactive-slots-vue.md) (the reactivity boundary) and
+  [`remote-capability-manifests.md`](remote-capability-manifests.md) (pick-one vs
+  render-all).
+- **Housekeeping (Gap D)**: the Vue family peer ranges widened to admit
+  `@modular-frontend/core@^0.3.0` (including `compositions` and `testing`).

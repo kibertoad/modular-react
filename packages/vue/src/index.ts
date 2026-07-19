@@ -87,6 +87,13 @@ export { modulesKey, provideModules, useModules, getModuleMeta } from "./modules
 // Vue-specific: error boundary
 export { ModuleErrorBoundary } from "./error-boundary.js";
 
+// Vue host for subject-keyed panels — the render-all, predicate-gated,
+// open-contribution sibling of the pick-one pairing surface. The pure resolver
+// (`resolvePanels` / `definePanelGroup`) lives in `@modular-frontend/core`; this
+// binding adds the reactive `usePanels` composable, the `<PanelsOutlet>` host,
+// and `usePanelSubject`.
+export { usePanels, PanelsOutlet, usePanelSubject, panelSubjectKey } from "./panels.js";
+
 // Vue-specific: module-exit plumbing (hosted by ModuleRoute / tabs; the
 // "step 0" pattern — modules fire exits outside a journey, composition root
 // decides what they mean).
