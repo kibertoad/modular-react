@@ -72,6 +72,20 @@ export { ModuleErrorBoundary } from "./error-boundary.js";
 export { usePanels, PanelsOutlet, usePanelSubject, PanelSubjectContext } from "./panels.js";
 export type { PanelsOutletProps, PanelWrapArgs } from "./panels.js";
 
+// React host for the state-keyed overlay — the pick-one, modal sibling of the
+// render-all panels. The pure resolver (`resolveOverlay` / `defineOverlayHost`)
+// and the shared stack live in `@modular-react/core`; this binding adds the
+// `useOverlay` hook, the managed `<OverlayOutlet>` modal host,
+// `useOverlaySubject`, and the standalone `useModalBehavior`.
+export {
+  useOverlay,
+  OverlayOutlet,
+  useOverlaySubject,
+  OverlaySubjectContext,
+  useModalBehavior,
+} from "./overlay.js";
+export type { OverlayOutletProps, OverlayWrapArgs } from "./overlay.js";
+
 // React-specific: module-exit plumbing (hosted by ModuleTab / ModuleRoute;
 // the "step 0" pattern — modules fire exits outside a journey, composition
 // root decides what they mean).

@@ -347,6 +347,15 @@ code-shipped components](remote-capability-manifests.md#pairing-wire-safe-manife
 for that join — the components ship as code through the seam above; only the
 selecting id crosses the wire.
 
+The seam also carries the two selection-hosted UI surfaces with no extra
+wiring, because their hosts read the same slots context the layer already
+provides: a consumer module can contribute inspector panels (render-all,
+subject-keyed — [subject-panels.md](subject-panels.md)) or modal windows with
+framework-managed chrome behaviour (pick-one, state-keyed —
+[overlay-host.md](overlay-host.md)) to slots the layer's shell hosts with
+`<PanelsOutlet>` / `<OverlayOutlet>`. No `installModularApp` change, no
+manifest threading — the slots manifest _is_ the manifest.
+
 ## Rules of thumb
 
 - **Registry as a factory, called in the plugin.** This is the one rule that

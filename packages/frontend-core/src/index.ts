@@ -111,6 +111,35 @@ export type {
 export { definePanelGroup, resolvePanels } from "./panels.js";
 export type { PanelEntry, PanelGroupHandle } from "./panels.js";
 
+// State-keyed overlay host — the pick-one, modal sibling of the render-all
+// panels: one entry, named by a caller-supplied active id, mounted by a
+// binding's managed modal host. A pure resolver over a slot's entries plus the
+// shared overlay-stack semantics; the thin per-binding hosts (`useOverlay` /
+// `<OverlayOutlet>` / `useModalBehavior`) live in the framework packages.
+export {
+  createOverlayStack,
+  defineOverlayHost,
+  resolveOverlay,
+  resolveOverlayTitle,
+} from "./overlay.js";
+export type {
+  OverlayEntry,
+  OverlayHostHandle,
+  OverlayStack,
+  OverlayStackTicket,
+} from "./overlay.js";
+// Client-only DOM behaviour shared by the bindings' overlay hosts: the single
+// app-wide stack instance plus the focus/scroll semantics that must not drift
+// between bindings. Consumed by `useModalBehavior` in the framework packages;
+// apps normally never touch these directly.
+export {
+  sharedOverlayStack,
+  lockBodyScroll,
+  unlockBodyScroll,
+  firstFocusableIn,
+  trapTabFocus,
+} from "./overlay-dom.js";
+
 // Validation
 export {
   validateNoDuplicateIds,

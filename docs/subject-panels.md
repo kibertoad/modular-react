@@ -34,9 +34,13 @@ Reach for panels when **all** of these hold:
 
 If instead you need to select **one** component by a data id (a wire manifest
 naming which view to render), that is the pick-one pairing surface, not panels —
-see [Panels vs component pairing](#panels-vs-component-pairing).
+see [Panels vs component pairing](#panels-vs-component-pairing). And if that one
+selected component should mount as a **modal window** with framework-managed
+chrome behaviour (focus trap, scroll lock, stacked Escape, a11y), that is the
+pick-one, modal sibling of panels: the
+[state-keyed overlay host](overlay-host.md) (`<OverlayOutlet>`).
 
-For the full "which primitive?" matrix (route/module zones · panels ·
+For the full "which primitive?" matrix (route/module zones · panels · overlays ·
 compositions · journeys), see
 [Comparison with sibling primitives](../packages/compositions/README.md#comparison-with-sibling-primitives).
 

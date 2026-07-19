@@ -94,6 +94,19 @@ export { ModuleErrorBoundary } from "./error-boundary.js";
 // and `usePanelSubject`.
 export { usePanels, PanelsOutlet, usePanelSubject, panelSubjectKey } from "./panels.js";
 
+// Vue host for the state-keyed overlay — the pick-one, modal sibling of the
+// render-all panels. The pure resolver (`resolveOverlay` / `defineOverlayHost`)
+// and the shared stack live in `@modular-frontend/core`; this binding adds the
+// reactive `useOverlay` composable, the managed `<OverlayOutlet>` modal host,
+// `useOverlaySubject`, and the standalone `useModalBehavior`.
+export {
+  useOverlay,
+  OverlayOutlet,
+  useOverlaySubject,
+  overlaySubjectKey,
+  useModalBehavior,
+} from "./overlay.js";
+
 // Vue-specific: module-exit plumbing (hosted by ModuleRoute / tabs; the
 // "step 0" pattern — modules fire exits outside a journey, composition root
 // decides what they mean).

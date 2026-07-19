@@ -1087,6 +1087,115 @@ importers:
         specifier: 8.1.5
         version: 8.1.5(@types/node@25.6.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
 
+  examples/react-router/overlay-result-windows/app-shared:
+    dependencies:
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/overlay-result-windows/modules/acme-extras:
+    dependencies:
+      '@example-rr-overlay-windows/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@react-router-modules/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/react-router-core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/overlay-result-windows/modules/run-core:
+    dependencies:
+      '@example-rr-overlay-windows/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../../packages/react
+      '@react-router-modules/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/react-router-core
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.6(react@19.2.6)
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  examples/react-router/overlay-result-windows/shell:
+    dependencies:
+      '@example-rr-overlay-windows/acme-extras':
+        specifier: workspace:*
+        version: link:../modules/acme-extras
+      '@example-rr-overlay-windows/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-rr-overlay-windows/run-core':
+        specifier: workspace:*
+        version: link:../modules/run-core
+      '@modular-react/core':
+        specifier: workspace:*
+        version: link:../../../../packages/core
+      '@modular-react/react':
+        specifier: workspace:*
+        version: link:../../../../packages/react
+      '@react-router-modules/core':
+        specifier: workspace:*
+        version: link:../../../../packages/react-router-core
+      '@react-router-modules/runtime':
+        specifier: workspace:*
+        version: link:../../../../packages/react-router-runtime
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.6(react@19.2.6)
+      react-router:
+        specifier: ^7.0.0
+        version: 7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.1(vite@8.1.5(@types/node@25.6.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: 8.1.5
+        version: 8.1.5(@types/node@25.6.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
+
   examples/react-router/remote-capabilities/app-shared:
     dependencies:
       '@modular-react/core':
@@ -2762,6 +2871,106 @@ importers:
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/overlay-result-windows/app-shared:
+    dependencies:
+      '@modular-vue/core':
+        specifier: workspace:*
+        version: link:../../../../packages/vue-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/overlay-result-windows/modules/acme-extras:
+    dependencies:
+      '@example-vue-overlay-windows/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-vue/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/vue-core
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/overlay-result-windows/modules/run-core:
+    dependencies:
+      '@example-vue-overlay-windows/app-shared':
+        specifier: workspace:*
+        version: link:../../app-shared
+      '@modular-vue/core':
+        specifier: workspace:*
+        version: link:../../../../../packages/vue-core
+      '@modular-vue/vue':
+        specifier: workspace:*
+        version: link:../../../../../packages/vue
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-tsc:
+        specifier: ^3.3.0
+        version: 3.3.7(typescript@6.0.3)
+
+  examples/vue/overlay-result-windows/shell:
+    dependencies:
+      '@example-vue-overlay-windows/acme-extras':
+        specifier: workspace:*
+        version: link:../modules/acme-extras
+      '@example-vue-overlay-windows/app-shared':
+        specifier: workspace:*
+        version: link:../app-shared
+      '@example-vue-overlay-windows/run-core':
+        specifier: workspace:*
+        version: link:../modules/run-core
+      '@modular-vue/core':
+        specifier: workspace:*
+        version: link:../../../../packages/vue-core
+      '@modular-vue/runtime':
+        specifier: workspace:*
+        version: link:../../../../packages/vue-runtime
+      '@modular-vue/vue':
+        specifier: workspace:*
+        version: link:../../../../packages/vue
+      vue:
+        specifier: ^3.5.40
+        version: 3.5.40(typescript@6.0.3)
+      vue-router:
+        specifier: ^5.0.0
+        version: 5.2.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(pinia@4.0.2(@vue/devtools-api@8.1.5)(typescript@6.0.3)(vue@3.5.40(typescript@6.0.3)))(rolldown@1.1.4)(rollup@4.60.3)(vite@8.1.5(@types/node@25.6.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3))
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.59.1
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.0
+        version: 6.0.8(vite@8.1.5(@types/node@25.6.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3))
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vite:
+        specifier: 8.1.5
+        version: 8.1.5(@types/node@25.6.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
       vue-tsc:
         specifier: ^3.3.0
         version: 3.3.7(typescript@6.0.3)
