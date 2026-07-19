@@ -1,6 +1,6 @@
 {
   "name": "@modular-frontend/testing",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Framework-neutral testing utilities for modular frontend modules: mock stores and headless module resolution over @modular-frontend/core.",
   "repository": {
     "type": "git",

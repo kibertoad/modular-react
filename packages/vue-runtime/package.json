@@ -1,6 +1,6 @@
 {
   "name": "@modular-vue/runtime",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "vue-router runtime for @modular-vue modules: createRegistry with module registration, dependency validation, lifecycle hooks, plugin machinery, and manifest resolution.",
   "repository": {
     "type": "git",

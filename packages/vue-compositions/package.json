@@ -1,6 +1,6 @@
 {
   "name": "@modular-vue/compositions",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Vue 3 compositions for @modular-vue: CompositionsProvider, panel composables (useCompositionState / useCompositionDispatch / useCompositionEmit), the host useComposition hook, and the compositions registry plugin over @modular-frontend/compositions-engine.",
   "repository": {
     "type": "git",

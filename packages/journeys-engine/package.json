@@ -1,6 +1,6 @@
 {
   "name": "@modular-frontend/journeys-engine",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Framework-neutral journey engine: runtime, validation, persistence, authoring helpers, handles, and types for typed, serializable multi-module workflows. No UI-framework dependency — the outlet and hooks live in a binding package.",
   "repository": {
     "type": "git",
