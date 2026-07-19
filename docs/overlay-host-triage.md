@@ -110,12 +110,14 @@ consumers have the identical need (the React family has no modal host either), a
 the operating rule restated in the slice-4 triage holds: _engine-first, both bindings
 in the same train._ Shipping a Vue-only overlay host would leave React to later port
 from the Vue binding — the inversion the family exists to prevent. The neutral parts
-(entry/handle/resolver, and the overlay **stack** — pure order-of-registration data
-with a subscribe seam, no DOM) land in `@modular-frontend/core`; each binding ships
-the same thin host and behaviour composable/hook over them. The DOM-touching parts
-(focus, scroll, key events) are per-binding by necessity, but they share the engine
-stack so "the top overlay closes first" is one implementation of _semantics_, twice
-of _glue_.
+land in `@modular-frontend/core`: the entry/handle/resolver, the overlay **stack**
+(pure order-of-registration data with a subscribe seam — one shared app-wide
+instance), and the framework-neutral DOM behaviour semantics (focusable scan,
+Tab-cycle trap, counted body scroll lock) as guarded client-only helpers. Each
+binding ships the same thin host and behaviour composable/hook over them; only the
+event registration and reactivity glue (effects/watchers, refs, re-renders) is
+per-binding, so "the top overlay closes first" — and every other behaviour rule —
+is one implementation of _semantics_, twice of _glue_.
 
 ### 4. §4E Nuxt threading and the `/testing` entry — obsolete for the same reason as slice 4
 
@@ -231,9 +233,9 @@ Vue (`@modular-vue/vue`, re-exported from `@modular-vue/core`):
 
 React (`@modular-react/react`, same train): `useOverlay`, `<OverlayOutlet>` (portal,
 `empty` / `wrap` props, `onClose`), `useOverlaySubject` / `OverlaySubjectContext`,
-`useModalBehavior` — the same surface with `useMemo` / context /
-`useSyncExternalStore` over the same engine stack. Angular: the engine part is done
-for it; hosts when its gate opens.
+`useModalBehavior` — the same surface with `useMemo` / context / a
+subscription-driven re-render over the same engine stack. Angular: the engine part
+is done for it; hosts when its gate opens.
 
 Module authors contribute through the existing field — no descriptor change:
 
@@ -307,17 +309,33 @@ threading, no route helper):
   `OverlayHostHandle<TSubject>`, `defineOverlayHost`, `resolveOverlay` (dedupe via
   the shared `collapseEntriesById` before the null guard; pick-one lookup; dangling
   → `null`), `resolveOverlayTitle`, and `createOverlayStack` (pure LIFO with
-  `subscribe`, the shared stacking semantics). Re-exported by `@modular-react/core`
-  (`export *`) and `@modular-vue/core`.
+  `subscribe`, the shared stacking semantics). The behaviour's framework-neutral
+  DOM semantics also live in the engine (`overlay-dom.ts`, client-only and
+  SSR-guarded): the single app-wide `sharedOverlayStack` instance both bindings
+  register on, the counted body scroll lock, and the focusable-scan/Tab-trap rules
+  — one implementation, so the behaviour cannot drift between bindings.
+  Re-exported by `@modular-react/core` (`export *`) and `@modular-vue/core`.
 - **Vue** (`@modular-vue/vue`, re-exported from `@modular-vue/core`): `useOverlay`,
-  `<OverlayOutlet>` (Teleport, backdrop `click.self` → `close`, managed behaviour,
-  `#wrap` / `#empty`, subject as prop + `provide`, per-subject keying, stable data
-  attributes, `ModuleErrorBoundary` label `"Overlay"`), `useOverlaySubject` /
-  `overlaySubjectKey`, `useModalBehavior`.
+  `<OverlayOutlet>` (Teleport, backdrop press-and-release → `close`, managed
+  behaviour, `#wrap` / `#empty`, subject as prop + `provide`, per-subject keying,
+  stable data attributes, `ModuleErrorBoundary` label `"Overlay"`),
+  `useOverlaySubject` / `overlaySubjectKey`, `useModalBehavior`.
 - **React** (`@modular-react/react`): `useOverlay`, `<OverlayOutlet>` (portal,
   `empty` / `wrap` / `onClose` props), `useOverlaySubject` / `OverlaySubjectContext`,
-  `useModalBehavior` (`useSyncExternalStore` over the engine stack).
+  `useModalBehavior` (subscription-driven re-render over the engine stack).
 - **Docs**: [`docs/overlay-host.md`](overlay-host.md); comparison table extended
   four → five; cross-links per the plan.
 - **Gap D**: confirmed already closed by the shared-peer-dependency change; ships in
   the same release train. Nothing further to widen.
+
+A review-hardening pass in the same train tightened the behaviour exactly where
+hand-rolled modals classically drift: backdrop close is **press-and-release** (a
+press that starts inside the dialog and slips onto the backdrop — a text selection —
+is not a close request), initial focus is **re-applied when the active window swaps
+without closing** (`contentKey` on `useModalBehavior`; the outlets pass the mounted
+window's key), and the behaviour bundle's scope is now a **documented contract** —
+see "Conscious constraints" in [`docs/overlay-host.md`](overlay-host.md). That
+section is the standing answer to future requests to grow the bundle: a behaviour
+joins the guarantee list only when it is structural and visual-opinion-free; pixels,
+chrome anatomy, background `inert`, the focusable-detection long tail, platform
+scroll quirks, and router awareness stay out by decision.

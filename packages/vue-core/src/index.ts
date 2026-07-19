@@ -53,6 +53,7 @@ export {
   defineOverlayHost,
   resolveOverlay,
   resolveOverlayTitle,
+  sharedOverlayStack,
 } from "@modular-frontend/core";
 export type {
   OverlayEntry,

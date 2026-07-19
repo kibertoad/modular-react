@@ -209,12 +209,18 @@ Same surface with props instead of slots (`empty` / `wrap` are props), `to` /
 
 - **Teleported/portaled** to `body` by default; nothing renders while closed (the
   `#empty` slot renders in place).
-- **Backdrop click-self** requests close (`closeOnBackdrop={false}` to opt out).
+- **Backdrop press-and-release** requests close (`closeOnBackdrop={false}` to opt
+  out). Only a press that both starts _and_ releases on the backdrop counts — a press
+  that starts inside the dialog and slips onto the backdrop (a text selection, a
+  missed drag) is not a close request.
 - **One overlay stack per app.** Every open overlay — outlet-hosted or bespoke via
-  `useModalBehavior` — registers on one shared stack. Nested overlays layer in open
-  order; **Escape closes only the top**; when it closes, the one below becomes top.
-- **Focus**: moved into the dialog on open (first focusable, else the dialog itself),
-  Tab-cycled within it while open, **returned to the opener** on close.
+  `useModalBehavior`, whichever binding mounted it — registers on the engine's single
+  `sharedOverlayStack`. Nested overlays layer in open order; **Escape closes only the
+  top**; when it closes, the one below becomes top.
+- **Focus**: moved into the dialog on open (`initialFocus` if given, else the first
+  focusable, else the dialog itself), Tab-cycled within it while open, re-applied when
+  the active window **swaps without closing** (so focus follows the new content), and
+  **returned to the opener** on close.
 - **Scroll**: body scroll locked while any overlay is open, restored when the last
   closes.
 - **A11y**: `role="dialog"`, `aria-modal="true"`, `aria-label` from `title` resolved
@@ -228,6 +234,43 @@ Same surface with props instead of slots (`empty` / `wrap` are props), `to` /
   remounts the window instead of leaking state across opens — the `subjectKey`
   contract from panels, pick-one edition.
 
+## Conscious constraints — what the shell deliberately does _not_ do
+
+The overlay host is the first surface in this family that owns DOM behaviour rather
+than pure rendering, and that line is held on purpose. The guarantee list above is the
+whole contract: a behaviour joins it only when it is **structural** (it cannot be made
+uniformly correct per app or per window — the reason the host exists) and carries
+**zero visual opinion**. Everything below is out of scope by decision, not omission,
+and feature requests for them start from a default of _no_:
+
+- **No pixels, ever.** No CSS ships, no default `z-index`, no positioning, no
+  transitions or animation hooks. Stacking order is DOM order at the teleport/portal
+  target; your `backdropClass` supplies `position`/`inset`/`z-index` along with the
+  rest of your design system. Enter/leave animation belongs to your `wrap` chrome.
+- **No chrome anatomy.** The host renders exactly two elements — backdrop and dialog
+  panel — and will not grow header/footer/close-button slots. That anatomy was
+  proposed and rejected in the [triage](overlay-host-triage.md); `wrap` is the whole
+  answer.
+- **No background `inert`/`aria-hidden` management.** `aria-modal="true"` is the
+  contract with assistive tech. Marking the rest of the app inert (and the churn of
+  restoring it correctly around portals, toasts, and third-party DOM) stays app scope.
+- **Structural focusable detection only.** The focus trap scans by attributes
+  (`a[href]`, non-disabled form controls, tabindex) and does not chase the rendered
+  long tail — `visibility: hidden` content, elements hidden by an ancestor,
+  `contenteditable`, zero-size targets. If a window's first structural focusable is
+  visually hidden, pass `initialFocus` or restructure the window.
+- **No platform scroll-lock workarounds.** The lock is a counted
+  `body.style.overflow` save/restore. iOS rubber-band suppression,
+  scrollbar-gutter compensation, and nested-scroll-container policy are app scope.
+- **No router awareness** — held from the original triage. State in, requests out.
+
+If a surface needs behaviour beyond this contract, the supported moves are, in order:
+put it in your `wrap`/chrome (visual), layer it over `useModalBehavior` (structural
+but yours), or use a dedicated dialog library for that one surface — accepting that a
+surface which bypasses `useModalBehavior` is invisible to the shared stack, so Escape
+ordering and scroll-lock counting no longer coordinate with hosted windows. Do **not**
+nest another focus-trapping dialog library _inside_ a hosted window: two traps fight.
+
 ## `useModalBehavior` — the behaviour without the shell
 
 For a surface that needs a bespoke root (a full-bleed detail view, a hand-styled
@@ -238,6 +281,9 @@ const { dialogRef, isTop } = useModalBehavior({
   active: () => ui.detailOpen, // React: a boolean
   onClose: () => ui.closeDetail(),
   // initialFocus?: element to focus on activation
+  // contentKey?: identity of the hosted content — when it changes while
+  //   active (the surface swaps content without closing), initial focus is
+  //   re-applied so focus follows the swap
 });
 // Put dialogRef on your root (give it tabindex="-1"); style it however you like.
 ```

@@ -128,6 +128,17 @@ export type {
   OverlayStack,
   OverlayStackTicket,
 } from "./overlay.js";
+// Client-only DOM behaviour shared by the bindings' overlay hosts: the single
+// app-wide stack instance plus the focus/scroll semantics that must not drift
+// between bindings. Consumed by `useModalBehavior` in the framework packages;
+// apps normally never touch these directly.
+export {
+  sharedOverlayStack,
+  lockBodyScroll,
+  unlockBodyScroll,
+  firstFocusableIn,
+  trapTabFocus,
+} from "./overlay-dom.js";
 
 // Validation
 export {

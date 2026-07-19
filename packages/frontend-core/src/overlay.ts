@@ -200,11 +200,13 @@ export interface OverlayStackTicket {
  * The shared stacking semantics behind "the top overlay closes first" and
  * "nested overlays layer correctly": a LIFO stack of live registrations with a
  * subscribe seam so a binding can make `isTop` reactive (a Vue `ref` bumped on
- * notify, a React `useSyncExternalStore`). Pure data — no DOM, no listeners of
- * its own — which is what lets it live in the neutral engine while the
- * DOM-touching behaviour (key events, focus, scroll) stays per binding. Both
- * bindings consume one module-level stack instance, so every overlay in an app
- * — outlet-hosted or bespoke via `useModalBehavior` — shares one ordering.
+ * notify, a version-bump re-render in React). Pure data — no DOM, no listeners
+ * of its own — which is what lets it live in the neutral engine while the
+ * event/reactivity glue stays per binding. Both bindings' behaviour
+ * implementations register on the engine's single `sharedOverlayStack`
+ * instance (see `overlay-dom.ts`), so every overlay in an app — outlet-hosted
+ * or bespoke via `useModalBehavior`, whichever binding mounted it — shares one
+ * ordering.
  */
 export interface OverlayStack {
   /** Register an activating overlay; the newest registration is the top. */
@@ -219,8 +221,10 @@ export interface OverlayStack {
 }
 
 /**
- * Create an {@link OverlayStack}. Bindings create one per module scope; apps
- * only need their own for bespoke coordination outside the shipped hosts.
+ * Create an {@link OverlayStack}. The bindings' hosts all register on the one
+ * engine-provided `sharedOverlayStack` — create your own only for an isolated
+ * coordination scope (tests, a surface deliberately outside the app's overlay
+ * ordering).
  */
 export function createOverlayStack(): OverlayStack {
   // Tokens are per-ticket object identities; order of the array is stack order.

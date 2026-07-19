@@ -86,6 +86,19 @@ describe("OverlayOutlet — selection", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('active id "not-registered"'));
     warn.mockRestore();
   });
+
+  it("portals into a custom target, and renders in place with portalDisabled", () => {
+    const target = document.createElement("div");
+    target.className = "custom-target";
+    document.body.appendChild(target);
+    renderOutlet({ activeId: "test-report", to: target });
+    expect(target.querySelector("[data-modular-overlay-panel]")).not.toBeNull();
+    cleanup();
+    target.remove();
+
+    const { container } = renderOutlet({ activeId: "test-report", portalDisabled: true });
+    expect(container.querySelector("[data-modular-overlay-panel]")).not.toBeNull();
+  });
 });
 
 describe("OverlayOutlet — shell and a11y", () => {
@@ -156,6 +169,24 @@ describe("OverlayOutlet — close requests", () => {
     expect(onClose2).not.toHaveBeenCalled();
   });
 
+  it("does not close when a press starts inside the dialog and releases on the backdrop", () => {
+    const onClose = vi.fn();
+    renderOutlet({ activeId: "test-report", onClose });
+    const backdrop = document.querySelector("[data-modular-overlay-backdrop]")!;
+    const panel = document.querySelector("[data-modular-overlay-panel]")!;
+
+    // Text selection / slipped drag: press starts on the panel, click lands on
+    // the backdrop — not a close request.
+    fireEvent.pointerDown(panel);
+    fireEvent.click(backdrop);
+    expect(onClose).not.toHaveBeenCalled();
+
+    // A deliberate backdrop press: starts and releases on the backdrop.
+    fireEvent.pointerDown(backdrop);
+    fireEvent.click(backdrop);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("Escape closes only the top of the stack; the one below closes next", () => {
     const closeUnder = vi.fn();
     const closeOver = vi.fn();
@@ -209,6 +240,63 @@ describe("OverlayOutlet — managed behaviour", () => {
     );
     expect(document.activeElement).toBe(opener);
     opener.remove();
+  });
+
+  it("wraps Tab at the dialog's edges and pulls escaped focus back in", () => {
+    function TwoButtons() {
+      return (
+        <>
+          <button className="first">a</button>
+          <button className="second">b</button>
+        </>
+      );
+    }
+    renderOutlet({ activeId: "w" }, slotsOf({ id: "w", component: TwoButtons }));
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("first");
+
+    // Tab from the last focusable wraps to the first.
+    (document.querySelector(".second") as HTMLElement).focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("first");
+
+    // Shift+Tab from the first wraps to the last.
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("second");
+
+    // Focus that escaped the dialog entirely is pulled back in on Tab.
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    outside.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("first");
+    outside.remove();
+  });
+
+  it("focuses the panel itself when the window has no focusable content, and keeps it there on Tab", () => {
+    renderOutlet({ activeId: "merger-verdict" });
+    const panel = document.querySelector("[data-modular-overlay-panel]")!;
+    expect(document.activeElement).toBe(panel);
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(panel);
+  });
+
+  it("moves focus into the new window when the active id switches without closing", () => {
+    function WinA() {
+      return <button className="in-a">a</button>;
+    }
+    function WinB() {
+      return <button className="in-b">b</button>;
+    }
+    const slots = slotsOf({ id: "a", component: WinA }, { id: "b", component: WinB });
+    const view = renderOutlet({ activeId: "a" }, slots);
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("in-a");
+
+    view.rerender(
+      <SlotsContext value={slots}>
+        <OverlayOutlet host={host} activeId="b" subject={step} />
+      </SlotsContext>,
+    );
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("in-b");
   });
 
   it("remounts window content when subjectKey changes with the subject", () => {
@@ -265,6 +353,25 @@ describe("useOverlaySubject", () => {
 });
 
 describe("useModalBehavior (standalone)", () => {
+  it("gives initial focus to initialFocus when provided", () => {
+    function Bespoke({ active }: { active: boolean }) {
+      const [wanted, setWanted] = useState<HTMLButtonElement | null>(null);
+      const { dialogRef } = useModalBehavior({ active, onClose: () => {}, initialFocus: wanted });
+      return (
+        <div ref={dialogRef as React.RefObject<HTMLDivElement | null>} tabIndex={-1}>
+          <button>first</button>
+          <button ref={setWanted} className="wanted">
+            second
+          </button>
+        </div>
+      );
+    }
+    const view = render(<Bespoke active={false} />);
+    view.rerender(<Bespoke active />);
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("wanted");
+    view.unmount();
+  });
+
   it("tracks top-of-stack across bespoke and hosted overlays, and closes top-first", () => {
     const closed = vi.fn();
     const { result, rerender } = renderHook(

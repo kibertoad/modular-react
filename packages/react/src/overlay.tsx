@@ -10,10 +10,14 @@ import {
 import { createPortal } from "react-dom";
 import type { ComponentType, ReactNode, RefObject } from "react";
 import {
-  createOverlayStack,
+  firstFocusableIn,
   isDevEnv,
+  lockBodyScroll,
   resolveOverlay,
   resolveOverlayTitle,
+  sharedOverlayStack,
+  trapTabFocus,
+  unlockBodyScroll,
   type OnDuplicateComponentId,
   type OverlayEntry,
   type OverlayHostHandle,
@@ -110,62 +114,11 @@ export function useOverlay<TSubject>(
 // Managed modal behaviour
 // ---------------------------------------------------------------------------
 
-// One stack per binding module scope: every overlay in the app — outlet-hosted
-// or bespoke via useModalBehavior — shares one ordering, so "the top overlay
-// closes first" holds across both. Pure data (no DOM), so module-level
-// creation is SSR-safe.
-const modalStack = createOverlayStack();
-
-// Shared scroll lock: one body-overflow save/restore across however many
-// overlays are open, whichever host or hook opened them.
-let scrollLockCount = 0;
-let prevBodyOverflow = "";
-
-function lockScroll(): void {
-  if (scrollLockCount++ === 0) {
-    prevBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-  }
-}
-
-function unlockScroll(): void {
-  if (scrollLockCount > 0 && --scrollLockCount === 0) {
-    document.body.style.overflow = prevBodyOverflow;
-  }
-}
-
-const FOCUSABLE_SELECTOR = [
-  "a[href]",
-  "button:not([disabled])",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  '[tabindex]:not([tabindex="-1"])',
-].join(", ");
-
-// Tab-cycle containment: wrap focus at the dialog's edges; if focus escaped
-// (or the dialog has no focusable content), pull it back in.
-function trapTab(event: KeyboardEvent, root: HTMLElement): void {
-  const focusables = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-  if (focusables.length === 0) {
-    event.preventDefault();
-    root.focus();
-    return;
-  }
-  const first = focusables[0];
-  const last = focusables[focusables.length - 1];
-  const active = document.activeElement;
-  const inside = active instanceof HTMLElement && root.contains(active);
-  if (event.shiftKey) {
-    if (!inside || active === first) {
-      event.preventDefault();
-      last.focus();
-    }
-  } else if (!inside || active === last) {
-    event.preventDefault();
-    first.focus();
-  }
-}
+// The stack instance, scroll lock, and focus semantics live in the engine
+// (`sharedOverlayStack`, `lockBodyScroll` / `unlockBodyScroll`,
+// `firstFocusableIn` / `trapTabFocus`) — one implementation shared with the
+// Vue binding so the behaviour cannot drift. This module contributes only the
+// React glue: effects, refs, and re-renders.
 
 /**
  * The managed modal *behaviour* as a standalone hook, for a window that needs
@@ -200,6 +153,14 @@ export function useModalBehavior(opts: {
   onClose: () => void;
   /** Element to receive initial focus on activation (default: first focusable). */
   initialFocus?: HTMLElement | null;
+  /**
+   * Identity of the content currently hosted inside the dialog. When it
+   * changes while `active` (the overlay swaps windows without closing —
+   * `<OverlayOutlet>` passes the mounted window's key), initial focus is
+   * re-applied so focus follows the new content instead of falling to `body`
+   * with the old one. Irrelevant for a root whose content never swaps.
+   */
+  contentKey?: string | number | null;
 }): { dialogRef: RefObject<HTMLElement | null>; isTop: boolean } {
   const dialogRef = useRef<HTMLElement | null>(null);
   const ticketRef = useRef<OverlayStackTicket | null>(null);
@@ -212,25 +173,25 @@ export function useModalBehavior(opts: {
   initialFocusRef.current = opts.initialFocus;
 
   // Re-render on stack changes and re-read `isTop` during render. Deliberately
-  // NOT useSyncExternalStore: `modalStack.push()` notifies synchronously
-  // *before* the activation effect below can assign `ticketRef`, so an eager
-  // snapshot read at notify time would see a stale null and settle on `false`.
-  // A version bump re-renders instead, and the render-time read happens after
-  // the ticket is assigned. The explicit bump after assignment covers this
-  // instance's own push; the subscription covers everyone else's.
+  // NOT useSyncExternalStore: `sharedOverlayStack.push()` notifies
+  // synchronously *before* the activation effect below can assign `ticketRef`,
+  // so an eager snapshot read at notify time would see a stale null and settle
+  // on `false`. A version bump re-renders instead, and the render-time read
+  // happens after the ticket is assigned. The explicit bump after assignment
+  // covers this instance's own push; the subscription covers everyone else's.
   const [, bumpStackVersion] = useReducer((n: number) => n + 1, 0);
-  useEffect(() => modalStack.subscribe(bumpStackVersion), []);
+  useEffect(() => sharedOverlayStack.subscribe(bumpStackVersion), []);
   const isTop = ticketRef.current?.isTop() ?? false;
 
   useEffect(() => {
     if (!opts.active) return;
 
-    const ticket = modalStack.push();
+    const ticket = sharedOverlayStack.push();
     ticketRef.current = ticket;
     bumpStackVersion();
     const restoreFocusTo =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    lockScroll();
+    lockBodyScroll();
 
     const onKeydown = (event: KeyboardEvent) => {
       if (!ticket.isTop()) return;
@@ -240,26 +201,33 @@ export function useModalBehavior(opts: {
         return;
       }
       if (event.key === "Tab" && dialogRef.current) {
-        trapTab(event, dialogRef.current);
+        trapTabFocus(event, dialogRef.current);
       }
     };
     document.addEventListener("keydown", onKeydown, true);
 
-    // The portal content committed with this effect's render; focus directly.
-    const target =
-      initialFocusRef.current ??
-      dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
-      dialogRef.current;
-    target?.focus();
-
     return () => {
       document.removeEventListener("keydown", onKeydown, true);
-      unlockScroll();
+      unlockBodyScroll();
       ticketRef.current = null;
       ticket.release();
       if (restoreFocusTo?.isConnected) restoreFocusTo.focus();
     };
   }, [opts.active]);
+
+  // Initial focus, separate from activation so it re-runs when the hosted
+  // content swaps under an open overlay (contentKey change): the old window's
+  // focused element unmounts and focus would otherwise fall to `body`. Runs
+  // after the activation effect above (declaration order), against the DOM
+  // this render committed.
+  useEffect(() => {
+    if (!opts.active) return;
+    const target =
+      initialFocusRef.current ??
+      (dialogRef.current ? firstFocusableIn(dialogRef.current) : null) ??
+      dialogRef.current;
+    target?.focus();
+  }, [opts.active, opts.contentKey]);
 
   return { dialogRef, isTop };
 }
@@ -303,7 +271,11 @@ export interface OverlayOutletProps<TSubject> {
   readonly to?: Element | null;
   /** Render in place instead of portaling (tests, inline embedding). */
   readonly portalDisabled?: boolean;
-  /** Close on backdrop click-self (default `true`). */
+  /**
+   * Request close when a press starts **and** releases on the backdrop itself
+   * (default `true`). A press that starts inside the dialog and slips onto the
+   * backdrop — a text selection, a missed drag — is not a close request.
+   */
   readonly closeOnBackdrop?: boolean;
   /** The app's styling for the two host-rendered elements. Headless otherwise. */
   readonly backdropClassName?: string;
@@ -367,30 +339,44 @@ export function OverlayOutlet<TSubject>({
 }: OverlayOutletProps<TSubject>): ReactNode {
   const entry = useOverlay(host, activeId, onDuplicate ? { onDuplicate } : undefined);
 
-  const close = useCallback(() => onClose?.(), [onClose]);
-  const { dialogRef, isTop } = useModalBehavior({ active: entry !== null, onClose: close });
+  const key =
+    entry === null
+      ? null
+      : subjectKey === undefined
+        ? entry.id
+        : `${entry.id}:${typeof subjectKey === "function" ? subjectKey(subject) : subjectKey}`;
 
+  const close = useCallback(() => onClose?.(), [onClose]);
+  const { dialogRef, isTop } = useModalBehavior({
+    active: entry !== null,
+    onClose: close,
+    contentKey: key,
+  });
+
+  // A press that starts inside the dialog (text selection, a slipped drag) and
+  // releases over the backdrop still fires `click` on the backdrop — that is
+  // not a close request. Close only when the press both started and ended on
+  // the backdrop itself.
+  const pressStartedInsidePanelRef = useRef(false);
+
+  const dangling = activeId != null && entry === null ? activeId : null;
   useEffect(() => {
-    if (isDevEnv() && activeId != null && entry === null) {
+    if (isDevEnv() && dangling !== null) {
       // A dangling active id is data, not a crash (the id may name a window
       // another deployment ships) — but it is worth a loud dev breadcrumb.
       console.warn(
-        `[@modular-react/react] OverlayOutlet: active id "${activeId}" matches no registered ` +
+        `[@modular-react/react] OverlayOutlet: active id "${dangling}" matches no registered ` +
           `overlay in slot "${host.slotKey}". Rendering nothing. Register a window under that ` +
           `id (module slots) or clear the id.`,
       );
     }
-  }, [activeId, entry, host.slotKey]);
+  }, [dangling, host.slotKey]);
 
   if (entry === null) return empty ?? null;
 
   const Component = entry.component as ComponentType<Record<string, unknown>>;
   const content = <Component {...entry.props} subject={subject} />;
   const inner = wrap ? wrap({ entry, subject, close, isTop, children: content }) : content;
-  const key =
-    subjectKey === undefined
-      ? entry.id
-      : `${entry.id}:${typeof subjectKey === "function" ? subjectKey(subject) : subjectKey}`;
 
   const shell = (
     <OverlaySubjectContext value={subject}>
@@ -398,8 +384,15 @@ export function OverlayOutlet<TSubject>({
         className={backdropClassName}
         data-modular-overlay-backdrop=""
         data-overlay-id={entry.id}
+        onPointerDown={(event) => {
+          pressStartedInsidePanelRef.current = event.target !== event.currentTarget;
+        }}
         onClick={(event) => {
-          if (closeOnBackdrop && event.target === event.currentTarget) close();
+          const pressStartedInsidePanel = pressStartedInsidePanelRef.current;
+          pressStartedInsidePanelRef.current = false;
+          if (closeOnBackdrop && event.target === event.currentTarget && !pressStartedInsidePanel) {
+            close();
+          }
         }}
       >
         <div

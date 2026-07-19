@@ -19,10 +19,14 @@ import {
   type VNode,
 } from "vue";
 import {
-  createOverlayStack,
+  firstFocusableIn,
   isDevEnv,
+  lockBodyScroll,
   resolveOverlay,
   resolveOverlayTitle,
+  sharedOverlayStack,
+  trapTabFocus,
+  unlockBodyScroll,
   type OnDuplicateComponentId,
   type OverlayEntry,
   type OverlayHostHandle,
@@ -123,74 +127,17 @@ export function useOverlay<TSubject>(
 // Managed modal behaviour
 // ---------------------------------------------------------------------------
 
-// One stack per binding module scope: every overlay in the app — outlet-hosted
-// or bespoke via useModalBehavior — shares one ordering, so "the top overlay
-// closes first" holds across both. Pure data (no DOM), so module-level
-// creation is SSR-safe.
-const modalStack = createOverlayStack();
+// The stack instance, scroll lock, and focus semantics live in the engine
+// (`sharedOverlayStack`, `lockBodyScroll` / `unlockBodyScroll`,
+// `firstFocusableIn` / `trapTabFocus`) — one implementation shared with the
+// React binding so the behaviour cannot drift. This module contributes only
+// the Vue glue: watchers, refs, and reactivity.
 
 // Reactive mirror of stack changes so per-instance `isTop` computeds re-read.
 const stackVersion = ref(0);
-modalStack.subscribe(() => {
+sharedOverlayStack.subscribe(() => {
   stackVersion.value++;
 });
-
-// Shared scroll lock: one body-overflow save/restore across however many
-// overlays are open, whichever host or composable opened them.
-let scrollLockCount = 0;
-let prevBodyOverflow = "";
-
-function lockScroll(): void {
-  if (typeof document === "undefined") return;
-  if (scrollLockCount++ === 0) {
-    prevBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-  }
-}
-
-function unlockScroll(): void {
-  if (typeof document === "undefined") return;
-  if (scrollLockCount > 0 && --scrollLockCount === 0) {
-    document.body.style.overflow = prevBodyOverflow;
-  }
-}
-
-const FOCUSABLE_SELECTOR = [
-  "a[href]",
-  "button:not([disabled])",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  '[tabindex]:not([tabindex="-1"])',
-].join(", ");
-
-function focusableWithin(root: HTMLElement): HTMLElement[] {
-  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-}
-
-// Tab-cycle containment: wrap focus at the dialog's edges; if focus escaped
-// (or the dialog has no focusable content), pull it back in.
-function trapTab(event: KeyboardEvent, root: HTMLElement): void {
-  const focusables = focusableWithin(root);
-  if (focusables.length === 0) {
-    event.preventDefault();
-    root.focus();
-    return;
-  }
-  const first = focusables[0];
-  const last = focusables[focusables.length - 1];
-  const active = document.activeElement;
-  const inside = active instanceof HTMLElement && root.contains(active);
-  if (event.shiftKey) {
-    if (!inside || active === first) {
-      event.preventDefault();
-      last.focus();
-    }
-  } else if (!inside || active === last) {
-    event.preventDefault();
-    first.focus();
-  }
-}
 
 /**
  * The managed modal *behaviour* as a standalone composable, for a window that
@@ -226,6 +173,14 @@ export function useModalBehavior(opts: {
   onClose: () => void;
   /** Element to receive initial focus on activation (default: first focusable). */
   initialFocus?: MaybeRefOrGetter<HTMLElement | null | undefined>;
+  /**
+   * Identity of the content currently hosted inside the dialog. When it
+   * changes while `active` (the overlay swaps windows without closing —
+   * `<OverlayOutlet>` passes the mounted window's key), initial focus is
+   * re-applied so focus follows the new content instead of falling to `body`
+   * with the old one. Irrelevant for a root whose content never swaps.
+   */
+  contentKey?: MaybeRefOrGetter<string | number | null | undefined>;
 }): { dialogRef: Ref<HTMLElement | null>; isTop: ComputedRef<boolean> } {
   const dialogRef = ref<HTMLElement | null>(null);
   let ticket: OverlayStackTicket | null = null;
@@ -245,34 +200,38 @@ export function useModalBehavior(opts: {
       return;
     }
     if (event.key === "Tab" && dialogRef.value) {
-      trapTab(event, dialogRef.value);
+      trapTabFocus(event, dialogRef.value);
     }
+  };
+
+  const focusIntoDialog = () => {
+    // The dialog (or its swapped-in content) renders in the same tick the
+    // trigger flips; focus after the DOM settles.
+    void nextTick(() => {
+      if (!ticket) return; // deactivated before the tick settled
+      const target =
+        toValue(opts.initialFocus) ??
+        (dialogRef.value ? firstFocusableIn(dialogRef.value) : null) ??
+        dialogRef.value;
+      target?.focus();
+    });
   };
 
   const activate = () => {
     // Client-only: on the server the behaviour is inert (nothing teleports,
     // nothing focuses); the app hydrates and activates in the browser.
     if (typeof document === "undefined" || ticket) return;
-    ticket = modalStack.push();
+    ticket = sharedOverlayStack.push();
     restoreFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    lockScroll();
+    lockBodyScroll();
     document.addEventListener("keydown", onKeydown, true);
-    // The dialog renders in the same tick the activation flag flips; focus
-    // after the DOM settles.
-    void nextTick(() => {
-      if (!ticket) return; // deactivated before the tick settled
-      const target =
-        toValue(opts.initialFocus) ??
-        dialogRef.value?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
-        dialogRef.value;
-      target?.focus();
-    });
+    focusIntoDialog();
   };
 
   const deactivate = () => {
     if (!ticket) return;
     document.removeEventListener("keydown", onKeydown, true);
-    unlockScroll();
+    unlockBodyScroll();
     ticket.release();
     ticket = null;
     if (restoreFocusTo?.isConnected) restoreFocusTo.focus();
@@ -286,6 +245,16 @@ export function useModalBehavior(opts: {
       else deactivate();
     },
     { immediate: true, flush: "post" },
+  );
+  // Re-apply initial focus when the hosted content swaps under an open
+  // overlay: the old window's focused element unmounts and focus would
+  // otherwise fall to `body`.
+  watch(
+    () => toValue(opts.contentKey),
+    () => {
+      if (ticket) focusIntoDialog();
+    },
+    { flush: "post" },
   );
   onBeforeUnmount(deactivate);
 
@@ -323,7 +292,10 @@ function keyFor(entry: OverlayEntry<unknown>, subjectKey: unknown, subject: unkn
  *   the `<PanelsOutlet>` `subjectKey` contract.
  * - `to` — teleport target (default `"body"`); `teleportDisabled` renders in
  *   place (tests, inline embedding).
- * - `closeOnBackdrop` — default `true`.
+ * - `closeOnBackdrop` — default `true`. Close is requested only when a press
+ *   both starts and releases on the backdrop itself; a press that starts
+ *   inside the dialog and slips onto the backdrop (a text selection, a missed
+ *   drag) is not a close request.
  * - `backdropClass` / `panelClass` — the app's styling for the only two
  *   elements the host renders. Headless: no opinionated CSS is applied; a
  *   bare host is functional but unstyled.
@@ -382,6 +354,7 @@ export const OverlayOutlet = defineComponent({
     const { dialogRef, isTop } = useModalBehavior({
       active: () => entry.value !== null,
       onClose: close,
+      contentKey: () => (entry.value ? keyFor(entry.value, props.subjectKey, props.subject) : null),
     });
 
     if (isDevEnv()) {
@@ -402,8 +375,20 @@ export const OverlayOutlet = defineComponent({
       );
     }
 
+    // A press that starts inside the dialog (text selection, a slipped drag)
+    // and releases over the backdrop still fires `click` on the backdrop —
+    // that is not a close request. Close only when the press both started and
+    // ended on the backdrop itself.
+    let pressStartedInsidePanel = false;
+    const onBackdropPointerdown = (event: PointerEvent) => {
+      pressStartedInsidePanel = event.target !== event.currentTarget;
+    };
     const onBackdropClick = (event: MouseEvent) => {
-      if (props.closeOnBackdrop && event.target === event.currentTarget) close();
+      const startedInsidePanel = pressStartedInsidePanel;
+      pressStartedInsidePanel = false;
+      if (props.closeOnBackdrop && event.target === event.currentTarget && !startedInsidePanel) {
+        close();
+      }
     };
 
     return () => {
@@ -433,6 +418,7 @@ export const OverlayOutlet = defineComponent({
             class: props.backdropClass,
             "data-modular-overlay-backdrop": "",
             "data-overlay-id": active.id,
+            onPointerdown: onBackdropPointerdown,
             onClick: onBackdropClick,
           },
           [

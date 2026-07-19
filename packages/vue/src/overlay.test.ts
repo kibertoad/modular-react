@@ -202,6 +202,21 @@ describe("OverlayOutlet — close requests", () => {
     expect(wrapper.emitted("close")).toBeUndefined();
   });
 
+  it("does not emit close when a press starts inside the dialog and releases on the backdrop", async () => {
+    const wrapper = track(mountOutlet({ activeId: "test-report", subject: step }));
+
+    // Text selection / slipped drag: press starts on the panel, click lands on
+    // the backdrop — not a close request.
+    await wrapper.find("[data-modular-overlay-panel]").trigger("pointerdown");
+    await wrapper.find("[data-modular-overlay-backdrop]").trigger("click");
+    expect(wrapper.emitted("close")).toBeUndefined();
+
+    // A deliberate backdrop press: starts and releases on the backdrop.
+    await wrapper.find("[data-modular-overlay-backdrop]").trigger("pointerdown");
+    await wrapper.find("[data-modular-overlay-backdrop]").trigger("click");
+    expect(wrapper.emitted("close")).toHaveLength(1);
+  });
+
   it("emits close on Escape", async () => {
     const wrapper = track(mountOutlet({ activeId: "test-report", subject: step }));
     await nextTick();
@@ -269,6 +284,79 @@ describe("OverlayOutlet — managed behaviour", () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it("wraps Tab at the dialog's edges and pulls escaped focus back in", async () => {
+    const TwoButtons = defineComponent({
+      props: { subject: { type: null as never, default: null } },
+      setup() {
+        return () => [h("button", { class: "first" }, "a"), h("button", { class: "second" }, "b")];
+      },
+    });
+    track(
+      mountOutlet(
+        { activeId: "w", subject: step, teleportDisabled: false },
+        entries({ id: "w", component: TwoButtons }),
+      ),
+    );
+    await nextTick();
+    await nextTick();
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("first");
+
+    const pressTab = (shiftKey = false) =>
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true }));
+
+    // Tab from the last focusable wraps to the first.
+    (document.querySelector(".second") as HTMLElement).focus();
+    pressTab();
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("first");
+
+    // Shift+Tab from the first wraps to the last.
+    pressTab(true);
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("second");
+
+    // Focus that escaped the dialog entirely is pulled back in on Tab.
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    outside.focus();
+    pressTab();
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("first");
+    outside.remove();
+  });
+
+  it("focuses the panel itself when the window has no focusable content, and keeps it there on Tab", async () => {
+    track(mountOutlet({ activeId: "merger-verdict", teleportDisabled: false }));
+    await nextTick();
+    await nextTick();
+    const panel = document.body.querySelector("[data-modular-overlay-panel]");
+    expect(document.activeElement).toBe(panel);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    expect(document.activeElement).toBe(panel);
+  });
+
+  it("moves focus into the new window when the active id switches without closing", async () => {
+    const WinA = defineComponent({
+      props: { subject: { type: null as never, default: null } },
+      setup: () => () => h("button", { class: "in-a" }, "a"),
+    });
+    const WinB = defineComponent({
+      props: { subject: { type: null as never, default: null } },
+      setup: () => () => h("button", { class: "in-b" }, "b"),
+    });
+    const wrapper = track(
+      mountOutlet(
+        { activeId: "a", subject: step, teleportDisabled: false },
+        entries({ id: "a", component: WinA }, { id: "b", component: WinB }),
+      ),
+    );
+    await nextTick();
+    await nextTick();
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("in-a");
+
+    await wrapper.setProps({ activeId: "b" });
+    await nextTick();
+    await nextTick();
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("in-b");
+  });
+
   it("keeps a window's instance state across subject changes without subjectKey, remounts with it", async () => {
     // Captures its first subject at setup, so the test can tell a reused
     // instance (stale capture survives) from a remounted one (fresh capture).
@@ -324,6 +412,30 @@ describe("useOverlaySubject", () => {
 });
 
 describe("useModalBehavior (standalone)", () => {
+  it("gives initial focus to initialFocus when provided", async () => {
+    const Bespoke = defineComponent({
+      props: { active: { type: Boolean, default: false } },
+      setup(props) {
+        const wanted = ref<HTMLElement | null>(null);
+        const { dialogRef } = useModalBehavior({
+          active: () => props.active,
+          onClose: () => {},
+          initialFocus: wanted,
+        });
+        return () =>
+          h("div", { ref: dialogRef, tabindex: -1 }, [
+            h("button", "first"),
+            h("button", { ref: wanted, class: "wanted" }, "second"),
+          ]);
+      },
+    });
+    const wrapper = track(mount(Bespoke, { attachTo: document.body }));
+    await wrapper.setProps({ active: true });
+    await nextTick();
+    await nextTick();
+    expect((document.activeElement as HTMLElement | null)?.className).toBe("wanted");
+  });
+
   it("tracks top-of-stack across bespoke and hosted overlays, and closes top-first", async () => {
     const active = ref(false);
     const closed = vi.fn();
