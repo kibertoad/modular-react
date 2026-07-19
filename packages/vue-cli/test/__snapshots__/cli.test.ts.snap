@@ -23,7 +23,7 @@ dist/
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@modular-frontend/core": "^0.1.0",
+    "@modular-frontend/core": ">=0.1.0 <2.0.0",
     "@modular-vue/vue": "^1.0.0",
     "wretch": "^2.11.0"
   },
@@ -286,7 +286,7 @@ export type CustomerOnboardingHandle = typeof customerOnboardingHandle
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@modular-frontend/core": "^0.1.0",
+    "@modular-frontend/core": ">=0.1.0 <2.0.0",
     "@modular-vue/core": "^1.0.0",
     "@acme/app-shared": "workspace:*"
   },
@@ -485,7 +485,7 @@ const user = useStore('auth', (s) => s.user)
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@modular-frontend/core": "^0.1.0",
+    "@modular-frontend/core": ">=0.1.0 <2.0.0",
     "@modular-vue/core": "^1.0.0",
     "@acme/app-shared": "workspace:*"
   },
@@ -733,7 +733,7 @@ onlyBuiltDependencies:
     "@acme/customer-onboarding-journey": "workspace:*",
     "@acme/dashboard-module": "workspace:*",
     "@acme/orders-module": "workspace:*",
-    "@modular-frontend/core": "^0.1.0",
+    "@modular-frontend/core": ">=0.1.0 <2.0.0",
     "@modular-vue/core": "^1.0.0",
     "@modular-vue/journeys": "^1.0.0",
     "@modular-vue/runtime": "^1.0.0",

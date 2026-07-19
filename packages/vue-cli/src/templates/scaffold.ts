@@ -22,8 +22,8 @@ export const MODULAR_VUE_VERSION = "^1.0.0";
 const V = {
   /** `@modular-vue/*` family (core, runtime, vue, testing, journeys). */
   modularVue: MODULAR_VUE_VERSION,
-  /** `@modular-frontend/*` shared engine/core (0.x — tight range, see D-policy). */
-  modularFrontend: "^0.1.0",
+  /** `@modular-frontend/*` shared engine/core — one open range across the pre-2.0 line so a generated app is never pinned off the latest (e.g. panels landed in 0.4). */
+  modularFrontend: ">=0.1.0 <2.0.0",
   vue: "^3.5.0",
   vueRouter: "^5.0.0",
   vueTsc: "^3.3.0",
