@@ -28,6 +28,12 @@ demonstrates end-to-end:
    subscription so the outlet's abandon-on-unmount is skipped
    (`record.listeners.size > 0`). Closing the modal keeps the journey; reopening
    resumes it.
+4. **Close vs. cancel.** Two buttons make the contract concrete. **Close**
+   (`ui.close()`) is a soft close — it only hides the modal, the keep-alive holds
+   the instance, and the blob survives for resume. **Cancel**
+   (`runtime.discard(id)`, in `useWizardControls`) is a hard cancel — it ends the
+   instance and removes the persisted blob in one call, so reopening starts
+   fresh. Only a genuine complete (confirm) or a discard removes the blob.
 
 ## Layout
 

@@ -404,3 +404,133 @@ describe("stock adapters end-to-end with createJourneyRuntime", () => {
     expect(idB).toBe(idA);
   });
 });
+
+// ---------------------------------------------------------------------------
+// runtime.discard — the "Cancel = throw the flow away" affordance. Ends the
+// instance (which removes the persisted blob, as any terminal transition does)
+// and forgets the record, addressable by instanceId so shells never re-derive
+// the persistence key by hand.
+// ---------------------------------------------------------------------------
+
+describe("runtime.discard", () => {
+  const stepModule = defineModule({
+    id: "step",
+    version: "1.0.0",
+    exitPoints: { done: defineExit() },
+    entryPoints: {
+      view: defineEntry({
+        component: (() => null) as any,
+        input: schema<{ customerId: string }>(),
+      }),
+    },
+  });
+  type Modules = { readonly step: typeof stepModule };
+  interface State {
+    readonly customerId: string;
+  }
+  interface Input {
+    readonly customerId: string;
+  }
+
+  const journey = defineJourney<Modules, State>()({
+    id: "cancelable",
+    version: "1.0.0",
+    initialState: ({ customerId }: Input) => ({ customerId }),
+    start: (s) => ({ module: "step", entry: "view", input: { customerId: s.customerId } }),
+    transitions: { step: { view: { done: () => ({ complete: { ok: true } }) } } },
+  });
+
+  const drain = async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  };
+
+  it("removes the persisted blob and drops the record", async () => {
+    const persistence = createMemoryPersistence<Input, State>({
+      keyFor: ({ journeyId, input }) => `${journeyId}:${input.customerId}`,
+    });
+    const rt = createJourneyRuntime([{ definition: journey, options: { persistence } }], {
+      modules: { step: stepModule },
+      debug: false,
+    });
+
+    const id = rt.start("cancelable", { customerId: "C-1" });
+    await drain();
+    expect(persistence.size()).toBe(1);
+    expect(rt.getInstance(id)?.status).toBe("active");
+
+    rt.discard(id);
+    await drain();
+
+    // Blob gone (hard cancel), record gone — no manual keyFor + remove needed.
+    expect(persistence.size()).toBe(0);
+    expect(rt.getInstance(id)).toBeNull();
+    expect(rt.listInstances()).toHaveLength(0);
+  });
+
+  it("does NOT remove the blob when the instance is merely left active (soft close)", async () => {
+    // The contrast case that makes the contract legible: a soft close keeps the
+    // instance active (never ends it), so the blob survives for resume. Only
+    // `discard` (or any other terminal) deletes it.
+    const persistence = createMemoryPersistence<Input, State>({
+      keyFor: ({ journeyId, input }) => `${journeyId}:${input.customerId}`,
+    });
+    const rt = createJourneyRuntime([{ definition: journey, options: { persistence } }], {
+      modules: { step: stepModule },
+      debug: false,
+    });
+
+    const id = rt.start("cancelable", { customerId: "C-2" });
+    await drain();
+    expect(persistence.size()).toBe(1);
+
+    // Soft close = do nothing to the runtime. Blob is still there to resume.
+    await drain();
+    expect(persistence.size()).toBe(1);
+    expect(rt.getInstance(id)?.status).toBe("active");
+  });
+
+  it("is a no-op for an unknown id", () => {
+    const rt = createJourneyRuntime([{ definition: journey, options: undefined }], {
+      modules: { step: stepModule },
+      debug: false,
+    });
+    expect(() => rt.discard("does-not-exist")).not.toThrow();
+  });
+
+  it("still fires onAbandon and forces termination when it returns a non-terminal result", async () => {
+    // A registration-level onAbandon that returns `{ next }` (non-terminal).
+    // `discard` force-ends, so this cannot leave the instance active (which
+    // would strand the blob and make forget a no-op) — it is coerced to abort.
+    const persistence = createMemoryPersistence<Input, State>({
+      keyFor: ({ journeyId, input }) => `${journeyId}:${input.customerId}`,
+    });
+    let abandoned = false;
+    const rt = createJourneyRuntime(
+      [
+        {
+          definition: journey,
+          options: {
+            persistence,
+            onAbandon: () => {
+              abandoned = true;
+              return { next: { module: "step", entry: "view", input: { customerId: "again" } } };
+            },
+          },
+        },
+      ],
+      { modules: { step: stepModule }, debug: false },
+    );
+
+    const id = rt.start("cancelable", { customerId: "C-3" });
+    await drain();
+    expect(persistence.size()).toBe(1);
+
+    rt.discard(id);
+    await drain();
+
+    expect(abandoned).toBe(true);
+    expect(persistence.size()).toBe(0);
+    expect(rt.getInstance(id)).toBeNull();
+  });
+});

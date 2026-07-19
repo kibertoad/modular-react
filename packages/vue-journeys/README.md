@@ -33,7 +33,9 @@ npm install @modular-vue/journeys
   starts it on mount, renders its step, ends + forgets the instance on unmount.
   Outlet props pass through as attrs, in either spelling (`:on-finished` and
   `:onFinished` both reach the outlet); the default scoped slot receives
-  `{ instanceId, instance, stepIndex, outlet }` for chrome.
+  `{ instanceId, instance, runtime, stepIndex, outlet }` for chrome. `outlet` is
+  a functional component — render it with `<component :is="outlet" />`, or spell
+  it yourself as `<JourneyOutlet :instance-id="instanceId" :runtime="runtime" />`.
 - **`useJourneyHost(handle, input, options?)`** — the lifecycle without the
   rendering. Returns `{ instanceId, instance, stepIndex }` as refs, plus the
   plain `runtime` it resolved at setup — the one `instanceId` is valid on.

@@ -146,6 +146,46 @@ export default defineNuxtPlugin((nuxtApp) => {
 Everything but `router` is forwarded to `registry.resolve()` — `router` comes
 from `nuxtApp.$router`.
 
+### Plugin extensions survive (and thread themselves app-wide)
+
+The returned manifest keeps its plugin extensions typed. A registry built with
+`createRegistry({}).use(journeysPlugin())` hands back a manifest whose
+`extensions.journeys` — and the `manifest.journeys` convenience alias — is typed
+as `JourneyRuntime`, **no cast**. (`installModularApp` infers the extension map
+from the registry's `resolve()` return rather than the opaque plugin tuple, which
+can't be recovered by inference.)
+
+You also usually don't need to touch that runtime by hand. Because the install
+calls `resolve()`, any plugin that implements the Vue `appProvides` hook — the
+journeys plugin does — is threaded **app-wide** via `app.provide` during
+`nuxtApp.vueApp.use(manifest)`. So `<JourneyHost>` / `<JourneyOutlet>` and
+`useJourneyContext()` resolve the runtime from context with **no
+`<JourneyProvider>` wrapper and no manual `provideJourneyRuntime`**. (Call
+`provideJourneyRuntime` only for the escape-hatch cases it documents — a
+hand-built runtime with no plugin, or installing the same runtime on a second
+app.)
+
+### Typing `manifest` under `defineNuxtPlugin`
+
+Returning `{ provide: { modular: manifest } }` makes Nuxt infer the plugin's
+provide types from `manifest`. When the manifest carries a large plugin runtime
+(the journeys runtime is large), that structural inference can trip TypeScript's
+self-reference guard — **TS7022, "referenced directly or indirectly in its own
+initializer."** Annotate the binding to break the cycle; the precise type is
+nameable thanks to the extension threading above:
+
+```ts
+import type { ApplicationManifest } from "@modular-vue/nuxt/runtime";
+import type { JourneyRuntime } from "@modular-vue/journeys";
+
+export default defineNuxtPlugin((nuxtApp) => {
+  const registry = buildRegistry();
+  const manifest: ApplicationManifest<AppSlots, AppNavItem, { journeys: JourneyRuntime }> =
+    installModularApp(nuxtApp, registry);
+  return { provide: { modular: manifest } };
+});
+```
+
 ## Routing: runtime `addRoute` and the first paint
 
 Module routes are added at runtime, when the plugin runs, via
