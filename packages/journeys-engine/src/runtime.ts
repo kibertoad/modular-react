@@ -2872,6 +2872,19 @@ export function createJourneyRuntime(
       instances.delete(id);
     },
 
+    discard(id, reason) {
+      // Cancel-and-discard in one call: `end` (forced) drives the instance
+      // terminal, which removes the persisted blob via the standard
+      // terminal-transition path (`applyTransition` → `removePersisted`), and
+      // `forget` then drops the now-terminal record. `force` guarantees a
+      // non-terminal `onAbandon` result can't leave the instance active (which
+      // would strand the blob and make `forget` a no-op). Both underlying calls
+      // no-op safely on unknown / already-terminal ids, so `discard` is
+      // idempotent and needs no extra guarding here.
+      runtime.end(id, reason ?? { reason: "discarded" }, { force: true });
+      runtime.forget(id);
+    },
+
     forgetTerminal() {
       let removed = 0;
       for (const [id, record] of instances) {

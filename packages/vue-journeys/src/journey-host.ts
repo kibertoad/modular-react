@@ -7,6 +7,7 @@ import {
   shallowRef,
   toRaw,
   type ComputedRef,
+  type FunctionalComponent,
   type PropType,
   type ShallowRef,
   type VNode,
@@ -231,10 +232,27 @@ export interface JourneyHostSlotProps {
   /** See {@link JourneyHostState.stepIndex}. */
   readonly stepIndex: number;
   /**
-   * The `<JourneyOutlet>` for this instance, already built with every outlet
-   * attribute passed to `<JourneyHost>`. Place it inside your chrome.
+   * The runtime the host started the instance on — the same value
+   * {@link JourneyHostState.runtime} exposes. Pass it to a hand-placed
+   * `<JourneyOutlet :instance-id="instanceId" :runtime="runtime" />` when you'd
+   * rather render the outlet yourself than use {@link JourneyHostSlotProps.outlet}
+   * (the idiomatic-Vue path), so the outlet resolves the *same* runtime the host
+   * pinned rather than whatever a nearer provider hands out.
    */
-  readonly outlet: VNode;
+  readonly runtime: JourneyRuntime;
+  /**
+   * The `<JourneyOutlet>` for this instance as a **functional component**,
+   * already bound to the host's pinned runtime and every outlet attribute passed
+   * to `<JourneyHost>`. Render it with `<component :is="outlet" />` in a template
+   * (or `h(outlet)` in a render function) — it is a component, not a raw VNode,
+   * so `:is` mounts it cleanly. Its identity is stable across host re-renders, so
+   * `:is` patches the outlet in place instead of remounting it on every step.
+   *
+   * Equivalent to spelling `<JourneyOutlet :instance-id="instanceId"
+   * :runtime="runtime" />` yourself with the slot's `instanceId` / `runtime` —
+   * use whichever reads better in your chrome.
+   */
+  readonly outlet: FunctionalComponent;
 }
 
 /**
@@ -253,7 +271,8 @@ export interface JourneyHostSlotProps {
  * reads itself, to cover the render before the instance exists — which is why
  * it has to accept both spellings; see {@link readLoadingFallback}.
  *
- * For chrome around the step, use the default scoped slot:
+ * For chrome around the step, use the default scoped slot. The slot's `outlet`
+ * is a functional component, so `<component :is="outlet" />` renders it:
  *
  * ```vue
  * <JourneyHost :handle="checkoutHandle" :input="{ cartId }" @finished="goToReceipt">
@@ -263,6 +282,17 @@ export interface JourneyHostSlotProps {
  *     </Layout>
  *   </template>
  * </JourneyHost>
+ * ```
+ *
+ * Or render the outlet yourself from the slot's `instanceId` + `runtime` — the
+ * more idiomatic-Vue spelling, equivalent to the `outlet` above:
+ *
+ * ```vue
+ * <template #default="{ stepIndex, instanceId, runtime }">
+ *   <Layout title="Checkout" :step="stepIndex">
+ *     <JourneyOutlet :instance-id="instanceId" :runtime="runtime" />
+ *   </Layout>
+ * </template>
  * ```
  *
  * To deep-link the steps, call `useJourneySync` in the same component — the
@@ -298,6 +328,26 @@ export const JourneyHost = defineComponent({
       runtime: props.runtime,
     });
 
+    // Build the outlet vnode for the currently-owned instance. Reads
+    // `instanceId.value` / `attrs` at call time, so it tracks the live step.
+    // The resolved runtime, not `props.runtime`: `instanceId` only means
+    // anything on the runtime the host started it on, so forwarding a later
+    // prop value would point the outlet at a runtime that has never heard of
+    // this instance.
+    const renderOutlet = (): VNode | null => {
+      const id = instanceId.value;
+      if (!id) return null;
+      return h(JourneyOutlet, { ...attrs, runtime, instanceId: id });
+    };
+
+    // A STABLE functional-component identity wrapping the outlet, handed to the
+    // slot as `outlet`. Stable across host re-renders on purpose: a fresh
+    // component identity each render would make `<component :is="outlet" />`
+    // remount the outlet (and restart the step component / start-on-mount) on
+    // every step, instead of patching it in place. Exposing a component (rather
+    // than a raw VNode) is what lets `:is` render it cleanly in a template.
+    const OutletComponent: FunctionalComponent = () => renderOutlet();
+
     return () => {
       const id = instanceId.value;
       const inst = instance.value;
@@ -307,18 +357,14 @@ export const JourneyHost = defineComponent({
         return typeof fallback === "function" ? fallback() : fallback;
       }
 
-      // The resolved runtime, not `props.runtime`: `instanceId` only means
-      // anything on the runtime the host started it on, so forwarding a later
-      // prop value would point the outlet at a runtime that has never heard of
-      // this instance.
-      const outlet = h(JourneyOutlet, { ...attrs, runtime, instanceId: id });
       const slot = slots.default;
-      if (!slot) return outlet;
+      if (!slot) return renderOutlet();
       return slot({
         instanceId: id,
         instance: inst,
+        runtime,
         stepIndex: stepIndex.value,
-        outlet,
+        outlet: OutletComponent,
       } satisfies JourneyHostSlotProps);
     };
   },

@@ -1024,6 +1024,35 @@ export interface JourneyRuntime {
    */
   forget(id: InstanceId): void;
   /**
+   * Cancel an instance **and discard its persisted blob** — the "throw the
+   * flow away" affordance a "Cancel" button wants, addressable by
+   * `instanceId` so a shell never re-derives `persistence.keyFor(input)` to
+   * call `persistence.remove` by hand.
+   *
+   * Equivalent to `end(id, reason, { force: true })` followed by
+   * `forget(id)`: the instance is force-terminated (its `onAbandon` still
+   * runs, and any terminal choice it returns is honoured; a non-terminal one
+   * is coerced to an abort so teardown is guaranteed), which removes the
+   * persisted blob — any terminal transition does, persistence tracks only
+   * *active* instances — and the terminal record is then dropped.
+   *
+   * The force-end **cascades to an active child** — the child is
+   * force-terminated and its blob removed too. `forget`, though, drops only
+   * *this* instance's record; a cascaded child is left as a (blob-less)
+   * terminal record for the normal terminal cleanup — `forget(childId)` or
+   * `forgetTerminal()` — exactly as a plain `end` leaves it.
+   *
+   * This is the deliberate counterpart to a **soft close**, which keeps the
+   * blob for resume by *not* ending the instance at all (e.g. a modal that
+   * hides its host while a subscription holds the instance alive). Ending is
+   * what deletes persistence; `discard` names that intent in one call.
+   *
+   * No-op for unknown ids. Safe on an already-terminal instance: `end`
+   * no-ops (the blob was removed when it first went terminal) and the record
+   * is still forgotten.
+   */
+  discard(id: InstanceId, reason?: unknown): void;
+  /**
    * Drop every terminal (completed / aborted) instance in one call. Returns
    * the number of records dropped. Useful hygiene for long-running shells
    * that accumulate finished journeys over a session.

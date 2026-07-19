@@ -1,4 +1,4 @@
-import { defineComponent, h, ref, type PropType } from "vue";
+import { defineComponent, h, ref, type Component, type PropType } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-frontend/core";
@@ -130,15 +130,17 @@ describe("<JourneyHost>", () => {
     expect(wrapper.find('[data-testid="step-b"]').exists()).toBe(true);
   });
 
-  it("hands chrome the live step index and a ready-built outlet", async () => {
+  it("hands chrome the live step index and a ready-built outlet component", async () => {
     const runtime = setup();
     const wrapper = mountUnderProvider(runtime, () =>
       h(
         JourneyHost,
         { handle },
         {
-          default: ({ stepIndex, outlet }: { stepIndex: number; outlet: ReturnType<typeof h> }) =>
-            h("div", [h("span", { "data-testid": "progress" }, `step ${stepIndex}`), outlet]),
+          // `outlet` is a functional component — render it with `h(outlet)`
+          // (the render-function analog of `<component :is="outlet" />`).
+          default: ({ stepIndex, outlet }: { stepIndex: number; outlet: Component }) =>
+            h("div", [h("span", { "data-testid": "progress" }, `step ${stepIndex}`), h(outlet)]),
         },
       ),
     );
@@ -148,6 +150,42 @@ describe("<JourneyHost>", () => {
     expect(wrapper.find('[data-testid="step-a"]').exists()).toBe(true);
 
     await wrapper.get('[data-testid="step-a"]').trigger("click");
+    expect(wrapper.get('[data-testid="progress"]').text()).toBe("step 1");
+    expect(wrapper.find('[data-testid="step-b"]').exists()).toBe(true);
+  });
+
+  it("renders the slot `outlet` via `<component :is>` and patches (not remounts) across steps", async () => {
+    const runtime = setup();
+    // A template consumer: `<component :is="outlet" />`. This is the shape the
+    // docstring documents and the raw-VNode form could not satisfy.
+    const Consumer = defineComponent({
+      components: { JourneyHost },
+      setup() {
+        return { handle };
+      },
+      template: `
+        <JourneyHost :handle="handle">
+          <template #default="{ outlet, stepIndex }">
+            <div>
+              <span data-testid="progress">step {{ stepIndex }}</span>
+              <component :is="outlet" />
+            </div>
+          </template>
+        </JourneyHost>
+      `,
+    });
+    const wrapper = mountUnderProvider(runtime, () => h(Consumer));
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="step-a"]').exists()).toBe(true);
+    const id = runtime.listInstances()[0]!;
+
+    await wrapper.get('[data-testid="step-a"]').trigger("click");
+    await flushPromises();
+    // Advancing patches the same outlet in place — the instance is unchanged,
+    // not torn down and restarted by a remount.
+    expect(wrapper.find('[data-testid="step-b"]').exists()).toBe(true);
+    expect(runtime.listInstances()).toEqual([id]);
     expect(wrapper.get('[data-testid="progress"]').text()).toBe("step 1");
   });
 
