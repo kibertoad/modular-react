@@ -39,6 +39,6 @@
     "vitest": "^4.1.10"
   },
   "peerDependencies": {
-    "@modular-frontend/core": "^0.1.0"
+    "@modular-frontend/core": ">=0.1.0 <2.0.0"
   }
 }

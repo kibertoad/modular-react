@@ -54,7 +54,7 @@
     "vue-router": "^5.0.0"
   },
   "peerDependencies": {
-    "@modular-frontend/core": "^0.1.0 || ^0.2.0 || ^0.3.0",
+    "@modular-frontend/core": ">=0.1.0 <2.0.0",
     "@modular-vue/runtime": "^1.0.0",
     "nuxt": "^4.4.0",
     "vue": "^3.5.40",

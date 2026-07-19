@@ -29,15 +29,16 @@
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@modular-frontend/core": "workspace:*"
-  },
   "devDependencies": {
+    "@modular-frontend/core": "workspace:*",
     "oxfmt": "^0.51.0",
     "oxlint": "^1.66.0",
     "rolldown-plugin-dts": "^0.26.0",
     "typescript": "^6.0.3",
     "vite": "^8.1.3",
     "vitest": "^4.1.10"
+  },
+  "peerDependencies": {
+    "@modular-frontend/core": ">=0.1.0 <2.0.0"
   }
 }
