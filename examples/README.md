@@ -10,6 +10,7 @@ examples/
 │   ├── integration-manager/          Sibling modules sharing a screen (React Router)
 │   ├── customer-onboarding-journey/  Multi-module workflow via @modular-react/journeys (React Router)
 │   ├── editor-composition/           Multi-module screen via @modular-react/compositions (React Router)
+│   ├── inspector-panels/             Subject-keyed panels — render-all inspector rail via <PanelsOutlet>
 │   ├── remote-capabilities/          Slots/navigation driven by a backend-served remote manifest
 │   └── active-project-manifest/      Per-project remote manifests swapped at runtime
 ├── tanstack-router/
@@ -56,6 +57,10 @@ A multi-module onboarding flow (`profile → plan → billing`) composed with `@
 ### `editor-composition`
 
 An editor screen with main canvas, integration source picker, and inspector panels, each owned by a different module and coordinated through `@modular-react/compositions`. Shows zone selectors, a per-instance scoped store, typed store projections via `input`, and the alternate hooks pattern (`useCompositionState` / `useCompositionDispatch`) for in-team panels. Documented alongside the [Compositions package](../packages/compositions/README.md).
+
+### `inspector-panels`
+
+A design board whose inspector rail is driven by **subject-keyed panels**. Selecting a block is the runtime **subject**; each contributed panel decides via its own `when(block)` predicate whether it applies, and `<PanelsOutlet>` renders **every** match, ordered — the render-all counterpart to compositions' pick-one zones. A first-party module (`inspector-core`) contributes an always-on `identity` panel plus a frontend-only `frontend-config` panel; a **consumer** module (`acme-extras`) adds a panel for its own `acme-secure` block type with no edit to the host, showing the open-contribution property. Documented in [docs/subject-panels.md](../docs/subject-panels.md).
 
 ### `remote-capabilities`
 
