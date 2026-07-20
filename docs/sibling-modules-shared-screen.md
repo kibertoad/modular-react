@@ -156,7 +156,7 @@ const handle: AppRouteData = {
   pageTitle: "Contentful",
 };
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "contentful",
   version: "1.0.0",
   requires: ["auth", "httpClient"],
@@ -193,7 +193,7 @@ const contentfulConfig: IntegrationConfig = {
   /* same shape as above */
 };
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "contentful",
   version: "1.0.0",
   requires: ["auth", "httpClient"],

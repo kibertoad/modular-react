@@ -162,7 +162,7 @@ For a module whose route structure is known at build time, wrap its component wi
 import { defineModule } from "@tanstack-react-modules/core";
 import { createRoute, lazyRouteComponent } from "@tanstack/react-router";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "billing",
   version: "1.0.0",
   createRoutes: (parent) =>

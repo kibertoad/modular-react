@@ -21,7 +21,7 @@ const githubConfig: IntegrationConfig = {
   ],
 };
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "github",
   version: "0.0.0",
   requires: ["auth"],

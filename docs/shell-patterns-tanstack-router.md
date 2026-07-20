@@ -14,7 +14,7 @@ import { defineModule } from "@tanstack-react-modules/core";
 import { createRoute, lazyRouteComponent } from "@tanstack/react-router";
 import type { AppDependencies, AppSlots } from "@myorg/app-shared";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "billing",
   version: "1.0.0",
   requires: ["auth", "httpClient"],
@@ -350,7 +350,7 @@ For per-module auth or role-based access, put `beforeLoad` directly on a module-
 import { createRoute, redirect } from "@tanstack/react-router";
 import { authStore } from "@myorg/app-shared/stores";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "admin",
   createRoutes: (parentRoute) => {
     const root = createRoute({

@@ -60,7 +60,7 @@ Three contract interfaces live in `app-shared`:
   detail panel on the right). In vue-router these ride on the route's `meta`.
 
 Every route-owning module's descriptor is typed as
-`defineModule<AppDependencies, AppSlots>({ … })`. That's how TypeScript catches,
+`defineModule<AppDependencies, AppSlots>()({ … })`. That's how TypeScript catches,
 at compile time, a module asking for a store the shell doesn't provide.
 
 ## 1. Create the workspace
@@ -167,7 +167,7 @@ import type { RouteRecordRaw } from "vue-router";
 import type { AppDependencies, AppSlots } from "@myorg/app-shared";
 import DashboardPage from "./DashboardPage.vue";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "dashboard",
   version: "0.1.0",
 
@@ -377,7 +377,7 @@ import type { RouteRecordRaw } from "vue-router";
 import type { AppDependencies, AppSlots } from "@myorg/app-shared";
 import BillingPage from "./BillingPage.vue";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "billing",
   version: "0.1.0",
   requires: ["auth"],
@@ -597,7 +597,10 @@ per-route and role-based variants.
 - [Journeys](../packages/journeys/README.md) and
   [Compositions](../packages/compositions/README.md) — compose several modules
   into a typed workflow or a shared multi-zone screen (both have Vue bindings:
-  `@modular-vue/journeys`, `@modular-vue/compositions`).
+  `@modular-vue/journeys`, `@modular-vue/compositions`). The Vue journey
+  composables mirror the React hooks — `useJourneyHost` to mount and run a
+  journey, `useJourneyProgress` for "Step X of N" and the current step's label,
+  and `useJourneySync` to bind the active step to the URL.
 - Working examples: [`examples/vue/`](../examples/vue) ships three runnable apps
   — `integration-manager` (sibling modules sharing a screen),
   `customer-onboarding-journey` (a persisted journey), and `editor-composition`

@@ -23,7 +23,7 @@ import { createRoute, lazyRouteComponent } from '@tanstack/react-router'
 import type { AppDependencies, AppSlots } from '${params.scope}/app-shared'
 import { ${label}DetailPanel } from './panels/DetailPanel.js'
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: '${params.name}',
   version: '0.1.0',
 

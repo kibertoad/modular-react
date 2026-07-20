@@ -45,6 +45,12 @@ export type {
   UseJourneyHostOptions,
 } from "./journey-host.js";
 
+// Vue-specific: progress for a running instance — `{ index, total }` derived
+// from the transition graph (via `resolveStepSequence`), returned as
+// `ComputedRef`s.
+export { useJourneyProgress } from "./use-journey-progress.js";
+export type { JourneyProgress, UseJourneyProgressOptions } from "./use-journey-progress.js";
+
 // Vue-specific: journey <-> URL sync. The reconciler is framework- and
 // router-neutral (it lives in the engine); this composable is the Vue lifetime
 // wrapper, and the app supplies a `JourneySyncPort` for vue-router.
@@ -143,6 +149,15 @@ export type {
   TerminalSentinel,
 } from "@modular-frontend/journeys-engine";
 
+// Derive an ordered step list from the transition graph — URL segments,
+// "Step X of N". `useJourneyProgress` builds on this.
+export { resolveStepSequence } from "@modular-frontend/journeys-engine";
+export type {
+  ResolvedJourneyStep,
+  ResolveStepSequenceOptions,
+  StepSequenceRef,
+} from "@modular-frontend/journeys-engine";
+
 // Journey <-> location reconciler — the neutral core behind `useJourneySync`,
 // plus the in-memory port for tests and headless hosts.
 export {
@@ -151,6 +166,7 @@ export {
   defaultStepPath,
   journeyStepPath,
   resolveJourneySyncAction,
+  stepPathFromDefinition,
 } from "@modular-frontend/journeys-engine";
 export type {
   JourneySync,
@@ -190,6 +206,8 @@ export type {
   JourneyStatus,
   JourneyStep,
   JourneyStepFor,
+  JourneyStepMeta,
+  JourneyStepMetaMap,
   JourneySystemAbortReason,
   JourneySystemAbortReasonCode,
   MaybePromise,

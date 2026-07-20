@@ -18,7 +18,7 @@ import type { AppDependencies, AppSlots } from "@example-tsr-remote-capabilities
  * re-runs `dynamicSlots(deps)` and the page re-renders with the new tiles
  * / connected badges.
  */
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "integration-catalog",
   version: "1.0.0",
   requires: ["integrations", "integrationsClient"],

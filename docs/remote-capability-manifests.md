@@ -67,7 +67,7 @@ Runnable reference: [`remote-capabilities`](../examples/react-router/remote-capa
 
 ## What a remote manifest can carry
 
-Remote manifests are a **strict subset** of a [`ModuleDescriptor`](../packages/core/src/types.ts) — only data that survives a round trip through JSON.
+Remote manifests are a **strict subset** of a [`ModuleDescriptor`](../packages/frontend-core/src/types.ts) — only data that survives a round trip through JSON.
 
 | Contribution                              | Remote? | Why                                                                                  |
 | ----------------------------------------- | ------- | ------------------------------------------------------------------------------------ |
@@ -85,7 +85,7 @@ The library ships a narrowed type that enforces this subset at compile time:
 import type { RemoteModuleManifest, RemoteNavigationItem } from "@modular-react/core";
 ```
 
-`RemoteNavigationItem` narrows `to` to `string` and `icon` to `string` — the two fields on a regular [`NavigationItem`](../packages/core/src/types.ts) that aren't JSON-safe. `RemoteModuleManifest` refuses the non-serializable `ModuleDescriptor` fields up front, so the type itself documents the wire contract.
+`RemoteNavigationItem` narrows `to` to `string` and `icon` to `string` — the two fields on a regular [`NavigationItem`](../packages/frontend-core/src/types.ts) that aren't JSON-safe. `RemoteModuleManifest` refuses the non-serializable `ModuleDescriptor` fields up front, so the type itself documents the wire contract.
 
 ## Pairing wire-safe manifests with code-shipped components
 
@@ -408,7 +408,7 @@ import type { AppDependencies, AppSlots } from "@myorg/app-shared";
 import { fetchIntegrationManifests } from "../../services/integrations-client";
 import { integrationsStore } from "../../stores/integrations-store";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "integrations",
   version: "1.0.0",
   requires: ["httpClient"],
@@ -445,7 +445,7 @@ Now: when the fetch completes, the store updates, `recalculateSlots()` fires, `d
 For the **swap topology**, the same module is shorter: no `onRegister` (fetching is UI-driven), and `dynamicSlots` reads the active manifest directly without a merge helper:
 
 ```ts
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "integrations",
   version: "1.0.0",
   requires: ["integrations"],
@@ -550,9 +550,9 @@ Two complete walkthroughs live under `examples/react-router/`, one per topology.
 
 ## Reference
 
-- Type: [`RemoteModuleManifest`](../packages/core/src/remote-manifest.ts) — JSON-safe subset of `ModuleDescriptor`.
-- Type: [`RemoteNavigationItem`](../packages/core/src/remote-manifest.ts) — JSON-safe subset of `NavigationItem`.
-- Helper: [`mergeRemoteManifests`](../packages/core/src/remote-manifest.ts) — merges an array into `{ slots, navigation, meta }`, throwing on duplicate ids.
+- Type: [`RemoteModuleManifest`](../packages/frontend-core/src/remote-manifest.ts) — JSON-safe subset of `ModuleDescriptor`.
+- Type: [`RemoteNavigationItem`](../packages/frontend-core/src/remote-manifest.ts) — JSON-safe subset of `NavigationItem`.
+- Helper: [`mergeRemoteManifests`](../packages/frontend-core/src/remote-manifest.ts) — merges an array into `{ slots, navigation, meta }`, throwing on duplicate ids.
 - Helper: [`resolveComponentRegistry`](../packages/frontend-core/src/component-registry.ts) — indexes a slot of `ComponentEntry` into an id → component registry; throws on duplicate ids (`onDuplicate` to override).
 - Helper: [`pairById`](../packages/frontend-core/src/component-registry.ts) — pairs manifest data with a component registry by id, partitioning into `paired` / `missing` / `unref`.
 - Plugin: [`componentPairingPlugin`](../packages/frontend-core/src/component-pairing-plugin.ts) — resolve-time validator that fails assembly when a statically-registered manifest reference has no registered component.

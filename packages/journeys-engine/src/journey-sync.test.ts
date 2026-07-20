@@ -8,6 +8,7 @@ import {
   defaultStepPath,
   journeyStepPath,
   resolveJourneySyncAction,
+  stepPathFromDefinition,
 } from "./journey-sync.js";
 import type { JourneySyncPort } from "./journey-sync.js";
 import { createJourneyRuntime } from "./runtime.js";
@@ -120,9 +121,64 @@ function setup(definition = linear) {
   return { runtime, id, harness, instance };
 }
 
+/** A journey whose start step (`a/show`) declares a custom URL `path`. */
+function setupWithPaths() {
+  const def = defineJourney<Modules, Record<string, never>>()({
+    id: "with-paths",
+    version: "1.0.0",
+    initialState: () => ({}),
+    start: () => ({ module: "a", entry: "show", input: undefined }),
+    steps: { a: { show: { path: "welcome" } } },
+    transitions: {
+      a: { show: { next: () => ({ next: { module: "b", entry: "show", input: undefined } }) } },
+      b: { show: { next: () => ({ complete: undefined }) } },
+    },
+  });
+  const runtime = createJourneyRuntime([{ definition: def, options: undefined }], { modules });
+  const id = runtime.start(def.id, undefined);
+  return { runtime, id, def };
+}
+
 describe("defaultStepPath", () => {
   it("renders a step as `moduleId/entry`", () => {
     expect(defaultStepPath({ moduleId: "a", entry: "show", input: undefined })).toBe("a/show");
+  });
+});
+
+describe("stepPathFromDefinition", () => {
+  const definition = {
+    steps: {
+      profile: { review: { path: "welcome" } },
+      plan: { choose: { progressLabel: "Pick a plan" } }, // no path
+    },
+  };
+
+  it("maps a step to its declared `path`", () => {
+    const toPath = stepPathFromDefinition(definition);
+    expect(toPath({ moduleId: "profile", entry: "review", input: undefined })).toBe("welcome");
+  });
+
+  it("falls back to `moduleId/entry` for a step with no declared path", () => {
+    const toPath = stepPathFromDefinition(definition);
+    expect(toPath({ moduleId: "plan", entry: "choose", input: undefined })).toBe("plan/choose");
+    expect(toPath({ moduleId: "other", entry: "x", input: undefined })).toBe("other/x");
+  });
+
+  it("honours a custom fallback", () => {
+    const toPath = stepPathFromDefinition(definition, (step) => step.entry);
+    expect(toPath({ moduleId: "plan", entry: "choose", input: undefined })).toBe("choose");
+  });
+
+  it("drives the URL when passed as the sync's stepToPath", () => {
+    const port = createMemoryJourneySyncPort("/checkout");
+    const { runtime, id, def } = setupWithPaths();
+    const sync = createJourneySync(runtime, id, port, {
+      stepToPath: stepPathFromDefinition(def),
+    });
+    // The start step declares `path: "welcome"`, so the URL reflects it rather
+    // than the default `profile/review`.
+    expect(port.read()).toBe("welcome");
+    sync.stop();
   });
 });
 

@@ -41,6 +41,7 @@ export {
   defaultStepPath,
   journeyStepPath,
   resolveJourneySyncAction,
+  stepPathFromDefinition,
 } from "./journey-sync.js";
 export type {
   JourneySync,
@@ -62,6 +63,18 @@ export {
   isTerminalSentinel,
 } from "./define-transition.js";
 export type { AnnotatedTransitionHandler, StepRef, TerminalSentinel } from "./define-transition.js";
+
+// Derive an ordered step list (URL segments, "Step X of N") from the transition
+// graph — the runtime companion to the catalog harvester's static extraction.
+export { resolveStepSequence, resolveStepSequenceResult } from "./resolve-step-sequence.js";
+export type {
+  ResolvedJourneyStep,
+  ResolveStepSequenceOptions,
+  StepSequenceOptionsArg,
+  StepSequenceRef,
+  StepSequenceResult,
+  StepSequenceWalkOptions,
+} from "./resolve-step-sequence.js";
 
 // Handles — open a journey with typed `input` without importing its runtime.
 export { defineJourneyHandle, invoke } from "./handle.js";
@@ -92,6 +105,8 @@ export type {
   JourneyStatus,
   JourneyStep,
   JourneyStepFor,
+  JourneyStepMeta,
+  JourneyStepMetaMap,
   JourneySystemAbortReason,
   JourneySystemAbortReasonCode,
   MaybePromise,

@@ -14,7 +14,7 @@ import type { AppDependencies, AppSlots } from "@example/app-shared";
  * `manifest.recalculateSlots()`, which re-runs `dynamicSlots(deps)` and the
  * shell re-renders with the new tiles. No new module registration happens.
  */
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "integrations",
   version: "1.0.0",
   requires: ["integrations", "integrationsClient"],

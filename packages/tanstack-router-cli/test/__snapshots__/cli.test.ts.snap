@@ -340,7 +340,7 @@ import { createRoute, lazyRouteComponent } from '@tanstack/react-router'
 import type { AppDependencies, AppSlots } from '@acme/app-shared'
 import { DashboardDetailPanel } from './panels/DetailPanel.js'
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: 'dashboard',
   version: '0.1.0',
 
@@ -544,7 +544,7 @@ import { createRoute, lazyRouteComponent } from '@tanstack/react-router'
 import type { AppDependencies, AppSlots } from '@acme/app-shared'
 import { OrdersDetailPanel } from './panels/DetailPanel.js'
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: 'orders',
   version: '0.1.0',
 

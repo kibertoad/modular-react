@@ -23,7 +23,7 @@ import type { RouteRecordRaw } from 'vue-router'
 import type { AppDependencies, AppSlots, AppZones } from '${params.scope}/app-shared'
 import ${label}DetailPanel from './panels/DetailPanel.vue'
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: '${params.name}',
   version: '0.1.0',
 

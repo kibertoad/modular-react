@@ -14,7 +14,7 @@ import { defineModule } from "@react-router-modules/core";
 import type { RouteObject } from "react-router";
 import type { AppDependencies, AppSlots } from "@myorg/app-shared";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "billing",
   version: "1.0.0",
   requires: ["auth", "httpClient"],
@@ -253,7 +253,7 @@ For per-module auth or role-based access, put a `loader` directly on the module'
 import { redirect } from "react-router";
 import { authStore } from "@myorg/app-shared/stores";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "admin",
   createRoutes: () => [
     {

@@ -4,7 +4,7 @@ import type { AppDependencies, AppSlots } from "@example-vue-integration-manager
 import GithubPage from "./GithubPage.vue";
 import { githubConfig } from "./config.js";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "github",
   version: "0.0.0",
   requires: ["auth"],

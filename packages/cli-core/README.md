@@ -1,10 +1,11 @@
 # @modular-react/cli-core
 
-Internal foundation for the modular-react CLI binaries. Both
-[`@react-router-modules/cli`](../react-router-cli) and
-[`@tanstack-react-modules/cli`](../tanstack-router-cli) are thin
-preset wrappers around this package: the commands, prompts, project
-detection, file transforms, and router-agnostic templates all live here.
+Internal foundation for the modular-react CLI binaries. The
+[`@react-router-modules/cli`](../react-router-cli),
+[`@tanstack-react-modules/cli`](../tanstack-router-cli), and
+[`@modular-vue/cli`](../vue-cli) binaries are thin preset wrappers around
+this package: the commands, prompts, project detection, file transforms,
+and framework-agnostic templates all live here.
 
 If you're scaffolding a project, install one of the router-specific
 binaries — not this package.
@@ -56,6 +57,10 @@ const preset: CliPreset = {
     routerVersion: "^1.0.0",
   },
   docs: { shellPatterns: "shell-patterns-your-router.md" },
+  scaffold: {
+    entryMain: "main.tsx", // shell entry file name
+    viewExt: "tsx", // extension for generated view/component files
+  },
   templates: {
     appSharedIndex, // your `app-shared/src/index.ts` template
     shellMain, // your `shell/src/main.tsx` template

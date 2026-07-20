@@ -76,7 +76,7 @@ when you pass `parentRouteName`, otherwise at the top level.
 import { defineModule } from "@modular-vue/core";
 import type { RouteRecordRaw } from "vue-router";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "billing",
   version: "1.0.0",
   createRoutes: (): RouteRecordRaw => ({

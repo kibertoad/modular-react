@@ -25,7 +25,7 @@ const contentfulConfig: IntegrationConfig = {
   ],
 };
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "contentful",
   version: "0.0.0",
   requires: ["auth"],

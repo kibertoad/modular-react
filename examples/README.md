@@ -8,6 +8,8 @@ Examples are split by router integration. Pick the directory for the router you 
 examples/
 ├── react-router/
 │   ├── integration-manager/          Sibling modules sharing a screen (React Router)
+│   ├── integration-setup-journey/    State-driven module dispatch via selectModuleOrDefault (React Router)
+│   ├── journey-invoke/               Parent journey invokes/resumes a child journey (React Router)
 │   ├── customer-onboarding-journey/  Multi-module workflow via @modular-react/journeys (React Router)
 │   ├── editor-composition/           Multi-module screen via @modular-react/compositions (React Router)
 │   ├── inspector-panels/             Subject-keyed panels — render-all inspector rail via <PanelsOutlet>
@@ -16,13 +18,17 @@ examples/
 │   └── active-project-manifest/      Per-project remote manifests swapped at runtime
 ├── tanstack-router/
 │   ├── integration-manager/          Sibling modules sharing a screen (TanStack Router)
+│   ├── integration-setup-journey/    State-driven module dispatch via selectModuleOrDefault (TanStack Router)
+│   ├── journey-invoke/               Parent journey invokes/resumes a child journey (TanStack Router)
 │   ├── customer-onboarding-journey/  Multi-module workflow via @modular-react/journeys (TanStack Router)
-│   └── editor-composition/           Multi-module screen via @modular-react/compositions (TanStack Router)
-└── vue/
-    ├── integration-manager/          Sibling modules sharing a screen (Vue Router)
-    ├── customer-onboarding-journey/  Multi-module workflow via @modular-vue/journeys (Vue Router)
-    ├── editor-composition/           Multi-module screen via @modular-vue/compositions (Vue Router)
-    └── overlay-result-windows/       State-keyed overlay host — pick-one managed modal via <OverlayOutlet>
+│   ├── editor-composition/           Multi-module screen via @modular-react/compositions (TanStack Router)
+│   └── remote-capabilities/          Remote manifests + journey orchestration on one page (TanStack Router)
+├── vue/
+│   ├── integration-manager/          Sibling modules sharing a screen (Vue Router)
+│   ├── customer-onboarding-journey/  Multi-module workflow via @modular-vue/journeys (Vue Router)
+│   ├── editor-composition/           Multi-module screen via @modular-vue/compositions (Vue Router)
+│   └── overlay-result-windows/       State-keyed overlay host — pick-one managed modal via <OverlayOutlet>
+└── catalog/                          Demo discovery portal built from the tanstack-router examples
 ```
 
 ## Running an example
@@ -74,7 +80,19 @@ Slots and navigation are driven by a backend-served `RemoteModuleManifest` JSON 
 
 ### `active-project-manifest`
 
-Extension of `remote-capabilities` where the active manifest is swapped at runtime when the user switches projects — each project ships a different JSON manifest, rehydrated into the registry.
+Extension of `remote-capabilities` where the active manifest is swapped at runtime when the user switches projects — each project ships a different JSON manifest, rehydrated into the registry. (React Router only.)
+
+### `integration-setup-journey`
+
+A journey that decides which module to step into next from a value picked earlier in the flow — the state-driven module dispatch pattern via `selectModuleOrDefault` from `@modular-react/journeys`. (React Router and TanStack Router.)
+
+### `journey-invoke`
+
+The `invoke` / `resume` primitive in `@modular-react/journeys`: a parent journey suspends mid-flow to run a child journey and picks up its typed output. (React Router and TanStack Router.)
+
+### `catalog`
+
+A demo `@modular-react/catalog` discovery portal built from the tanstack-router examples in this repo — the easiest way to see a populated catalog. Lives at [`examples/catalog/`](catalog) and has its own [README](catalog/README.md).
 
 ## Adding a new example
 

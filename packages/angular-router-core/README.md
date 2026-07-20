@@ -41,7 +41,7 @@ npm install @angular-router-modules/core
 ```typescript
 import { defineModule } from "@angular-router-modules/core";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "billing",
   version: "0.1.0",
   createRoutes: () => [

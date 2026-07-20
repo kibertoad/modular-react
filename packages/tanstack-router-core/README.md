@@ -22,7 +22,7 @@ npm install @tanstack-react-modules/core
 import { defineModule } from "@tanstack-react-modules/core";
 import { createRoute } from "@tanstack/react-router";
 
-export default defineModule<AppDependencies, AppSlots>({
+export default defineModule<AppDependencies, AppSlots>()({
   id: "billing",
   version: "0.1.0",
   createRoutes: (parentRoute) =>

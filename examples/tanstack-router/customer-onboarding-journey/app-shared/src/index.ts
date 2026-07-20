@@ -21,7 +21,7 @@ export interface PlanHint {
  * No module contributes slots here. The workflow is expressed as a journey,
  * not as slot items. Keeping the slot map empty-but-declared documents that
  * intent — modules still get the typed dependency/slot surface through the
- * same `defineModule<AppDependencies, AppSlots>` pattern.
+ * same `defineModule<AppDependencies, AppSlots>()` pattern.
  */
 export interface AppSlots {
   // Intentionally empty — this example renders exclusively via journey tabs.

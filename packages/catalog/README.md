@@ -2,7 +2,7 @@
 
 Build a deployable, static **discovery portal** for the modules and journeys in your modular-react codebase. Point it at one or more directories, configure how descriptors are exposed, and get back a directory of HTML/JS/CSS/JSON you can host on any static server.
 
-> **Status:** v0.2 — harvester, CLI, and SPA are stable. URL-driven filter state, pivot pages, and the build-time extension API are all in. The catalog also pre-computes a cross-reference graph (entry/exit usage, journey-to-journey invocations, module-to-journey launches) and recovers transition destinations from journey source via static analysis. Catalog `schemaVersion` is `"2"`.
+> **Status:** v1.x — harvester, CLI, and SPA are stable. URL-driven filter state, pivot pages, and the build-time extension API are all in. The catalog also pre-computes a cross-reference graph (entry/exit usage, journey-to-journey invocations, module-to-journey launches) and recovers transition destinations from journey source via static analysis. Catalog `schemaVersion` is `"2"`.
 
 ## Why
 
@@ -308,6 +308,17 @@ modular-react-catalog build [--config path] [--out path] [--cwd path]
 | `--config` | First match of `catalog.config.{ts,js,mts,mjs}` | Override config path                                           |
 | `--out`    | `config.out` ?? `dist-catalog`                  | Override output directory                                      |
 | `--cwd`    | `process.cwd()`                                 | Override the project root used for config / pattern resolution |
+
+```bash
+modular-react-catalog serve [dir] [--port 4321] [--host 127.0.0.1]
+```
+
+Serve a built catalog directory (default `dist-catalog`) over static HTTP — handy for previewing the portal locally after `build`.
+
+| Flag     | Default     | Use                    |
+| -------- | ----------- | ---------------------- |
+| `--port` | `4321`      | Port to listen on      |
+| `--host` | `127.0.0.1` | Host/interface to bind |
 
 ## Programmatic API
 

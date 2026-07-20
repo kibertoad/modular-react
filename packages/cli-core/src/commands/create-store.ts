@@ -13,7 +13,7 @@ export function createCreateStoreCommand(preset: CliPreset) {
   return defineCommand({
     meta: {
       name: "store",
-      description: "Create a new Zustand store and wire it into AppDependencies",
+      description: "Create a new shared store and wire it into AppDependencies",
     },
     args: {
       name: {
