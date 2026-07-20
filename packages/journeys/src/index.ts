@@ -78,6 +78,7 @@ export {
   defaultStepPath,
   journeyStepPath,
   resolveJourneySyncAction,
+  stepPathFromDefinition,
 } from "@modular-frontend/journeys-engine";
 export type {
   JourneySync,

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { InstanceId, JourneyRuntime } from "@modular-frontend/journeys-engine";
 import {
-  resolveStepSequence,
+  resolveStepSequenceResult,
   type JourneyDefinition,
   type ModuleTypeMap,
   type ResolvedJourneyStep,
@@ -33,41 +33,51 @@ interface UseJourneyProgressBase {
  * journey but required (carrying `input` or `start`) when the journey's
  * `initialState` / `start` need a non-void input.
  */
-export type UseJourneyProgressOptions<TInput = unknown> = UseJourneyProgressBase &
+export type UseJourneyProgressOptions<
+  TInput = unknown,
+  TModules extends ModuleTypeMap = ModuleTypeMap,
+> = UseJourneyProgressBase &
   ([TInput] extends [void]
-    ? { readonly sequence?: ResolveStepSequenceOptions<TInput> }
-    : { readonly sequence: ResolveStepSequenceOptions<TInput> });
+    ? { readonly sequence?: ResolveStepSequenceOptions<TInput, TModules> }
+    : { readonly sequence: ResolveStepSequenceOptions<TInput, TModules> });
 
 /**
  * Trailing options argument for {@link useJourneyProgress}: optional for a
  * void-input journey, required when the journey needs a non-void input so the
  * mandatory `sequence.input` / `sequence.start` can't be omitted.
  */
-export type UseJourneyProgressArgs<TInput> = [TInput] extends [void]
-  ? [options?: UseJourneyProgressOptions<TInput>]
-  : [options: UseJourneyProgressOptions<TInput>];
+export type UseJourneyProgressArgs<TInput, TModules extends ModuleTypeMap = ModuleTypeMap> = [
+  TInput,
+] extends [void]
+  ? [options?: UseJourneyProgressOptions<TInput, TModules>]
+  : [options: UseJourneyProgressOptions<TInput, TModules>];
 
 export interface JourneyProgress {
   /**
-   * 0-based position in the flow — `history.length`, so `0` on the first step.
-   * Matches `useJourneyHost`'s `stepIndex`. Render "Step {index + 1} of {total}".
+   * 0-based position in the flow. Render "Step {index + 1} of {total}".
    *
-   * Note `index` tracks the *live* instance while `total` comes from the
-   * *statically-resolved* spine, so when the runtime path diverges from the
-   * resolved one (a fork walked with a different `branch`, or steps past an
-   * unannotated transition) `index` can reach or exceed `total`. Clamp at the
-   * call site if you render a bounded stepper.
+   * Derived from the *resolved sequence*: the position of the instance's
+   * current step within `steps`. This is why it is correct under a
+   * `maxHistory` cap — unlike `history.length`, which the runtime trims and
+   * which would then under-count on later steps. When the live step is not on
+   * the resolved spine (a fork walked with a different `branch`, or a step past
+   * an unannotated transition) it falls back to `history.length`, best-effort,
+   * and can then reach or exceed `total`; clamp at the call site if you render a
+   * bounded stepper. `0` before an instance exists.
    */
   readonly index: number;
   /**
-   * Total number of steps in the resolved sequence — the "N" in "Step X of N".
+   * Total number of steps in the resolved sequence — the "N" in "Step X of N",
+   * or `null` when that total cannot be trusted.
    *
-   * Best-effort: it counts the statically-walkable spine `resolveStepSequence`
-   * returns from the start step, which is a *partial* total when the flow forks
-   * without a `branch` resolver, stops at an unannotated (bare-function)
-   * transition, or is cut by `maxSteps`. It does not depend on a live instance —
-   * a definition with a derivable start always yields at least `1`. `null` only
-   * when no step at all can be resolved (an empty sequence).
+   * It is a number only when the walk reached a genuine end of the flow (a
+   * step that can *only* complete/abort). It is `null` when the sequence is
+   * *partial* — an unresolved fork (no/rejecting `branch`), a bare
+   * (unannotated) or wildcard-only step, a `"invoke"` hand-off to a child, a
+   * cycle, or the `maxSteps` cap — because the statically-walkable length is
+   * then only a lower bound, and rendering it as the total produces nonsense
+   * like "Step 2 of 1". Guard your progress UI on `total != null`; use `steps`
+   * directly if you want the partial list for a breadcrumb.
    */
   readonly total: number | null;
   /**
@@ -116,10 +126,10 @@ export function useJourneyProgress<
 >(
   instanceId: InstanceId | null,
   definition: JourneyDefinition<TModules, TState, TInput, TOutput, TMeta>,
-  ...[options]: UseJourneyProgressArgs<TInput>
+  ...[options]: UseJourneyProgressArgs<TInput, TModules>
 ): JourneyProgress {
   const opts = (options ?? {}) as UseJourneyProgressBase & {
-    readonly sequence?: ResolveStepSequenceOptions<TInput>;
+    readonly sequence?: ResolveStepSequenceOptions<TInput, TModules>;
   };
   const context = useJourneyContext();
   const runtime = opts.runtime ?? context?.runtime ?? null;
@@ -127,24 +137,35 @@ export function useJourneyProgress<
   const instance = useInstanceSnapshot(runtime, instanceId);
 
   const sequenceOptions = opts.sequence;
-  const steps = useMemo(
+  const resolved = useMemo(
     // The tuple cast localizes the same "TInput is generic here" erasure the
     // engine documents: `sequenceOptions` already satisfies the input-or-start
     // requirement via `UseJourneyProgressOptions`, so forward it as-is.
     () =>
-      resolveStepSequence(
+      resolveStepSequenceResult(
         definition,
-        ...((sequenceOptions === undefined
-          ? []
-          : [sequenceOptions]) as StepSequenceOptionsArg<TInput>),
+        ...((sequenceOptions === undefined ? [] : [sequenceOptions]) as StepSequenceOptionsArg<
+          TInput,
+          TModules
+        >),
       ),
     [definition, sequenceOptions],
   );
-
-  const index = instance ? instance.history.length : 0;
-  const total = steps.length > 0 ? steps.length : null;
+  const steps = resolved.steps;
 
   const current = instance?.step;
+  // Position within the resolved spine — trim-immune, unlike `history.length`.
+  // Falls back to the live history depth when the current step is off the spine.
+  const resolvedIndex =
+    current != null
+      ? steps.findIndex((s) => s.module === current.moduleId && s.entry === current.entry)
+      : -1;
+  const index = resolvedIndex >= 0 ? resolvedIndex : instance ? instance.history.length : 0;
+
+  // Only a completed walk yields a trustworthy total; a partial spine would
+  // render "Step 2 of 1" once the runtime advances past it.
+  const total = resolved.complete && steps.length > 0 ? steps.length : null;
+
   const label =
     current != null
       ? (steps.find((s) => s.module === current.moduleId && s.entry === current.entry)

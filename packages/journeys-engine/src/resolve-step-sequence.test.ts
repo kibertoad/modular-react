@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defineEntry, defineExit, defineModule, schema } from "@modular-frontend/core";
 import { defineJourney } from "./define-journey.js";
 import { defineTransition } from "./define-transition.js";
-import { resolveStepSequence } from "./resolve-step-sequence.js";
+import { resolveStepSequence, resolveStepSequenceResult } from "./resolve-step-sequence.js";
 
 // --- Modules -----------------------------------------------------------------
 
@@ -184,7 +184,9 @@ describe("resolveStepSequence — branching flow", () => {
 
   it("stops the sequence when the resolver returns a ref that isn't a declared target", () => {
     const seq = resolveStepSequence(branching, {
-      branch: () => ({ module: "billing", entry: "not-a-target" }),
+      // A real journey step, but not one of this fork's targets (billing/collect
+      // or plan/upsell) — so it is rejected rather than followed.
+      branch: () => ({ module: "profile", entry: "review" }),
     });
     // The returned ref is matched back against the fork's `targets` by
     // module + entry; no match means the walk stops rather than following it.
@@ -242,5 +244,83 @@ describe("resolveStepSequence — edge cases", () => {
 
   it("respects maxSteps", () => {
     expect(resolveStepSequence(linear, { maxSteps: 2 }).length).toBe(2);
+  });
+});
+
+// --- resolveStepSequenceResult: `complete` (partial vs. full spine) ----------
+
+describe("resolveStepSequenceResult — completeness", () => {
+  it("is complete when the walk reaches a genuine terminal step", () => {
+    const result = resolveStepSequenceResult(linear);
+    expect(result.complete).toBe(true);
+    expect(result.steps.map((s) => `${s.module}/${s.entry}`)).toEqual([
+      "profile/review",
+      "plan/choose",
+      "billing/collect",
+    ]);
+  });
+
+  it("is incomplete at an unresolved fork (no branch resolver)", () => {
+    expect(resolveStepSequenceResult(branching).complete).toBe(false);
+  });
+
+  it("is complete again once a branch resolver linearizes the fork to a terminal", () => {
+    const result = resolveStepSequenceResult(branching, {
+      branch: ({ targets }) => targets.find((t) => t.module === "billing"),
+    });
+    expect(result.complete).toBe(true);
+  });
+
+  it("is incomplete when the branch resolver stops the walk", () => {
+    expect(resolveStepSequenceResult(branching, { branch: () => undefined }).complete).toBe(false);
+  });
+
+  it("is incomplete at a bare (unannotated) handler — the next step is unknown", () => {
+    const bare = defineJourney<Modules, State>()({
+      id: "bare-complete",
+      version: "1.0.0",
+      initialState: () => ({ tier: null }),
+      start: () => ({ module: "profile", entry: "review", input: { customerId: "c1" } }),
+      transitions: {
+        profile: {
+          review: {
+            done: () => ({ next: { module: "plan", entry: "choose", input: { x: 1 } } }),
+          },
+        },
+      },
+    });
+    const result = resolveStepSequenceResult(bare);
+    expect(result.complete).toBe(false);
+    expect(result.steps.map((s) => s.module)).toEqual(["profile"]);
+  });
+
+  it("is incomplete when the walk breaks a cycle", () => {
+    const cyclic = defineJourney<Modules, State>()({
+      id: "cyclic-complete",
+      version: "1.0.0",
+      initialState: () => ({ tier: null }),
+      start: () => ({ module: "plan", entry: "choose", input: { x: 1 } }),
+      transitions: {
+        plan: {
+          choose: {
+            chosen: transition({
+              targets: [{ module: "plan", entry: "upsell" }],
+              handle: () => ({ next: { module: "plan", entry: "upsell", input: { x: 1 } } }),
+            }),
+          },
+          upsell: {
+            chosen: transition({
+              targets: [{ module: "plan", entry: "choose" }],
+              handle: () => ({ next: { module: "plan", entry: "choose", input: { x: 1 } } }),
+            }),
+          },
+        },
+      },
+    });
+    expect(resolveStepSequenceResult(cyclic).complete).toBe(false);
+  });
+
+  it("is incomplete when cut short by maxSteps", () => {
+    expect(resolveStepSequenceResult(linear, { maxSteps: 2 }).complete).toBe(false);
   });
 });

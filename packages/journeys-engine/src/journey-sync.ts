@@ -180,6 +180,38 @@ export function defaultStepPath(step: JourneyStep): string {
 }
 
 /**
+ * Build a {@link JourneySyncOptions.stepToPath} from a journey definition's
+ * per-step `steps[module][entry].path` metadata — the bridge that makes a
+ * declared `JourneyStepMeta.path` actually drive the URL.
+ *
+ * The sync is definition-neutral: it only ever sees `{ moduleId, entry, input }`
+ * steps and never the journey definition, so a `path` declared on the
+ * definition does nothing on its own. An adapter opts in by passing this as its
+ * `stepToPath`:
+ *
+ * ```ts
+ * createJourneySync(runtime, id, port, {
+ *   stepToPath: stepPathFromDefinition(checkoutDef),
+ * });
+ * ```
+ *
+ * Steps without a declared `path` fall through to `fallback` (default
+ * {@link defaultStepPath}, `"moduleId/entry"`). The same injectivity caveat
+ * applies as for any `stepToPath` (see {@link resolveJourneySyncAction}): two
+ * steps mapped to the same segment are indistinguishable to the reconciler, so
+ * keep declared paths unique within a journey.
+ */
+export function stepPathFromDefinition(
+  definition: { readonly steps?: unknown },
+  fallback: (step: JourneyStep) => string = defaultStepPath,
+): (step: JourneyStep) => string {
+  const steps = definition.steps as
+    | Record<string, Record<string, { readonly path?: string } | undefined> | undefined>
+    | undefined;
+  return (step) => steps?.[step.moduleId]?.[step.entry]?.path ?? fallback(step);
+}
+
+/**
  * The location a journey's current step should be at, or `null` when the
  * journey has no step to represent — it is `loading` (async persistence has
  * not hydrated yet) or terminal (`step` is `null` once a journey completes or

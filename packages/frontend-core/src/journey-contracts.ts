@@ -211,9 +211,9 @@ export type StepSpec<TModules extends ModuleTypeMap> =
  * Declarative per-step presentation metadata a journey attaches to a
  * `(module, entry)` pair via {@link JourneyStepMetaMap}. Purely descriptive —
  * the runtime never reads it to make transition decisions. Consumed by
- * `resolveStepSequence` (to label a derived step list), a progress hook
- * (`useJourneyProgress`), and the journey ↔ URL sync (a per-step `path`
- * overrides the default `"moduleId/entry"` segment).
+ * `resolveStepSequence` (to label a derived step list) and a progress hook
+ * (`useJourneyProgress`); the `path` field additionally feeds the journey ↔ URL
+ * sync when an adapter opts in (see `path` below).
  *
  * Keeping it on the journey definition — rather than duplicated into every
  * transition's returned `StepSpec` — is deliberate: the flow's ordering already
@@ -222,9 +222,18 @@ export type StepSpec<TModules extends ModuleTypeMap> =
  */
 export interface JourneyStepMeta {
   /**
-   * URL segment for this step. Overrides the sync's default
-   * `"moduleId/entry"` path. Should be unique within the journey — two steps
-   * that share a path are indistinguishable to the URL reconciler.
+   * URL segment for this step, as an alternative to the sync's default
+   * `"moduleId/entry"` path.
+   *
+   * The journey ↔ URL sync is definition-neutral — it never sees this metadata
+   * on its own — so declaring a `path` has no effect until the adapter builds
+   * its `stepToPath` from the definition. Pass `stepPathFromDefinition(def)`
+   * (from `@modular-frontend/journeys-engine`) as the sync's `stepToPath` to
+   * make declared paths drive the URL; steps without one fall back to
+   * `"moduleId/entry"`.
+   *
+   * Should be unique within the journey — two steps that share a path are
+   * indistinguishable to the URL reconciler.
    */
   readonly path?: string;
   /**

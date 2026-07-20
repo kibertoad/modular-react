@@ -1,7 +1,7 @@
 import { computed, toRaw, type ComputedRef, type MaybeRefOrGetter } from "vue";
 import type { InstanceId, JourneyRuntime } from "@modular-frontend/journeys-engine";
 import {
-  resolveStepSequence,
+  resolveStepSequenceResult,
   type JourneyDefinition,
   type ModuleTypeMap,
   type ResolvedJourneyStep,
@@ -28,34 +28,43 @@ interface UseJourneyProgressBase {
  * journey but required (carrying `input` or `start`) when the journey's
  * `initialState` / `start` need a non-void input.
  */
-export type UseJourneyProgressOptions<TInput = unknown> = UseJourneyProgressBase &
+export type UseJourneyProgressOptions<
+  TInput = unknown,
+  TModules extends ModuleTypeMap = ModuleTypeMap,
+> = UseJourneyProgressBase &
   ([TInput] extends [void]
-    ? { readonly sequence?: ResolveStepSequenceOptions<TInput> }
-    : { readonly sequence: ResolveStepSequenceOptions<TInput> });
+    ? { readonly sequence?: ResolveStepSequenceOptions<TInput, TModules> }
+    : { readonly sequence: ResolveStepSequenceOptions<TInput, TModules> });
 
 /**
  * Trailing options argument for {@link useJourneyProgress}: optional for a
  * void-input journey, required when the journey needs a non-void input so the
  * mandatory `sequence.input` / `sequence.start` can't be omitted.
  */
-export type UseJourneyProgressArgs<TInput> = [TInput] extends [void]
-  ? [options?: UseJourneyProgressOptions<TInput>]
-  : [options: UseJourneyProgressOptions<TInput>];
+export type UseJourneyProgressArgs<TInput, TModules extends ModuleTypeMap = ModuleTypeMap> = [
+  TInput,
+] extends [void]
+  ? [options?: UseJourneyProgressOptions<TInput, TModules>]
+  : [options: UseJourneyProgressOptions<TInput, TModules>];
 
 export interface JourneyProgress {
   /**
-   * 0-based position (`history.length`), so `0` on the first step. Tracks the
-   * live instance, whereas `total` is the statically-resolved spine, so `index`
-   * can reach or exceed `total` when the runtime path diverges (a fork walked
-   * with a different `branch`, or steps past an unannotated transition).
+   * 0-based position in the flow, `0` on the first step. Derived from the
+   * *resolved sequence* (the position of the live step within `steps`), so it
+   * is correct under a `maxHistory` cap — unlike `history.length`, which the
+   * runtime trims and which would then under-count later steps. Falls back to
+   * `history.length` when the live step is off the resolved spine (a fork
+   * walked with a different `branch`, or a step past an unannotated
+   * transition), and can then reach or exceed `total`.
    */
   readonly index: ComputedRef<number>;
   /**
-   * Resolved sequence length — best-effort. Counts the statically-walkable
-   * spine, so it is a *partial* total when the flow forks without a `branch`
-   * resolver, stops at an unannotated transition, or is cut by `maxSteps`. A
-   * definition with a derivable start always yields at least `1`; `null` only
-   * when no step at all can be resolved.
+   * Resolved sequence length — the "N" in "Step X of N" — or `null` when it
+   * cannot be trusted. A number only when the walk reached a genuine end of the
+   * flow; `null` when the sequence is *partial* (fork without `branch`, a bare
+   * or wildcard-only step, an `"invoke"` hand-off, a cycle, or the `maxSteps`
+   * cap), because the walkable length is then only a lower bound and rendering
+   * it as the total produces nonsense like "Step 2 of 1". Guard on `total`.
    */
   readonly total: ComputedRef<number | null>;
   /** `progressLabel` of the current step, or `null`. */
@@ -97,10 +106,10 @@ export function useJourneyProgress<
 >(
   instanceId: MaybeRefOrGetter<InstanceId | null>,
   definition: JourneyDefinition<TModules, TState, TInput, TOutput, TMeta>,
-  ...[options]: UseJourneyProgressArgs<TInput>
+  ...[options]: UseJourneyProgressArgs<TInput, TModules>
 ): JourneyProgress {
   const opts = (options ?? {}) as UseJourneyProgressBase & {
-    readonly sequence?: ResolveStepSequenceOptions<TInput>;
+    readonly sequence?: ResolveStepSequenceOptions<TInput, TModules>;
   };
   const ctx = useJourneyContext();
   // `toRaw` for the same reason the host/outlet do it — a runtime that arrived
@@ -113,13 +122,28 @@ export function useJourneyProgress<
   // is resolved once at setup — the same read the React hook memoizes. The
   // tuple cast localizes the engine's documented "TInput is generic here"
   // erasure; `opts.sequence` already satisfies the input-or-start requirement.
-  const steps = resolveStepSequence(
+  const resolved = resolveStepSequenceResult(
     definition,
-    ...((opts.sequence === undefined ? [] : [opts.sequence]) as StepSequenceOptionsArg<TInput>),
+    ...((opts.sequence === undefined ? [] : [opts.sequence]) as StepSequenceOptionsArg<
+      TInput,
+      TModules
+    >),
   );
+  const steps = resolved.steps;
 
-  const index = computed(() => (instance.value ? instance.value.history.length : 0));
-  const total = computed(() => (steps.length > 0 ? steps.length : null));
+  const index = computed(() => {
+    const current = instance.value?.step;
+    // Position within the resolved spine — trim-immune, unlike `history.length`.
+    const resolvedIndex =
+      current != null
+        ? steps.findIndex((s) => s.module === current.moduleId && s.entry === current.entry)
+        : -1;
+    if (resolvedIndex >= 0) return resolvedIndex;
+    return instance.value ? instance.value.history.length : 0;
+  });
+  // Only a completed walk yields a trustworthy total; a partial spine would
+  // render "Step 2 of 1" once the runtime advances past it.
+  const total = computed(() => (resolved.complete && steps.length > 0 ? steps.length : null));
   const label = computed<string | null>(() => {
     const current = instance.value?.step;
     if (current == null) return null;

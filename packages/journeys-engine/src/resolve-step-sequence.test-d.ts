@@ -126,3 +126,28 @@ test("resolveStepSequence: non-void-input journey rejects a wrong-typed `input`"
   // @ts-expect-error — `input` must match the journey's `TInput`.
   resolveStepSequence(nonVoidInput, { input: { token: 1 } });
 });
+
+// --- `start` / `branch` refs are checked against the module vocabulary -------
+// An explicit `start` (and a `branch` return) must name a real `(module, entry)`
+// pair — a typo should be a compile error, not a fake step the walk emits.
+
+test("resolveStepSequence: `start` accepts a declared (module, entry) pair", () => {
+  resolveStepSequence(voidInput, { start: { module: "plan", entry: "choose" } });
+});
+
+test("resolveStepSequence: `start` rejects an unknown module id", () => {
+  // @ts-expect-error — "typo" is not a module in `Modules`.
+  resolveStepSequence(voidInput, { start: { module: "typo", entry: "choose" } });
+});
+
+test("resolveStepSequence: `start` rejects an unknown entry name on a real module", () => {
+  // @ts-expect-error — `plan` declares `choose`, not `missing`.
+  resolveStepSequence(voidInput, { start: { module: "plan", entry: "missing" } });
+});
+
+test("resolveStepSequence: `branch` must return one of the journey's steps", () => {
+  resolveStepSequence(voidInput, {
+    // @ts-expect-error — a fabricated (module, entry) is not a valid branch pick.
+    branch: () => ({ module: "typo", entry: "missing" }),
+  });
+});

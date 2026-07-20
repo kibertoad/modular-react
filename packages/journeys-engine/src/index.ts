@@ -41,6 +41,7 @@ export {
   defaultStepPath,
   journeyStepPath,
   resolveJourneySyncAction,
+  stepPathFromDefinition,
 } from "./journey-sync.js";
 export type {
   JourneySync,
@@ -65,12 +66,13 @@ export type { AnnotatedTransitionHandler, StepRef, TerminalSentinel } from "./de
 
 // Derive an ordered step list (URL segments, "Step X of N") from the transition
 // graph — the runtime companion to the catalog harvester's static extraction.
-export { resolveStepSequence } from "./resolve-step-sequence.js";
+export { resolveStepSequence, resolveStepSequenceResult } from "./resolve-step-sequence.js";
 export type {
   ResolvedJourneyStep,
   ResolveStepSequenceOptions,
   StepSequenceOptionsArg,
   StepSequenceRef,
+  StepSequenceResult,
   StepSequenceWalkOptions,
 } from "./resolve-step-sequence.js";
 

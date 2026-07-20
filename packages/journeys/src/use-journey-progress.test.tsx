@@ -120,6 +120,37 @@ describe("useJourneyProgress", () => {
     expect(seen.at(-1)).toMatchObject({ index: 2, total: 3, label: "Payment" });
   });
 
+  it("keeps index correct under a maxHistory cap that trims history", () => {
+    // maxHistory: 1 trims `history` to a single frame, so `history.length`
+    // would stall at 1 on the third step. `index` is derived from the resolved
+    // spine instead, so it still reports the true position.
+    const runtime = createJourneyRuntime([{ definition: checkout, options: { maxHistory: 1 } }]);
+    const id = runtime.start(checkout.id, undefined);
+    const seen: JourneyProgress[] = [];
+
+    function Probe() {
+      seen.push(useJourneyProgress(id, checkout));
+      return null;
+    }
+    render(
+      <JourneyProvider runtime={runtime}>
+        <Probe />
+      </JourneyProvider>,
+    );
+
+    act(() => {
+      createTestHarness(runtime).fireExit(id, "done");
+    });
+    act(() => {
+      createTestHarness(runtime).fireExit(id, "chosen");
+    });
+
+    // History has been trimmed to length 1, but the current step is
+    // billing/collect — position 2 in the spine.
+    expect(runtime.getInstance(id)?.history.length).toBe(1);
+    expect(seen.at(-1)).toMatchObject({ index: 2, total: 3, label: "Payment" });
+  });
+
   it("derives total even before an instance exists (index 0, label null)", () => {
     let observed: JourneyProgress | undefined;
     function Probe() {
@@ -154,9 +185,10 @@ describe("useJourneyProgress", () => {
         <Probe />
       </JourneyProvider>,
     );
-    // Only the start step is statically knowable, so total is 1 — but the point
-    // is it never throws and stays finite. (A fully-unresolvable start would be
-    // null; here `start` yields one step.)
-    expect(observed?.total).toBe(1);
+    // The walk stops at the bare-handler start step without reaching a genuine
+    // terminal, so the spine is partial and `total` is null rather than the
+    // misleading lower bound of 1. `steps` still carries the one known step.
+    expect(observed?.total).toBeNull();
+    expect(observed?.steps.map((s) => `${s.module}/${s.entry}`)).toEqual(["profile/review"]);
   });
 });
