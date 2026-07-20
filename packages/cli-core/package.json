@@ -1,6 +1,6 @@
 {
   "name": "@modular-react/cli-core",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Shared command implementations and templates for the modular-react CLI binaries (@react-router-modules/cli, @tanstack-react-modules/cli, @modular-vue/cli).",
   "repository": {
     "type": "git",

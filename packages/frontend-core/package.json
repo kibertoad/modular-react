@@ -1,6 +1,6 @@
 {
   "name": "@modular-frontend/core",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Framework-neutral primitives for modular frontend applications: module descriptors, slots, navigation, validation, journey contracts, and a lightweight store. No UI-framework dependency — components are carried as opaque values.",
   "repository": {
     "type": "git",
