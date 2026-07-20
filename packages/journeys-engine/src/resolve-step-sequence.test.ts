@@ -323,4 +323,141 @@ describe("resolveStepSequenceResult — completeness", () => {
   it("is incomplete when cut short by maxSteps", () => {
     expect(resolveStepSequenceResult(linear, { maxSteps: 2 }).complete).toBe(false);
   });
+
+  // A step can look terminal from its exact `transitions` alone while a
+  // wildcard fall-through handler still carries the flow forward — firing that
+  // exit would recreate "Step 2 of 1". The walk never follows wildcard targets,
+  // so it keeps such a step off `complete` rather than reporting a false total.
+
+  it("is incomplete when a tier-3 (byExit) wildcard can advance past an exact-terminal step", () => {
+    const wildcardAdvance = defineJourney<Modules, State>()({
+      id: "wildcard-advance",
+      version: "1.0.0",
+      initialState: () => ({ tier: null }),
+      start: () => ({ module: "billing", entry: "collect", input: { x: 1 } }),
+      transitions: {
+        billing: {
+          collect: {
+            paid: transition({ targets: ["complete"], handle: () => ({ complete: undefined }) }),
+          },
+        },
+      },
+      wildcardTransitions: {
+        byExit: {
+          chosen: transition({
+            targets: [{ module: "plan", entry: "choose" }],
+            handle: () => ({ next: { module: "plan", entry: "choose", input: { x: 1 } } }),
+          }),
+        },
+      },
+    });
+    const result = resolveStepSequenceResult(wildcardAdvance);
+    expect(result.complete).toBe(false);
+    // the wildcard target is not walked — only the known spine is returned
+    expect(result.steps.map((s) => `${s.module}/${s.entry}`)).toEqual(["billing/collect"]);
+  });
+
+  it("is incomplete when a tier-2 (byEntryAndExit) wildcard can advance past an exact-terminal step", () => {
+    const wildcardTier2 = defineJourney<Modules, State>()({
+      id: "wildcard-tier2",
+      version: "1.0.0",
+      initialState: () => ({ tier: null }),
+      start: () => ({ module: "plan", entry: "choose", input: { x: 1 } }),
+      transitions: {
+        plan: {
+          choose: {
+            chosen: transition({ targets: ["complete"], handle: () => ({ complete: undefined }) }),
+          },
+        },
+      },
+      wildcardTransitions: {
+        byEntryAndExit: {
+          choose: {
+            premium: transition({
+              targets: [{ module: "plan", entry: "upsell" }],
+              handle: () => ({ next: { module: "plan", entry: "upsell", input: { x: 1 } } }),
+            }),
+          },
+        },
+      },
+    });
+    expect(resolveStepSequenceResult(wildcardTier2).complete).toBe(false);
+  });
+
+  it("is incomplete when a bare (unannotated) wildcard handler could fire", () => {
+    const wildcardBare = defineJourney<Modules, State>()({
+      id: "wildcard-bare",
+      version: "1.0.0",
+      initialState: () => ({ tier: null }),
+      start: () => ({ module: "billing", entry: "collect", input: { x: 1 } }),
+      transitions: {
+        billing: {
+          collect: {
+            paid: transition({ targets: ["complete"], handle: () => ({ complete: undefined }) }),
+          },
+        },
+      },
+      wildcardTransitions: {
+        byExit: {
+          // opaque: the walk cannot prove where this leads
+          chosen: () => ({ next: { module: "plan", entry: "choose", input: { x: 1 } } }),
+        },
+      },
+    });
+    expect(resolveStepSequenceResult(wildcardBare).complete).toBe(false);
+  });
+
+  it("stays complete when the only applicable wildcard just ends the journey", () => {
+    // A cross-cutting `premium → abort` wildcard must not demote a genuinely
+    // terminal step — it cannot advance, so the total stays confident.
+    const wildcardTerminalOnly = defineJourney<Modules, State>()({
+      id: "wildcard-terminal-only",
+      version: "1.0.0",
+      initialState: () => ({ tier: null }),
+      start: () => ({ module: "billing", entry: "collect", input: { x: 1 } }),
+      transitions: {
+        billing: {
+          collect: {
+            paid: transition({ targets: ["complete"], handle: () => ({ complete: undefined }) }),
+          },
+        },
+      },
+      wildcardTransitions: {
+        byExit: {
+          premium: transition({
+            targets: ["abort"],
+            handle: () => ({ abort: { reason: "cancelled" } }),
+          }),
+        },
+      },
+    });
+    expect(resolveStepSequenceResult(wildcardTerminalOnly).complete).toBe(true);
+  });
+
+  it("stays complete when an exact handler shadows a would-be-advancing wildcard", () => {
+    // `paid` has an exact terminal handler, so the `paid` wildcard never fires
+    // for this step; precedence (exact > wildcard) is respected.
+    const wildcardShadowed = defineJourney<Modules, State>()({
+      id: "wildcard-shadowed",
+      version: "1.0.0",
+      initialState: () => ({ tier: null }),
+      start: () => ({ module: "billing", entry: "collect", input: { x: 1 } }),
+      transitions: {
+        billing: {
+          collect: {
+            paid: transition({ targets: ["complete"], handle: () => ({ complete: undefined }) }),
+          },
+        },
+      },
+      wildcardTransitions: {
+        byExit: {
+          paid: transition({
+            targets: [{ module: "plan", entry: "choose" }],
+            handle: () => ({ next: { module: "plan", entry: "choose", input: { x: 1 } } }),
+          }),
+        },
+      },
+    });
+    expect(resolveStepSequenceResult(wildcardShadowed).complete).toBe(true);
+  });
 });

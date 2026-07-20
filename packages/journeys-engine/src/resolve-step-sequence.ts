@@ -173,7 +173,9 @@ const DEFAULT_MAX_STEPS = 256;
  * `"invoke"`) carry no next step and are skipped. Only the per-step
  * `transitions` map is walked — `wildcard` fall-through handlers are not
  * followed, so a step whose only forward movement is a wildcard also ends the
- * sequence.
+ * sequence. A wildcard that *could* advance still keeps that step off the
+ * `complete` reckoning (see {@link resolveStepSequenceResult}), so its length is
+ * never mistaken for a confident total.
  *
  * Unless `options.start` is supplied, the first step is computed by invoking
  * `definition.initialState(options.input)` then `definition.start(...)`; these
@@ -189,9 +191,15 @@ const DEFAULT_MAX_STEPS = 256;
  *
  * @example
  * ```ts
+ * // URL segments from the resolved spine — safe, it just maps the known steps:
  * const steps = resolveStepSequence(checkout);
- * const total = steps.length;                    // "Step X of N"
  * const paths = steps.map((s) => s.path ?? `${s.module}/${s.entry}`);
+ *
+ * // A "Step X of N" total must come from resolveStepSequenceResult and be
+ * // trusted only when the walk reached a genuine terminal step — a partial
+ * // spine's length is a lower bound, not the real total:
+ * const { steps: seq, complete } = resolveStepSequenceResult(checkout);
+ * const total = complete ? seq.length : null;
  * ```
  */
 export function resolveStepSequence<
@@ -332,6 +340,15 @@ function readStepMeta(
  *   sentinel. A step that stops the walk for any other reason (bare handler,
  *   wildcard-only, invoke hand-off, or simply no declared transitions) is
  *   `terminal: false` — the walk cannot prove it is the flow's real end.
+ *
+ *   Wildcard fall-through handlers count too: the runtime routes an exit with
+ *   no exact `transitions[module][entry][exit]` through
+ *   `wildcardTransitions.byEntryAndExit[entry][exit]` then `byExit[exit]`, so a
+ *   step with an exact `done → complete` handler *and* a wildcard `retry → next`
+ *   handler can still advance. When any applicable wildcard handler may advance
+ *   (a bare handler, a forward step ref, or `"invoke"`), `terminal` is `false` —
+ *   the resolver deliberately does not walk wildcard targets, so it cannot prove
+ *   the step is the flow's real end.
  */
 function classifyStep(
   definition: AnyDefinition,
@@ -346,6 +363,7 @@ function classifyStep(
 
   const refs: StepSequenceRef[] = [];
   const seen = new Set<string>();
+  const exactExits = new Set<string>();
   let hasAnnotated = false;
   let hasBare = false;
   let hasInvoke = false;
@@ -353,6 +371,7 @@ function classifyStep(
   for (const [exitName, handler] of Object.entries(perEntry)) {
     // `allowBack` is a sibling boolean flag on the per-entry map, not a handler.
     if (exitName === "allowBack") continue;
+    exactExits.add(exitName);
     if (!isAnnotatedTransition(handler)) {
       hasBare = true;
       continue;
@@ -370,8 +389,84 @@ function classifyStep(
       refs.push({ module: target.module, entry: target.entry });
     }
   }
-  const terminal = refs.length === 0 && hasAnnotated && !hasBare && !hasInvoke && hasEndSentinel;
+  const terminal =
+    refs.length === 0 &&
+    hasAnnotated &&
+    !hasBare &&
+    !hasInvoke &&
+    hasEndSentinel &&
+    !wildcardMayAdvance(definition, entry, exactExits);
   return { targets: refs, terminal };
+}
+
+/**
+ * Whether any wildcard fall-through handler that could fire from this step may
+ * advance the journey (rather than only ending it). Mirrors the runtime's
+ * resolution precedence — exact → `byEntryAndExit[entry][exit]` → `byExit[exit]`
+ * — so a wildcard is only considered for an exit that no more-specific tier
+ * already handles. A handler "may advance" when it is bare (opaque), declares a
+ * forward step ref, or declares `"invoke"`; a handler that only targets
+ * `"complete"` / `"abort"` does not. Used to keep a step off `terminal` when a
+ * wildcard could carry the flow past it (the resolver never walks wildcard
+ * targets, so it cannot prove such a step is the real end).
+ */
+function wildcardMayAdvance(
+  definition: AnyDefinition,
+  entry: string,
+  exactExits: ReadonlySet<string>,
+): boolean {
+  const wildcards = (definition as { wildcardTransitions?: unknown }).wildcardTransitions;
+  if (typeof wildcards !== "object" || wildcards === null) return false;
+
+  const byEntryAndExit = readExitHandlerMap(
+    (wildcards as { byEntryAndExit?: unknown }).byEntryAndExit,
+    entry,
+  );
+  const byExit = readExitHandlerMap((wildcards as { byExit?: unknown }).byExit);
+
+  // Tier 2: module unknown, this step's entry + exit known. Fires only for
+  // exits with no exact handler.
+  if (byEntryAndExit) {
+    for (const [exitName, handler] of Object.entries(byEntryAndExit)) {
+      if (exactExits.has(exitName)) continue;
+      if (handlerMayAdvance(handler)) return true;
+    }
+  }
+
+  // Tier 3: module + entry unknown. Fires only for exits neither an exact
+  // handler nor a tier-2 handler for this entry already covers.
+  if (byExit) {
+    for (const [exitName, handler] of Object.entries(byExit)) {
+      if (exactExits.has(exitName)) continue;
+      if (byEntryAndExit && Object.hasOwn(byEntryAndExit, exitName)) continue;
+      if (handlerMayAdvance(handler)) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Read an `{ [exit]: handler }` map from a wildcard tier — either `byExit`
+ * directly, or `byEntryAndExit[entry]` when an `entry` is supplied. Returns
+ * `undefined` for a missing / malformed tier so callers can skip it.
+ */
+function readExitHandlerMap(value: unknown, entry?: string): Record<string, unknown> | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const map = entry === undefined ? value : (value as Record<string, unknown>)[entry];
+  if (typeof map !== "object" || map === null) return undefined;
+  return map as Record<string, unknown>;
+}
+
+/**
+ * Whether a single wildcard handler may carry the flow forward. Bare handlers
+ * are opaque (the walk cannot see past them), and annotated handlers advance
+ * when they declare a forward step ref or `"invoke"`. A handler that only
+ * targets `"complete"` / `"abort"` ends the journey and does not advance.
+ */
+function handlerMayAdvance(handler: unknown): boolean {
+  if (!isAnnotatedTransition(handler)) return true; // bare — opaque
+  return handler.targets.some((target) => !isTerminalSentinel(target) || target === "invoke");
 }
 
 /**
