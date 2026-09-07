@@ -380,19 +380,41 @@ pnpm build          # Build all packages
 pnpm test           # Run all tests
 ```
 
-## Release labels
+## Releases
 
-Every merged PR to `main` must carry exactly one of these labels. The publish workflow reads the label to decide whether to release and how:
+Releases are driven by [changesets](https://changesets.dev). A PR declares its own
+release; nothing is published from a feature branch.
 
-| Label                  | What it does                                                                                                                                                                                                                                                                                                                              |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `patch`                | Run the release. Bump each changed package's patch version.                                                                                                                                                                                                                                                                               |
-| `minor`                | Run the release. Bump each changed package's minor version.                                                                                                                                                                                                                                                                               |
-| `major`                | Run the release. Bump each changed package's major version.                                                                                                                                                                                                                                                                               |
-| `release-same-version` | Run the release, but **do not bump versions** — publish the versions already committed in each `package.json`. Use this when the PR pre-set the versions by hand (e.g. coordinated multi-package release where the docs or example apps reference specific numbers). The workflow still skips any `<name>@<version>` already live on npm. |
-| `skip-release`         | Merge without releasing. Use for docs, workflow edits, tests, or anything that doesn't ship library code.                                                                                                                                                                                                                                 |
+**When you change shipped code under `packages/*`, add a changeset:**
 
-Attach exactly one label. `release-same-version` wins over `major`/`minor`/`patch` if both are attached. Attaching `skip-release` alongside a release label is ambiguous — the `ensure-labels` check passes but the publish job still fires on the release label, so don't mix them.
+```bash
+pnpm changeset
+```
+
+Pick the packages you touched, pick `patch` / `minor` / `major` for each, and write
+a one-line summary in the consumer's voice. Commit the generated `.changeset/*.md`
+file alongside your code. The `Changeset` check on the PR fails if a released
+package changed without one; add the `skip-release` label to override it for a
+deliberate no-release change. Docs-only, example-only, and CI-only PRs need no
+changeset and no label.
+
+**What happens after merge:**
+
+1. The release workflow runs `changeset version` on `main`, which drains the
+   pending changesets into version bumps and `CHANGELOG.md` entries, and opens a
+   **chore: version packages** PR with the result.
+2. That PR is merged automatically.
+3. The follow-up run publishes every package whose version is not yet on npm,
+   pushes the `<name>@<version>` git tags, and creates the GitHub releases.
+
+Because step 1 batches, several feature PRs merged before the version PR lands are
+released together — one bump per package, one changelog entry per changeset.
+
+Bumps cascade the way the dependency graph demands: an internal `workspace:*`
+dependency is rewritten to an exact version at pack time, so releasing a package
+also patch-releases its dependents. Wide-ranged `peerDependencies` (the
+`@modular-frontend/*` engines) do not cascade — a dependent is only bumped when
+the new version falls outside its declared range.
 
 ## Help & contributing
 

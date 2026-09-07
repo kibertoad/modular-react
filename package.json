@@ -11,15 +11,21 @@
     "lint": "turbo run typecheck && oxfmt --check . && oxlint .",
     "lint:fix": "oxfmt --write . && oxlint --fix .",
     "check:lockfile-dedup": "node scripts/check-lockfile-dedup.mjs",
-    "check:publish": "node scripts/check-publish.mjs"
+    "check:publish": "node scripts/check-publish.mjs",
+    "changeset": "changeset",
+    "changeset:status": "changeset status --since=origin/main",
+    "changeset:version": "changeset version && pnpm install --lockfile-only --no-frozen-lockfile && oxfmt --write .",
+    "changeset:publish": "pnpm turbo run build --filter=\"./packages/*\" && changeset publish"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.0",
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.2",
     "oxfmt": "^0.51.0",
     "oxlint": "^1.66.0",
     "publint": "^0.3.0",
     "turbo": "^2.9.6",
     "typescript": "^6.0.3"
   },
-  "packageManager": "pnpm@11.15.0"
+  "packageManager": "pnpm@12.3.4"
 }
