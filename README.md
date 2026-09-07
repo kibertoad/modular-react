@@ -394,18 +394,24 @@ pnpm changeset
 Pick the packages you touched, pick `patch` / `minor` / `major` for each, and write
 a one-line summary in the consumer's voice. Commit the generated `.changeset/*.md`
 file alongside your code. The `Changeset` check on the PR fails if a released
-package changed without one; add the `skip-release` label to override it for a
-deliberate no-release change. Docs-only, example-only, and CI-only PRs need no
-changeset and no label.
+package's shipped files changed without one; add the `skip-release` label to
+override it for a deliberate no-release change. Docs-only, test-only,
+example-only, and CI-only PRs need no changeset and no label — tests, fixtures,
+test-runner config and READMEs are excluded from the check by
+`changedFilePatterns` in `.changeset/config.json`.
 
 **What happens after merge:**
 
 1. The release workflow runs `changeset version` on `main`, which drains the
    pending changesets into version bumps and `CHANGELOG.md` entries, and opens a
    **chore: version packages** PR with the result.
-2. That PR is merged automatically.
-3. The follow-up run publishes every package whose version is not yet on npm,
-   pushes the `<name>@<version>` git tags, and creates the GitHub releases.
+2. The same run merges that PR.
+3. It then publishes every package whose version is not yet on npm, pushes the
+   `<name>@<version>` git tags, and creates the GitHub releases.
+
+If the version PR cannot be merged automatically, the run fails instead of going
+green with nothing published. Merging it by hand releases it: a merge attributed
+to a person emits a `push` event, which starts a fresh release run.
 
 Because step 1 batches, several feature PRs merged before the version PR lands are
 released together — one bump per package, one changelog entry per changeset.

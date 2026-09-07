@@ -16,23 +16,30 @@ that package's `CHANGELOG.md` and in the GitHub release notes. Commit the
 generated `.changeset/*.md` file with the rest of your PR.
 
 Docs-only, test-only, and CI-only PRs need no changeset. The `Changeset`
-check on the PR enforces this: it fails when `packages/*` changed and no
-changeset was added. Add the `skip-release` label to override it for a
-deliberate no-release change (a comment-only edit to shipped source, say).
+check on the PR enforces this: it fails when a package's _shipped_ files
+changed and no changeset was added. Which files count is the
+`changedFilePatterns` config below, not "anything under `packages/*`". Add the
+`skip-release` label to override the check for a deliberate no-release change
+to shipped source (a comment-only edit, say).
 
 ## How a release happens
 
 1. Your PR merges to `main` with its changeset.
-2. `release.yml` runs `changeset version`, which drains `.changeset/*.md` into
-   version bumps + `CHANGELOG.md` entries, and opens a **Version Packages** PR
-   with the result.
-3. That PR is merged automatically, and the follow-up run publishes every
-   package whose version is not yet on npm, then pushes the git tags and
-   creates the GitHub releases.
+2. `.github/workflows/publish.yml` runs `changeset version`, which drains
+   `.changeset/*.md` into version bumps + `CHANGELOG.md` entries, and opens a
+   **chore: version packages** PR with the result.
+3. The same workflow run merges that PR and then publishes every package whose
+   version is not yet on npm, pushes the git tags, and creates the GitHub
+   releases.
 
-Nothing is published from a feature PR — only from the merged Version Packages
-PR. So batching: several feature PRs merged before the Version Packages PR
-lands are released together, in one bump per package.
+Nothing is published from a feature PR — only from the merged version PR. So
+batching: several feature PRs merged before the version PR lands are released
+together, in one bump per package.
+
+If the version PR cannot be merged automatically, the release run fails rather
+than going green with nothing published. Merging that PR by hand releases it:
+a merge attributed to a person emits a `push` event, which starts a fresh
+release run.
 
 ## What is not versioned here
 
@@ -43,13 +50,21 @@ lands are released together, in one bump per package.
 
 ## Notes on the config
 
-- `onlyUpdatePeerDependentsWhenOutOfRange: true` — the React and Vue bindings
-  declare `@modular-frontend/*` as a wide-ranged `peerDependency`
-  (`>=0.1.0 <2.0.0`). Without this flag changesets treats _any_ release of a
-  peer dependency as a breaking change for its dependents and majors them.
-  With it, a dependent is only bumped when the new version actually falls
-  outside the declared range.
+- `changedFilePatterns` decides which files inside a package make it "changed"
+  for the `Changeset` check. It is a denylist over `**` on purpose: a new kind
+  of shipped file needs a changeset by default, and only the things that
+  provably do not reach the published tarball's behaviour — tests, test
+  fixtures and snapshots, test-runner config, `README.md`, `CHANGELOG.md` — are
+  subtracted. Order matters: the negations only take effect after `**`.
 - Internal deps are all `workspace:*`, which `pnpm publish` rewrites to the
   exact version at pack time. A dependent therefore does need a release when
   its dependency moves, which is what `updateInternalDependencies: "patch"`
   gives us.
+- Peer dependents need no config flag. The React and Vue bindings declare
+  `@modular-frontend/*` as a wide-ranged `peerDependency` (`>=0.1.0 <2.0.0`),
+  and changesets only bumps a peer dependent when the released version falls
+  _outside_ the declared range — which these ranges never do. (The
+  `onlyUpdatePeerDependentsWhenOutOfRange` flag that used to be needed for this
+  is unrelated today: it lives under
+  `___experimentalUnsafeOptions_WILL_CHANGE_IN_PATCH` and only controls whether
+  the `peerDependencies` _range_ in `package.json` is rewritten.)

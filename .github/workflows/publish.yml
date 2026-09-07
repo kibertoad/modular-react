@@ -1,14 +1,23 @@
 # Changesets-driven release.
 #
-# Two phases, both of which run from this one workflow on every push to `main`:
+# One run carries a release all the way through, as three jobs forming an
+# explicit state machine:
 #
-#   1. Version. Pending `.changeset/*.md` files exist, so `changeset version`
-#      drains them into version bumps + CHANGELOG entries and the changesets
-#      action opens (or updates) the `changeset-release/main` PR. The next step
-#      merges that PR automatically and re-dispatches this workflow.
-#   2. Publish. No pending changesets remain, so `changeset publish` ships every
-#      package whose version is not yet on npm, pushes the git tags, and creates
-#      the GitHub releases.
+#   detect  — are there pending `.changeset/*.md` files?
+#   version — yes: `changeset version` drains them into version bumps and
+#             CHANGELOG entries, the changesets action opens (or updates) the
+#             `changeset-release/main` PR, and the job merges it.
+#   publish — the drained release commit is now on `main` (the version job just
+#             merged it, or there was nothing to version): `changeset publish`
+#             ships every package whose version is not yet on npm, pushes the
+#             `<name>@<version>` tags, and creates the GitHub releases.
+#
+# Version and publish run in the same workflow run on purpose. A merge performed
+# on behalf of `github-actions[bot]` emits no `push` event, so a two-run design
+# would have to re-enter through `workflow_dispatch` — which needs `actions:
+# write` and drops the publish run into this workflow's concurrency group as a
+# *pending* run, where the next push to `main` silently cancels it. Chaining
+# jobs avoids both problems and keeps one release in one run's logs.
 #
 # The file name is load-bearing: npm trusted publishing is configured per package
 # against `.github/workflows/publish.yml`. Renaming this file breaks publishing
@@ -19,36 +28,202 @@ on:
   push:
     branches:
       - main
-  # Also the re-entry point used by the auto-merge step below: `workflow_dispatch`
-  # is the one event GITHUB_TOKEN is allowed to trigger, so it is how the publish
-  # phase gets started after the bot merges the version PR.
+  # Manual escape hatch: re-run the release after clearing whatever blocked it
+  # (a version PR that had to be merged by hand, say).
   workflow_dispatch:
 
 permissions: {}
 
 # Never let two releases interleave. `cancel-in-progress: false` so a queued
-# publish run waits for the version run instead of replacing it.
+# release waits for the one in flight instead of replacing it.
 concurrency:
   group: release-main
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Version or publish
+  detect:
+    name: Detect pending changesets
     runs-on: ubuntu-latest
     permissions:
-      contents: write # push the version branch, the release commit, and the tags
-      pull-requests: write # open, update, and auto-merge the version PR
-      id-token: write # mint the OIDC token npm trusted publishing authenticates with
+      contents: read # checkout reads the repo
+    outputs:
+      pending: ${{ steps.scan.outputs.pending }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
+      - name: Scan .changeset
+        id: scan
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # Every `.md` in `.changeset` is a pending changeset except the
+          # folder's own README.
+          pending=false
+          for changeset in .changeset/*.md; do
+            if [ "$changeset" != ".changeset/README.md" ]; then
+              pending=true
+              break
+            fi
+          done
+          echo "pending=$pending" >> "$GITHUB_OUTPUT"
+          echo "Pending changesets: $pending"
+
+  version:
+    name: Version packages
+    needs: detect
+    if: needs.detect.outputs.pending == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the version branch and the release commit
+      pull-requests: write # open, update, and merge the version PR
+    outputs:
+      # "true" once the drained release commit is on `main` and publishing may
+      # proceed. The job fails instead when the version PR will not merge.
+      ready: ${{ steps.merge.outputs.ready }}
+      # The release commit itself, so the publish job builds exactly what was
+      # versioned rather than racing whatever lands on `main` next.
+      sha: ${{ steps.merge.outputs.sha }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           # `changeset version` diffs against the base branch and the changelog
           # generator resolves commits to PRs, so shallow history is not enough.
           fetch-depth: 0
-          # The action pushes the release commit and tags through the GitHub API
+          # The action pushes the release commit through the GitHub API
           # (`push-with-git-cli` defaults to false), so no on-disk credentials.
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+
+      - name: Install pnpm
+        # Pin pnpm via `packageManager` in package.json (see ci.common.yml).
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Open the version PR
+        id: changesets
+        uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          version-script: pnpm changeset:version
+          commit-message: "chore: version packages"
+          pr-title: "chore: version packages"
+
+      - name: Merge the version PR
+        id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.changesets.outputs.pr-number }}
+          MERGE_ATTEMPTS: "6"
+          MERGE_RETRY_SECONDS: "10"
+        run: |
+          set -euo pipefail
+
+          if [ -z "$PR" ]; then
+            # Every pending changeset was empty, so there was nothing to version
+            # and nothing to merge. Publishing still runs — it is a no-op when
+            # every version is already on npm.
+            echo "No version PR was opened; nothing to merge."
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # The version PR is opened with GITHUB_TOKEN, so no `pull_request`
+          # workflow ever runs on it: any required status check stays
+          # permanently "expected" and GitHub's native auto-merge would queue
+          # forever. Merging outright is the only path that can complete, so
+          # take it first. Mergeability is computed asynchronously, so an
+          # attempt in the first seconds after the PR is opened can fail for
+          # that reason alone — retry before concluding something is blocking.
+          merged=false
+          for attempt in $(seq 1 "$MERGE_ATTEMPTS"); do
+            if gh pr merge "$PR" --squash --delete-branch; then
+              merged=true
+              break
+            fi
+            if [ "$attempt" -lt "$MERGE_ATTEMPTS" ]; then
+              echo "Merge attempt ${attempt}/${MERGE_ATTEMPTS} on #${PR} did not succeed; retrying in ${MERGE_RETRY_SECONDS}s."
+              sleep "$MERGE_RETRY_SECONDS"
+            fi
+          done
+
+          if [ "$merged" = true ]; then
+            # Publish the squash commit this merge produced, not `main`'s tip:
+            # another push can land on `main` in between, and only this commit
+            # is known to carry the drained changesets.
+            sha=""
+            for attempt in $(seq 1 "$MERGE_ATTEMPTS"); do
+              # `|| true` so a transient API error retries instead of tripping
+              # `set -e` on the assignment.
+              sha=$(gh pr view "$PR" --json mergeCommit --jq '.mergeCommit.oid // ""' || true)
+              if [ -n "$sha" ]; then
+                break
+              fi
+              if [ "$attempt" -lt "$MERGE_ATTEMPTS" ]; then
+                sleep "$MERGE_RETRY_SECONDS"
+              fi
+            done
+
+            if [ -z "$sha" ]; then
+              echo "::error::Version PR #${PR} merged, but GitHub did not report the resulting commit, so there is nothing safe to publish. Re-run this workflow to publish it."
+              exit 1
+            fi
+
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+            echo "Merged version PR #${PR} as ${sha}."
+            exit 0
+          fi
+
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+
+          # Something this token cannot clear is blocking the merge — a required
+          # status check that will never report, or a required review. Leave a
+          # standing auto-merge order so the PR lands the moment a human clears
+          # it; that merge is attributed to a person, so it emits a `push` event
+          # and starts a fresh run of this workflow, which publishes.
+          gh pr merge "$PR" --squash --delete-branch --auto ||
+            echo "::warning::Auto-merge is not enabled for this repository, so no standing merge order could be left on #${PR}."
+
+          # Then fail. A version PR that did not merge means nothing was
+          # released, and a green run would hide that.
+          echo "::error::Version PR #${PR} could not be merged, so nothing was published. Merge it by hand to release, then check this repository's settings: squash merging must be allowed, and branch protection on 'main' must not require status checks — they never run on a PR opened by GITHUB_TOKEN."
+          exit 1
+
+  publish:
+    name: Publish to npm
+    needs: [detect, version]
+    # Runs when there was nothing to version (the `version` job is skipped), or
+    # when it ran and put the release commit on `main`. A failed version job
+    # stops the release here.
+    if: >-
+      !cancelled() &&
+      needs.detect.result == 'success' &&
+      (needs.version.result == 'skipped' ||
+      (needs.version.result == 'success' && needs.version.outputs.ready == 'true'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the <name>@<version> tags and create the GitHub releases
+      id-token: write # mint the OIDC token npm trusted publishing authenticates with
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # The release commit the version job just produced, or — when there
+          # was nothing to version — the commit that triggered this run. Never
+          # `main`'s tip: that would publish whatever else has landed since.
+          ref: ${{ needs.version.outputs.sha || github.sha }}
+          # The action reads the existing tags to decide which GitHub releases
+          # it still has to create.
+          fetch-depth: 0
+          # The action supplies its own credentials to the git CLI through
+          # `GIT_CONFIG_*`, so nothing has to be persisted on disk.
           persist-credentials: false
 
       - name: Setup Node
@@ -65,14 +240,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Version or publish
+      - name: Publish
         id: changesets
         uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
         with:
-          version-script: pnpm changeset:version
           publish-script: pnpm changeset:publish
-          commit-message: "chore: version packages"
-          pr-title: "chore: version packages"
+          # `changeset publish` creates the `<name>@<version>` tags locally, on
+          # the commit checked out above. Left to the GitHub API, the action
+          # would instead re-create each tag at `GITHUB_SHA` — the commit that
+          # triggered the run, which is one commit behind the release commit
+          # whenever the version job just merged the version PR. Pushing the
+          # local tags with the git CLI keeps every tag on the commit that
+          # actually carries that version.
+          push-with-git-cli: true
         env:
           # setup-node sets NODE_AUTH_TOKEN to a placeholder ('XXXXX-XXXXX-XXXXX-XXXXX')
           # when no token exists, which prevents npm from falling back to OIDC
@@ -84,63 +264,18 @@ jobs:
           # documents for it.
           NPM_CONFIG_PROVENANCE: true
 
-      - name: Auto-merge the version PR
-        if: steps.changesets.outputs.pr-number != ''
-        id: automerge
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ steps.changesets.outputs.pr-number }}
-        run: |
-          set -euo pipefail
-
-          # Prefer GitHub's native auto-merge — it honours branch protection and
-          # merges once required checks pass. It is only available when the repo
-          # has "Allow auto-merge" enabled, so fall back to merging outright. The
-          # fallback is safe: the version PR's contents are generated verbatim
-          # from changesets that already passed CI on `main`, and the packages
-          # are built and validated again in the publish phase before anything
-          # reaches npm.
-          if ! gh pr merge "$PR" --squash --delete-branch --auto; then
-            echo "Auto-merge unavailable; merging #$PR directly."
-            gh pr merge "$PR" --squash --delete-branch
-          fi
-
-          # A merge performed on behalf of github-actions[bot] does not emit a
-          # `push` event, so the publish phase will not start on its own. Wait
-          # for the merge to land (native auto-merge is asynchronous), then
-          # re-enter this workflow via `workflow_dispatch`.
-          STATE=""
-          for _ in $(seq 1 30); do
-            STATE=$(gh pr view "$PR" --json state --jq .state)
-            if [ "$STATE" = "MERGED" ]; then
-              break
-            fi
-            sleep 10
-          done
-
-          if [ "$STATE" = "MERGED" ]; then
-            echo "Version PR #$PR merged; dispatching the publish run."
-            gh workflow run publish.yml --ref main
-          else
-            echo "::notice::Version PR #$PR is still $STATE. It will publish once it merges and this workflow is dispatched (push to main, or run it manually)."
-          fi
-
       - name: Summary
         env:
-          PR_NUMBER: ${{ steps.changesets.outputs.pr-number }}
           PUBLISHED: ${{ steps.changesets.outputs.published }}
           PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.published-packages }}
         run: |
           {
             echo "## Release summary"
             echo
-            if [ -n "$PR_NUMBER" ]; then
-              echo "Opened or updated version PR #${PR_NUMBER}."
-            fi
             if [ "$PUBLISHED" = "true" ]; then
               echo "### Published"
               echo "$PUBLISHED_PACKAGES" | jq -r '.[] | "- \(.name)@\(.version)"'
-            elif [ -z "$PR_NUMBER" ]; then
-              echo "Nothing to release."
+            else
+              echo "Nothing to publish — every package version is already on npm."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

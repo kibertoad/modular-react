@@ -13,5 +13,18 @@
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
   "privatePackages": false,
-  "ignore": ["@example/*", "@example-*/*"]
+  "ignore": ["@example/*", "@example-*/*"],
+  "changedFilePatterns": [
+    "**",
+    "!**/*.test.*",
+    "!**/*.spec.*",
+    "!**/__tests__/**",
+    "!**/__snapshots__/**",
+    "!test/**",
+    "!vitest.config.*",
+    "!vitest.setup.*",
+    "!playwright.config.*",
+    "!README.md",
+    "!CHANGELOG.md"
+  ]
 }
