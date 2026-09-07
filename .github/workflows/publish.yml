@@ -1,287 +1,230 @@
-name: Publish to npm
+# Changesets-driven release.
+#
+# One run carries a release all the way through, as three jobs forming an
+# explicit state machine:
+#
+#   detect  — are there pending `.changeset/*.md` files?
+#   version — yes: `changeset version` drains them into version bumps and
+#             CHANGELOG entries, the changesets action opens (or updates) the
+#             `changeset-release/main` PR, and the job merges it.
+#   publish — the drained release commit is now on `main` (the version job just
+#             merged it, or there was nothing to version): `changeset publish`
+#             ships every package whose version is not yet on npm, pushes the
+#             `<name>@<version>` tags, and creates the GitHub releases.
+#
+# Version and publish run in the same workflow run on purpose. A merge performed
+# on behalf of `github-actions[bot]` emits no `push` event, so a two-run design
+# would have to re-enter through `workflow_dispatch` — which needs `actions:
+# write` and drops the publish run into this workflow's concurrency group as a
+# *pending* run, where the next push to `main` silently cancels it. Chaining
+# jobs avoids both problems and keeps one release in one run's logs.
+#
+# The file name is load-bearing: npm trusted publishing is configured per package
+# against `.github/workflows/publish.yml`. Renaming this file breaks publishing
+# for all 29 packages until every trusted-publisher entry is updated on npmjs.com.
+name: Release
 
 on:
-  pull_request:
-    types:
-      - closed
+  push:
     branches:
       - main
+  # Manual escape hatch: re-run the release after clearing whatever blocked it
+  # (a version PR that had to be merged by hand, say).
+  workflow_dispatch:
 
 permissions: {}
 
-# Prevent overlapping releases if multiple PRs merge close together
+# Never let two releases interleave. `cancel-in-progress: false` so a queued
+# release waits for the one in flight instead of replacing it.
 concurrency:
   group: release-main
   cancel-in-progress: false
 
 jobs:
-  detect-changes:
-    name: Detect changed packages
-    # Publish runs when the PR carries any of: major / minor / patch (auto-bump
-    # paths) OR release-same-version (publish the versions already committed).
-    if: >-
-      github.event.pull_request.merged == true && (
-        contains(github.event.pull_request.labels.*.name, 'patch') ||
-        contains(github.event.pull_request.labels.*.name, 'minor') ||
-        contains(github.event.pull_request.labels.*.name, 'major') ||
-        contains(github.event.pull_request.labels.*.name, 'release-same-version')
-      )
+  detect:
+    name: Detect pending changesets
     runs-on: ubuntu-latest
     permissions:
       contents: read # checkout reads the repo
-      pull-requests: read # dorny/paths-filter reads the PR's changed-file list via the API
     outputs:
-      matrix: ${{ steps.build-matrix.outputs.matrix }}
-      has_changes: ${{ steps.build-matrix.outputs.has_changes }}
-      bump: ${{ steps.version.outputs.bump }}
-      same_version: ${{ steps.version.outputs.same_version }}
+      pending: ${{ steps.scan.outputs.pending }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0
           persist-credentials: false
 
-      - name: Determine version strategy
-        id: version
-        # Resolve GitHub expressions into env vars and branch on those in
-        # shell. Inline `${{ contains(...) }}` expansion works (it renders
-        # as the literal word `true` / `false` into the command) but it's
-        # easy to get wrong — one typo and the shell silently executes a
-        # command called `false`, which happens to succeed in some shells.
-        # Env-var + bash string compare is the durable pattern.
-        env:
-          IS_SAME_VERSION: ${{ contains(github.event.pull_request.labels.*.name, 'release-same-version') }}
-          IS_MAJOR: ${{ contains(github.event.pull_request.labels.*.name, 'major') }}
-          IS_MINOR: ${{ contains(github.event.pull_request.labels.*.name, 'minor') }}
+      - name: Scan .changeset
+        id: scan
         run: |
-          # release-same-version wins over major/minor/patch — the author
-          # already committed the versions they want, so the workflow must
-          # not re-bump them. Emit same_version=true; bump is unused in that
-          # branch but still set to 'none' so downstream conditionals never
-          # evaluate against an empty string.
-          if [ "$IS_SAME_VERSION" = "true" ]; then
-            echo "same_version=true" >> $GITHUB_OUTPUT
-            echo "bump=none" >> $GITHUB_OUTPUT
-          else
-            echo "same_version=false" >> $GITHUB_OUTPUT
-            if [ "$IS_MAJOR" = "true" ]; then
-              echo "bump=major" >> $GITHUB_OUTPUT
-            elif [ "$IS_MINOR" = "true" ]; then
-              echo "bump=minor" >> $GITHUB_OUTPUT
-            else
-              echo "bump=patch" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          shopt -s nullglob
+          # Every `.md` in `.changeset` is a pending changeset except the
+          # folder's own README.
+          pending=false
+          for changeset in .changeset/*.md; do
+            if [ "$changeset" != ".changeset/README.md" ]; then
+              pending=true
+              break
             fi
+          done
+          echo "pending=$pending" >> "$GITHUB_OUTPUT"
+          echo "Pending changesets: $pending"
+
+  version:
+    name: Version packages
+    needs: detect
+    if: needs.detect.outputs.pending == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the version branch and the release commit
+      pull-requests: write # open, update, and merge the version PR
+    outputs:
+      # "true" once the drained release commit is on `main` and publishing may
+      # proceed. The job fails instead when the version PR will not merge.
+      ready: ${{ steps.merge.outputs.ready }}
+      # The release commit itself, so the publish job builds exactly what was
+      # versioned rather than racing whatever lands on `main` next.
+      sha: ${{ steps.merge.outputs.sha }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # `changeset version` diffs against the base branch and the changelog
+          # generator resolves commits to PRs, so shallow history is not enough.
+          fetch-depth: 0
+          # The action pushes the release commit through the GitHub API
+          # (`push-with-git-cli` defaults to false), so no on-disk credentials.
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+
+      - name: Install pnpm
+        # Pin pnpm via `packageManager` in package.json (see ci.common.yml).
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Open the version PR
+        id: changesets
+        uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          version-script: pnpm changeset:version
+          commit-message: "chore: version packages"
+          pr-title: "chore: version packages"
+
+      - name: Merge the version PR
+        id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.changesets.outputs.pr-number }}
+          MERGE_ATTEMPTS: "6"
+          MERGE_RETRY_SECONDS: "10"
+        run: |
+          set -euo pipefail
+
+          if [ -z "$PR" ]; then
+            # Every pending changeset was empty, so there was nothing to version
+            # and nothing to merge. Publishing still runs — it is a no-op when
+            # every version is already on npm.
+            echo "No version PR was opened; nothing to merge."
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-      - id: filter
-        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
-        with:
-          filters: |
-            pkg_core:
-              - 'packages/core/lib/**'
-              - 'packages/core/src/**'
-              - 'packages/core/package.json'
-              - 'packages/core/README.md'
-            pkg_react:
-              - 'packages/react/lib/**'
-              - 'packages/react/src/**'
-              - 'packages/react/package.json'
-              - 'packages/react/README.md'
-            pkg_testing:
-              - 'packages/testing/lib/**'
-              - 'packages/testing/src/**'
-              - 'packages/testing/package.json'
-              - 'packages/testing/README.md'
-            pkg_journeys:
-              - 'packages/journeys/src/**'
-              - 'packages/journeys/package.json'
-              - 'packages/journeys/README.md'
-            pkg_catalog:
-              # Catalog ships a built TS library plus a Vite-built SPA bundle
-              # (dist + dist-spa, see packages/catalog/package.json's `files`),
-              # so the SPA source tree is part of the publish surface.
-              - 'packages/catalog/src/**'
-              - 'packages/catalog/spa-src/**'
-              - 'packages/catalog/package.json'
-              - 'packages/catalog/README.md'
-            pkg_cli_core:
-              - 'packages/cli-core/src/**'
-              - 'packages/cli-core/package.json'
-              - 'packages/cli-core/README.md'
-            pkg_rr_cli:
-              - 'packages/react-router-cli/src/**'
-              - 'packages/react-router-cli/package.json'
-              - 'packages/react-router-cli/README.md'
-            pkg_rr_core:
-              - 'packages/react-router-core/src/**'
-              - 'packages/react-router-core/package.json'
-              - 'packages/react-router-core/README.md'
-            pkg_rr_runtime:
-              - 'packages/react-router-runtime/src/**'
-              - 'packages/react-router-runtime/package.json'
-              - 'packages/react-router-runtime/README.md'
-            pkg_rr_testing:
-              - 'packages/react-router-testing/src/**'
-              - 'packages/react-router-testing/package.json'
-              - 'packages/react-router-testing/README.md'
-            pkg_tr_cli:
-              - 'packages/tanstack-router-cli/src/**'
-              - 'packages/tanstack-router-cli/package.json'
-              - 'packages/tanstack-router-cli/README.md'
-            pkg_tr_core:
-              - 'packages/tanstack-router-core/src/**'
-              - 'packages/tanstack-router-core/package.json'
-              - 'packages/tanstack-router-core/README.md'
-            pkg_tr_runtime:
-              - 'packages/tanstack-router-runtime/src/**'
-              - 'packages/tanstack-router-runtime/package.json'
-              - 'packages/tanstack-router-runtime/README.md'
-            pkg_tr_testing:
-              - 'packages/tanstack-router-testing/src/**'
-              - 'packages/tanstack-router-testing/package.json'
-              - 'packages/tanstack-router-testing/README.md'
-            # Shared framework-neutral engines (@modular-frontend/*, D2) —
-            # extracted from the React packages and consumed by both the React
-            # and Vue families, so they publish on their own cadence.
-            pkg_fe_core:
-              - 'packages/frontend-core/src/**'
-              - 'packages/frontend-core/package.json'
-              - 'packages/frontend-core/README.md'
-            pkg_fe_testing:
-              - 'packages/frontend-testing/src/**'
-              - 'packages/frontend-testing/package.json'
-              - 'packages/frontend-testing/README.md'
-            pkg_fe_journeys_engine:
-              - 'packages/journeys-engine/src/**'
-              - 'packages/journeys-engine/package.json'
-              - 'packages/journeys-engine/README.md'
-            pkg_fe_compositions_engine:
-              - 'packages/compositions-engine/src/**'
-              - 'packages/compositions-engine/package.json'
-              - 'packages/compositions-engine/README.md'
-            # Vue Router family (@modular-vue/*).
-            pkg_vue:
-              - 'packages/vue/src/**'
-              - 'packages/vue/package.json'
-              - 'packages/vue/README.md'
-            pkg_vue_core:
-              - 'packages/vue-core/src/**'
-              - 'packages/vue-core/package.json'
-              - 'packages/vue-core/README.md'
-            pkg_vue_runtime:
-              - 'packages/vue-runtime/src/**'
-              - 'packages/vue-runtime/package.json'
-              - 'packages/vue-runtime/README.md'
-            pkg_vue_testing:
-              - 'packages/vue-testing/src/**'
-              - 'packages/vue-testing/package.json'
-              - 'packages/vue-testing/README.md'
-            pkg_vue_journeys:
-              - 'packages/vue-journeys/src/**'
-              - 'packages/vue-journeys/package.json'
-              - 'packages/vue-journeys/README.md'
-            pkg_vue_compositions:
-              - 'packages/vue-compositions/src/**'
-              - 'packages/vue-compositions/package.json'
-              - 'packages/vue-compositions/README.md'
-            pkg_vue_cli:
-              - 'packages/vue-cli/src/**'
-              - 'packages/vue-cli/package.json'
-              - 'packages/vue-cli/README.md'
-            pkg_vue_nuxt:
-              - 'packages/vue-nuxt/src/**'
-              - 'packages/vue-nuxt/package.json'
-              - 'packages/vue-nuxt/README.md'
-
-      - name: Build dynamic matrix
-        id: build-matrix
-        env:
-          CHANGED: ${{ steps.filter.outputs.changes }}
-        run: |
-          # Each entry: filter_key -> dir:npmName
-          declare -A PKG_MAP=(
-            ["pkg_core"]="core:@modular-react/core"
-            ["pkg_react"]="react:@modular-react/react"
-            ["pkg_testing"]="testing:@modular-react/testing"
-            ["pkg_journeys"]="journeys:@modular-react/journeys"
-            ["pkg_catalog"]="catalog:@modular-react/catalog"
-            ["pkg_cli_core"]="cli-core:@modular-react/cli-core"
-            ["pkg_rr_cli"]="react-router-cli:@react-router-modules/cli"
-            ["pkg_rr_core"]="react-router-core:@react-router-modules/core"
-            ["pkg_rr_runtime"]="react-router-runtime:@react-router-modules/runtime"
-            ["pkg_rr_testing"]="react-router-testing:@react-router-modules/testing"
-            ["pkg_tr_cli"]="tanstack-router-cli:@tanstack-react-modules/cli"
-            ["pkg_tr_core"]="tanstack-router-core:@tanstack-react-modules/core"
-            ["pkg_tr_runtime"]="tanstack-router-runtime:@tanstack-react-modules/runtime"
-            ["pkg_tr_testing"]="tanstack-router-testing:@tanstack-react-modules/testing"
-            ["pkg_fe_core"]="frontend-core:@modular-frontend/core"
-            ["pkg_fe_testing"]="frontend-testing:@modular-frontend/testing"
-            ["pkg_fe_journeys_engine"]="journeys-engine:@modular-frontend/journeys-engine"
-            ["pkg_fe_compositions_engine"]="compositions-engine:@modular-frontend/compositions-engine"
-            ["pkg_vue"]="vue:@modular-vue/vue"
-            ["pkg_vue_core"]="vue-core:@modular-vue/core"
-            ["pkg_vue_runtime"]="vue-runtime:@modular-vue/runtime"
-            ["pkg_vue_testing"]="vue-testing:@modular-vue/testing"
-            ["pkg_vue_journeys"]="vue-journeys:@modular-vue/journeys"
-            ["pkg_vue_compositions"]="vue-compositions:@modular-vue/compositions"
-            ["pkg_vue_cli"]="vue-cli:@modular-vue/cli"
-            ["pkg_vue_nuxt"]="vue-nuxt:@modular-vue/nuxt"
-          )
-
-          echo "Changed filters: $CHANGED"
-
-          MATRIX="["
-          FIRST=true
-
-          for key in "${!PKG_MAP[@]}"; do
-            if echo "$CHANGED" | grep -q "\"$key\""; then
-              IFS=':' read -r DIR NPM_NAME <<< "${PKG_MAP[$key]}"
-
-              if [ "$FIRST" = true ]; then
-                FIRST=false
-              else
-                MATRIX+=","
-              fi
-
-              MATRIX+="{\"dir\":\"${DIR}\",\"npmName\":\"${NPM_NAME}\"}"
+          # The version PR is opened with GITHUB_TOKEN, so no `pull_request`
+          # workflow ever runs on it: any required status check stays
+          # permanently "expected" and GitHub's native auto-merge would queue
+          # forever. Merging outright is the only path that can complete, so
+          # take it first. Mergeability is computed asynchronously, so an
+          # attempt in the first seconds after the PR is opened can fail for
+          # that reason alone — retry before concluding something is blocking.
+          merged=false
+          for attempt in $(seq 1 "$MERGE_ATTEMPTS"); do
+            if gh pr merge "$PR" --squash --delete-branch; then
+              merged=true
+              break
+            fi
+            if [ "$attempt" -lt "$MERGE_ATTEMPTS" ]; then
+              echo "Merge attempt ${attempt}/${MERGE_ATTEMPTS} on #${PR} did not succeed; retrying in ${MERGE_RETRY_SECONDS}s."
+              sleep "$MERGE_RETRY_SECONDS"
             fi
           done
 
-          MATRIX+="]"
+          if [ "$merged" = true ]; then
+            # Publish the squash commit this merge produced, not `main`'s tip:
+            # another push can land on `main` in between, and only this commit
+            # is known to carry the drained changesets.
+            sha=""
+            for attempt in $(seq 1 "$MERGE_ATTEMPTS"); do
+              # `|| true` so a transient API error retries instead of tripping
+              # `set -e` on the assignment.
+              sha=$(gh pr view "$PR" --json mergeCommit --jq '.mergeCommit.oid // ""' || true)
+              if [ -n "$sha" ]; then
+                break
+              fi
+              if [ "$attempt" -lt "$MERGE_ATTEMPTS" ]; then
+                sleep "$MERGE_RETRY_SECONDS"
+              fi
+            done
 
-          echo "Generated matrix: $MATRIX"
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+            if [ -z "$sha" ]; then
+              echo "::error::Version PR #${PR} merged, but GitHub did not report the resulting commit, so there is nothing safe to publish. Re-run this workflow to publish it."
+              exit 1
+            fi
 
-          if [ "$MATRIX" = "[]" ]; then
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+            echo "Merged version PR #${PR} as ${sha}."
+            exit 0
           fi
 
-  release:
-    name: Release to npm
-    needs: detect-changes
-    if: needs.detect-changes.outputs.has_changes == 'true'
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+
+          # Something this token cannot clear is blocking the merge — a required
+          # status check that will never report, or a required review. Leave a
+          # standing auto-merge order so the PR lands the moment a human clears
+          # it; that merge is attributed to a person, so it emits a `push` event
+          # and starts a fresh run of this workflow, which publishes.
+          gh pr merge "$PR" --squash --delete-branch --auto ||
+            echo "::warning::Auto-merge is not enabled for this repository, so no standing merge order could be left on #${PR}."
+
+          # Then fail. A version PR that did not merge means nothing was
+          # released, and a green run would hide that.
+          echo "::error::Version PR #${PR} could not be merged, so nothing was published. Merge it by hand to release, then check this repository's settings: squash merging must be allowed, and branch protection on 'main' must not require status checks — they never run on a PR opened by GITHUB_TOKEN."
+          exit 1
+
+  publish:
+    name: Publish to npm
+    needs: [detect, version]
+    # Runs when there was nothing to version (the `version` job is skipped), or
+    # when it ran and put the release commit on `main`. A failed version job
+    # stops the release here.
+    if: >-
+      !cancelled() &&
+      needs.detect.result == 'success' &&
+      (needs.version.result == 'skipped' ||
+      (needs.version.result == 'success' && needs.version.outputs.ready == 'true'))
     runs-on: ubuntu-latest
     permissions:
-      contents: write # push the version-bump commit and tags back to main
-      id-token: write # mint the OIDC token used by `pnpm publish --provenance`
-
+      contents: write # push the <name>@<version> tags and create the GitHub releases
+      id-token: write # mint the OIDC token npm trusted publishing authenticates with
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          # The release commit the version job just produced, or — when there
+          # was nothing to version — the commit that triggered this run. Never
+          # `main`'s tip: that would publish whatever else has landed since.
+          ref: ${{ needs.version.outputs.sha || github.sha }}
+          # The action reads the existing tags to decide which GitHub releases
+          # it still has to create.
           fetch-depth: 0
-          token: ${{ github.token }}
-          persist-credentials: true
-
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Pull latest changes
-        run: git pull --ff-only origin main
+          # The action supplies its own credentials to the git CLI through
+          # `GIT_CONFIG_*`, so nothing has to be persisted on disk.
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -297,157 +240,42 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Bump versions for changed packages
-        # Skip bumping entirely when the PR used release-same-version — the
-        # versions in package.json are already the intended publish targets.
-        if: needs.detect-changes.outputs.same_version != 'true'
-        id: bump
-        env:
-          MATRIX: ${{ needs.detect-changes.outputs.matrix }}
-          BUMP: ${{ needs.detect-changes.outputs.bump }}
-        run: |
-          echo "Packages to bump: $MATRIX"
-          echo "Version bump type: $BUMP"
-
-          for PKG_DIR in $(echo "$MATRIX" | jq -r '.[] | .dir'); do
-            echo "Bumping version for $PKG_DIR..."
-            cd "packages/$PKG_DIR"
-            OLD_VERSION=$(node -p "require('./package.json').version")
-            # --no-git-checks bypasses pnpm's clean-working-tree guard, which
-            # would fire on the second package once the first bump has dirtied
-            # package.json. --no-git-tag-version skips the commit/tag (we batch
-            # bumps into a single commit later, after publish succeeds).
-            pnpm version "$BUMP" --no-git-tag-version --no-git-checks
-            NEW_VERSION=$(node -p "require('./package.json').version")
-            echo "  $OLD_VERSION -> $NEW_VERSION"
-            cd ../..
-          done
-
-      - name: Log publish versions
-        env:
-          MATRIX: ${{ needs.detect-changes.outputs.matrix }}
-          SAME_VERSION: ${{ needs.detect-changes.outputs.same_version }}
-        run: |
-          if [ "$SAME_VERSION" = "true" ]; then
-            echo "release-same-version: using versions as committed in package.json"
-          fi
-          for PKG_DIR in $(echo "$MATRIX" | jq -r '.[] | .dir'); do
-            NPM_NAME=$(node -p "require('./packages/$PKG_DIR/package.json').name")
-            VERSION=$(node -p "require('./packages/$PKG_DIR/package.json').version")
-            echo "  $NPM_NAME@$VERSION"
-          done
-
-      - name: Build all packages
-        run: pnpm turbo run build
-
-      - name: Publish packages to npm
-        id: publish
+      - name: Publish
+        id: changesets
+        uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          publish-script: pnpm changeset:publish
+          # `changeset publish` creates the `<name>@<version>` tags locally, on
+          # the commit checked out above. Left to the GitHub API, the action
+          # would instead re-create each tag at `GITHUB_SHA` — the commit that
+          # triggered the run, which is one commit behind the release commit
+          # whenever the version job just merged the version PR. Pushing the
+          # local tags with the git CLI keeps every tag on the commit that
+          # actually carries that version.
+          push-with-git-cli: true
         env:
           # setup-node sets NODE_AUTH_TOKEN to a placeholder ('XXXXX-XXXXX-XXXXX-XXXXX')
-          # when no token exists, which prevents npm from falling back to OIDC authentication.
-          # Setting it to an empty/undefined secret clears the placeholder so that
-          # pnpm/npm publish --provenance can authenticate via the GitHub Actions OIDC token.
+          # when no token exists, which prevents npm from falling back to OIDC
+          # authentication. Setting it to an empty/undefined secret clears the
+          # placeholder so trusted publishing can authenticate via the OIDC token.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          MATRIX: ${{ needs.detect-changes.outputs.matrix }}
-        run: |
-          PUBLISHED=""
-          SKIPPED=""
-
-          for PKG_DIR in $(echo "$MATRIX" | jq -r '.[] | .dir'); do
-            cd "packages/$PKG_DIR"
-
-            NPM_NAME=$(node -p "require('./package.json').name")
-            VERSION=$(node -p "require('./package.json').version")
-
-            if npm view "$NPM_NAME@$VERSION" version >/dev/null 2>&1; then
-              echo "Skipping $NPM_NAME@$VERSION - already published"
-              SKIPPED+="$NPM_NAME@$VERSION "
-            else
-              echo "Publishing $NPM_NAME@$VERSION..."
-              # pnpm publish (vs. npm publish) is intentional:
-              # - it rewrites any workspace:* / workspace:^ dep specs to real
-              #   versions in the published tarball
-              # - it respects the workspace's package manager (consistent with
-              #   local dev and the `pnpm turbo run build` step above)
-              # - --no-git-checks skips pnpm's dirty-working-tree guard, which
-              #   would fire because the bump step just modified package.json
-              pnpm publish --provenance --access public --no-git-checks
-              PUBLISHED+="$NPM_NAME@$VERSION "
-            fi
-
-            cd ../..
-          done
-
-          echo "published=$PUBLISHED" >> $GITHUB_OUTPUT
-          echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
-
-      - name: Commit version bumps
-        # Only meaningful when the workflow actually bumped versions. With
-        # release-same-version the versions were already committed in the PR.
-        if: needs.detect-changes.outputs.same_version != 'true'
-        run: |
-          git add packages/*/package.json
-          if git diff --staged --quiet; then
-            echo "No version changes to commit"
-          else
-            git commit -m "chore: bump versions [skip ci]"
-          fi
-
-      - name: Create tags for published packages
-        env:
-          MATRIX: ${{ needs.detect-changes.outputs.matrix }}
-        run: |
-          for PKG_DIR in $(echo "$MATRIX" | jq -r '.[] | .dir'); do
-            NPM_NAME=$(node -p "require('./packages/$PKG_DIR/package.json').name")
-            VERSION=$(node -p "require('./packages/$PKG_DIR/package.json').version")
-            TAG="${NPM_NAME}@${VERSION}"
-
-            if git rev-parse "$TAG" >/dev/null 2>&1; then
-              echo "Warning: Tag already exists: $TAG (skipping)"
-            else
-              echo "Creating tag: $TAG"
-              git tag "$TAG"
-            fi
-          done
-
-      - name: Push commits and tags
-        run: |
-          git push
-          git push --tags
+          # `changeset publish` builds the `pnpm publish` argv itself, so there is
+          # no place to pass `--provenance`. This is the env var changesets
+          # documents for it.
+          NPM_CONFIG_PROVENANCE: true
 
       - name: Summary
         env:
-          PUBLISHED: ${{ steps.publish.outputs.published }}
-          SKIPPED: ${{ steps.publish.outputs.skipped }}
-          SAME_VERSION: ${{ needs.detect-changes.outputs.same_version }}
-          BUMP: ${{ needs.detect-changes.outputs.bump }}
+          PUBLISHED: ${{ steps.changesets.outputs.published }}
+          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.published-packages }}
         run: |
-          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          if [ "$SAME_VERSION" = "true" ]; then
-            echo "**Strategy:** release-same-version (used versions committed in PR)" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Strategy:** auto-bump ($BUMP)" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          if [ -n "$PUBLISHED" ]; then
-            echo "### Published packages" >> $GITHUB_STEP_SUMMARY
-            for PKG in $PUBLISHED; do
-              echo "- $PKG" >> $GITHUB_STEP_SUMMARY
-            done
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          if [ -n "$SKIPPED" ]; then
-            echo "### Skipped (already published)" >> $GITHUB_STEP_SUMMARY
-            for PKG in $SKIPPED; do
-              echo "- $PKG" >> $GITHUB_STEP_SUMMARY
-            done
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          if [ -z "$PUBLISHED" ] && [ -z "$SKIPPED" ]; then
-            echo "No packages were published or skipped." >> $GITHUB_STEP_SUMMARY
-          fi
+          {
+            echo "## Release summary"
+            echo
+            if [ "$PUBLISHED" = "true" ]; then
+              echo "### Published"
+              echo "$PUBLISHED_PACKAGES" | jq -r '.[] | "- \(.name)@\(.version)"'
+            else
+              echo "Nothing to publish — every package version is already on npm."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,76 @@
+# Gate on the release queue: a PR that changes shipped library code must also
+# add the changeset that will release it. Replaces the old
+# major/minor/patch/release-same-version label gate — the bump type now lives in
+# the changeset file, next to the change it describes.
+name: Changeset
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - labeled
+      - unlabeled
+
+permissions: {}
+
+# One check per PR ref; new pushes supersede the previous run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changeset:
+    name: Ensure package changes carry a changeset
+    # Three exemptions:
+    #  - the version PR carries drained changesets, never new ones;
+    #  - dependabot only moves devDependency ranges, which don't ship;
+    #  - `skip-release` is the deliberate no-release escape hatch for an edit
+    #    to shipped source that changes no behaviour (a comment or a rename of
+    #    something not exported). Tests, fixtures, test-runner config and
+    #    READMEs need no label — `changedFilePatterns` already excludes them.
+    if: >-
+      github.actor != 'dependabot[bot]' &&
+      github.head_ref != 'changeset-release/main' &&
+      !contains(github.event.pull_request.labels.*.name, 'skip-release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout reads the repo
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+
+      - name: Install pnpm
+        # Pin pnpm via `packageManager` in package.json (see ci.common.yml).
+        run: corepack enable
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check for a changeset
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          # actions/checkout configures a PR-specific refspec, so the base
+          # branch has no remote-tracking ref until we ask for one by name.
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          # Exits non-zero when a released package's shipped files changed with
+          # no changeset to cover it. Ignored workspaces (examples) and private
+          # packages don't count, and `changedFilePatterns` in
+          # .changeset/config.json narrows "changed" to files that reach the
+          # published tarball — so docs-only, test-only and example-only PRs
+          # pass.
+          pnpm exec changeset status --since="origin/$BASE_REF"
