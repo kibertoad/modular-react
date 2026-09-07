@@ -15,12 +15,14 @@ write a one-line summary in the consumer's voice — the text lands verbatim in
 that package's `CHANGELOG.md` and in the GitHub release notes. Commit the
 generated `.changeset/*.md` file with the rest of your PR.
 
-Docs-only, test-only, and CI-only PRs need no changeset. The `Changeset`
-check on the PR enforces this: it fails when a package's _shipped_ files
-changed and no changeset was added. Which files count is the
-`changedFilePatterns` config below, not "anything under `packages/*`". Add the
-`skip-release` label to override the check for a deliberate no-release change
-to shipped source (a comment-only edit, say).
+Test-only and CI-only PRs need no changeset, and neither does documentation
+outside `packages/*`. The `Changeset` check on the PR enforces this: it fails
+when a package's _shipped_ files changed and no changeset was added. Which
+files count is the `changedFilePatterns` config below, not "anything under
+`packages/*`" — and not "anything but docs" either: only `README.md` and
+`CHANGELOG.md` are exempt among a package's Markdown. Add the `skip-release`
+label to override the check for a deliberate no-release change to shipped
+source (a comment-only edit, say).
 
 ## How a release happens
 
@@ -55,7 +57,9 @@ release run.
   of shipped file needs a changeset by default, and only the things that
   provably do not reach the published tarball's behaviour — tests, test
   fixtures and snapshots, test-runner config, `README.md`, `CHANGELOG.md` — are
-  subtracted. Order matters: the negations only take effect after `**`.
+  subtracted. Note this is deliberately narrower than "docs": Markdown a
+  package carries beyond those two still counts as shipped. Order matters: the
+  negations only take effect after `**`.
 - Internal deps are all `workspace:*`, which `pnpm publish` rewrites to the
   exact version at pack time. A dependent therefore does need a release when
   its dependency moves, which is what `updateInternalDependencies: "patch"`

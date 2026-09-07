@@ -395,10 +395,12 @@ Pick the packages you touched, pick `patch` / `minor` / `major` for each, and wr
 a one-line summary in the consumer's voice. Commit the generated `.changeset/*.md`
 file alongside your code. The `Changeset` check on the PR fails if a released
 package's shipped files changed without one; add the `skip-release` label to
-override it for a deliberate no-release change. Docs-only, test-only,
-example-only, and CI-only PRs need no changeset and no label — tests, fixtures,
-test-runner config and READMEs are excluded from the check by
-`changedFilePatterns` in `.changeset/config.json`.
+override it for a deliberate no-release change. Example-only and CI-only PRs
+need no changeset and no label, and neither does documentation outside
+`packages/*`. Inside a package, `changedFilePatterns` in
+`.changeset/config.json` excludes tests, fixtures, snapshots, test-runner
+config, `README.md` and `CHANGELOG.md` — every other file counts as shipped,
+including any other Markdown a package carries.
 
 **What happens after merge:**
 

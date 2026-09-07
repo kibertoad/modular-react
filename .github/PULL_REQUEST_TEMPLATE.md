@@ -16,9 +16,9 @@ Delete any section that genuinely doesn't apply.
 - [ ] `pnpm lint` passes (typecheck + oxfmt + oxlint).
 - [ ] **Changeset added** (`pnpm changeset`) if this changes shipped code under
       `packages/*` — one entry per package, with the bump type and a summary in
-      the consumer's voice. Not needed for docs-only, test-only, example-only,
-      or CI-only PRs; use the `skip-release` label for a deliberate no-release
-      change to shipped source.
+      the consumer's voice. Not needed for test-only, example-only or CI-only
+      PRs, nor for docs outside `packages/*`; use the `skip-release` label for a
+      deliberate no-release change to shipped source.
 - [ ] Tests cover the change and pass (`pnpm test`).
 - [ ] Docs / READMEs / tracker updated in the same PR where relevant.
 - [ ] **Vue impact stated.** If this touches `@modular-frontend/*` (core, engines,
