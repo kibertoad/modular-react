@@ -20,6 +20,7 @@ import {
 import type {
   NavigationItem,
   NavigationItemBase,
+  PluginExtensionsOf,
   PluginRuntimesOf,
   RegistryPlugin,
   SlotFilter,
@@ -79,7 +80,7 @@ export interface ModuleRegistry<
   use<TPlugin extends RegistryPlugin<string, any, any>>(
     plugin: TPlugin,
   ): ModuleRegistry<TSharedDependencies, TSlots, TNavItem, readonly [...TPlugins, TPlugin]> &
-    (TPlugin extends RegistryPlugin<any, infer TExt, any> ? TExt : object);
+    PluginExtensionsOf<readonly [...TPlugins, TPlugin]>;
 
   /**
    * Resolve all modules and produce the application manifest, including a

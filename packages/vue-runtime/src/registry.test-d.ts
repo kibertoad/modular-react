@@ -9,6 +9,18 @@ interface DemoExtension {
   registerDemo: (id: string) => void;
 }
 
+interface OtherExtension {
+  registerOther: (id: number) => void;
+}
+
+function otherPlugin(): RegistryPlugin<"other", OtherExtension, { other: true }> {
+  return {
+    name: "other",
+    extend: () => ({ registerOther: () => {} }),
+    onResolve: () => ({ other: true }),
+  };
+}
+
 function demoPlugin(): RegistryPlugin<"demo", DemoExtension, DemoRuntime> {
   return {
     name: "demo",
@@ -22,6 +34,12 @@ describe("registry types", () => {
     const registry = createRegistry({}).use(demoPlugin());
     expectTypeOf(registry.registerDemo).toBeFunction();
     expectTypeOf(registry.registerDemo).parameters.toEqualTypeOf<[string]>();
+  });
+
+  it("keeps every plugin's extension across chained use() calls", () => {
+    const registry = createRegistry({}).use(demoPlugin()).use(otherPlugin());
+    expectTypeOf(registry.registerDemo).parameters.toEqualTypeOf<[string]>();
+    expectTypeOf(registry.registerOther).parameters.toEqualTypeOf<[number]>();
   });
 
   it("keeps plugin methods off the base registry surface", () => {
