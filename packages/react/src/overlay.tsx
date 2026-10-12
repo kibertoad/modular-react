@@ -120,25 +120,24 @@ export function useOverlay<TSubject>(
 // Vue binding so the behaviour cannot drift. This module contributes only the
 // React glue: effects, refs, and re-renders.
 
-// Render-order keys for stack pushes. Render visits a parent before its
-// children, but effects run children first: in one commit, a nested overlay or
-// a foreign layer would push before the window that contains it.
-let nextStackOrder = 0;
-
 /**
  * Hold a ticket on {@link sharedOverlayStack} while `active`: the one
  * push/release path shared by {@link useModalBehavior} and
  * {@link useOverlayTicket}. Returns the live ticket (read it in handlers) and
  * `isTop` as of this render.
  *
- * The push carries a key taken in the render where `active` turns true. Keys
- * grow in render order, so within one commit a container lands below what it
- * contains, and across commits a later open lands on top.
+ * Render visits a parent before its children, but effects run children
+ * first: in one commit, a nested overlay or a foreign layer would push before
+ * the window that contains it. So the push carries a key from
+ * `sharedOverlayStack.nextOrder()`, taken in the render where `active` turns
+ * true. The stack uses keys only to order the pushes of one synchronous
+ * batch, so a container lands below what it contains, and a later open still
+ * lands above every earlier one.
  *
- * The peer range admits engines whose stack ignores the key (no `ordered`
- * flag). On those, a `deferLegacy` caller pushes one microtask after the
- * effect instead, after every synchronous push of the commit, so a foreign
- * layer open at mount still lands above its window.
+ * The peer range admits engines whose stack ignores keys (no `ordered` flag).
+ * On those, a `deferLegacy` caller pushes one microtask after the effect
+ * instead, after every synchronous push of the commit, so a foreign layer open
+ * at mount still lands above its window.
  *
  * Re-renders on stack changes only while holding a ticket; an inactive caller
  * reads `isTop` as `false` and needs no updates.
@@ -156,8 +155,10 @@ function useStackTicket(
   // the ticket is assigned.
   const [, bumpStackVersion] = useReducer((n: number) => n + 1, 0);
   const isTop = ticketRef.current?.isTop() ?? false;
-  // Only ordering matters, so a recomputed or discarded key is harmless.
-  const order = useMemo(() => (active ? nextStackOrder++ : -1), [active]);
+  // One engine-wide sequence, so every binding copy on this stack draws
+  // comparable keys. Only order matters: a skipped or discarded key is
+  // harmless. Undefined on engines without `ordered`, which ignore keys.
+  const order = useMemo(() => sharedOverlayStack.nextOrder?.(), [active]);
 
   useEffect(() => {
     if (!active) return;
@@ -166,8 +167,8 @@ function useStackTicket(
     let cancelled = false;
     const acquire = () => {
       if (cancelled) return;
-      // The key of the render that turned `active` on: `order` is not a dep,
-      // so a recomputed key never re-pushes this ticket above its children.
+      // The key of the render that turned `active` on. `order` is not a dep:
+      // a recomputed key must not re-push a held ticket.
       ticket = sharedOverlayStack.push(order);
       ticketRef.current = ticket;
       unsubscribe = sharedOverlayStack.subscribe(bumpStackVersion);

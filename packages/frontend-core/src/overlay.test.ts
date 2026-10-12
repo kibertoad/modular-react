@@ -166,16 +166,52 @@ describe("createOverlayStack", () => {
     expect(stack.size).toBe(1);
   });
 
-  it("an ordered push does not step below a keyless registration", () => {
+  // The batch closes in a microtask queued at its first push, so a microtask
+  // queued after that runs once the batch is closed.
+  const nextBatch = () => new Promise<void>((resolve) => queueMicrotask(resolve));
+
+  it("an ordered push stays above every registration of an earlier batch", async () => {
     const stack = createOverlayStack();
-    const keyed = stack.push(5);
+    // A stale key from an earlier render, pushed after an overlay that opened
+    // in the meantime (an Activity reveal): it still lands on top.
+    const meantime = stack.push(9);
+    await nextBatch();
+    const revealed = stack.push(1);
+    expect(revealed.isTop()).toBe(true);
+    revealed.release();
+    expect(meantime.isTop()).toBe(true);
+  });
+
+  it("an ordered push does not step below a keyless registration of an earlier batch", async () => {
+    const stack = createOverlayStack();
     const keyless = stack.push();
+    await nextBatch();
     const late = stack.push(1);
     expect(late.isTop()).toBe(true);
     late.release();
     expect(keyless.isTop()).toBe(true);
+  });
+
+  it("a keyless push in the same batch stays above its keyed neighbours", () => {
+    const stack = createOverlayStack();
+    // One commit, child-first: a nested modal (3), a hand-rolled keyless push
+    // inside the window, then the outlet (1). Stack: [outlet, nested, keyless].
+    const nested = stack.push(3);
+    const keyless = stack.push();
+    const outlet = stack.push(1);
+    expect(keyless.isTop()).toBe(true);
     keyless.release();
-    expect(keyed.isTop()).toBe(true);
+    expect(nested.isTop()).toBe(true);
+    nested.release();
+    expect(outlet.isTop()).toBe(true);
+  });
+
+  it("hands out one increasing key sequence per stack", () => {
+    const stack = createOverlayStack();
+    const first = stack.nextOrder!();
+    expect(stack.nextOrder!()).toBeGreaterThan(first);
+    // Another stack has its own sequence.
+    expect(createOverlayStack().nextOrder!()).toBe(0);
   });
 
   it("a listener unsubscribing mid-notify does not skip its peers", () => {

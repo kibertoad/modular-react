@@ -215,11 +215,21 @@ export interface OverlayStack {
    * `order` corrects for bindings that register child-first. React runs a
    * child's effects before its parent's, so in one commit a nested overlay
    * would push before the overlay that contains it. A binding passes a key
-   * taken in render order (parent first). The registration then goes below
-   * the keyed registrations at the top that have a greater key, but never
-   * below a keyless one. Omit it to push on top.
+   * from {@link OverlayStack.nextOrder}, taken in render order (parent
+   * first). Keys only order the registrations of one synchronous batch (the
+   * pushes since the last microtask boundary): the registration goes below
+   * the registrations of the current batch at the top that have a greater key
+   * or no key. Registrations of earlier batches are always below it, so a
+   * stale key never puts a later open below an earlier one. Omit `order` to
+   * push on top.
    */
   push(order?: number): OverlayStackTicket;
+  /**
+   * The next key for {@link OverlayStack.push}. One sequence per stack, so
+   * every binding that registers on it draws comparable keys. Absent on
+   * engines before {@link OverlayStack.ordered}.
+   */
+  nextOrder?(): number;
   /**
    * `true` when {@link OverlayStack.push} honours `order`. Engines before this
    * flag ignore the argument and always push on top, so a binding that peers
@@ -243,8 +253,21 @@ export interface OverlayStack {
  */
 export function createOverlayStack(): OverlayStack {
   // Tokens are per-ticket object identities; order of the array is stack order.
-  const live: { readonly order?: number }[] = [];
+  const live: { readonly order?: number; readonly batch: object }[] = [];
   const listeners = new Set<() => void>();
+  let nextOrder = 0;
+  // The pushes since the last microtask boundary share one batch identity.
+  let batch: object | null = null;
+  const currentBatch = (): object => {
+    if (batch === null) {
+      const opened = {};
+      batch = opened;
+      queueMicrotask(() => {
+        if (batch === opened) batch = null;
+      });
+    }
+    return batch;
+  };
 
   const notify = () => {
     // Snapshot so a listener mutating the set mid-notify (unsubscribing itself
@@ -255,15 +278,20 @@ export function createOverlayStack(): OverlayStack {
 
   return {
     ordered: true,
+    nextOrder() {
+      return nextOrder++;
+    },
     push(order) {
-      const token = { order };
+      const token = { order, batch: currentBatch() };
       let at = live.length;
       if (order !== undefined) {
-        // Step below the keyed registrations made later in render order. A
-        // keyless registration is a barrier: it was pushed earlier in time.
+        // Within this batch, step below the registrations made later in render
+        // order, and below keyless ones, which carry no render position. Stop
+        // at an earlier batch: those registrations opened before this one.
         while (at > 0) {
-          const below = live[at - 1].order;
-          if (below === undefined || below <= order) break;
+          const below = live[at - 1];
+          if (below.batch !== token.batch) break;
+          if (below.order !== undefined && below.order <= order) break;
           at--;
         }
       }

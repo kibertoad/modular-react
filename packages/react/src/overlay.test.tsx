@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { useState } from "react";
+import { Activity, useState } from "react";
 import { act, cleanup, fireEvent, render, renderHook } from "@testing-library/react";
 import { defineOverlayHost, sharedOverlayStack, type OverlayEntry } from "@modular-react/core";
 import {
@@ -426,6 +426,22 @@ describe("useOverlayTicket", () => {
   // Flush pending effects and re-renders.
   const flushPush = () => act(async () => {});
 
+  // A foreign layer inside another one, both open at mount; each reports isTop.
+  function InnerLayer() {
+    const { isTop } = useOverlayTicket(true);
+    return <span data-testid="inner-layer" data-top={String(isTop)} />;
+  }
+  function NestedLayers() {
+    const { isTop } = useOverlayTicket(true);
+    return (
+      <div data-testid="outer-layer" data-top={String(isTop)}>
+        <InnerLayer />
+      </div>
+    );
+  }
+  const topOf = (testId: string) =>
+    document.querySelector(`[data-testid="${testId}"]`)?.getAttribute("data-top") === "true";
+
   const renderTicket = (open: boolean) =>
     renderHook(({ open }: { open: boolean }) => useOverlayTicket(open), {
       initialProps: { open },
@@ -502,17 +518,61 @@ describe("useOverlayTicket", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("puts the inner of two nested layers open at mount on top", async () => {
+    render(<NestedLayers />);
+    await flushPush();
+    expect(topOf("inner-layer")).toBe(true);
+    expect(topOf("outer-layer")).toBe(false);
+  });
+
+  it("puts a ticket re-pushed by an Activity reveal above an overlay opened while it was hidden", async () => {
+    const closeA = vi.fn();
+    const closeB = vi.fn();
+    function Modal({ onClose }: { onClose: () => void }) {
+      const { dialogRef } = useModalBehavior({ active: true, onClose });
+      return <div ref={dialogRef as React.RefObject<HTMLDivElement>} />;
+    }
+    function App({ showA, openB }: { showA: boolean; openB: boolean }) {
+      return (
+        <>
+          <Activity mode={showA ? "visible" : "hidden"}>
+            <Modal onClose={closeA} />
+          </Activity>
+          {openB && <Modal onClose={closeB} />}
+        </>
+      );
+    }
+    // Each step is a separate user event, so its pushes form their own batch.
+    const { rerender } = render(<App showA openB={false} />);
+    await flushPush();
+    rerender(<App showA={false} openB={false} />); // A's effect cleans up
+    await flushPush();
+    rerender(<App showA={false} openB />); // B opens
+    await flushPush();
+    rerender(<App showA openB />); // A re-pushes with the key of its first render
+    await flushPush();
+    expect(sharedOverlayStack.size).toBe(2);
+    // A opened last, so it owns Escape.
+    press("Escape");
+    expect(closeA).toHaveBeenCalledTimes(1);
+    expect(closeB).not.toHaveBeenCalled();
+  });
+
   describe("on an engine without ordered pushes", () => {
-    // Engines before 0.7.0: no `ordered` flag, and `push` ignores its key.
-    const stack = sharedOverlayStack as { ordered?: boolean };
+    // Engines before 0.7.0: no `ordered` flag, no `nextOrder`, and `push`
+    // ignores its key.
+    const stack = sharedOverlayStack as { ordered?: boolean; nextOrder?: () => number };
+    const nextOrder = stack.nextOrder;
     const legacyEngine = () => {
       const push = sharedOverlayStack.push.bind(sharedOverlayStack);
       vi.spyOn(sharedOverlayStack, "push").mockImplementation(() => push());
       stack.ordered = undefined;
+      stack.nextOrder = undefined;
     };
     afterEach(() => {
       vi.restoreAllMocks();
       stack.ordered = true;
+      stack.nextOrder = nextOrder;
     });
 
     it("still lands above its host window when the layer is open as the window mounts", async () => {
@@ -532,6 +592,15 @@ describe("useOverlayTicket", () => {
       expect(sharedOverlayStack.size).toBe(2);
       press("Escape");
       expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("puts the outer of two nested layers open at mount on top (documented limit)", async () => {
+      legacyEngine();
+      render(<NestedLayers />);
+      await flushPush();
+      // The deferred pushes run in effect order, child first.
+      expect(topOf("outer-layer")).toBe(true);
+      expect(topOf("inner-layer")).toBe(false);
     });
 
     it("does not push when it deactivates before the deferred push runs", async () => {
