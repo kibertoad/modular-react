@@ -64,15 +64,15 @@ React example's suite):
 | Behaviour                     | What you see                                                                                                         |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | **Pick-one, app-state-keyed** | The in-dialog switcher swaps windows without closing; exactly one dialog is ever mounted                             |
-| **Managed a11y**              | `role="dialog"`, `aria-modal`, `aria-label` from `title(subject)` — zero app effort                                  |
+| **Managed a11y**              | `role="dialog"`, `aria-modal`, `aria-label` from `title(subject)`, zero app effort                                   |
 | **Focus trap + return**       | Focus moves into the dialog on open, follows a window swap, returns to the opener                                    |
 | **Backdrop + Escape close**   | Both _request_ close; app state clears the id (the host never closes itself)                                         |
 | **Press-and-release guard**   | A press that starts in the dialog and releases on the backdrop does **not** close                                    |
 | **Subject injection**         | The window reads the step via a `subject` prop **and** via `useOverlaySubject`                                       |
-| **Consumer contribution**     | `acme:security-report` opens with no host edit — same `slots` path every module uses                                 |
+| **Consumer contribution**     | `acme:security-report` opens with no host edit, through the same `slots` path every module uses                      |
 | **Shared stack**              | A nested `useModalBehavior` confirm layers on the same stack; Escape closes the top first                            |
 | **Foreign layers**            | A stand-in dropdown with its own Escape listener holds a `useOverlayTicket`; Escape closes the menu, then the window |
-| **Dangling id is data**       | An unregistered id renders nothing and dev-warns — it never crashes the app                                          |
+| **Dangling id is data**       | An unregistered id renders nothing and dev-warns; it never crashes the app                                           |
 
 ## Test
 
