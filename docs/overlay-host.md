@@ -326,23 +326,25 @@ listener. Use it only for a layer whose library handles its own keys. To use the
 stack directly, call `sharedOverlayStack.push()` and `ticket.release()`; the helper is
 that pair, bound to `active`, with the ordering below.
 
-Open order is the order in which the tickets are pushed, and the framework decides that
-order when several layers open in one update. The helper handles the common case: a
-foreign layer that is already open when its hosted window mounts (a dropdown with
-`defaultOpen`, an open state restored from a store) lands _above_ that window. In Vue
-every push, the first one included, runs in a post-flush effect, and post-flush jobs run
-in the order they were queued: an outlet queues its push when its active id changes,
-before the window it opens is set up. In React, child effects run before parent effects,
-so the helper pushes one microtask after its effect, after every synchronous push of
-that commit. A hand-rolled `sharedOverlayStack.push()` in a React effect does not get
-this, and lands _below_ a window that opens in the same commit. The reverse is also
-true: a foreign layer _outside_ a hosted window that opens in the same update as that
-window lands above it.
+Open order is the order in which the tickets are pushed. When several layers open in
+one update, the bindings push in tree order, parent first. So a foreign layer that is
+already open when its hosted window mounts (a dropdown with `defaultOpen`, an open state
+restored from a store) lands _above_ that window, and _below_ an overlay nested inside
+it that opens in the same update. In Vue every push, the first one included, runs in a
+post-flush effect, and post-flush jobs run in the order they were queued: an outlet
+queues its push when its active id changes, before the window it opens is set up. In
+React, child effects run before parent effects, so each push carries a key taken in
+render order, and `sharedOverlayStack.push(order)` puts the ticket below the keyed
+tickets of later renders. A hand-rolled `sharedOverlayStack.push()` without a key does
+not get this: in a React effect it lands _above_ a nested overlay that opens in the same
+commit, and _below_ a window that contains it.
 
-One React limitation: the microtask also puts the ticket above a `useModalBehavior`
-nested in the same window that opens in the same commit, so that modal stands down while
-it is visually on top. A layer that opens after its window, the common case, is not
-affected.
+The key needs `@modular-frontend/core` 0.7.0 or later, which sets `sharedOverlayStack.ordered`.
+The React binding still accepts older engines, whose stack ignores the key. On those,
+React keeps the earlier ordering: overlays push on top in effect order, and
+`useOverlayTicket` pushes one microtask after its effect, so a foreign layer open at
+mount still lands above its window, but also above a modal nested inside it that opens
+in the same commit. Vue does not use the key and orders the same on every engine.
 
 Detecting _when_ a foreign layer is open is app scope. It is specific to each UI
 library (an `open` model, an `onOpenChange` callback, a DOM attribute on the layer

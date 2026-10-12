@@ -423,7 +423,7 @@ describe("useOverlayTicket", () => {
     document.dispatchEvent(event);
     return event;
   };
-  // The ticket is pushed one microtask after the effect.
+  // Flush pending effects and re-renders.
   const flushPush = () => act(async () => {});
 
   const renderTicket = (open: boolean) =>
@@ -466,8 +466,8 @@ describe("useOverlayTicket", () => {
   });
 
   it("lands above its host window when the layer is open as the window mounts", async () => {
-    // Child effects run before parent effects: without the deferred push this
-    // ticket would land below the outlet's.
+    // Child effects run before parent effects: without the render-order key
+    // this ticket would land below the outlet's.
     function WindowWithOpenMenu() {
       useOverlayTicket(true);
       return <div className="window">menu open</div>;
@@ -502,6 +502,47 @@ describe("useOverlayTicket", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  describe("on an engine without ordered pushes", () => {
+    // Engines before 0.7.0: no `ordered` flag, and `push` ignores its key.
+    const stack = sharedOverlayStack as { ordered?: boolean };
+    const legacyEngine = () => {
+      const push = sharedOverlayStack.push.bind(sharedOverlayStack);
+      vi.spyOn(sharedOverlayStack, "push").mockImplementation(() => push());
+      stack.ordered = undefined;
+    };
+    afterEach(() => {
+      vi.restoreAllMocks();
+      stack.ordered = true;
+    });
+
+    it("still lands above its host window when the layer is open as the window mounts", async () => {
+      legacyEngine();
+      function WindowWithOpenMenu() {
+        useOverlayTicket(true);
+        return <div className="window">menu open</div>;
+      }
+      const onClose = vi.fn();
+      renderOutlet(
+        { activeId: "menu-window", onClose },
+        slotsOf({ id: "menu-window", component: WindowWithOpenMenu }),
+      );
+      // Not pushed yet: the push waits one microtask.
+      expect(sharedOverlayStack.size).toBe(1);
+      await flushPush();
+      expect(sharedOverlayStack.size).toBe(2);
+      press("Escape");
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("does not push when it deactivates before the deferred push runs", async () => {
+      legacyEngine();
+      const { rerender } = renderTicket(true);
+      rerender({ open: false });
+      await flushPush();
+      expect(sharedOverlayStack.size).toBe(0);
+    });
+  });
+
   it("holds exactly one ticket while active stays true", async () => {
     const { rerender } = renderTicket(true);
     await flushPush();
@@ -514,11 +555,27 @@ describe("useOverlayTicket", () => {
     expect(sharedOverlayStack.size).toBe(0);
   });
 
-  it("does not push when it deactivates before the deferred push runs", async () => {
-    const { rerender } = renderTicket(true);
-    rerender({ open: false });
+  it("stays below a nested modal that opens in the same commit", async () => {
+    const nestedClose = vi.fn();
+    function Nested() {
+      const { dialogRef } = useModalBehavior({ active: true, onClose: nestedClose });
+      return <div ref={dialogRef as React.RefObject<HTMLDivElement>}>nested</div>;
+    }
+    function WindowWithMenuAndNested() {
+      useOverlayTicket(true);
+      return <Nested />;
+    }
+    const onClose = vi.fn();
+    renderOutlet(
+      { activeId: "w", onClose },
+      slotsOf({ id: "w", component: WindowWithMenuAndNested }),
+    );
     await flushPush();
-    expect(sharedOverlayStack.size).toBe(0);
+    expect(sharedOverlayStack.size).toBe(3);
+    // The nested modal is the visual top, so it owns Escape.
+    press("Escape");
+    expect(nestedClose).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("releases on unmount", async () => {

@@ -209,8 +209,23 @@ export interface OverlayStackTicket {
  * ordering.
  */
 export interface OverlayStack {
-  /** Register an activating overlay; the newest registration is the top. */
-  push(): OverlayStackTicket;
+  /**
+   * Register an activating overlay; the newest registration is the top.
+   *
+   * `order` corrects for bindings that register child-first. React runs a
+   * child's effects before its parent's, so in one commit a nested overlay
+   * would push before the overlay that contains it. A binding passes a key
+   * taken in render order (parent first). The registration then goes below
+   * the keyed registrations at the top that have a greater key, but never
+   * below a keyless one. Omit it to push on top.
+   */
+  push(order?: number): OverlayStackTicket;
+  /**
+   * `true` when {@link OverlayStack.push} honours `order`. Engines before this
+   * flag ignore the argument and always push on top, so a binding that peers
+   * on a range of engines checks the flag before it relies on ordered pushes.
+   */
+  readonly ordered?: boolean;
   /** Number of live registrations (0 = no overlay open). */
   readonly size: number;
   /**
@@ -228,7 +243,7 @@ export interface OverlayStack {
  */
 export function createOverlayStack(): OverlayStack {
   // Tokens are per-ticket object identities; order of the array is stack order.
-  const live: object[] = [];
+  const live: { readonly order?: number }[] = [];
   const listeners = new Set<() => void>();
 
   const notify = () => {
@@ -239,9 +254,20 @@ export function createOverlayStack(): OverlayStack {
   };
 
   return {
-    push() {
-      const token = {};
-      live.push(token);
+    ordered: true,
+    push(order) {
+      const token = { order };
+      let at = live.length;
+      if (order !== undefined) {
+        // Step below the keyed registrations made later in render order. A
+        // keyless registration is a barrier: it was pushed earlier in time.
+        while (at > 0) {
+          const below = live[at - 1].order;
+          if (below === undefined || below <= order) break;
+          at--;
+        }
+      }
+      live.splice(at, 0, token);
       notify();
       return {
         release() {

@@ -154,6 +154,30 @@ describe("createOverlayStack", () => {
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
+  it("an ordered push goes below later-ordered registrations, not on top", () => {
+    const stack = createOverlayStack();
+    expect(stack.ordered).toBe(true);
+    // Child-first registration of one commit: nested (2), then container (1).
+    const nested = stack.push(2);
+    const container = stack.push(1);
+    expect(nested.isTop()).toBe(true);
+    container.release();
+    expect(nested.isTop()).toBe(true);
+    expect(stack.size).toBe(1);
+  });
+
+  it("an ordered push does not step below a keyless registration", () => {
+    const stack = createOverlayStack();
+    const keyed = stack.push(5);
+    const keyless = stack.push();
+    const late = stack.push(1);
+    expect(late.isTop()).toBe(true);
+    late.release();
+    expect(keyless.isTop()).toBe(true);
+    keyless.release();
+    expect(keyed.isTop()).toBe(true);
+  });
+
   it("a listener unsubscribing mid-notify does not skip its peers", () => {
     const stack = createOverlayStack();
     const calls: string[] = [];

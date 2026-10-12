@@ -120,24 +120,32 @@ export function useOverlay<TSubject>(
 // Vue binding so the behaviour cannot drift. This module contributes only the
 // React glue: effects, refs, and re-renders.
 
+// Render-order keys for stack pushes. Render visits a parent before its
+// children, but effects run children first: in one commit, a nested overlay or
+// a foreign layer would push before the window that contains it.
+let nextStackOrder = 0;
+
 /**
  * Hold a ticket on {@link sharedOverlayStack} while `active`: the one
  * push/release path shared by {@link useModalBehavior} and
  * {@link useOverlayTicket}. Returns the live ticket (read it in handlers) and
  * `isTop` as of this render.
  *
- * `defer` pushes one microtask after the effect instead of in it. React runs
- * child effects before parent effects, so a layer that is open when its host
- * window mounts would otherwise push *below* the host's own ticket. The
- * microtask runs after every effect of the commit, so the deferred ticket lands
- * above every synchronous push of that commit.
+ * The push carries a key taken in the render where `active` turns true. Keys
+ * grow in render order, so within one commit a container lands below what it
+ * contains, and across commits a later open lands on top.
+ *
+ * The peer range admits engines whose stack ignores the key (no `ordered`
+ * flag). On those, a `deferLegacy` caller pushes one microtask after the
+ * effect instead, after every synchronous push of the commit, so a foreign
+ * layer open at mount still lands above its window.
  *
  * Re-renders on stack changes only while holding a ticket; an inactive caller
  * reads `isTop` as `false` and needs no updates.
  */
 function useStackTicket(
   active: boolean,
-  defer: boolean,
+  deferLegacy: boolean,
 ): { ticketRef: RefObject<OverlayStackTicket | null>; isTop: boolean } {
   const ticketRef = useRef<OverlayStackTicket | null>(null);
   // Re-render on stack changes and re-read `isTop` during render. Deliberately
@@ -148,6 +156,8 @@ function useStackTicket(
   // the ticket is assigned.
   const [, bumpStackVersion] = useReducer((n: number) => n + 1, 0);
   const isTop = ticketRef.current?.isTop() ?? false;
+  // Only ordering matters, so a recomputed or discarded key is harmless.
+  const order = useMemo(() => (active ? nextStackOrder++ : -1), [active]);
 
   useEffect(() => {
     if (!active) return;
@@ -156,12 +166,14 @@ function useStackTicket(
     let cancelled = false;
     const acquire = () => {
       if (cancelled) return;
-      ticket = sharedOverlayStack.push();
+      // The key of the render that turned `active` on: `order` is not a dep,
+      // so a recomputed key never re-pushes this ticket above its children.
+      ticket = sharedOverlayStack.push(order);
       ticketRef.current = ticket;
       unsubscribe = sharedOverlayStack.subscribe(bumpStackVersion);
       bumpStackVersion();
     };
-    if (defer) queueMicrotask(acquire);
+    if (deferLegacy && sharedOverlayStack.ordered !== true) queueMicrotask(acquire);
     else acquire();
 
     return () => {
@@ -172,7 +184,7 @@ function useStackTicket(
       ticket?.release();
       unsubscribe?.();
     };
-  }, [active, defer]);
+  }, [active, deferLegacy]);
 
   return { ticketRef, isTop };
 }
@@ -284,11 +296,13 @@ export function useModalBehavior(opts: {
  * and its library dismisses it. On release the overlay below is top again.
  *
  * Pushes when `active` turns true, so tickets layer in open order, and
- * releases when it turns false and on unmount. The push runs one microtask
- * after the effect: React runs child effects before parent effects, so a layer
- * that is already open when its host window mounts would otherwise land below
- * that window's ticket. Deciding *when* a foreign layer is open is app scope,
- * because it is UI-library specific; pass that state as `active`.
+ * releases when it turns false and on unmount. A layer that is already open
+ * when its host window mounts lands above that window, and below an overlay
+ * nested inside it that opens in the same commit. On an engine without
+ * ordered pushes (`@modular-frontend/core` before 0.7.0) it lands above that
+ * nested overlay too. Deciding *when* a foreign
+ * layer is open is app scope, because it is UI-library specific; pass that
+ * state as `active`.
  * Effect-driven: inert on the server.
  *
  * @example
