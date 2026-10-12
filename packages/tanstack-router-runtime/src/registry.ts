@@ -20,6 +20,7 @@ import {
 import type {
   NavigationItem,
   NavigationItemBase,
+  PluginExtensionsOf,
   PluginRuntimesOf,
   RegistryPlugin,
   SlotFilter,
@@ -69,10 +70,9 @@ export interface ModuleRegistry<
 
   /**
    * Attach a plugin. The plugin's `extend` return is intersected onto the
-   * returned registry type, and the methods earlier `use()` calls contributed
-   * are carried over from `this`. Methods and state contributed by every
-   * attached plugin are callable on the same reference. The registry is
-   * mutated in place and the return value is the same object, typed wider.
+   * returned registry type — methods and state contributed by the plugin
+   * become callable on the same reference. The registry is mutated in place
+   * and the return value is the same object, typed wider.
    *
    * Must be called before `resolve()` / `resolveManifest()`. Plugin name
    * collisions and method-name collisions throw loud.
@@ -80,8 +80,7 @@ export interface ModuleRegistry<
   use<TPlugin extends RegistryPlugin<string, any, any>>(
     plugin: TPlugin,
   ): ModuleRegistry<TSharedDependencies, TSlots, TNavItem, readonly [...TPlugins, TPlugin]> &
-    Omit<this, keyof ModuleRegistry<any, any, any, any>> &
-    (TPlugin extends RegistryPlugin<any, infer TExt, any> ? TExt : object);
+    PluginExtensionsOf<readonly [...TPlugins, TPlugin]>;
 
   /**
    * Resolve all modules and produce the application manifest, including a
