@@ -92,24 +92,22 @@ export interface PluginProvidersCtx<TRuntime> {
 // concrete keys / values.
 // -----------------------------------------------------------------------------
 
-type PluginExtensionOf<TPlugin> =
-  TPlugin extends RegistryPlugin<any, infer TExt, any> ? TExt : object;
+type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
+  k: infer I,
+) => void
+  ? I
+  : never;
 
 /**
- * Intersection of every plugin's `extend` return value in a tuple of plugins.
- *
- * Folds the tuple one plugin at a time. Inferring from the union
- * `TPlugins[number]` would let TypeScript's subtype reduction drop an
- * extension that another one is assignable to (any `object` extension absorbs
- * all the others). A non-tuple array yields `object` rather than `any`.
+ * Intersection of every plugin's `extend` return value. Used to augment the
+ * base `ModuleRegistry` type with plugin-contributed methods.
  */
 export type PluginExtensionsOf<TPlugins extends readonly RegistryPlugin<string, any, any>[]> =
-  TPlugins extends readonly [
-    infer THead,
-    ...infer TRest extends readonly RegistryPlugin<string, any, any>[],
-  ]
-    ? PluginExtensionOf<THead> & PluginExtensionsOf<TRest>
-    : object;
+  TPlugins["length"] extends 0
+    ? object
+    : UnionToIntersection<
+        TPlugins[number] extends RegistryPlugin<any, infer TExt, any> ? TExt : never
+      >;
 
 /**
  * Mapping of `plugin.name` → `plugin.onResolve` return type. Used to type
