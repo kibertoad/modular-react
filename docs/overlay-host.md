@@ -335,40 +335,29 @@ in the order they were queued: an outlet queues its push when its active id chan
 before the window it opens is set up. In React, child effects run before parent effects,
 so the helper pushes one microtask after its effect, after every synchronous push of
 that commit. A hand-rolled `sharedOverlayStack.push()` in a React effect does not get
-this, and lands _below_ a window that opens in the same commit.
+this, and lands _below_ a window that opens in the same commit. The reverse is also
+true: a foreign layer _outside_ a hosted window that opens in the same update as that
+window lands above it.
 
-A foreign layer _outside_ a hosted window that opens in the same update as that window
-orders differently in the two bindings. In React the deferred push lands it above the
-window. In Vue the order follows when each push is queued. A layer that reads its open
-state from a ref queues its push as soon as the ref changes, before the outlet receives
-its new active id, so it lands below the window.
-
-One React limitation: the microtask orders tickets of one commit by effect order, which
-is child first. So a layer open at mount also lands above a `useModalBehavior` nested
-inside it that opens in the same commit, and above a second foreign layer nested inside
-it that is also open at mount. In both cases the inner layer stands down while it is
-visually on top. A layer that opens after its window, the common case, is not affected.
+One React limitation: the microtask also puts the ticket above a `useModalBehavior`
+nested in the same window that opens in the same commit, so that modal stands down while
+it is visually on top. A layer that opens after its window, the common case, is not
+affected.
 
 Detecting _when_ a foreign layer is open is app scope. It is specific to each UI
 library (an `open` model, an `onOpenChange` callback, a DOM attribute on the layer
 root), and the host stays structural with zero visual opinion, so it ships no adapter
-for any library. Hold one ticket per open layer that handles Escape.
+for any library. Hold one ticket per open layer that takes focus or handles Escape.
 
-A held ticket hands the layer Tab as well as Escape, so the layer must keep focus
-itself. Menus, selects, listboxes, modal popovers and dialogs from libraries such as
-Reka UI and Radix already do. For a non-modal popover, turn on its library's focus trap
-while it holds a ticket. Otherwise Tab moves focus out of the hosted window, because the
-window's trap is not top.
+Two alternatives were considered for the host and rejected:
 
-Two other designs do not fit the host:
-
-- **A focus location rule** (ignore keys whose target is outside the dialog) is a
+- **A focus location rule** (ignore keys whose target is outside the dialog). It is a
   heuristic. It loses the Tab pull-back for focus that escaped into, for example, a
   toast. It also misses foreign layers that keep focus in their trigger, such as a
   combobox input inside the dialog.
-- **Bubble phase and honouring `defaultPrevented`** does not help. Libraries such as
-  Reka UI do not call `preventDefault()` when they dismiss, and listeners in the same
-  phase run in registration order, so a foreign layer opened later still loses.
+- **Bubble phase and honouring `defaultPrevented`.** Libraries such as Reka UI do not
+  call `preventDefault()` when they dismiss, and listeners in the same phase run in
+  registration order, so a foreign layer opened later still loses.
 
 ## `useModalBehavior` — the behaviour without the shell
 
