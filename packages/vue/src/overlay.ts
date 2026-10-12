@@ -13,6 +13,7 @@ import {
   shallowRef,
   toValue,
   watch,
+  watchPostEffect,
   type Component,
   type ComputedRef,
   type InjectionKey,
@@ -146,10 +147,16 @@ sharedOverlayStack.subscribe(() => {
 /**
  * Hold a ticket on {@link sharedOverlayStack} while `active`: the one
  * push/release path shared by {@link useModalBehavior} and
- * {@link useOverlayTicket}. Pushes in a post-flush watcher, so within one tick
- * a parent's ticket lands before its children's (post-flush jobs run in
- * component order). Releases when `active` turns false, on `release()`, and on
- * scope dispose when there is a scope.
+ * {@link useOverlayTicket}. Releases when `active` turns false, on
+ * `release()`, and on scope dispose when there is a scope.
+ *
+ * Every push, the first one included, runs in a post-flush effect. Post-flush
+ * jobs run in the order they were queued, so within one tick the owner of a
+ * state change queues before the components that change mounts. An
+ * already-mounted outlet that opens a window therefore pushes before an
+ * overlay or a foreign layer the window mounts open. A `watch` with
+ * `immediate` would not do this: its first run is synchronous in setup, during
+ * the parent's render.
  */
 function holdStackTicket(active: MaybeRefOrGetter<boolean>): {
   ticket: ShallowRef<OverlayStackTicket | null>;
@@ -167,26 +174,27 @@ function holdStackTicket(active: MaybeRefOrGetter<boolean>): {
     return ticket.value?.isTop() ?? false;
   });
 
+  // The effect reads `held`, not `ticket`, so its own assignment does not
+  // re-run it.
+  let held: OverlayStackTicket | null = null;
   const release = () => {
-    const held = ticket.value;
+    const was = held;
+    held = null;
     ticket.value = null;
-    held?.release();
+    was?.release();
   };
 
-  watch(
-    () => toValue(active),
-    (on) => {
-      if (!on) {
-        release();
-        return;
-      }
-      // Client-only: the stack is module-level, so a server push would leak
-      // across requests.
-      if (typeof document === "undefined") return;
-      ticket.value = sharedOverlayStack.push();
-    },
-    { immediate: true, flush: "post" },
-  );
+  watchPostEffect(() => {
+    if (!toValue(active)) {
+      release();
+      return;
+    }
+    // Client-only: the stack is module-level, so a server push would leak
+    // across requests.
+    if (held || typeof document === "undefined") return;
+    held = sharedOverlayStack.push();
+    ticket.value = held;
+  });
   if (getCurrentScope()) onScopeDispose(release);
 
   return { ticket, isTop, release };
@@ -237,7 +245,8 @@ export function useModalBehavior(opts: {
 }): { dialogRef: Ref<HTMLElement | null>; isTop: ComputedRef<boolean> } {
   const dialogRef = ref<HTMLElement | null>(null);
   // Created before the activation watcher below, so on the same flush the
-  // ticket is pushed before activation and released before deactivation.
+  // ticket is released before deactivation returns focus. The first push runs
+  // post-flush, after activation; until then the keydown handler stands down.
   const stack = holdStackTicket(opts.active);
   let open = false;
   let restoreFocusTo: HTMLElement | null = null;
@@ -324,7 +333,7 @@ export function useModalBehavior(opts: {
  * Pushes when `active` turns true, so tickets layer in open order, and
  * releases when it turns false and when the owning scope is disposed. A layer
  * that is already open when its host window mounts lands above that window:
- * the push runs post-flush, after the parent's. Throws outside a component
+ * the push runs post-flush, after the window's. Throws outside a component
  * setup or effect scope, because nothing would release the ticket. Deciding
  * *when* a foreign layer is open is app scope, because it is UI-library
  * specific; pass that state as `active`. Client-only: on the server this is

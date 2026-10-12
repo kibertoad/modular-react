@@ -554,6 +554,52 @@ describe("useOverlayTicket", () => {
     expect(outlet.emitted("close")).toBeUndefined();
   });
 
+  it("lands above an already-mounted outlet that opens a window with the layer open", async () => {
+    const WindowWithOpenMenu = defineComponent({
+      setup() {
+        useOverlayTicket(true);
+        return () => h("div", { class: "window" }, "menu open");
+      },
+    });
+    const outlet = track(
+      mountOutlet(
+        { activeId: null },
+        entries({ id: "menu-window", component: WindowWithOpenMenu }),
+      ),
+    );
+    await outlet.setProps({ activeId: "menu-window", subject: step });
+    await nextTick();
+    expect(sharedOverlayStack.size).toBe(2);
+    expect(press("Escape").defaultPrevented).toBe(false);
+    expect(outlet.emitted("close")).toBeUndefined();
+  });
+
+  it("stays below a nested modal that opens in the same tick", async () => {
+    const nestedClose = vi.fn();
+    const Nested = defineComponent({
+      setup() {
+        const { dialogRef } = useModalBehavior({ active: true, onClose: nestedClose });
+        return () => h("div", { ref: dialogRef }, "nested");
+      },
+    });
+    const WindowWithMenuAndNested = defineComponent({
+      setup() {
+        useOverlayTicket(true);
+        return () => h(Nested);
+      },
+    });
+    const outlet = track(
+      mountOutlet({ activeId: null }, entries({ id: "w", component: WindowWithMenuAndNested })),
+    );
+    await outlet.setProps({ activeId: "w", subject: step });
+    await nextTick();
+    expect(sharedOverlayStack.size).toBe(3);
+    // The nested modal is the visual top, so it owns Escape.
+    press("Escape");
+    expect(nestedClose).toHaveBeenCalledTimes(1);
+    expect(outlet.emitted("close")).toBeUndefined();
+  });
+
   it("holds exactly one ticket while active stays true", async () => {
     // The source changes while the derived `active` stays true.
     const openLayers = ref(1);

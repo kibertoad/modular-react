@@ -330,12 +330,19 @@ Open order is the order in which the tickets are pushed, and the framework decid
 order when several layers open in one update. The helper handles the common case: a
 foreign layer that is already open when its hosted window mounts (a dropdown with
 `defaultOpen`, an open state restored from a store) lands _above_ that window. In Vue
-the push runs in a post-flush watcher, and post-flush jobs run parent first. In React,
-child effects run before parent effects, so the helper pushes one microtask after its
-effect, after every synchronous push of that commit. A hand-rolled
-`sharedOverlayStack.push()` in a React effect does not get this, and lands _below_ a
-window that opens in the same commit. The reverse is also true: a foreign layer
-_outside_ a hosted window that opens in the same update as that window lands above it.
+every push, the first one included, runs in a post-flush effect, and post-flush jobs run
+in the order they were queued: an outlet queues its push when its active id changes,
+before the window it opens is set up. In React, child effects run before parent effects,
+so the helper pushes one microtask after its effect, after every synchronous push of
+that commit. A hand-rolled `sharedOverlayStack.push()` in a React effect does not get
+this, and lands _below_ a window that opens in the same commit. The reverse is also
+true: a foreign layer _outside_ a hosted window that opens in the same update as that
+window lands above it.
+
+One React limitation: the microtask also puts the ticket above a `useModalBehavior`
+nested in the same window that opens in the same commit, so that modal stands down while
+it is visually on top. A layer that opens after its window, the common case, is not
+affected.
 
 Detecting _when_ a foreign layer is open is app scope. It is specific to each UI
 library (an `open` model, an `onOpenChange` callback, a DOM attribute on the layer

@@ -483,6 +483,25 @@ describe("useOverlayTicket", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("lands above an already-mounted outlet that opens a window with the layer open", async () => {
+    function WindowWithOpenMenu() {
+      useOverlayTicket(true);
+      return <div className="window">menu open</div>;
+    }
+    const onClose = vi.fn();
+    const slots = slotsOf({ id: "menu-window", component: WindowWithOpenMenu });
+    const { rerender } = renderOutlet({ activeId: null, onClose }, slots);
+    rerender(
+      <SlotsContext value={slots}>
+        <OverlayOutlet host={host} activeId="menu-window" subject={step} onClose={onClose} />
+      </SlotsContext>,
+    );
+    await flushPush();
+    expect(sharedOverlayStack.size).toBe(2);
+    expect(press("Escape").defaultPrevented).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("holds exactly one ticket while active stays true", async () => {
     const { rerender } = renderTicket(true);
     await flushPush();
