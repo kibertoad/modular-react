@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { defineModule } from "@react-router-modules/core";
 import { useModalBehavior, useOverlaySubject, useOverlayTicket } from "@modular-react/react";
@@ -35,19 +35,28 @@ function TestReportWindow({ subject }: { subject: StepRef | null }) {
     onClose: () => setConfirmOpen(false),
   });
 
-  // A stand-in for another UI library's dropdown (Reka UI, Radix): it closes on
-  // Escape from its own bubble-phase listener, and only when nothing called
+  // A stand-in for another UI library's dropdown (Reka UI, Radix). Like theirs,
+  // it owns its keys: focus moves into the menu on open and Tab stays there,
+  // and Escape closes it from a bubble-phase listener only when nothing called
   // `preventDefault()`. `useOverlayTicket` holds a ticket on the same stack while
-  // the menu is open, so the window stands down and the menu gets the key.
+  // the menu is open, so the window stands down and the menu gets the keys.
   const [menuOpen, setMenuOpen] = useState(false);
   useOverlayTicket(menuOpen);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (!menuOpen) return;
+    menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
     const onKeydown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") event.preventDefault();
       if (event.key === "Escape" && !event.defaultPrevented) setMenuOpen(false);
     };
     document.addEventListener("keydown", onKeydown);
-    return () => document.removeEventListener("keydown", onKeydown);
+    const trigger = menuTriggerRef.current;
+    return () => {
+      document.removeEventListener("keydown", onKeydown);
+      if (trigger?.isConnected) trigger.focus();
+    };
   }, [menuOpen]);
 
   return (
@@ -58,11 +67,17 @@ function TestReportWindow({ subject }: { subject: StepRef | null }) {
       <button type="button" data-testid="open-confirm" onClick={() => setConfirmOpen(true)}>
         Discard this run…
       </button>
-      <button type="button" data-testid="open-menu" onClick={() => setMenuOpen((open) => !open)}>
+      <button
+        type="button"
+        ref={menuTriggerRef}
+        data-testid="open-menu"
+        onClick={() => setMenuOpen((open) => !open)}
+      >
         Actions ▾
       </button>
       {menuOpen && (
         <div
+          ref={menuRef}
           role="menu"
           data-testid="foreign-menu"
           style={{

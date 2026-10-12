@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import { useModalBehavior, useOverlayTicket } from "@modular-vue/vue";
 import type { StepRef } from "@example-vue-overlay-windows/app-shared";
 
@@ -20,20 +20,35 @@ const { dialogRef } = useModalBehavior({
   },
 });
 
-// A stand-in for another UI library's dropdown (Reka UI, Radix): it closes on
-// Escape from its own bubble-phase listener, and only when nothing called
+// A stand-in for another UI library's dropdown (Reka UI, Radix). Like theirs,
+// it owns its keys: focus moves into the menu on open and Tab stays there, and
+// Escape closes it from a bubble-phase listener only when nothing called
 // `preventDefault()`. `useOverlayTicket` holds a ticket on the same stack while
-// the menu is open, so the window stands down and the menu gets the key.
+// the menu is open, so the window stands down and the menu gets the keys.
 const menuOpen = ref(false);
 useOverlayTicket(menuOpen);
-const onMenuKeydown = (event: KeyboardEvent) => {
-  if (event.key === "Escape" && !event.defaultPrevented) menuOpen.value = false;
-};
-watch(menuOpen, (open) => {
-  if (open) document.addEventListener("keydown", onMenuKeydown);
-  else document.removeEventListener("keydown", onMenuKeydown);
-});
-onBeforeUnmount(() => document.removeEventListener("keydown", onMenuKeydown));
+const menuRef = ref<HTMLElement | null>(null);
+const menuTriggerRef = ref<HTMLElement | null>(null);
+watch(
+  menuOpen,
+  (open, _, onCleanup) => {
+    if (!open) return;
+    menuRef.value?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    const onKeydown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") event.preventDefault();
+      if (event.key === "Escape" && !event.defaultPrevented) menuOpen.value = false;
+    };
+    document.addEventListener("keydown", onKeydown);
+    const trigger = menuTriggerRef.value;
+    onCleanup(() => {
+      document.removeEventListener("keydown", onKeydown);
+      // Also runs on unmount, while the DOM is still attached; only a closed
+      // menu hands focus back, so the window's own focus return wins.
+      if (!menuOpen.value) trigger?.focus();
+    });
+  },
+  { flush: "post" },
+);
 </script>
 
 <template>
@@ -44,9 +59,17 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onMenuKeydown));
     <button type="button" data-testid="open-confirm" @click="confirmOpen = true">
       Discard this run…
     </button>
-    <button type="button" data-testid="open-menu" @click="menuOpen = !menuOpen">Actions ▾</button>
+    <button
+      ref="menuTriggerRef"
+      type="button"
+      data-testid="open-menu"
+      @click="menuOpen = !menuOpen"
+    >
+      Actions ▾
+    </button>
     <div
       v-if="menuOpen"
+      ref="menuRef"
       role="menu"
       data-testid="foreign-menu"
       :style="{

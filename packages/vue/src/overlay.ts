@@ -328,7 +328,9 @@ export function useModalBehavior(opts: {
  * popover, select, or dialog) opened inside a hosted overlay. While the
  * ticket is top, every `useModalBehavior` below it stands down: no Escape
  * handling, no `preventDefault`, no Tab trap. The foreign layer owns its keys,
- * and its library dismisses it. On release the overlay below is top again.
+ * Tab included, so it must keep focus itself (menus, selects and modal popovers
+ * do; turn on a non-modal popover's focus trap). Its library dismisses it. On
+ * release the overlay below is top again.
  *
  * Pushes when `active` turns true, so tickets layer in open order, and
  * releases when it turns false and when the owning scope is disposed. A layer
