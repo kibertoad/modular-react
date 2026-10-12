@@ -304,7 +304,10 @@ by holding a ticket while it is open:
 
 While the ticket is top, every `useModalBehavior` below it stands down: no Escape
 handling, no `preventDefault()`, no Tab trap. The foreign library owns its keys and
-dismisses its layer. On release, the hosted overlay is top again and Escape closes it
+dismisses its layer. Tab is one of those keys, so the layer must keep focus itself.
+Menus, selects, and modal popovers do. A non-modal popover lets focus leave it, and
+with the window's trap off, focus then leaves the `aria-modal` window too: turn on the
+popover's focus trap. On release, the hosted overlay is top again and Escape closes it
 as before. `useOverlayTicket` does the push and release for you:
 
 ```ts
@@ -333,33 +336,46 @@ restored from a store) lands _above_ that window, and _below_ an overlay nested 
 it that opens in the same update. In Vue every push, the first one included, runs in a
 post-flush effect, and post-flush jobs run in the order they were queued: an outlet
 queues its push when its active id changes, before the window it opens is set up. In
-React, child effects run before parent effects, so each push carries a key taken in
-render order, and `sharedOverlayStack.push(order)` puts the ticket below the keyed
-tickets of later renders. A hand-rolled `sharedOverlayStack.push()` without a key does
-not get this: in a React effect it lands _above_ a nested overlay that opens in the same
-commit, and _below_ a window that contains it.
+React, child effects run before parent effects, so each push carries a key from
+`sharedOverlayStack.nextOrder()`, taken in render order. A key only orders the tickets
+pushed in the same synchronous batch, that is, since the last microtask boundary: the
+ticket goes below the tickets of its batch that have a greater key or no key, and
+always above the tickets of earlier batches. So a key never moves a later open below an
+earlier one. A hand-rolled `sharedOverlayStack.push()` has no key, and lands on top of
+every ticket pushed in the same commit.
 
-The key needs `@modular-frontend/core` 0.7.0 or later, which sets `sharedOverlayStack.ordered`.
-The React binding still accepts older engines, whose stack ignores the key. On those,
-React keeps the earlier ordering: overlays push on top in effect order, and
-`useOverlayTicket` pushes one microtask after its effect, so a foreign layer open at
-mount still lands above its window, but also above a modal nested inside it that opens
-in the same commit. Vue does not use the key and orders the same on every engine.
+A foreign layer _outside_ a hosted window that opens in the same update as that window
+lands on a different side in each binding. In Vue it lands below the window: its open
+state changes first, so its push queues before the outlet's, which queues only when
+the outlet's active id changes. In React it follows tree position: below the window
+when the layer renders before the outlet, above it when it renders after.
+
+Keys need `@modular-frontend/core` 0.7.0 or later, which sets
+`sharedOverlayStack.ordered`. The React binding also accepts older engines, whose stack
+ignores keys. On those engines, overlays push on top in effect order, and
+`useOverlayTicket` pushes one microtask after its effect. A foreign layer open at mount
+still lands above its window, and a layer outside a window that opens in the same
+commit lands above it. But microtasks also run in effect order, child first. So a
+foreign layer lands above a `useModalBehavior` nested in the same window that opens in
+the same commit, and that modal stands down while it is visually on top. And of two
+nested foreign layers that are both open at mount, the outer one lands on top. A layer
+that opens after its window, the common case, is not affected. Vue does not use keys
+and orders the same on every engine.
 
 Detecting _when_ a foreign layer is open is app scope. It is specific to each UI
 library (an `open` model, an `onOpenChange` callback, a DOM attribute on the layer
 root), and the host stays structural with zero visual opinion, so it ships no adapter
-for any library. Hold one ticket per open layer that takes focus or handles Escape.
+for any library. Hold one ticket per open layer that handles Escape or keeps focus.
 
-Two alternatives were considered for the host and rejected:
+Two other host designs do not solve this:
 
-- **A focus location rule** (ignore keys whose target is outside the dialog). It is a
+- **A focus location rule** (ignore keys whose target is outside the dialog) is a
   heuristic. It loses the Tab pull-back for focus that escaped into, for example, a
   toast. It also misses foreign layers that keep focus in their trigger, such as a
   combobox input inside the dialog.
-- **Bubble phase and honouring `defaultPrevented`.** Libraries such as Reka UI do not
-  call `preventDefault()` when they dismiss, and listeners in the same phase run in
-  registration order, so a foreign layer opened later still loses.
+- **Bubble phase and honouring `defaultPrevented`** does not help: libraries such as
+  Reka UI do not call `preventDefault()` when they dismiss, and listeners in the same
+  phase run in registration order, so a foreign layer opened later still loses.
 
 ## `useModalBehavior` — the behaviour without the shell
 

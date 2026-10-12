@@ -225,6 +225,38 @@ test("nested bespoke overlay shares the stack: Escape closes the top first", asy
   assertNoErrors(errors);
 });
 
+test("a foreign layer holds a ticket: Escape closes it first, then the window", async ({
+  page,
+}) => {
+  const errors = attachErrorCollectors(page);
+  await page.goto("/");
+
+  await page.getByTestId("open-test-report").click();
+  await expect(page.locator(panel)).toBeVisible();
+
+  // Open the stand-in foreign menu: its own Escape listener, plus `useOverlayTicket`.
+  await page.getByTestId("open-menu").click();
+  await expect(page.getByTestId("foreign-menu")).toBeVisible();
+  const menuItem = page.getByTestId("foreign-menu").getByRole("menuitem");
+  await expect(menuItem).toBeFocused();
+
+  // The window's Tab trap stands down too, so the menu keeps focus itself.
+  await page.keyboard.press("Tab");
+  await expect(menuItem).toBeFocused();
+
+  // The window stands down, so the menu's own listener closes the menu.
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("foreign-menu")).toHaveCount(0);
+  await expect(page.locator(panel)).toBeVisible();
+  await expect(page.getByTestId("open-menu")).toBeFocused();
+
+  // The ticket is released: Escape closes the window again.
+  await page.keyboard.press("Escape");
+  await expect(page.locator(panel)).toHaveCount(0);
+
+  assertNoErrors(errors);
+});
+
 test("a dangling active id is data, not a crash: renders nothing, no error", async ({ page }) => {
   const errors = attachErrorCollectors(page);
   await page.goto("/");
