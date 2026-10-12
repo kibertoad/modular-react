@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { useModalBehavior } from "@modular-vue/vue";
+import { onBeforeUnmount, ref, watch } from "vue";
+import { useModalBehavior, useOverlayTicket } from "@modular-vue/vue";
 import type { StepRef } from "@example-vue-overlay-windows/app-shared";
 
 // The window body — no <Teleport>/backdrop/Escape/focus code for the *window*
@@ -8,7 +8,8 @@ import type { StepRef } from "@example-vue-overlay-windows/app-shared";
 // nested bespoke confirm built on `useModalBehavior`: it registers on the same
 // shared overlay stack as the hosted window, so Escape closes the top one first
 // (the confirm), then the window — the stacking guarantee, demonstrated with the
-// composable the `<OverlayOutlet>` is itself built on.
+// composable the `<OverlayOutlet>` is itself built on. It also owns a stand-in
+// foreign menu that joins the stack through `useOverlayTicket`.
 defineProps<{ subject: StepRef | null }>();
 
 const confirmOpen = ref(false);
@@ -18,6 +19,21 @@ const { dialogRef } = useModalBehavior({
     confirmOpen.value = false;
   },
 });
+
+// A stand-in for another UI library's dropdown (Reka UI, Radix): it closes on
+// Escape from its own bubble-phase listener, and only when nothing called
+// `preventDefault()`. `useOverlayTicket` holds a ticket on the same stack while
+// the menu is open, so the window stands down and the menu gets the key.
+const menuOpen = ref(false);
+useOverlayTicket(menuOpen);
+const onMenuKeydown = (event: KeyboardEvent) => {
+  if (event.key === "Escape" && !event.defaultPrevented) menuOpen.value = false;
+};
+watch(menuOpen, (open) => {
+  if (open) document.addEventListener("keydown", onMenuKeydown);
+  else document.removeEventListener("keydown", onMenuKeydown);
+});
+onBeforeUnmount(() => document.removeEventListener("keydown", onMenuKeydown));
 </script>
 
 <template>
@@ -28,6 +44,21 @@ const { dialogRef } = useModalBehavior({
     <button type="button" data-testid="open-confirm" @click="confirmOpen = true">
       Discard this run…
     </button>
+    <button type="button" data-testid="open-menu" @click="menuOpen = !menuOpen">Actions ▾</button>
+    <div
+      v-if="menuOpen"
+      role="menu"
+      data-testid="foreign-menu"
+      :style="{
+        marginTop: '0.5rem',
+        padding: '0.25rem',
+        border: '1px solid #cbd5e1',
+        borderRadius: '6px',
+        maxWidth: '200px',
+      }"
+    >
+      <button type="button" role="menuitem" @click="menuOpen = false">Re-run step</button>
+    </div>
 
     <Teleport to="body">
       <div
