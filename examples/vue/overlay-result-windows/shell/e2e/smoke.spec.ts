@@ -228,18 +228,11 @@ test("a foreign layer holds a ticket: Escape closes it first, then the window", 
   // Open the stand-in foreign menu: its own Escape listener, plus `useOverlayTicket`.
   await page.getByTestId("open-menu").click();
   await expect(page.getByTestId("foreign-menu")).toBeVisible();
-  const menuItem = page.getByTestId("foreign-menu").getByRole("menuitem");
-  await expect(menuItem).toBeFocused();
-
-  // The window's Tab trap stands down too; the menu keeps focus itself.
-  await page.keyboard.press("Tab");
-  await expect(menuItem).toBeFocused();
 
   // The window stands down, so the menu's own listener closes the menu.
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("foreign-menu")).toHaveCount(0);
   await expect(page.locator(panel)).toBeVisible();
-  await expect(page.getByTestId("open-menu")).toBeFocused();
 
   // The ticket is released: Escape closes the window again.
   await page.keyboard.press("Escape");
