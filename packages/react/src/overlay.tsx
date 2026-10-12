@@ -121,6 +121,63 @@ export function useOverlay<TSubject>(
 // React glue: effects, refs, and re-renders.
 
 /**
+ * Hold a ticket on {@link sharedOverlayStack} while `active`: the one
+ * push/release path shared by {@link useModalBehavior} and
+ * {@link useOverlayTicket}. Returns the live ticket (read it in handlers) and
+ * `isTop` as of this render.
+ *
+ * `defer` pushes one microtask after the effect instead of in it. React runs
+ * child effects before parent effects, so a layer that is open when its host
+ * window mounts would otherwise push *below* the host's own ticket. The
+ * microtask runs after every effect of the commit, so the deferred ticket lands
+ * above every synchronous push of that commit.
+ *
+ * Re-renders on stack changes only while holding a ticket; an inactive caller
+ * reads `isTop` as `false` and needs no updates.
+ */
+function useStackTicket(
+  active: boolean,
+  defer: boolean,
+): { ticketRef: RefObject<OverlayStackTicket | null>; isTop: boolean } {
+  const ticketRef = useRef<OverlayStackTicket | null>(null);
+  // Re-render on stack changes and re-read `isTop` during render. Deliberately
+  // NOT useSyncExternalStore: `sharedOverlayStack.push()` notifies
+  // synchronously *before* `ticketRef` can be assigned, so an eager snapshot
+  // read at notify time would see a stale null and settle on `false`. A
+  // version bump re-renders instead, and the render-time read happens after
+  // the ticket is assigned.
+  const [, bumpStackVersion] = useReducer((n: number) => n + 1, 0);
+  const isTop = ticketRef.current?.isTop() ?? false;
+
+  useEffect(() => {
+    if (!active) return;
+    let ticket: OverlayStackTicket | null = null;
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+    const acquire = () => {
+      if (cancelled) return;
+      ticket = sharedOverlayStack.push();
+      ticketRef.current = ticket;
+      unsubscribe = sharedOverlayStack.subscribe(bumpStackVersion);
+      bumpStackVersion();
+    };
+    if (defer) queueMicrotask(acquire);
+    else acquire();
+
+    return () => {
+      cancelled = true;
+      ticketRef.current = null;
+      // Release while still subscribed, so the release itself re-renders this
+      // caller and `isTop` settles on `false`.
+      ticket?.release();
+      unsubscribe?.();
+    };
+  }, [active, defer]);
+
+  return { ticketRef, isTop };
+}
+
+/**
  * The managed modal *behaviour* as a standalone hook, for a window that needs
  * a bespoke root (a full-bleed detail surface, a hand-styled shell) but still
  * wants correct, consistent behaviour instead of re-deriving it:
@@ -163,7 +220,9 @@ export function useModalBehavior(opts: {
   contentKey?: string | number | null;
 }): { dialogRef: RefObject<HTMLElement | null>; isTop: boolean } {
   const dialogRef = useRef<HTMLElement | null>(null);
-  const ticketRef = useRef<OverlayStackTicket | null>(null);
+  // Declared before the activation effect, so the ticket is held before the
+  // keydown listener is added and released before focus is returned.
+  const { ticketRef, isTop } = useStackTicket(opts.active, false);
 
   // Latest-ref pattern: the activation effect must not re-run (and re-stack
   // the overlay) because a caller passed an inline onClose/initialFocus.
@@ -172,29 +231,15 @@ export function useModalBehavior(opts: {
   const initialFocusRef = useRef(opts.initialFocus);
   initialFocusRef.current = opts.initialFocus;
 
-  // Re-render on stack changes and re-read `isTop` during render. Deliberately
-  // NOT useSyncExternalStore: `sharedOverlayStack.push()` notifies
-  // synchronously *before* the activation effect below can assign `ticketRef`,
-  // so an eager snapshot read at notify time would see a stale null and settle
-  // on `false`. A version bump re-renders instead, and the render-time read
-  // happens after the ticket is assigned. The explicit bump after assignment
-  // covers this instance's own push; the subscription covers everyone else's.
-  const [, bumpStackVersion] = useReducer((n: number) => n + 1, 0);
-  useEffect(() => sharedOverlayStack.subscribe(bumpStackVersion), []);
-  const isTop = ticketRef.current?.isTop() ?? false;
-
   useEffect(() => {
     if (!opts.active) return;
 
-    const ticket = sharedOverlayStack.push();
-    ticketRef.current = ticket;
-    bumpStackVersion();
     const restoreFocusTo =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     lockBodyScroll();
 
     const onKeydown = (event: KeyboardEvent) => {
-      if (!ticket.isTop()) return;
+      if (!ticketRef.current?.isTop()) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onCloseRef.current();
@@ -209,8 +254,6 @@ export function useModalBehavior(opts: {
     return () => {
       document.removeEventListener("keydown", onKeydown, true);
       unlockBodyScroll();
-      ticketRef.current = null;
-      ticket.release();
       if (restoreFocusTo?.isConnected) restoreFocusTo.focus();
     };
   }, [opts.active]);
@@ -230,6 +273,33 @@ export function useModalBehavior(opts: {
   }, [opts.active, opts.contentKey]);
 
   return { dialogRef, isTop };
+}
+
+/**
+ * Hold a ticket on the shared overlay stack while `active`, with none of the
+ * modal behaviour, for a **foreign layer** (another UI library's menu,
+ * popover, select, or dialog) opened inside a hosted overlay. While the
+ * ticket is top, every `useModalBehavior` below it stands down: no Escape
+ * handling, no `preventDefault`, no Tab trap. The foreign layer owns its keys,
+ * and its library dismisses it. On release the overlay below is top again.
+ *
+ * Pushes when `active` turns true, so tickets layer in open order, and
+ * releases when it turns false and on unmount. The push runs one microtask
+ * after the effect: React runs child effects before parent effects, so a layer
+ * that is already open when its host window mounts would otherwise land below
+ * that window's ticket. Deciding *when* a foreign layer is open is app scope,
+ * because it is UI-library specific; pass that state as `active`.
+ * Effect-driven: inert on the server.
+ *
+ * @example
+ * ```tsx
+ * const [open, setOpen] = useState(false) // the dropdown's onOpenChange
+ * useOverlayTicket(open)
+ * ```
+ */
+export function useOverlayTicket(active: boolean): { isTop: boolean } {
+  const { isTop } = useStackTicket(active, true);
+  return { isTop };
 }
 
 // ---------------------------------------------------------------------------

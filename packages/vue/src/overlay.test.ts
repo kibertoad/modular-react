@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { defineComponent, h, nextTick, ref, shallowRef } from "vue";
+import { defineComponent, effectScope, h, nextTick, ref, shallowRef, watch } from "vue";
 import { mount, type VueWrapper } from "@vue/test-utils";
-import { defineOverlayHost, type OverlayEntry } from "@modular-frontend/core";
-import { OverlayOutlet, useModalBehavior, useOverlay, useOverlaySubject } from "./overlay.js";
+import { defineOverlayHost, sharedOverlayStack, type OverlayEntry } from "@modular-frontend/core";
+import {
+  OverlayOutlet,
+  useModalBehavior,
+  useOverlay,
+  useOverlaySubject,
+  useOverlayTicket,
+} from "./overlay.js";
 import { slotsKey } from "./slots-context.js";
 import { renderComposable } from "./test-render.js";
 
@@ -478,5 +484,132 @@ describe("useModalBehavior (standalone)", () => {
     active.value = false;
     await nextTick();
     expect(result().isTop.value).toBe(false);
+  });
+});
+
+describe("useOverlayTicket", () => {
+  // Cancelable keydowns, so tests can see whether the overlay preventDefaulted.
+  const press = (key: string) => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    return event;
+  };
+
+  it("makes a hosted overlay stand down while held, and hands the top back on release", async () => {
+    const outlet = track(mountOutlet({ activeId: "test-report", subject: step }));
+    await nextTick();
+
+    const open = ref(false);
+    const { result, wrapper } = renderComposable(() => useOverlayTicket(open));
+    track(wrapper);
+    expect(result().isTop.value).toBe(false);
+
+    open.value = true;
+    await nextTick();
+    expect(result().isTop.value).toBe(true);
+    // The foreign layer owns Escape: the overlay neither closes nor
+    // preventDefaults, so the foreign library's own handler still runs.
+    expect(press("Escape").defaultPrevented).toBe(false);
+    expect(outlet.emitted("close")).toBeUndefined();
+
+    open.value = false;
+    await nextTick();
+    expect(result().isTop.value).toBe(false);
+    expect(press("Escape").defaultPrevented).toBe(true);
+    expect(outlet.emitted("close")).toHaveLength(1);
+  });
+
+  it("makes a hosted overlay stop trapping Tab while held", async () => {
+    track(mountOutlet({ activeId: "test-report", subject: step }));
+    await nextTick();
+    const open = ref(true);
+    track(renderComposable(() => useOverlayTicket(open)).wrapper);
+    await nextTick();
+
+    // Focus outside the dialog: the trap would pull it back in.
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(press("Tab").defaultPrevented).toBe(false);
+
+    open.value = false;
+    await nextTick();
+    expect(press("Tab").defaultPrevented).toBe(true);
+  });
+
+  it("lands above its host window when the layer is open as the window mounts", async () => {
+    const WindowWithOpenMenu = defineComponent({
+      setup() {
+        useOverlayTicket(true);
+        return () => h("div", { class: "window" }, "menu open");
+      },
+    });
+    const outlet = track(
+      mountOutlet(
+        { activeId: "menu-window", subject: step },
+        entries({ id: "menu-window", component: WindowWithOpenMenu }),
+      ),
+    );
+    await nextTick();
+    expect(sharedOverlayStack.size).toBe(2);
+    press("Escape");
+    expect(outlet.emitted("close")).toBeUndefined();
+  });
+
+  it("holds exactly one ticket while active stays true", async () => {
+    // The source changes while the derived `active` stays true.
+    const openLayers = ref(1);
+    track(renderComposable(() => useOverlayTicket(() => openLayers.value > 0)).wrapper);
+    await nextTick();
+    expect(sharedOverlayStack.size).toBe(1);
+    openLayers.value = 2;
+    await nextTick();
+    openLayers.value = 3;
+    await nextTick();
+    expect(sharedOverlayStack.size).toBe(1);
+
+    openLayers.value = 0;
+    await nextTick();
+    expect(sharedOverlayStack.size).toBe(0);
+  });
+
+  it("reports isTop correctly to a reader that runs during the push", async () => {
+    const open = ref(false);
+    const { result, wrapper } = renderComposable(() => useOverlayTicket(open));
+    track(wrapper);
+    // A stack subscriber reads isTop while push() is notifying, before the
+    // ticket is assigned. The read must not pin a stale `false`.
+    const unsubscribe = sharedOverlayStack.subscribe(() => void result().isTop.value);
+    const seen: boolean[] = [];
+    const stop = watch(result().isTop, (top) => seen.push(top), { flush: "sync" });
+
+    open.value = true;
+    await nextTick();
+    expect(result().isTop.value).toBe(true);
+    expect(seen).toEqual([true]);
+    unsubscribe();
+    stop();
+  });
+
+  it("releases on unmount", async () => {
+    const { wrapper } = renderComposable(() => useOverlayTicket(true));
+    await nextTick();
+    expect(sharedOverlayStack.size).toBe(1);
+    wrapper.unmount();
+    expect(sharedOverlayStack.size).toBe(0);
+  });
+
+  it("releases on effect scope dispose", async () => {
+    const scope = effectScope();
+    const ticket = scope.run(() => useOverlayTicket(true))!;
+    await nextTick();
+    expect(ticket.isTop.value).toBe(true);
+    expect(sharedOverlayStack.size).toBe(1);
+
+    scope.stop();
+    expect(sharedOverlayStack.size).toBe(0);
+  });
+
+  it("throws outside a component setup or effect scope", () => {
+    expect(() => useOverlayTicket(true)).toThrow(/must be called inside a component setup/);
+    expect(sharedOverlayStack.size).toBe(0);
   });
 });

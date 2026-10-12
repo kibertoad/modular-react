@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { useState } from "react";
-import { cleanup, fireEvent, render, renderHook } from "@testing-library/react";
-import { defineOverlayHost, type OverlayEntry } from "@modular-react/core";
-import { OverlayOutlet, useModalBehavior, useOverlay, useOverlaySubject } from "./overlay.js";
+import { act, cleanup, fireEvent, render, renderHook } from "@testing-library/react";
+import { defineOverlayHost, sharedOverlayStack, type OverlayEntry } from "@modular-react/core";
+import {
+  OverlayOutlet,
+  useModalBehavior,
+  useOverlay,
+  useOverlaySubject,
+  useOverlayTicket,
+} from "./overlay.js";
 import { SlotsContext } from "./slots-context.js";
 
 interface StepRef {
@@ -407,5 +413,112 @@ describe("useModalBehavior (standalone)", () => {
 
     rerender({ active: false });
     expect(result.current.isTop).toBe(false);
+  });
+});
+
+describe("useOverlayTicket", () => {
+  // Cancelable keydowns, so tests can see whether the overlay preventDefaulted.
+  const press = (key: string) => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    return event;
+  };
+  // The ticket is pushed one microtask after the effect.
+  const flushPush = () => act(async () => {});
+
+  const renderTicket = (open: boolean) =>
+    renderHook(({ open }: { open: boolean }) => useOverlayTicket(open), {
+      initialProps: { open },
+    });
+
+  it("makes a hosted overlay stand down while held, and hands the top back on release", async () => {
+    const onClose = vi.fn();
+    renderOutlet({ activeId: "test-report", onClose });
+
+    const { result, rerender } = renderTicket(false);
+    expect(result.current.isTop).toBe(false);
+
+    rerender({ open: true });
+    await flushPush();
+    expect(result.current.isTop).toBe(true);
+    // The foreign layer owns Escape: the overlay neither closes nor
+    // preventDefaults, so the foreign library's own handler still runs.
+    expect(press("Escape").defaultPrevented).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+
+    rerender({ open: false });
+    expect(result.current.isTop).toBe(false);
+    expect(press("Escape").defaultPrevented).toBe(true);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("makes a hosted overlay stop trapping Tab while held", async () => {
+    renderOutlet({ activeId: "test-report" });
+    const { rerender } = renderTicket(true);
+    await flushPush();
+
+    // Focus outside the dialog: the trap would pull it back in.
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(press("Tab").defaultPrevented).toBe(false);
+
+    rerender({ open: false });
+    expect(press("Tab").defaultPrevented).toBe(true);
+  });
+
+  it("lands above its host window when the layer is open as the window mounts", async () => {
+    // Child effects run before parent effects: without the deferred push this
+    // ticket would land below the outlet's.
+    function WindowWithOpenMenu() {
+      useOverlayTicket(true);
+      return <div className="window">menu open</div>;
+    }
+    const onClose = vi.fn();
+    renderOutlet(
+      { activeId: "menu-window", onClose },
+      slotsOf({ id: "menu-window", component: WindowWithOpenMenu }),
+    );
+    await flushPush();
+    expect(sharedOverlayStack.size).toBe(2);
+    press("Escape");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("holds exactly one ticket while active stays true", async () => {
+    const { rerender } = renderTicket(true);
+    await flushPush();
+    rerender({ open: true });
+    rerender({ open: true });
+    await flushPush();
+    expect(sharedOverlayStack.size).toBe(1);
+
+    rerender({ open: false });
+    expect(sharedOverlayStack.size).toBe(0);
+  });
+
+  it("does not push when it deactivates before the deferred push runs", async () => {
+    const { rerender } = renderTicket(true);
+    rerender({ open: false });
+    await flushPush();
+    expect(sharedOverlayStack.size).toBe(0);
+  });
+
+  it("releases on unmount", async () => {
+    const { unmount } = renderTicket(true);
+    await flushPush();
+    expect(sharedOverlayStack.size).toBe(1);
+    unmount();
+    expect(sharedOverlayStack.size).toBe(0);
+  });
+
+  it("re-renders on stack changes only while holding a ticket", async () => {
+    let renders = 0;
+    renderHook(() => {
+      renders++;
+      return useOverlayTicket(false);
+    });
+    const before = renders;
+    const over = renderOutlet({ activeId: "test-report" });
+    over.unmount();
+    expect(renders).toBe(before);
   });
 });

@@ -224,8 +224,9 @@ hook-shaped reads.
   missed drag) is not a close request.
 - **One overlay stack per app.** Every open overlay — outlet-hosted or bespoke via
   `useModalBehavior`, whichever binding mounted it — registers on the engine's single
-  `sharedOverlayStack`. Nested overlays layer in open order; **Escape closes only the
-  top**; when it closes, the one below becomes top.
+  `sharedOverlayStack`, and foreign layers join it through `useOverlayTicket`. Nested
+  overlays layer in open order; **Escape closes only the top**; when it closes, the one
+  below becomes top.
 - **Focus**: moved into the dialog on open (`initialFocus` if given, else the first
   focusable, else the dialog itself), Tab-cycled within it while open, re-applied when
   the active window **swaps without closing** (so focus follows the new content), and
@@ -278,8 +279,78 @@ If a surface needs behaviour beyond this contract, the supported moves are, in o
 put it in your `wrap`/chrome (visual), layer it over `useModalBehavior` (structural
 but yours), or use a dedicated dialog library for that one surface — accepting that a
 surface which bypasses `useModalBehavior` is invisible to the shared stack, so Escape
-ordering and scroll-lock counting no longer coordinate with hosted windows. Do **not**
-nest another focus-trapping dialog library _inside_ a hosted window: two traps fight.
+ordering and scroll-lock counting no longer coordinate with hosted windows. A layer
+from another library opened _inside_ a hosted window (a menu, popover, select, or
+nested dialog) must join the stack instead: see
+[foreign layers inside a hosted window](#foreign-layers-inside-a-hosted-window).
+
+## Foreign layers inside a hosted window
+
+Most UI libraries keep their own layer stack for menus, popovers, selects, and dialogs
+(for example Reka UI's `DismissableLayer`). Two stacks that do not know about
+each other fight over the same keys. The hosted overlay handles Escape in a
+capture-phase `document` listener and calls `preventDefault()` while it is top; a
+library that dismisses in a later listener, and only when the event is not
+default-prevented, never sees it. With a dropdown open inside a hosted window, Escape
+closes the window and leaves the dropdown open.
+
+The supported fix is one stack that every closable layer registers on, the same model
+as the platform's `CloseWatcher` and top layer. A foreign layer joins the shared stack
+by holding a ticket while it is open:
+
+- push the ticket when the layer opens, so tickets layer in open order with the
+  hosted overlays;
+- release it when the layer closes, and when its owner unmounts.
+
+While the ticket is top, every `useModalBehavior` below it stands down: no Escape
+handling, no `preventDefault()`, no Tab trap. The foreign library owns its keys and
+dismisses its layer. On release, the hosted overlay is top again and Escape closes it
+as before. `useOverlayTicket` does the push and release for you:
+
+```ts
+// Vue (`@modular-vue/vue` or `@modular-vue/core`): a MaybeRefOrGetter<boolean>.
+// Releases when it turns false and on scope dispose. Throws outside a component
+// setup or effect scope, because nothing would release the ticket.
+const menuOpen = ref(false); // v-model:open of the dropdown
+const { isTop } = useOverlayTicket(menuOpen);
+```
+
+```tsx
+// React (`@modular-react/react`): a boolean. Releases when it turns false and on unmount.
+const [menuOpen, setMenuOpen] = useState(false); // setMenuOpen is the dropdown's onOpenChange
+const { isTop } = useOverlayTicket(menuOpen);
+```
+
+The ticket carries no behaviour of its own: no focus moves, no scroll lock, no key
+listener. Use it only for a layer whose library handles its own keys. To use the
+stack directly, call `sharedOverlayStack.push()` and `ticket.release()`; the helper is
+that pair, bound to `active`, with the ordering below.
+
+Open order is the order in which the tickets are pushed, and the framework decides that
+order when several layers open in one update. The helper handles the common case: a
+foreign layer that is already open when its hosted window mounts (a dropdown with
+`defaultOpen`, an open state restored from a store) lands _above_ that window. In Vue
+the push runs in a post-flush watcher, and post-flush jobs run parent first. In React,
+child effects run before parent effects, so the helper pushes one microtask after its
+effect, after every synchronous push of that commit. A hand-rolled
+`sharedOverlayStack.push()` in a React effect does not get this, and lands _below_ a
+window that opens in the same commit. The reverse is also true: a foreign layer
+_outside_ a hosted window that opens in the same update as that window lands above it.
+
+Detecting _when_ a foreign layer is open is app scope. It is specific to each UI
+library (an `open` model, an `onOpenChange` callback, a DOM attribute on the layer
+root), and the host stays structural with zero visual opinion, so it ships no adapter
+for any library. Hold one ticket per open layer that takes focus or handles Escape.
+
+Two alternatives were considered for the host and rejected:
+
+- **A focus location rule** (ignore keys whose target is outside the dialog). It is a
+  heuristic. It loses the Tab pull-back for focus that escaped into, for example, a
+  toast. It also misses foreign layers that keep focus in their trigger, such as a
+  combobox input inside the dialog.
+- **Bubble phase and honouring `defaultPrevented`.** Libraries such as Reka UI do not
+  call `preventDefault()` when they dismiss, and listeners in the same phase run in
+  registration order, so a foreign layer opened later still loses.
 
 ## `useModalBehavior` — the behaviour without the shell
 
@@ -301,6 +372,10 @@ const { dialogRef, isTop } = useModalBehavior({
 Same stack, same focus/scroll/Escape rules as the outlet — a bespoke overlay and a
 hosted window layer and close correctly against each other because they share the one
 stack. (`<OverlayOutlet>` is implemented on exactly this composable/hook.)
+
+For a layer that another library already manages (a menu or popover inside a hosted
+window), use `useOverlayTicket` instead: it joins the stack without the modal
+behaviour. See [foreign layers inside a hosted window](#foreign-layers-inside-a-hosted-window).
 
 ## End-to-end: an app shell over the host
 
