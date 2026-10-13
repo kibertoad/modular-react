@@ -126,18 +126,25 @@ export function useOverlay<TSubject>(
  * {@link useOverlayTicket}. Returns the live ticket (read it in handlers) and
  * `isTop` as of this render.
  *
- * `defer` pushes one microtask after the effect instead of in it. React runs
- * child effects before parent effects, so a layer that is open when its host
- * window mounts would otherwise push *below* the host's own ticket. The
- * microtask runs after every effect of the commit, so the deferred ticket lands
- * above every synchronous push of that commit.
+ * Render visits a parent before its children, but effects run children
+ * first: in one commit, a nested overlay or a foreign layer would push before
+ * the window that contains it. So the push carries a key from
+ * `sharedOverlayStack.nextOrder()`, taken in the render where `active` turns
+ * true. The stack uses keys only to order the pushes of one synchronous
+ * batch, so a container lands below what it contains, and a later open still
+ * lands above every earlier one.
+ *
+ * The peer range admits engines whose stack ignores keys (no `ordered` flag).
+ * On those, a `deferLegacy` caller pushes one microtask after the effect
+ * instead, after every synchronous push of the commit, so a foreign layer open
+ * at mount still lands above its window.
  *
  * Re-renders on stack changes only while holding a ticket; an inactive caller
  * reads `isTop` as `false` and needs no updates.
  */
 function useStackTicket(
   active: boolean,
-  defer: boolean,
+  deferLegacy: boolean,
 ): { ticketRef: RefObject<OverlayStackTicket | null>; isTop: boolean } {
   const ticketRef = useRef<OverlayStackTicket | null>(null);
   // Re-render on stack changes and re-read `isTop` during render. Deliberately
@@ -148,6 +155,10 @@ function useStackTicket(
   // the ticket is assigned.
   const [, bumpStackVersion] = useReducer((n: number) => n + 1, 0);
   const isTop = ticketRef.current?.isTop() ?? false;
+  // One engine-wide sequence, so every binding copy on this stack draws
+  // comparable keys. Only order matters: a skipped or discarded key is
+  // harmless. Undefined on engines without `ordered`, which ignore keys.
+  const order = useMemo(() => sharedOverlayStack.nextOrder?.(), [active]);
 
   useEffect(() => {
     if (!active) return;
@@ -156,12 +167,14 @@ function useStackTicket(
     let cancelled = false;
     const acquire = () => {
       if (cancelled) return;
-      ticket = sharedOverlayStack.push();
+      // The key of the render that turned `active` on. `order` is not a dep:
+      // a recomputed key must not re-push a held ticket.
+      ticket = sharedOverlayStack.push(order);
       ticketRef.current = ticket;
       unsubscribe = sharedOverlayStack.subscribe(bumpStackVersion);
       bumpStackVersion();
     };
-    if (defer) queueMicrotask(acquire);
+    if (deferLegacy && sharedOverlayStack.ordered !== true) queueMicrotask(acquire);
     else acquire();
 
     return () => {
@@ -172,7 +185,7 @@ function useStackTicket(
       ticket?.release();
       unsubscribe?.();
     };
-  }, [active, defer]);
+  }, [active, deferLegacy]);
 
   return { ticketRef, isTop };
 }
@@ -289,12 +302,13 @@ export function useModalBehavior(opts: {
  * below is top again.
  *
  * Pushes when `active` turns true, so tickets layer in open order, and
- * releases when it turns false and on unmount. The push runs one microtask
- * after the effect: React runs child effects before parent effects, so a layer
- * that is already open when its host window mounts would otherwise land below
- * that window's ticket. Microtasks run in effect order, child first, so the
- * deferral has two limits in one commit: the ticket lands above a
- * `useModalBehavior` nested in the same window, and of two nested foreign
+ * releases when it turns false and on unmount. A layer that is already open
+ * when its host window mounts lands above that window, and below an overlay
+ * nested inside it that opens in the same commit. On an engine without
+ * ordered pushes (`@modular-frontend/core` before 0.7.0), the push runs one
+ * microtask after the effect instead. The layer still lands above its window,
+ * but microtasks run in effect order, child first: the layer also lands above
+ * a `useModalBehavior` nested in the same window, and of two nested foreign
  * layers open at mount, the outer one lands on top. Deciding *when* a foreign
  * layer is open is app scope, because it is UI-library specific; pass that
  * state as `active`.
