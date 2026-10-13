@@ -304,11 +304,15 @@ by holding a ticket while it is open:
 
 While the ticket is top, every `useModalBehavior` below it stands down: no Escape
 handling, no `preventDefault()`, no Tab trap. The foreign library owns its keys and
-dismisses its layer. Tab is one of those keys, so the layer must keep focus itself.
-Menus, selects, and modal popovers do. A non-modal popover lets focus leave it, and
-with the window's trap off, focus then leaves the `aria-modal` window too: turn on the
-popover's focus trap. On release, the hosted overlay is top again and Escape closes it
-as before. `useOverlayTicket` does the push and release for you:
+dismisses its layer. Tab is one of those keys, and with the window's trap off, nothing
+else keeps focus inside the `aria-modal` window. Whether the layer does depends on the
+widget, so check each one. Radix and Reka UI menus block Tab (Reka only in its default
+`modal` mode), and so does the Reka UI select. Other menus close on Tab and let focus
+move on, as the WAI-ARIA menu pattern describes, and a combobox keeps focus in its
+input, where Tab moves to the next element. A non-modal popover lets focus leave it.
+When Tab can take focus out of the layer, focus can also leave the window: turn on the
+widget's modal mode or focus trap, or handle Tab in the app. On release, the hosted
+overlay is top again and Escape closes it as before. `useOverlayTicket` does the push and release for you:
 
 ```ts
 // Vue (`@modular-vue/vue` or `@modular-vue/core`): a MaybeRefOrGetter<boolean>.

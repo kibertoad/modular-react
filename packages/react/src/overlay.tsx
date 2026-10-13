@@ -294,9 +294,12 @@ export function useModalBehavior(opts: {
  * popover, select, or dialog) opened inside a hosted overlay. While the
  * ticket is top, every `useModalBehavior` below it stands down: no Escape
  * handling, no `preventDefault`, no Tab trap. The foreign layer owns its keys,
- * Tab included, so it must keep focus itself: menus, selects and modal popovers
- * do; for a non-modal popover, turn on its focus trap. Its library dismisses
- * it. On release the overlay below is top again.
+ * Tab included, so it must keep focus inside the window. Whether it does
+ * depends on the widget: Radix and Reka UI menus (in modal mode) block Tab,
+ * but a menu that closes on Tab, a combobox, or a non-modal popover lets focus
+ * move on. Check each widget, and turn on its modal mode or focus trap, or
+ * handle Tab in the app. Its library dismisses it. On release the overlay
+ * below is top again.
  *
  * Pushes when `active` turns true, so tickets layer in open order, and
  * releases when it turns false and on unmount. A layer that is already open
