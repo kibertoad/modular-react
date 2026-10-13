@@ -2,20 +2,25 @@ import {
   Teleport,
   computed,
   defineComponent,
+  getCurrentScope,
   h,
   inject,
   nextTick,
   onBeforeUnmount,
+  onScopeDispose,
   provide,
   ref,
+  shallowRef,
   toValue,
   watch,
+  watchPostEffect,
   type Component,
   type ComputedRef,
   type InjectionKey,
   type MaybeRefOrGetter,
   type PropType,
   type Ref,
+  type ShallowRef,
   type VNode,
 } from "vue";
 import {
@@ -140,6 +145,62 @@ sharedOverlayStack.subscribe(() => {
 });
 
 /**
+ * Hold a ticket on {@link sharedOverlayStack} while `active`: the one
+ * push/release path shared by {@link useModalBehavior} and
+ * {@link useOverlayTicket}. Releases when `active` turns false, on
+ * `release()`, and on scope dispose when there is a scope.
+ *
+ * Every push, the first one included, runs in a post-flush effect. Post-flush
+ * jobs run in the order they were queued, so within one tick the owner of a
+ * state change queues before the components that change mounts. An
+ * already-mounted outlet that opens a window therefore pushes before an
+ * overlay or a foreign layer the window mounts open. A `watch` with
+ * `immediate` would not do this: its first run is synchronous in setup, during
+ * the parent's render.
+ */
+function holdStackTicket(active: MaybeRefOrGetter<boolean>): {
+  ticket: ShallowRef<OverlayStackTicket | null>;
+  isTop: ComputedRef<boolean>;
+  release: () => void;
+} {
+  // A shallowRef, not a plain variable: `push()` notifies before the
+  // assignment, so a computed read during that notify must be invalidated by
+  // the assignment itself, not only by the next stack change.
+  const ticket = shallowRef<OverlayStackTicket | null>(null);
+
+  const isTop = computed(() => {
+    // Depend on the stack version so pushes/releases elsewhere re-evaluate.
+    void stackVersion.value;
+    return ticket.value?.isTop() ?? false;
+  });
+
+  // The effect reads `held`, not `ticket`, so its own assignment does not
+  // re-run it.
+  let held: OverlayStackTicket | null = null;
+  const release = () => {
+    const was = held;
+    held = null;
+    ticket.value = null;
+    was?.release();
+  };
+
+  watchPostEffect(() => {
+    if (!toValue(active)) {
+      release();
+      return;
+    }
+    // Client-only: the stack is module-level, so a server push would leak
+    // across requests.
+    if (held || typeof document === "undefined") return;
+    held = sharedOverlayStack.push();
+    ticket.value = held;
+  });
+  if (getCurrentScope()) onScopeDispose(release);
+
+  return { ticket, isTop, release };
+}
+
+/**
  * The managed modal *behaviour* as a standalone composable, for a window that
  * needs a bespoke root (a full-bleed detail surface, a hand-styled shell) but
  * still wants correct, consistent behaviour instead of re-deriving it:
@@ -183,17 +244,15 @@ export function useModalBehavior(opts: {
   contentKey?: MaybeRefOrGetter<string | number | null | undefined>;
 }): { dialogRef: Ref<HTMLElement | null>; isTop: ComputedRef<boolean> } {
   const dialogRef = ref<HTMLElement | null>(null);
-  let ticket: OverlayStackTicket | null = null;
+  // Created before the activation watcher below, so on the same flush the
+  // ticket is released before deactivation returns focus. The first push runs
+  // post-flush, after activation; until then the keydown handler stands down.
+  const stack = holdStackTicket(opts.active);
+  let open = false;
   let restoreFocusTo: HTMLElement | null = null;
 
-  const isTop = computed(() => {
-    // Depend on the stack version so pushes/releases elsewhere re-evaluate.
-    void stackVersion.value;
-    return ticket?.isTop() ?? false;
-  });
-
   const onKeydown = (event: KeyboardEvent) => {
-    if (!ticket?.isTop()) return;
+    if (!stack.ticket.value?.isTop()) return;
     if (event.key === "Escape") {
       event.preventDefault();
       opts.onClose();
@@ -208,7 +267,7 @@ export function useModalBehavior(opts: {
     // The dialog (or its swapped-in content) renders in the same tick the
     // trigger flips; focus after the DOM settles.
     void nextTick(() => {
-      if (!ticket) return; // deactivated before the tick settled
+      if (!open) return; // deactivated before the tick settled
       const target =
         toValue(opts.initialFocus) ??
         (dialogRef.value ? firstFocusableIn(dialogRef.value) : null) ??
@@ -220,8 +279,8 @@ export function useModalBehavior(opts: {
   const activate = () => {
     // Client-only: on the server the behaviour is inert (nothing teleports,
     // nothing focuses); the app hydrates and activates in the browser.
-    if (typeof document === "undefined" || ticket) return;
-    ticket = sharedOverlayStack.push();
+    if (typeof document === "undefined" || open) return;
+    open = true;
     restoreFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     lockBodyScroll();
     document.addEventListener("keydown", onKeydown, true);
@@ -229,11 +288,13 @@ export function useModalBehavior(opts: {
   };
 
   const deactivate = () => {
-    if (!ticket) return;
+    if (!open) return;
+    open = false;
     document.removeEventListener("keydown", onKeydown, true);
     unlockBodyScroll();
-    ticket.release();
-    ticket = null;
+    // Release before returning focus. On unmount this runs before scope
+    // dispose; elsewhere the ticket watcher has already released (idempotent).
+    stack.release();
     if (restoreFocusTo?.isConnected) restoreFocusTo.focus();
     restoreFocusTo = null;
   };
@@ -252,13 +313,56 @@ export function useModalBehavior(opts: {
   watch(
     () => toValue(opts.contentKey),
     () => {
-      if (ticket) focusIntoDialog();
+      if (open) focusIntoDialog();
     },
     { flush: "post" },
   );
   onBeforeUnmount(deactivate);
 
-  return { dialogRef, isTop };
+  return { dialogRef, isTop: stack.isTop };
+}
+
+/**
+ * Hold a ticket on the shared overlay stack while `active`, with none of the
+ * modal behaviour, for a **foreign layer** (another UI library's menu,
+ * popover, select, or dialog) opened inside a hosted overlay. While the
+ * ticket is top, every `useModalBehavior` below it stands down: no Escape
+ * handling, no `preventDefault`, no Tab trap. The foreign layer owns its keys,
+ * Tab included, so it must keep focus inside the window. Whether it does
+ * depends on the widget: Radix and Reka UI menus (in modal mode) block Tab,
+ * but a menu that closes on Tab, a combobox, or a non-modal popover lets focus
+ * move on. Check each widget, and turn on its modal mode or focus trap, or
+ * handle Tab in the app. Its library dismisses it. On release the overlay
+ * below is top again.
+ *
+ * Pushes when `active` turns true, so tickets layer in open order, and
+ * releases when it turns false and when the owning scope is disposed. A layer
+ * that is already open when its host window mounts lands above that window:
+ * the push runs post-flush, after the window's. Throws outside a component
+ * setup or effect scope, because nothing would release the ticket. Deciding
+ * *when* a foreign layer is open is app scope, because it is UI-library
+ * specific; pass that state as `active`. Client-only: on the server this is
+ * inert.
+ *
+ * @example
+ * ```ts
+ * const open = ref(false) // v-model:open of the dropdown
+ * useOverlayTicket(open)
+ * ```
+ */
+export function useOverlayTicket(active: MaybeRefOrGetter<boolean>): {
+  isTop: ComputedRef<boolean>;
+} {
+  // Without a scope nothing releases the ticket when its owner goes away, and
+  // a leaked ticket silently disables Escape and Tab in every hosted overlay.
+  if (!getCurrentScope()) {
+    throw new Error(
+      "[@modular-vue/vue] useOverlayTicket must be called inside a component setup or an " +
+        "effect scope (the ticket is released when that scope is disposed).",
+    );
+  }
+  const { isTop } = holdStackTicket(active);
+  return { isTop };
 }
 
 // ---------------------------------------------------------------------------

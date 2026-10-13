@@ -98,13 +98,15 @@ export { usePanels, PanelsOutlet, usePanelSubject, panelSubjectKey } from "./pan
 // render-all panels. The pure resolver (`resolveOverlay` / `defineOverlayHost`)
 // and the shared stack live in `@modular-frontend/core`; this binding adds the
 // reactive `useOverlay` composable, the managed `<OverlayOutlet>` modal host,
-// `useOverlaySubject`, and the standalone `useModalBehavior`.
+// `useOverlaySubject`, the standalone `useModalBehavior`, and `useOverlayTicket`
+// for foreign layers (another UI library's menu or popover) inside a hosted overlay.
 export {
   useOverlay,
   OverlayOutlet,
   useOverlaySubject,
   overlaySubjectKey,
   useModalBehavior,
+  useOverlayTicket,
 } from "./overlay.js";
 
 // Vue-specific: module-exit plumbing (hosted by ModuleRoute / tabs; the

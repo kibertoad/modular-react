@@ -67,6 +67,7 @@ export {
   useOverlaySubject,
   overlaySubjectKey,
   useModalBehavior,
+  useOverlayTicket,
 } from "@modular-vue/vue";
 
 // Module definition

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { defineModule } from "@react-router-modules/core";
-import { useModalBehavior, useOverlaySubject } from "@modular-react/react";
+import { useModalBehavior, useOverlaySubject, useOverlayTicket } from "@modular-react/react";
 import type { AppDependencies, AppSlots, StepRef } from "@example-rr-overlay-windows/app-shared";
 
 /**
@@ -16,7 +16,8 @@ import type { AppDependencies, AppSlots, StepRef } from "@example-rr-overlay-win
  *   That confirm dialog registers on the same shared stack as the hosted
  *   window, so Escape closes the **top** one first (the confirm), then the
  *   window — the stacking guarantee, demonstrated with the composable the
- *   `<OverlayOutlet>` is itself built on.
+ *   `<OverlayOutlet>` is itself built on. It also hosts a stand-in **foreign
+ *   menu** that joins the stack through `useOverlayTicket`.
  * - `run-logs` — reads the subject through `useOverlaySubject`, the context
  *   reader that reaches the current step without prop-drilling.
  */
@@ -34,6 +35,33 @@ function TestReportWindow({ subject }: { subject: StepRef | null }) {
     onClose: () => setConfirmOpen(false),
   });
 
+  // A stand-in for another UI library's dropdown (Reka UI, Radix). Like theirs,
+  // it owns its keys while open: focus moves to its first item, Tab stays in the
+  // menu, and Escape closes it from a bubble-phase listener only when nothing
+  // called `preventDefault()`. On close, focus returns to the trigger.
+  // `useOverlayTicket` holds a ticket on the same stack while the menu is open,
+  // so the window stands down (no Escape, no Tab trap) and the menu gets the keys.
+  const [menuOpen, setMenuOpen] = useState(false);
+  useOverlayTicket(menuOpen);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    const onKeydown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") event.preventDefault();
+      if (event.key === "Escape" && !event.defaultPrevented) setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKeydown);
+    const trigger = menuTriggerRef.current;
+    return () => {
+      document.removeEventListener("keydown", onKeydown);
+      // On unmount the trigger is already detached, so the window's own focus
+      // return is not overridden.
+      if (trigger?.isConnected) trigger.focus();
+    };
+  }, [menuOpen]);
+
   return (
     <div data-testid="window-body-test-report">
       <p style={{ marginTop: 0 }}>
@@ -42,6 +70,32 @@ function TestReportWindow({ subject }: { subject: StepRef | null }) {
       <button type="button" data-testid="open-confirm" onClick={() => setConfirmOpen(true)}>
         Discard this run…
       </button>
+      <button
+        type="button"
+        ref={menuTriggerRef}
+        data-testid="open-menu"
+        onClick={() => setMenuOpen((open) => !open)}
+      >
+        Actions ▾
+      </button>
+      {menuOpen && (
+        <div
+          ref={menuRef}
+          role="menu"
+          data-testid="foreign-menu"
+          style={{
+            marginTop: "0.5rem",
+            padding: "0.25rem",
+            border: "1px solid #cbd5e1",
+            borderRadius: 6,
+            maxWidth: 200,
+          }}
+        >
+          <button type="button" role="menuitem" onClick={() => setMenuOpen(false)}>
+            Re-run step
+          </button>
+        </div>
+      )}
 
       {confirmOpen &&
         createPortal(

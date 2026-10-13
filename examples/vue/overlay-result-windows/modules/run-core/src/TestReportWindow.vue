@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { useModalBehavior } from "@modular-vue/vue";
+import { ref, watch } from "vue";
+import { useModalBehavior, useOverlayTicket } from "@modular-vue/vue";
 import type { StepRef } from "@example-vue-overlay-windows/app-shared";
 
 // The window body — no <Teleport>/backdrop/Escape/focus code for the *window*
@@ -8,7 +8,8 @@ import type { StepRef } from "@example-vue-overlay-windows/app-shared";
 // nested bespoke confirm built on `useModalBehavior`: it registers on the same
 // shared overlay stack as the hosted window, so Escape closes the top one first
 // (the confirm), then the window — the stacking guarantee, demonstrated with the
-// composable the `<OverlayOutlet>` is itself built on.
+// composable the `<OverlayOutlet>` is itself built on. It also owns a stand-in
+// foreign menu that joins the stack through `useOverlayTicket`.
 defineProps<{ subject: StepRef | null }>();
 
 const confirmOpen = ref(false);
@@ -18,6 +19,37 @@ const { dialogRef } = useModalBehavior({
     confirmOpen.value = false;
   },
 });
+
+// A stand-in for another UI library's dropdown (Reka UI, Radix). Like theirs,
+// it owns its keys while open: focus moves to its first item, Tab stays in the
+// menu, and Escape closes it from a bubble-phase listener only when nothing
+// called `preventDefault()`. On close, focus returns to the trigger.
+// `useOverlayTicket` holds a ticket on the same stack while the menu is open,
+// so the window stands down (no Escape, no Tab trap) and the menu gets the keys.
+const menuOpen = ref(false);
+useOverlayTicket(menuOpen);
+const menuRef = ref<HTMLElement | null>(null);
+const menuTriggerRef = ref<HTMLElement | null>(null);
+watch(
+  menuOpen,
+  (open, _, onCleanup) => {
+    if (!open) return;
+    menuRef.value?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    const onKeydown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") event.preventDefault();
+      if (event.key === "Escape" && !event.defaultPrevented) menuOpen.value = false;
+    };
+    document.addEventListener("keydown", onKeydown);
+    const trigger = menuTriggerRef.value;
+    onCleanup(() => {
+      document.removeEventListener("keydown", onKeydown);
+      // Cleanup also runs on unmount. Only a menu that closed returns focus,
+      // so the window's own focus return is not overridden.
+      if (!menuOpen.value) trigger?.focus();
+    });
+  },
+  { flush: "post" },
+);
 </script>
 
 <template>
@@ -28,6 +60,29 @@ const { dialogRef } = useModalBehavior({
     <button type="button" data-testid="open-confirm" @click="confirmOpen = true">
       Discard this run…
     </button>
+    <button
+      ref="menuTriggerRef"
+      type="button"
+      data-testid="open-menu"
+      @click="menuOpen = !menuOpen"
+    >
+      Actions ▾
+    </button>
+    <div
+      v-if="menuOpen"
+      ref="menuRef"
+      role="menu"
+      data-testid="foreign-menu"
+      :style="{
+        marginTop: '0.5rem',
+        padding: '0.25rem',
+        border: '1px solid #cbd5e1',
+        borderRadius: '6px',
+        maxWidth: '200px',
+      }"
+    >
+      <button type="button" role="menuitem" @click="menuOpen = false">Re-run step</button>
+    </div>
 
     <Teleport to="body">
       <div

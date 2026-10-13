@@ -76,13 +76,15 @@ export type { PanelsOutletProps, PanelWrapArgs } from "./panels.js";
 // render-all panels. The pure resolver (`resolveOverlay` / `defineOverlayHost`)
 // and the shared stack live in `@modular-react/core`; this binding adds the
 // `useOverlay` hook, the managed `<OverlayOutlet>` modal host,
-// `useOverlaySubject`, and the standalone `useModalBehavior`.
+// `useOverlaySubject`, the standalone `useModalBehavior`, and `useOverlayTicket`
+// for foreign layers (another UI library's menu or popover) inside a hosted overlay.
 export {
   useOverlay,
   OverlayOutlet,
   useOverlaySubject,
   OverlaySubjectContext,
   useModalBehavior,
+  useOverlayTicket,
 } from "./overlay.js";
 export type { OverlayOutletProps, OverlayWrapArgs } from "./overlay.js";
 
