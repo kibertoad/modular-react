@@ -18,6 +18,7 @@ import type {
   ReactiveService,
   RegistryConfig,
   RegistryPlugin,
+  PluginExtensionsOf,
   PluginRuntimesOf,
   SlotFilter,
   SlotMap,
@@ -86,7 +87,7 @@ export interface ModuleRegistry<
   use<TPlugin extends RegistryPlugin<string, any, any>>(
     plugin: TPlugin,
   ): ModuleRegistry<TSharedDependencies, TSlots, TNavItem, readonly [...TPlugins, TPlugin]> &
-    (TPlugin extends RegistryPlugin<any, infer TExt, any> ? TExt : object);
+    PluginExtensionsOf<readonly [...TPlugins, TPlugin]>;
 
   /**
    * Resolve all modules and produce the application manifest: an installable
