@@ -1,6 +1,6 @@
 {
   "name": "@modular-vue/core",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "vue-router core for @modular-vue modules: defineModule with createRoutes(): RouteRecordRaw[], defineSlots, shared composables, scoped stores, and the RouteMeta convention.",
   "repository": {
     "type": "git",
@@ -42,8 +42,8 @@
     "vue-router": "^5.0.0"
   },
   "peerDependencies": {
-    "@modular-frontend/core": ">=0.1.0 <2.0.0",
-    "@modular-vue/vue": "^1.0.0",
+    "@modular-frontend/core": ">=0.7.0",
+    "@modular-vue/vue": "^1.5.0",
     "vue": "^3.5.40",
     "vue-router": "^5.0.0"
   }
